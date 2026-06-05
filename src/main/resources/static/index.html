@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRM Follow-up | Gruppo Autoscala</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<!-- LOGIN PAGE -->
+<div id="loginPage" class="auth-page">
+    <div class="auth-container">
+        <div class="auth-logo">
+            <img src="/img/logo.webp" alt="Gruppo Autoscala">
+            <p>CRM Follow-up</p>
+        </div>
+        <div class="auth-box">
+            <h2>Accedi</h2>
+            <div id="loginError" class="error-msg" style="display:none"></div>
+            <input type="email" id="loginEmail" placeholder="Email" class="input-field">
+            <input type="password" id="loginPassword" placeholder="Password" class="input-field">
+            <button onclick="login()" class="btn-primary">ENTRA</button>
+        </div>
+    </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="mainApp" style="display:none">
+
+    <!-- NAVBAR -->
+    <nav class="navbar">
+        <div class="nav-logo">
+            <img src="/img/logo.webp" alt="Gruppo Autoscala">
+        </div>
+        <div class="nav-links">
+            <a href="#" class="nav-link active" onclick="showPage('dashboard')">📊 DASHBOARD</a>
+            <a href="#" class="nav-link" onclick="showPage('followups')">📋 FOLLOW-UP</a>
+            <a href="#" class="nav-link" onclick="showPage('waiting')">🚗 ATTESA VETTURE</a>
+            <a href="#" class="nav-link" id="adminLink" style="display:none" onclick="showPage('admin')">⚙️ UTENTI</a>
+        </div>
+        <div class="nav-user">
+            <div class="theme-switch" onclick="toggleTheme()">
+                <span class="theme-icon">🌙</span>
+                <div class="switch-track">
+                    <div class="switch-thumb"></div>
+                </div>
+                <span class="theme-icon">☀️</span>
+            </div>
+            <span id="navUserName"></span>
+            <button onclick="logout()" class="btn-logout">ESCI</button>
+        </div>
+    </nav>
+
+    <!-- DASHBOARD -->
+    <div id="dashboardPage" class="page">
+        <div class="page-header">
+            <h2>DASHBOARD</h2>
+            <div class="filter-bar">
+                <input type="date" id="statsFrom" class="input-dark">
+                <input type="date" id="statsTo" class="input-dark">
+                <button onclick="loadStats()" class="btn-gold">AGGIORNA</button>
+            </div>
+        </div>
+        <div class="stats-grid">
+            <div class="stat-card green">
+                <div class="stat-label">FOLLOW-UP TOTALI</div>
+                <div class="stat-value" id="statTotal">0</div>
+            </div>
+            <div class="stat-card blue">
+                <div class="stat-label">RISPOSTE RICEVUTE</div>
+                <div class="stat-value" id="statResponded">0</div>
+            </div>
+            <div class="stat-card gold">
+                <div class="stat-label">APPUNTAMENTI</div>
+                <div class="stat-value" id="statAppointments">0</div>
+            </div>
+            <div class="stat-card pink">
+                <div class="stat-label">TASSO RISPOSTA</div>
+                <div class="stat-value" id="statResponseRate">0%</div>
+            </div>
+            <div class="stat-card purple">
+                <div class="stat-label">TASSO APPUNTAMENTI</div>
+                <div class="stat-value" id="statAppointmentRate">0%</div>
+            </div>
+        </div>
+        <div class="charts-grid">
+            <div class="chart-card">
+                <h3>FOLLOW-UP vs RISPOSTE vs APPUNTAMENTI</h3>
+                <canvas id="chartFollowUp"></canvas>
+            </div>
+            <div class="chart-card">
+                <h3>LISTA ATTESA VETTURE</h3>
+                <canvas id="chartWaiting"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- FOLLOW-UP PAGE -->
+    <div id="followupsPage" class="page" style="display:none">
+        <div class="page-header">
+            <h2>GESTIONE FOLLOW-UP</h2>
+            <div class="filter-bar">
+                <input type="date" id="workDateFilter" class="input-dark">
+                <button onclick="loadFollowUps()" class="btn-gold">CARICA GIORNO</button>
+                <button onclick="showNewFollowUp()" class="btn-primary" style="width:auto;padding:10px 20px">+ NUOVO</button>
+            </div>
+        </div>
+        <div id="newFollowUpForm" class="form-card" style="display:none">
+            <h3>NUOVO FOLLOW-UP</h3>
+            <div class="form-grid">
+                <input type="text" id="fuFullName" placeholder="Cognome e Nome Cliente" class="input-field">
+                <input type="email" id="fuEmail" placeholder="Email Cliente (opzionale)" class="input-field">
+                <input type="text" id="fuPhone" placeholder="Cellulare (opzionale)" class="input-field">
+                <input type="date" id="fuWorkDate" class="input-field">
+                <select id="fuConsultant" class="input-field">
+                    <option value="">Seleziona Consulente</option>
+                    <option>Ambrosino Luca</option>
+                    <option>Capitelli Silvio</option>
+                    <option>Castaldo Marco</option>
+                    <option>Castaldo Roberto</option>
+                    <option>Filosa Claudio</option>
+                    <option>Fiore Guido</option>
+                    <option>Gerardi Claudio</option>
+                    <option>Giordano Luca</option>
+                    <option>Montuori Francesco</option>
+                    <option>Palumbo Enrico</option>
+                    <option>Scala Rosario</option>
+                    <option>Zaritto Davide</option>
+                    <option>Zuppa Mattia</option>
+                </select>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="fuEmailOnly"> Solo Email (nessun telefono)
+                </label>
+            </div>
+            <div class="form-actions">
+                <button onclick="createFollowUp()" class="btn-gold">CREA FOLLOW-UP</button>
+                <button onclick="hideNewFollowUp()" class="btn-secondary">ANNULLA</button>
+            </div>
+        </div>
+        <div id="followUpsList"></div>
+    </div>
+
+    <!-- WAITING LIST PAGE -->
+    <div id="waitingPage" class="page" style="display:none">
+        <div class="page-header">
+            <h2>CLIENTI IN ATTESA VETTURE</h2>
+            <button onclick="showNewWaiting()" class="btn-primary" style="width:auto;padding:10px 20px">+ AGGIUNGI</button>
+        </div>
+        <div id="newWaitingForm" class="form-card" style="display:none">
+            <h3>NUOVO CLIENTE IN ATTESA</h3>
+            <div class="form-grid">
+                <input type="text" id="wFullName" placeholder="Cognome e Nome" class="input-field">
+                <input type="text" id="wContact" placeholder="Telefono o Email" class="input-field">
+                <input type="text" id="wBrand" placeholder="Marchio (es. Peugeot)" class="input-field">
+                <input type="text" id="wModel" placeholder="Modello (es. 208)" class="input-field">
+                <input type="number" id="wPrice" placeholder="Prezzo (opzionale)" class="input-field">
+                <textarea id="wNotes" placeholder="Note" class="input-field"></textarea>
+            </div>
+            <div class="form-actions">
+                <button onclick="createWaiting()" class="btn-gold">SALVA</button>
+                <button onclick="hideNewWaiting()" class="btn-secondary">ANNULLA</button>
+            </div>
+        </div>
+        <div id="waitingList"></div>
+    </div>
+
+    <!-- ADMIN PAGE -->
+    <div id="adminPage" class="page" style="display:none">
+        <div class="page-header">
+            <h2>GESTIONE UTENTI</h2>
+            <button onclick="showNewUserForm()" class="btn-primary" style="width:auto;padding:10px 20px">+ NUOVO UTENTE</button>
+        </div>
+        <div id="newUserForm" class="form-card" style="display:none">
+            <h3>CREA NUOVO CONSULENTE</h3>
+            <div class="form-grid">
+                <input type="text" id="newUserName" placeholder="Cognome e Nome" class="input-field">
+                <input type="email" id="newUserEmail" placeholder="Email" class="input-field">
+                <input type="password" id="newUserPassword" placeholder="Password temporanea" class="input-field">
+            </div>
+            <div class="form-actions">
+                <button onclick="createUser()" class="btn-gold">CREA UTENTE</button>
+                <button onclick="hideNewUserForm()" class="btn-secondary">ANNULLA</button>
+            </div>
+        </div>
+        <div id="usersList"></div>
+    </div>
+
+</div>
+
+<script src="/js/auth.js"></script>
+<script src="/js/followup.js"></script>
+<script src="/js/waiting.js"></script>
+<script src="/js/charts.js"></script>
+<script src="/js/admin.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>
