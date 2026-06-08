@@ -5,6 +5,7 @@ import com.gruppoautoscala.followup.model.FollowUp;
 import com.gruppoautoscala.followup.model.FollowUpStep;
 import com.gruppoautoscala.followup.model.User;
 import com.gruppoautoscala.followup.repository.CustomerRepository;
+import com.gruppoautoscala.followup.repository.FollowUpRepository;
 import com.gruppoautoscala.followup.repository.FollowUpStepRepository;
 import com.gruppoautoscala.followup.repository.UserRepository;
 import com.gruppoautoscala.followup.service.FollowUpService;
@@ -21,17 +22,11 @@ import java.util.Optional;
 @RequestMapping("/api/followups")
 public class FollowUpController {
 
-    @Autowired
-    private FollowUpService followUpService;
-
-    @Autowired
-    private CustomerRepository customerRepository;
-
-    @Autowired
-    private UserRepository userRepository;
-
-    @Autowired
-    private FollowUpStepRepository followUpStepRepository;
+    @Autowired private FollowUpService followUpService;
+    @Autowired private CustomerRepository customerRepository;
+    @Autowired private UserRepository userRepository;
+    @Autowired private FollowUpStepRepository followUpStepRepository;
+    @Autowired private FollowUpRepository followUpRepository;
 
     @GetMapping
     public ResponseEntity<?> getByDate(@RequestParam String date, HttpSession session) {
@@ -42,12 +37,23 @@ public class FollowUpController {
         return ResponseEntity.ok(followUps);
     }
 
+    @GetMapping("/search")
+    public ResponseEntity<?> search(@RequestParam String q, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        List<FollowUp> byName = followUpService.searchByCustomerName(q);
+        List<FollowUp> byPhone = followUpService.searchByCustomerPhone(q);
+        byPhone.stream()
+            .filter(f -> byName.stream().noneMatch(n -> n.getId().equals(f.getId())))
+            .forEach(byName::add);
+        return ResponseEntity.ok(byName);
+    }
+
     @PostMapping
     public ResponseEntity<?> create(@RequestBody Map<String, Object> body, HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
 
-        // Crea o recupera cliente
         Customer customer = new Customer();
         customer.setFullName((String) body.get("fullName"));
         customer.setEmail((String) body.get("email"));
@@ -55,14 +61,16 @@ public class FollowUpController {
         customer.setEmailOnly(Boolean.TRUE.equals(body.get("emailOnly")));
         customer = customerRepository.save(customer);
 
-        // Recupera utente dalla sessione o dal body
-        Long targetUserId = body.get("userId") != null ?
-            Long.valueOf(body.get("userId").toString()) : userId;
-        Optional<User> userOpt = userRepository.findById(targetUserId);
+        Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "Utente non trovato"));
 
+        String consultantName = (String) body.get("consultantName");
+        if (consultantName == null || consultantName.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Consulente obbligatorio"));
+        }
+
         LocalDate workDate = LocalDate.parse((String) body.get("workDate"));
-        FollowUp followUp = followUpService.createFollowUp(customer, userOpt.get(), workDate);
+        FollowUp followUp = followUpService.createFollowUp(customer, userOpt.get(), workDate, consultantName.trim());
         return ResponseEntity.ok(followUp);
     }
 
@@ -70,9 +78,7 @@ public class FollowUpController {
     public ResponseEntity<?> getById(@PathVariable Long id, HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
-        Optional<FollowUp> followUp = followUpService.getById(id);
-        return followUp.map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        return followUpService.getById(id).map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/{id}/steps")
@@ -81,9 +87,7 @@ public class FollowUpController {
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
         Optional<FollowUp> followUp = followUpService.getById(id);
         if (followUp.isEmpty()) return ResponseEntity.notFound().build();
-        List<FollowUpStep> steps = followUpStepRepository
-                .findByFollowUpOrderByStepNumber(followUp.get());
-        return ResponseEntity.ok(steps);
+        return ResponseEntity.ok(followUpStepRepository.findByFollowUpOrderByStepNumber(followUp.get()));
     }
 
     @PatchMapping("/{id}")
@@ -98,7 +102,24 @@ public class FollowUpController {
         if (body.containsKey("status")) followUp.setStatus((String) body.get("status"));
         if (body.containsKey("hasAppointment"))
             followUp.setHasAppointment(Boolean.TRUE.equals(body.get("hasAppointment")));
+        if (body.containsKey("customerName")) {
+            followUp.getCustomer().setFullName((String) body.get("customerName"));
+            customerRepository.save(followUp.getCustomer());
+        }
+        if (body.containsKey("consultantName"))
+            followUp.setConsultantName((String) body.get("consultantName"));
         return ResponseEntity.ok(followUpService.save(followUp));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> delete(@PathVariable Long id, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        Optional<FollowUp> followUpOpt = followUpService.getById(id);
+        if (followUpOpt.isEmpty()) return ResponseEntity.notFound().build();
+        followUpStepRepository.deleteAll(followUpStepRepository.findByFollowUp(followUpOpt.get()));
+        followUpRepository.deleteById(id);
+        return ResponseEntity.ok(Map.of("message", "Follow-up eliminato"));
     }
 
     @PatchMapping("/steps/{stepId}")
@@ -112,8 +133,7 @@ public class FollowUpController {
         FollowUpStep step = stepOpt.get();
         if (body.containsKey("outcome")) step.setOutcome((String) body.get("outcome"));
         if (body.containsKey("notes")) step.setNotes((String) body.get("notes"));
-        if (body.containsKey("executedAt"))
-            step.setExecutedAt(java.time.LocalDateTime.now());
+        if (body.containsKey("executedAt")) step.setExecutedAt(java.time.LocalDateTime.now());
         return ResponseEntity.ok(followUpStepRepository.save(step));
     }
 }

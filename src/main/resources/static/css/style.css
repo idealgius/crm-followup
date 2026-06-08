@@ -238,6 +238,7 @@ select.input-dark {
     display: flex;
     align-items: center;
     gap: 8px;
+    cursor: pointer;
 }
 
 .theme-icon { font-size: 14px; }
@@ -348,6 +349,39 @@ select.input-dark {
 [data-theme="light"] .page-header h2 { color: #1a1200; }
 
 .filter-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+/* ===== SEARCH BAR ===== */
+.search-bar {
+    margin-bottom: 20px;
+    position: relative;
+}
+
+.search-bar .input-field {
+    padding-left: 20px;
+    font-size: 14px;
+    border-radius: 10px;
+    margin-bottom: 0;
+}
+
+.search-results-header {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    color: #f0c040;
+    text-transform: uppercase;
+    padding: 10px 0;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+}
+
+#searchResults {
+    background: var(--bg-card);
+    border-radius: 14px;
+    padding: 15px;
+    margin-bottom: 20px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+}
 
 /* ===== STAT CARDS ===== */
 .stats-grid {
@@ -513,6 +547,13 @@ select.input-dark {
     margin-top: 3px;
 }
 
+.followup-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
 /* ===== STATUS BADGES ===== */
 .status-badge {
     padding: 4px 12px;
@@ -643,4 +684,75 @@ select.input-field {
     appearance: none;
     background: var(--input-bg);
     color: var(--input-color);
+}
+
+/* ===== CONSULTANT SECTIONS ===== */
+.consultant-section {
+    background: var(--bg-card);
+    border-radius: 14px;
+    margin-bottom: 20px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+
+.consultant-header {
+    background: linear-gradient(135deg, #1a1200, #2a2000);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 2px solid #f0c040;
+}
+
+[data-theme="light"] .consultant-header {
+    background: linear-gradient(135deg, #1a1200, #2a1800);
+}
+
+.consultant-icon { font-size: 18px; }
+
+.consultant-name {
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    color: #f0c040;
+    text-transform: uppercase;
+    flex: 1;
+}
+
+.consultant-count {
+    font-size: 11px;
+    font-weight: 600;
+    color: #aaa;
+    background: rgba(255,255,255,0.1);
+    padding: 4px 10px;
+    border-radius: 20px;
+}
+
+.consultant-body {
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+/* ===== CONSULENTE COMPLETO ===== */
+.consultant-complete {
+    border: 2px solid #f0c040 !important;
+    box-shadow: 0 0 20px rgba(240,192,64,0.25) !important;
+}
+
+.consultant-header-complete {
+    background: linear-gradient(135deg, #2a1e00, #3d2d00) !important;
+    border-bottom: 2px solid #f0c040;
+}
+
+.consultant-done-badge {
+    background: #f0c040;
+    color: #1a1200;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 1.5px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    text-transform: uppercase;
 }

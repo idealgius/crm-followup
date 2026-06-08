@@ -22,6 +22,9 @@ public class FollowUp {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    @Column(name = "consultant_name", length = 150)
+    private String consultantName;
+
     @Column(name = "work_date", nullable = false)
     private LocalDate workDate;
 

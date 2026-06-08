@@ -21,13 +21,14 @@ public class FollowUpService {
     @Autowired
     private FollowUpStepRepository followUpStepRepository;
 
-    public FollowUp createFollowUp(Customer customer, User user, LocalDate workDate) {
+    public FollowUp createFollowUp(Customer customer, User user, LocalDate workDate, String consultantName) {
         FollowUp followUp = new FollowUp();
         followUp.setCustomer(customer);
         followUp.setUser(user);
         followUp.setWorkDate(workDate);
         followUp.setStatus("IN_PROGRESS");
         followUp.setHasAppointment(false);
+        followUp.setConsultantName(consultantName);
         FollowUp saved = followUpRepository.save(followUp);
         createSteps(saved, customer.getEmailOnly());
         return saved;
@@ -45,12 +46,9 @@ public class FollowUpService {
                 followUpStepRepository.save(step);
             }
         } else {
-            int[][] steps = {
-                {1, 1}, {2, 1}, {3, 2}, {4, 3}
-            };
+            int[][] steps = {{1, 1}, {2, 1}, {3, 2}, {4, 3}};
             String[] channels = {"CALL", "CALL", "CALL", "CALL"};
             String[] slots = {"MORNING", "AFTERNOON", null, null};
-
             for (int i = 0; i < steps.length; i++) {
                 FollowUpStep step = new FollowUpStep();
                 step.setFollowUp(followUp);
@@ -86,5 +84,13 @@ public class FollowUpService {
 
     public List<FollowUp> getByUserAndDateRange(User user, LocalDate from, LocalDate to) {
         return followUpRepository.findByUserAndWorkDateBetween(user, from, to);
+    }
+
+    public List<FollowUp> searchByCustomerName(String name) {
+        return followUpRepository.findByCustomerFullNameContainingIgnoreCase(name);
+    }
+
+    public List<FollowUp> searchByCustomerPhone(String phone) {
+        return followUpRepository.findByCustomerPhone(phone);
     }
 }

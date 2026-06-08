@@ -104,19 +104,78 @@
             <h2>GESTIONE FOLLOW-UP</h2>
             <div class="filter-bar">
                 <input type="date" id="workDateFilter" class="input-dark">
-                <button onclick="loadFollowUps()" class="btn-gold">CARICA GIORNO</button>
+                <select id="consultantFilter" class="input-dark" onchange="loadFollowUps()">
+                    <option value="">Tutti i consulenti</option>
+                    <option>Ambrosino Luca</option>
+                    <option>Capitelli Silvio</option>
+                    <option>Castaldo Marco</option>
+                    <option>Castaldo Roberto</option>
+                    <option>Filosa Claudio</option>
+                    <option>Fiore Guido</option>
+                    <option>Gerardi Claudio</option>
+                    <option>Giordano Luca</option>
+                    <option>Montuori Francesco</option>
+                    <option>Palumbo Enrico</option>
+                    <option>Scala Rosario</option>
+                    <option>Zaritto Davide</option>
+                    <option>Zuppa Mattia</option>
+                </select>
+                <button onclick="loadFollowUps()" class="btn-gold">CARICA</button>
                 <button onclick="showNewFollowUp()" class="btn-primary" style="width:auto;padding:10px 20px">+ NUOVO</button>
             </div>
         </div>
+
+        <!-- BARRA RICERCA GLOBALE -->
+        <div class="search-bar">
+            <div style="display:flex;gap:10px;align-items:center">
+                <input type="text" id="searchInput"
+                    placeholder="🔍 Cerca cliente per nome o numero (in tutti i giorni)..."
+                    class="input-field"
+                    style="margin-bottom:0;flex:1"
+                    oninput="searchFollowUps(this.value)">
+                <select id="searchConsultantFilter" class="input-dark"
+                    onchange="searchFollowUps(document.getElementById('searchInput').value)"
+                    style="min-width:180px">
+                    <option value="">Tutti i consulenti</option>
+                    <option>Ambrosino Luca</option>
+                    <option>Capitelli Silvio</option>
+                    <option>Castaldo Marco</option>
+                    <option>Castaldo Roberto</option>
+                    <option>Filosa Claudio</option>
+                    <option>Fiore Guido</option>
+                    <option>Gerardi Claudio</option>
+                    <option>Giordano Luca</option>
+                    <option>Montuori Francesco</option>
+                    <option>Palumbo Enrico</option>
+                    <option>Scala Rosario</option>
+                    <option>Zaritto Davide</option>
+                    <option>Zuppa Mattia</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- RISULTATI RICERCA -->
+        <div id="searchResults" style="display:none">
+            <div class="search-results-header">
+                RISULTATI RICERCA
+                <span style="float:right;cursor:pointer;font-size:13px;color:var(--text-secondary)"
+                    onclick="document.getElementById('searchResults').style.display='none';document.getElementById('searchInput').value=''">
+                    ✕ Chiudi
+                </span>
+            </div>
+            <div id="searchResultsList"></div>
+        </div>
+
+        <!-- FORM NUOVO FOLLOW-UP -->
         <div id="newFollowUpForm" class="form-card" style="display:none">
             <h3>NUOVO FOLLOW-UP</h3>
             <div class="form-grid">
-                <input type="text" id="fuFullName" placeholder="Cognome e Nome Cliente" class="input-field">
+                <input type="text" id="fuFullName" placeholder="Cognome e Nome Cliente *" class="input-field">
                 <input type="email" id="fuEmail" placeholder="Email Cliente (opzionale)" class="input-field">
                 <input type="text" id="fuPhone" placeholder="Cellulare (opzionale)" class="input-field">
                 <input type="date" id="fuWorkDate" class="input-field">
                 <select id="fuConsultant" class="input-field">
-                    <option value="">Seleziona Consulente</option>
+                    <option value="">Seleziona Consulente *</option>
                     <option>Ambrosino Luca</option>
                     <option>Capitelli Silvio</option>
                     <option>Castaldo Marco</option>
@@ -140,6 +199,8 @@
                 <button onclick="hideNewFollowUp()" class="btn-secondary">ANNULLA</button>
             </div>
         </div>
+
+        <!-- LISTA FOLLOW-UP raggruppata per consulente -->
         <div id="followUpsList"></div>
     </div>
 
