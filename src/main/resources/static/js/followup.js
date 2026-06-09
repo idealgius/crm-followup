@@ -1,4 +1,5 @@
 let searchTimeout = null;
+const collapsedSections = new Set();
 
 async function loadFollowUps() {
     const date = document.getElementById('workDateFilter').value;
@@ -24,12 +25,26 @@ async function loadFollowUps() {
 }
 
 function isConsultantComplete(items) {
-    // Completo se ogni follow-up ha risposto, non risponde, o ha appuntamento
     return items.every(fu =>
         fu.status === 'RESPONDED' ||
         fu.status === 'ABANDONED' ||
         fu.hasAppointment === true
     );
+}
+
+function toggleSection(consultantKey) {
+    if (collapsedSections.has(consultantKey)) {
+        collapsedSections.delete(consultantKey);
+    } else {
+        collapsedSections.add(consultantKey);
+    }
+    const body = document.getElementById(`section-body-${consultantKey}`);
+    const arrow = document.getElementById(`arrow-${consultantKey}`);
+    if (body) {
+        const isCollapsed = collapsedSections.has(consultantKey);
+        body.style.display = isCollapsed ? 'none' : 'block';
+        if (arrow) arrow.style.transform = isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+    }
 }
 
 function renderFollowUps(followUps) {
@@ -47,7 +62,7 @@ function renderFollowUps(followUps) {
     followUps.forEach(fu => {
         const consultant = fu.consultantName && fu.consultantName.trim() !== ''
             ? fu.consultantName
-            : '⚠️ Consulente non assegnato';
+            : '⚠️ Non assegnato';
         if (!grouped[consultant]) grouped[consultant] = [];
         grouped[consultant].push(fu);
     });
@@ -60,15 +75,38 @@ function renderFollowUps(followUps) {
 
     container.innerHTML = sorted.map(([consultant, items]) => {
         const complete = isConsultantComplete(items);
+        const key = consultant.replace(/[^a-zA-Z0-9]/g, '_');
+        const isCollapsed = collapsedSections.has(key);
+        const responded = items.filter(fu => fu.status === 'RESPONDED').length;
+        const abandoned = items.filter(fu => fu.status === 'ABANDONED').length;
+        const appointments = items.filter(fu => fu.hasAppointment).length;
+
         return `
-        <div class="consultant-section ${complete ? 'consultant-complete' : ''}">
-            <div class="consultant-header ${complete ? 'consultant-header-complete' : ''}">
-                <span class="consultant-icon">${complete ? '✅' : '👤'}</span>
-                <span class="consultant-name">${consultant}</span>
-                <span class="consultant-count">${items.length} follow-up</span>
-                ${complete ? '<span class="consultant-done-badge">COMPLETATO</span>' : ''}
+        <div class="consultant-folder ${complete ? 'consultant-folder-complete' : ''}">
+            <div class="consultant-folder-tab ${complete ? 'tab-complete' : ''}" onclick="toggleSection('${key}')">
+                <div class="folder-tab-left">
+                    <div class="folder-icon ${complete ? 'folder-icon-complete' : ''}">
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                            <path d="M3 7C3 5.9 3.9 5 5 5H10L12 7H19C20.1 7 21 7.9 21 9V17C21 18.1 20.1 19 19 19H5C3.9 19 3 18.1 3 17V7Z"
+                                fill="${complete ? '#f0c040' : '#1a4080'}" opacity="0.9"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <div class="folder-consultant-name">${consultant}</div>
+                        <div class="folder-stats">
+                            <span class="folder-stat-item stat-total">${items.length} totali</span>
+                            ${responded > 0 ? `<span class="folder-stat-item stat-responded">✅ ${responded}</span>` : ''}
+                            ${abandoned > 0 ? `<span class="folder-stat-item stat-abandoned">❌ ${abandoned}</span>` : ''}
+                            ${appointments > 0 ? `<span class="folder-stat-item stat-appointment">📅 ${appointments}</span>` : ''}
+                        </div>
+                    </div>
+                </div>
+                <div class="folder-tab-right">
+                    ${complete ? '<span class="folder-complete-badge">✓ COMPLETATO</span>' : ''}
+                    <span class="folder-arrow" id="arrow-${key}" style="transform:${isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)'}">▼</span>
+                </div>
             </div>
-            <div class="consultant-body">
+            <div class="consultant-folder-body" id="section-body-${key}" style="display:${isCollapsed ? 'none' : 'block'}">
                 ${items.map(fu => renderFollowUpCard(fu)).join('')}
             </div>
         </div>
@@ -82,7 +120,7 @@ function renderFollowUpCard(fu) {
     return `
         <div class="followup-card" id="fu-${fu.id}">
             <div class="followup-header">
-                <div>
+                <div style="flex:1">
                     <div class="followup-name">${fu.customer.fullName}</div>
                     <div class="followup-meta">
                         ${fu.customer.email ? '✉️ ' + fu.customer.email : ''}
@@ -90,42 +128,35 @@ function renderFollowUpCard(fu) {
                         ${fu.customer.emailOnly ? ' · <span style="color:#f0c040;font-weight:800">SOLO EMAIL</span>' : ''}
                     </div>
                     <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
-                        <span style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px">👤 CONSULENTE:</span>
+                        <span style="font-size:10px;font-weight:700;color:var(--text-secondary);letter-spacing:1px">👤</span>
                         <select class="input-dark" style="font-size:12px;padding:4px 10px;border-radius:6px"
                             onchange="updateConsultant(${fu.id}, this.value)">
-                            <option value="">-- seleziona --</option>
-                            <option ${fu.consultantName === 'Ambrosino Luca' ? 'selected' : ''}>Ambrosino Luca</option>
-                            <option ${fu.consultantName === 'Capitelli Silvio' ? 'selected' : ''}>Capitelli Silvio</option>
-                            <option ${fu.consultantName === 'Castaldo Marco' ? 'selected' : ''}>Castaldo Marco</option>
-                            <option ${fu.consultantName === 'Castaldo Roberto' ? 'selected' : ''}>Castaldo Roberto</option>
-                            <option ${fu.consultantName === 'Filosa Claudio' ? 'selected' : ''}>Filosa Claudio</option>
-                            <option ${fu.consultantName === 'Fiore Guido' ? 'selected' : ''}>Fiore Guido</option>
-                            <option ${fu.consultantName === 'Gerardi Claudio' ? 'selected' : ''}>Gerardi Claudio</option>
-                            <option ${fu.consultantName === 'Giordano Luca' ? 'selected' : ''}>Giordano Luca</option>
-                            <option ${fu.consultantName === 'Montuori Francesco' ? 'selected' : ''}>Montuori Francesco</option>
-                            <option ${fu.consultantName === 'Palumbo Enrico' ? 'selected' : ''}>Palumbo Enrico</option>
-                            <option ${fu.consultantName === 'Scala Rosario' ? 'selected' : ''}>Scala Rosario</option>
-                            <option ${fu.consultantName === 'Zaritto Davide' ? 'selected' : ''}>Zaritto Davide</option>
-                            <option ${fu.consultantName === 'Zuppa Mattia' ? 'selected' : ''}>Zuppa Mattia</option>
+                            <option value="">-- consulente --</option>
+                            ${['Ambrosino Luca','Capitelli Silvio','Castaldo Marco','Castaldo Roberto',
+                               'Filosa Claudio','Fiore Guido','Gerardi Claudio','Giordano Luca',
+                               'Montuori Francesco','Palumbo Enrico','Scala Rosario',
+                               'Zaritto Davide','Zuppa Mattia'].map(c =>
+                                `<option ${fu.consultantName === c ? 'selected' : ''}>${c}</option>`
+                            ).join('')}
                         </select>
                     </div>
                 </div>
-                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;justify-content:flex-end">
                     <span class="status-badge status-${fu.status}">${formatStatus(fu.status)}</span>
-                    ${fu.hasAppointment ? '<span class="status-badge status-APPOINTMENT">📅 APPUNTAMENTO</span>' : ''}
+                    ${fu.hasAppointment ? '<span class="status-badge status-APPOINTMENT">📅 APP.</span>' : ''}
                 </div>
             </div>
             <div class="followup-actions">
                 <button class="btn-small btn-green" onclick="setStatus(${fu.id}, 'RESPONDED')">✅ Risponde</button>
                 <button class="btn-small btn-red" onclick="setStatus(${fu.id}, 'ABANDONED')">❌ Non Risponde</button>
                 <button class="btn-small btn-blue" onclick="toggleAppointment(${fu.id}, ${fu.hasAppointment})">
-                    ${fu.hasAppointment ? '📅 Rimuovi App.' : '📅 Segna App.'}
+                    ${fu.hasAppointment ? '📅 Rimuovi' : '📅 Appuntamento'}
                 </button>
                 <button class="btn-small btn-orange" onclick="editFollowUp(${fu.id}, '${fu.customer.fullName.replace(/'/g, "\\'")}')">✏️ Modifica</button>
-                <button class="btn-small btn-red" onclick="deleteFollowUp(${fu.id})">🗑️ Elimina</button>
+                <button class="btn-small btn-red" onclick="deleteFollowUp(${fu.id})">🗑️</button>
             </div>
             <div class="steps-grid" id="steps-${fu.id}">
-                <div style="color:var(--text-secondary);font-size:12px;padding:8px">Caricamento step...</div>
+                <div style="color:var(--text-secondary);font-size:12px;padding:8px">Caricamento...</div>
             </div>
         </div>
     `;
@@ -230,6 +261,14 @@ async function loadSteps(followUpId) {
     }
 }
 
+function formatDateTime(isoString) {
+    if (!isoString) return null;
+    const d = new Date(isoString);
+    const date = d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const time = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+    return `${date} · ${time}`;
+}
+
 function renderSteps(followUpId, steps) {
     const container = document.getElementById(`steps-${followUpId}`);
     if (!steps || steps.length === 0) {
@@ -237,7 +276,11 @@ function renderSteps(followUpId, steps) {
         return;
     }
 
-    container.innerHTML = steps.map(step => `
+    container.innerHTML = steps.map(step => {
+        const isContact3 = step.stepNumber === 3;
+        const executedAt = formatDateTime(step.executedAt);
+
+        return `
         <div class="step-card">
             <div class="step-title">
                 STEP ${step.stepNumber} · GG ${step.dayNumber} · ${step.channel}
@@ -246,9 +289,21 @@ function renderSteps(followUpId, steps) {
             <div class="step-outcome outcome-${step.outcome}">
                 ${formatOutcome(step.outcome)}
             </div>
+            ${executedAt ? `
+                <div class="step-timestamp">
+                    🕐 ${executedAt}
+                </div>
+            ` : ''}
             <div style="display:flex;gap:5px;margin-bottom:8px">
-                <button class="btn-small btn-green" onclick="updateStep(${step.id}, 'ANSWERED', ${followUpId})">✅</button>
-                <button class="btn-small btn-red" onclick="updateStep(${step.id}, 'NO_ANSWER', ${followUpId})">❌</button>
+                ${isContact3 ? `
+                    <button class="btn-small btn-sent ${step.outcome === 'ANSWERED' ? 'btn-sent-active' : ''}"
+                        onclick="updateStep(${step.id}, 'ANSWERED', ${followUpId})">
+                        ${step.outcome === 'ANSWERED' ? '✓ INVIATO' : '📤 INVIATO'}
+                    </button>
+                ` : `
+                    <button class="btn-small btn-green" onclick="updateStep(${step.id}, 'ANSWERED', ${followUpId})">✅</button>
+                    <button class="btn-small btn-red" onclick="updateStep(${step.id}, 'NO_ANSWER', ${followUpId})">❌</button>
+                `}
             </div>
             <textarea
                 class="input-field"
@@ -257,7 +312,8 @@ function renderSteps(followUpId, steps) {
                 onblur="saveNote(${step.id}, this.value)"
             >${step.notes || ''}</textarea>
         </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 async function updateStep(stepId, outcome, followUpId) {
@@ -360,7 +416,7 @@ async function createFollowUp() {
             );
             if (duplicate) {
                 const proceed = confirm(
-                    `⚠️ Attenzione! Esiste già un cliente simile il ${workDate}:\n` +
+                    `⚠️ Esiste già un cliente simile il ${workDate}:\n` +
                     `"${duplicate.customer.fullName}" · ${duplicate.consultantName || 'N/D'}\n\n` +
                     `Vuoi inserirlo comunque?`
                 );
