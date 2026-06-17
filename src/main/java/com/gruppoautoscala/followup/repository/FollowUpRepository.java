@@ -22,4 +22,11 @@ public interface FollowUpRepository extends JpaRepository<FollowUp, Long> {
 
     @Query("SELECT f FROM FollowUp f WHERE f.customer.phone = :phone")
     List<FollowUp> findByCustomerPhone(@Param("phone") String phone);
+
+    @Query("SELECT f FROM FollowUp f WHERE f.workDate BETWEEN :from AND :to " +
+           "AND (:consultant IS NULL OR :consultant = '' OR f.consultantName = :consultant)")
+    List<FollowUp> findByWorkDateBetweenAndConsultant(
+            @Param("from") LocalDate from,
+            @Param("to") LocalDate to,
+            @Param("consultant") String consultant);
 }

@@ -254,8 +254,8 @@ select.input-dark {
 }
 
 .btn-sent-active {
-    background: #00c853 !important;
-    box-shadow: 0 0 10px rgba(0,200,83,0.4);
+    background: #4a90d9 !important;
+    box-shadow: 0 0 12px rgba(74,144,217,0.6) !important;
 }
 
 .btn-sent:hover { opacity: 0.85; }
@@ -441,6 +441,200 @@ select.input-dark {
 .stat-card.purple::after { background: #7c4dff; }
 
 .stat-card:hover { transform: translateY(-3px); }
+
+.stat-card-clickable {
+    cursor: pointer;
+}
+
+.stat-card-clickable:hover {
+    box-shadow: 0 8px 24px rgba(26,64,128,0.18);
+}
+
+.stat-card-clickable:active {
+    transform: translateY(-1px);
+}
+
+/* ===== DASHBOARD CALENDAR & MODAL ===== */
+.dashboard-extras {
+    margin-bottom: 28px;
+}
+
+.calendar-card {
+    background: var(--bg-card);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    box-shadow: var(--shadow);
+    max-width: 420px;
+}
+
+.calendar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.calendar-header h3 {
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.cal-nav-btn {
+    background: var(--stat-bg);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+}
+
+.cal-nav-btn:hover { border-color: #1a4080; }
+
+.calendar-legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.cal-legend-item { display: flex; align-items: center; gap: 6px; }
+
+.cal-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.cal-dot-pending { background: #f0c040; }
+.cal-dot-complete { background: #00c853; }
+
+.fu-calendar {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+}
+
+.cal-weekday {
+    text-align: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    padding: 4px 0;
+}
+
+.cal-day {
+    aspect-ratio: 1;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--stat-bg);
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.cal-day:hover { border-color: #1a4080; }
+
+.cal-day-empty {
+    border: none;
+    background: transparent;
+    cursor: default;
+}
+
+.cal-day-pending {
+    background: rgba(240,192,64,0.35);
+    border-color: #f0c040;
+}
+
+.cal-day-complete {
+    background: rgba(0,200,83,0.28);
+    border-color: #00c853;
+}
+
+.cal-day-today {
+    box-shadow: 0 0 0 2px #1a4080;
+}
+
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.modal-box {
+    background: var(--bg-card);
+    border: 1.5px solid var(--border);
+    border-radius: 16px;
+    width: min(720px, 100%);
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 22px;
+    border-bottom: 1px solid var(--border);
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 1px;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 8px;
+}
+
+.modal-close:hover { color: var(--text-primary); }
+
+.modal-body {
+    padding: 16px 22px 22px;
+    overflow-y: auto;
+}
+
+.stat-detail-meta {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 14px;
+    font-weight: 600;
+}
+
+.stat-detail-card {
+    cursor: pointer;
+    margin-bottom: 10px;
+    transition: border-color 0.2s;
+}
+
+.stat-detail-card:hover {
+    border-color: #f0c040;
+}
 
 .stat-label {
     font-size: 10px;
@@ -745,9 +939,11 @@ select.input-dark {
 
 .outcome-PENDING { color: var(--text-secondary); }
 .outcome-ANSWERED { color: #00c853; }
+.outcome-SENT { color: #42a5f5; }
 .outcome-NO_ANSWER { color: #ff3d3d; }
 
 [data-theme="light"] .outcome-ANSWERED { color: #007a30; }
+[data-theme="light"] .outcome-SENT { color: #1565c0; }
 [data-theme="light"] .outcome-NO_ANSWER { color: #cc0000; }
 
 .step-timestamp {

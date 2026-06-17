@@ -278,16 +278,19 @@ function renderSteps(followUpId, steps) {
 
     container.innerHTML = steps.map(step => {
         const isContact3 = step.stepNumber === 3;
+        const isSent = step.outcome === 'SENT' || (isContact3 && step.outcome === 'ANSWERED');
+        const outcomeClass = isSent ? 'SENT' : step.outcome;
         const executedAt = formatDateTime(step.executedAt);
+        const slotLabel = formatSlot(step.scheduledSlot);
 
         return `
         <div class="step-card">
             <div class="step-title">
-                STEP ${step.stepNumber} · GG ${step.dayNumber} · ${step.channel}
-                ${step.scheduledSlot ? ' · ' + step.scheduledSlot : ''}
+                STEP ${step.stepNumber} · GG ${step.dayNumber} · ${formatChannel(step)}
+                ${slotLabel ? ' · ' + slotLabel : ''}
             </div>
-            <div class="step-outcome outcome-${step.outcome}">
-                ${formatOutcome(step.outcome)}
+            <div class="step-outcome outcome-${outcomeClass}">
+                ${formatOutcome(step.outcome, step.stepNumber)}
             </div>
             ${executedAt ? `
                 <div class="step-timestamp">
@@ -296,9 +299,9 @@ function renderSteps(followUpId, steps) {
             ` : ''}
             <div style="display:flex;gap:5px;margin-bottom:8px">
                 ${isContact3 ? `
-                    <button class="btn-small btn-sent ${step.outcome === 'ANSWERED' ? 'btn-sent-active' : ''}"
-                        onclick="updateStep(${step.id}, 'ANSWERED', ${followUpId})">
-                        ${step.outcome === 'ANSWERED' ? '✓ INVIATO' : '📤 INVIATO'}
+                    <button class="btn-small btn-sent ${isSent ? 'btn-sent-active' : ''}"
+                        onclick="updateStep(${step.id}, '${isSent ? 'PENDING' : 'SENT'}', ${followUpId})">
+                        ${isSent ? '✓ INVIATO' : '📤 INVIA'}
                     </button>
                 ` : `
                     <button class="btn-small btn-green" onclick="updateStep(${step.id}, 'ANSWERED', ${followUpId})">✅</button>
@@ -474,11 +477,33 @@ function formatStatus(status) {
     return map[status] || status;
 }
 
-function formatOutcome(outcome) {
+function formatChannel(step) {
+    if (step.stepNumber === 3 && step.dayNumber === 2) {
+        return 'WhatsApp / Mail';
+    }
+    const map = {
+        'CALL': 'Chiamata',
+        'WHATSAPP': 'WhatsApp',
+        'EMAIL': 'Email'
+    };
+    return map[step.channel] || step.channel;
+}
+
+function formatSlot(slot) {
+    if (!slot) return '';
+    const map = { 'MORNING': 'Mattina', 'AFTERNOON': 'Pomeriggio' };
+    return map[slot] || slot;
+}
+
+function formatOutcome(outcome, stepNumber) {
+    if (stepNumber === 3 && (outcome === 'SENT' || outcome === 'ANSWERED')) {
+        return '📤 Inviato';
+    }
     const map = {
         'PENDING': '⏳ In attesa',
         'ANSWERED': '✅ Risposto',
-        'NO_ANSWER': '❌ Non risponde'
+        'NO_ANSWER': '❌ Non risponde',
+        'SENT': '📤 Inviato'
     };
     return map[outcome] || outcome;
 }

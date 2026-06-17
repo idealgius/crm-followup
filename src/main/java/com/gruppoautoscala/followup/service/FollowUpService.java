@@ -36,6 +36,7 @@ public class FollowUpService {
 
     private void createSteps(FollowUp followUp, boolean emailOnly) {
         if (emailOnly) {
+            // Flusso solo email: 3 mail nei 3 giorni
             for (int day = 1; day <= 3; day++) {
                 FollowUpStep step = new FollowUpStep();
                 step.setFollowUp(followUp);
@@ -46,16 +47,25 @@ public class FollowUpService {
                 followUpStepRepository.save(step);
             }
         } else {
-            int[][] steps = {{1, 1}, {2, 1}, {3, 2}, {4, 3}};
-            String[] channels = {"CALL", "CALL", "CALL", "CALL"};
-            String[] slots = {"MORNING", "AFTERNOON", null, null};
-            for (int i = 0; i < steps.length; i++) {
+            // Flusso standard:
+            // Step 1 - Giorno 1 Mattina - CALL
+            // Step 2 - Giorno 1 Pomeriggio - CALL
+            // Step 3 - Giorno 2 - WHATSAPP o EMAIL
+            // Step 4 - Giorno 3 - CALL
+            Object[][] steps = {
+                {1, 1, "CALL", "MORNING"},
+                {2, 1, "CALL", "AFTERNOON"},
+                {3, 2, "WHATSAPP", null},
+                {4, 3, "CALL", null}
+            };
+
+            for (Object[] s : steps) {
                 FollowUpStep step = new FollowUpStep();
                 step.setFollowUp(followUp);
-                step.setStepNumber(steps[i][0]);
-                step.setDayNumber(steps[i][1]);
-                step.setChannel(channels[i]);
-                step.setScheduledSlot(slots[i]);
+                step.setStepNumber((int) s[0]);
+                step.setDayNumber((int) s[1]);
+                step.setChannel((String) s[2]);
+                step.setScheduledSlot((String) s[3]);
                 step.setOutcome("PENDING");
                 followUpStepRepository.save(step);
             }

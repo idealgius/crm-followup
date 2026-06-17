@@ -61,19 +61,35 @@
             <div class="filter-bar">
                 <input type="date" id="statsFrom" class="input-dark">
                 <input type="date" id="statsTo" class="input-dark">
+                <select id="statsConsultant" class="input-dark" onchange="loadStats()">
+                    <option value="">Tutti i consulenti</option>
+                    <option>Ambrosino Luca</option>
+                    <option>Capitelli Silvio</option>
+                    <option>Castaldo Marco</option>
+                    <option>Castaldo Roberto</option>
+                    <option>Filosa Claudio</option>
+                    <option>Fiore Guido</option>
+                    <option>Gerardi Claudio</option>
+                    <option>Giordano Luca</option>
+                    <option>Montuori Francesco</option>
+                    <option>Palumbo Enrico</option>
+                    <option>Scala Rosario</option>
+                    <option>Zaritto Davide</option>
+                    <option>Zuppa Mattia</option>
+                </select>
                 <button onclick="loadStats()" class="btn-gold">AGGIORNA</button>
             </div>
         </div>
         <div class="stats-grid">
-            <div class="stat-card green">
+            <div class="stat-card green stat-card-clickable" onclick="showStatDetail('all')" title="Clicca per vedere l'elenco">
                 <div class="stat-label">FOLLOW-UP TOTALI</div>
                 <div class="stat-value" id="statTotal">0</div>
             </div>
-            <div class="stat-card blue">
+            <div class="stat-card blue stat-card-clickable" onclick="showStatDetail('responded')" title="Clicca per vedere l'elenco">
                 <div class="stat-label">RISPOSTE RICEVUTE</div>
                 <div class="stat-value" id="statResponded">0</div>
             </div>
-            <div class="stat-card gold">
+            <div class="stat-card gold stat-card-clickable" onclick="showStatDetail('appointments')" title="Clicca per vedere l'elenco">
                 <div class="stat-label">APPUNTAMENTI</div>
                 <div class="stat-value" id="statAppointments">0</div>
             </div>
@@ -86,6 +102,20 @@
                 <div class="stat-value" id="statAppointmentRate">0%</div>
             </div>
         </div>
+        <div class="dashboard-extras">
+            <div class="calendar-card">
+                <div class="calendar-header">
+                    <button type="button" class="cal-nav-btn" onclick="changeCalendarMonth(-1)">‹</button>
+                    <h3 id="calendarTitle">Calendario Follow-up</h3>
+                    <button type="button" class="cal-nav-btn" onclick="changeCalendarMonth(1)">›</button>
+                </div>
+                <div class="calendar-legend">
+                    <span class="cal-legend-item"><span class="cal-dot cal-dot-pending"></span> Follow-up in corso</span>
+                    <span class="cal-legend-item"><span class="cal-dot cal-dot-complete"></span> Tutti completati</span>
+                </div>
+                <div id="fuCalendar" class="fu-calendar"></div>
+            </div>
+        </div>
         <div class="charts-grid">
             <div class="chart-card">
                 <h3>FOLLOW-UP vs RISPOSTE vs APPUNTAMENTI</h3>
@@ -95,6 +125,17 @@
                 <h3>LISTA ATTESA VETTURE</h3>
                 <canvas id="chartWaiting"></canvas>
             </div>
+        </div>
+    </div>
+
+    <!-- MODAL DETTAGLIO STATS -->
+    <div id="statDetailModal" class="modal-overlay" style="display:none" onclick="closeStatDetail(event)">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="statDetailTitle">Dettaglio</h3>
+                <button type="button" class="modal-close" onclick="closeStatDetail()">✕</button>
+            </div>
+            <div id="statDetailList" class="modal-body"></div>
         </div>
     </div>
 
