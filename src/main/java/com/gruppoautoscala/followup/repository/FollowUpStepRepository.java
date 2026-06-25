@@ -10,4 +10,5 @@ import java.util.List;
 public interface FollowUpStepRepository extends JpaRepository<FollowUpStep, Long> {
     List<FollowUpStep> findByFollowUp(FollowUp followUp);
     List<FollowUpStep> findByFollowUpOrderByStepNumber(FollowUp followUp);
+    List<FollowUpStep> findByFollowUpIn(List<FollowUp> followUps);
 }

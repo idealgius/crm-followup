@@ -23,7 +23,7 @@ public class User {
     private String passwordHash;
 
     @Column(nullable = false, length = 20)
-    private String role = "CONSULTANT";
+    private String role = "UTENTE";
 
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();

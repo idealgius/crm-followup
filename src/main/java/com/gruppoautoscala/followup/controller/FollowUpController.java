@@ -14,9 +14,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/followups")
@@ -35,6 +34,64 @@ public class FollowUpController {
         LocalDate localDate = LocalDate.parse(date);
         List<FollowUp> followUps = followUpService.getByDate(localDate);
         return ResponseEntity.ok(followUps);
+    }
+
+    @GetMapping("/with-steps")
+    public ResponseEntity<?> getByDateWithSteps(@RequestParam String date, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        LocalDate localDate = LocalDate.parse(date);
+        List<FollowUp> followUps = followUpService.getByDate(localDate);
+
+        if (followUps.isEmpty()) return ResponseEntity.ok(List.of());
+
+        // Carica tutti gli step in una sola query
+        List<FollowUpStep> allSteps = followUpStepRepository.findByFollowUpIn(followUps);
+        Map<Long, List<FollowUpStep>> stepsByFollowUp = allSteps.stream()
+            .collect(Collectors.groupingBy(s -> s.getFollowUp().getId()));
+
+        List<Map<String, Object>> result = followUps.stream().map(fu -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", fu.getId());
+            m.put("workDate", fu.getWorkDate().toString());
+            m.put("status", fu.getStatus());
+            m.put("hasAppointment", fu.getHasAppointment());
+            m.put("consultantName", fu.getConsultantName());
+
+            Map<String, Object> customer = new LinkedHashMap<>();
+            customer.put("id", fu.getCustomer().getId());
+            customer.put("fullName", fu.getCustomer().getFullName());
+            customer.put("email", fu.getCustomer().getEmail());
+            customer.put("phone", fu.getCustomer().getPhone());
+            customer.put("emailOnly", fu.getCustomer().getEmailOnly());
+            m.put("customer", customer);
+
+            Map<String, Object> user = new LinkedHashMap<>();
+            user.put("id", fu.getUser().getId());
+            user.put("fullName", fu.getUser().getFullName());
+            m.put("user", user);
+
+            List<Map<String, Object>> steps = stepsByFollowUp
+                .getOrDefault(fu.getId(), List.of())
+                .stream()
+                .sorted(Comparator.comparingInt(FollowUpStep::getStepNumber))
+                .map(s -> {
+                    Map<String, Object> sm = new LinkedHashMap<>();
+                    sm.put("id", s.getId());
+                    sm.put("stepNumber", s.getStepNumber());
+                    sm.put("dayNumber", s.getDayNumber());
+                    sm.put("channel", s.getChannel());
+                    sm.put("scheduledSlot", s.getScheduledSlot());
+                    sm.put("outcome", s.getOutcome());
+                    sm.put("notes", s.getNotes());
+                    sm.put("executedAt", s.getExecutedAt() != null ? s.getExecutedAt().toString() : null);
+                    return sm;
+                }).collect(Collectors.toList());
+            m.put("steps", steps);
+            return m;
+        }).collect(Collectors.toList());
+
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/search")

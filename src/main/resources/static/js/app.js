@@ -7,35 +7,71 @@ function toggleTheme() {
     localStorage.setItem('theme', isDark ? 'light' : 'dark');
 }
 
+function applyRolePermissions(role) {
+    const isAdmin = role === 'ADMIN';
+    const isModerator = role === 'MODERATORE';
+
+    document.getElementById('navDashboard').style.display = (isAdmin || isModerator) ? 'inline-block' : 'none';
+    document.getElementById('navFollowups').style.display = (isAdmin || isModerator) ? 'inline-block' : 'none';
+    document.getElementById('navWaiting').style.display = (isAdmin || isModerator) ? 'inline-block' : 'none';
+    document.getElementById('navContacts').style.display = 'inline-block';
+    document.getElementById('adminLink').style.display = isAdmin ? 'inline-block' : 'none';
+}
+
 function showPage(page) {
+    const role = currentUser?.role || 'UTENTE';
+    const canSeeAll = role === 'ADMIN' || role === 'MODERATORE';
+
+    if (!canSeeAll && page !== 'contacts') return;
+
+    sessionStorage.setItem('currentPage', page);
+
     document.getElementById('dashboardPage').style.display = 'none';
     document.getElementById('followupsPage').style.display = 'none';
     document.getElementById('waitingPage').style.display = 'none';
+    document.getElementById('contactsPage').style.display = 'none';
     document.getElementById('adminPage').style.display = 'none';
 
     document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
 
     if (page === 'dashboard') {
         document.getElementById('dashboardPage').style.display = 'block';
-        document.querySelectorAll('.nav-link')[0].classList.add('active');
+        document.getElementById('navDashboard').classList.add('active');
+        loadStats();
     } else if (page === 'followups') {
         document.getElementById('followupsPage').style.display = 'block';
-        document.querySelectorAll('.nav-link')[1].classList.add('active');
+        document.getElementById('navFollowups').classList.add('active');
         const today = new Date().toISOString().split('T')[0];
-        document.getElementById('workDateFilter').value = today;
+        if (!document.getElementById('workDateFilter').value) {
+            document.getElementById('workDateFilter').value = today;
+        }
         loadFollowUps();
     } else if (page === 'waiting') {
         document.getElementById('waitingPage').style.display = 'block';
-        document.querySelectorAll('.nav-link')[2].classList.add('active');
+        document.getElementById('navWaiting').classList.add('active');
         loadWaitingList();
+    } else if (page === 'contacts') {
+        document.getElementById('contactsPage').style.display = 'block';
+        document.getElementById('navContacts').classList.add('active');
+        const today = new Date().toISOString().split('T')[0];
+        const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+            .toISOString().split('T')[0];
+        if (!document.getElementById('contactFrom').value) {
+            document.getElementById('contactFrom').value = firstDay;
+            document.getElementById('contactTo').value = today;
+        }
+        loadContactLogs(
+            document.getElementById('contactFrom').value,
+            document.getElementById('contactTo').value
+        );
     } else if (page === 'admin') {
         document.getElementById('adminPage').style.display = 'block';
+        document.getElementById('adminLink').classList.add('active');
         loadUsers();
     }
 }
 
 window.onload = function() {
-    // Ripristina tema salvato
     const savedTheme = localStorage.getItem('theme') || 'dark';
     document.documentElement.setAttribute('data-theme', savedTheme);
 
@@ -55,11 +91,14 @@ window.onload = function() {
             document.getElementById('navUserName').textContent = data.fullName || data.email;
             document.getElementById('loginPage').style.display = 'none';
             document.getElementById('mainApp').style.display = 'block';
-            if (data.role === 'ADMIN') {
-                document.getElementById('adminLink').style.display = 'inline-block';
-            }
-            showPage('dashboard');
-            loadStats();
+            applyRolePermissions(data.role);
+
+            const savedPage = sessionStorage.getItem('currentPage');
+            const defaultPage = data.role === 'UTENTE' ? 'contacts' : 'dashboard';
+            const startPage = savedPage || defaultPage;
+            showPage(startPage);
+
+            if (data.role !== 'UTENTE') loadStats();
         })
         .catch(() => {
             document.getElementById('loginPage').style.display = 'flex';

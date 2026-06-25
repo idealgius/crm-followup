@@ -1,6 +1,10 @@
 let searchTimeout = null;
 const collapsedSections = new Set();
 
+function isModerator() {
+    return currentUser?.role === 'MODERATORE';
+}
+
 async function loadFollowUps() {
     const date = document.getElementById('workDateFilter').value;
     if (!date) return;
@@ -117,6 +121,9 @@ function renderFollowUps(followUps) {
 }
 
 function renderFollowUpCard(fu) {
+    const readOnly = isModerator();
+    const stepsHtml = '<div style="color:var(--text-secondary);font-size:12px;padding:8px">Caricamento...</div>';
+
     return `
         <div class="followup-card" id="fu-${fu.id}">
             <div class="followup-header">
@@ -129,16 +136,19 @@ function renderFollowUpCard(fu) {
                     </div>
                     <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
                         <span style="font-size:10px;font-weight:700;color:var(--text-secondary);letter-spacing:1px">👤</span>
-                        <select class="input-dark" style="font-size:12px;padding:4px 10px;border-radius:6px"
-                            onchange="updateConsultant(${fu.id}, this.value)">
-                            <option value="">-- consulente --</option>
-                            ${['Ambrosino Luca','Capitelli Silvio','Castaldo Marco','Castaldo Roberto',
-                               'Filosa Claudio','Fiore Guido','Gerardi Claudio','Giordano Luca',
-                               'Montuori Francesco','Palumbo Enrico','Scala Rosario',
-                               'Zaritto Davide','Zuppa Mattia'].map(c =>
-                                `<option ${fu.consultantName === c ? 'selected' : ''}>${c}</option>`
-                            ).join('')}
-                        </select>
+                        ${readOnly
+                            ? `<span style="font-size:12px;color:var(--text-secondary);padding:4px 10px">${fu.consultantName || '—'}</span>`
+                            : `<select class="input-dark" style="font-size:12px;padding:4px 10px;border-radius:6px"
+                                onchange="updateConsultant(${fu.id}, this.value)">
+                                <option value="">-- consulente --</option>
+                                ${['Ambrosino Luca','Capitelli Silvio','Castaldo Marco','Castaldo Roberto',
+                                   'Filosa Claudio','Fiore Guido','Gerardi Claudio','Giordano Luca',
+                                   'Montuori Francesco','Palumbo Enrico','Scala Rosario',
+                                   'Zaritto Davide','Zuppa Mattia'].map(c =>
+                                    `<option ${fu.consultantName === c ? 'selected' : ''}>${c}</option>`
+                                ).join('')}
+                              </select>`
+                        }
                     </div>
                 </div>
                 <div style="display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap;justify-content:flex-end">
@@ -146,24 +156,74 @@ function renderFollowUpCard(fu) {
                     ${fu.hasAppointment ? '<span class="status-badge status-APPOINTMENT">📅 APP.</span>' : ''}
                 </div>
             </div>
+            ${readOnly ? '' : `
             <div class="followup-actions">
-                <button class="btn-small btn-green" onclick="setStatus(${fu.id}, 'RESPONDED')">✅ Risponde</button>
-                <button class="btn-small btn-red" onclick="setStatus(${fu.id}, 'ABANDONED')">❌ Non Risponde</button>
+                <button class="btn-small btn-green" onclick="setStatus(${fu.id}, '${fu.status === 'RESPONDED' ? 'IN_PROGRESS' : 'RESPONDED'}')">
+                    ${fu.status === 'RESPONDED' ? '↩️ Annulla Risponde' : '✅ Risponde'}
+                </button>
+                <button class="btn-small btn-red" onclick="setStatus(${fu.id}, '${fu.status === 'ABANDONED' ? 'IN_PROGRESS' : 'ABANDONED'}')">
+                    ${fu.status === 'ABANDONED' ? '↩️ Annulla Non Risponde' : '❌ Non Risponde'}
+                </button>
                 <button class="btn-small btn-blue" onclick="toggleAppointment(${fu.id}, ${fu.hasAppointment})">
                     ${fu.hasAppointment ? '📅 Rimuovi' : '📅 Appuntamento'}
                 </button>
                 <button class="btn-small btn-orange" onclick="editFollowUp(${fu.id}, '${fu.customer.fullName.replace(/'/g, "\\'")}')">✏️ Modifica</button>
                 <button class="btn-small btn-red" onclick="deleteFollowUp(${fu.id})">🗑️</button>
             </div>
+            `}
             <div class="steps-grid" id="steps-${fu.id}">
-                <div style="color:var(--text-secondary);font-size:12px;padding:8px">Caricamento...</div>
+                ${stepsHtml}
             </div>
         </div>
     `;
 }
 
+function renderStepCard(step, followUpId) {
+    const readOnly = isModerator();
+    const isContact3 = step.stepNumber === 3;
+    const isSent = step.outcome === 'SENT' || (isContact3 && step.outcome === 'ANSWERED');
+    const outcomeClass = isSent ? 'SENT' : step.outcome;
+    const executedAt = formatDateTime(step.executedAt);
+    const slotLabel = formatSlot(step.scheduledSlot);
+
+    return `
+    <div class="step-card">
+        <div class="step-title">
+            STEP ${step.stepNumber} · GG ${step.dayNumber} · ${formatChannel(step)}
+            ${slotLabel ? ' · ' + slotLabel : ''}
+        </div>
+        <div class="step-outcome outcome-${outcomeClass}">
+            ${formatOutcome(step.outcome, step.stepNumber)}
+        </div>
+        ${executedAt ? `<div class="step-timestamp">🕐 ${executedAt}</div>` : ''}
+        ${readOnly ? '' : `
+        <div style="display:flex;gap:5px;margin-bottom:8px">
+            ${isContact3 ? `
+                <button class="btn-small btn-sent ${isSent ? 'btn-sent-active' : ''}"
+                    onclick="updateStep(${step.id}, '${isSent ? 'PENDING' : 'SENT'}', ${followUpId})">
+                    ${isSent ? '✓ INVIATO' : '📤 INVIA'}
+                </button>
+            ` : `
+                <button class="btn-small btn-green" onclick="updateStep(${step.id}, '${step.outcome === 'ANSWERED' ? 'PENDING' : 'ANSWERED'}', ${followUpId})">
+                    ${step.outcome === 'ANSWERED' ? '↩️' : '✅'}
+                </button>
+                <button class="btn-small btn-red" onclick="updateStep(${step.id}, '${step.outcome === 'NO_ANSWER' ? 'PENDING' : 'NO_ANSWER'}', ${followUpId})">
+                    ${step.outcome === 'NO_ANSWER' ? '↩️' : '❌'}
+                </button>
+            `}
+        </div>
+        <textarea class="input-field" placeholder="Note..."
+            style="font-size:12px;padding:8px;margin-bottom:0"
+            onblur="saveNote(${step.id}, this.value)"
+        >${step.notes || ''}</textarea>
+        `}
+        ${readOnly && step.notes ? `<div style="font-size:12px;color:var(--text-secondary);padding:6px 0">${step.notes}</div>` : ''}
+    </div>
+    `;
+}
+
 async function updateConsultant(followUpId, consultantName) {
-    if (!consultantName) return;
+    if (!consultantName || isModerator()) return;
     try {
         await fetch(`/api/followups/${followUpId}`, {
             method: 'PATCH',
@@ -255,7 +315,10 @@ async function loadSteps(followUpId) {
         const res = await fetch(`/api/followups/${followUpId}/steps`);
         if (!res.ok) return;
         const steps = await res.json();
-        renderSteps(followUpId, steps);
+        const container = document.getElementById(`steps-${followUpId}`);
+        if (container) {
+            container.innerHTML = steps.map(s => renderStepCard(s, followUpId)).join('');
+        }
     } catch (err) {
         console.error('Errore caricamento step:', err);
     }
@@ -269,57 +332,8 @@ function formatDateTime(isoString) {
     return `${date} · ${time}`;
 }
 
-function renderSteps(followUpId, steps) {
-    const container = document.getElementById(`steps-${followUpId}`);
-    if (!steps || steps.length === 0) {
-        container.innerHTML = '<div style="color:var(--text-secondary);font-size:12px;padding:8px">Nessuno step</div>';
-        return;
-    }
-
-    container.innerHTML = steps.map(step => {
-        const isContact3 = step.stepNumber === 3;
-        const isSent = step.outcome === 'SENT' || (isContact3 && step.outcome === 'ANSWERED');
-        const outcomeClass = isSent ? 'SENT' : step.outcome;
-        const executedAt = formatDateTime(step.executedAt);
-        const slotLabel = formatSlot(step.scheduledSlot);
-
-        return `
-        <div class="step-card">
-            <div class="step-title">
-                STEP ${step.stepNumber} · GG ${step.dayNumber} · ${formatChannel(step)}
-                ${slotLabel ? ' · ' + slotLabel : ''}
-            </div>
-            <div class="step-outcome outcome-${outcomeClass}">
-                ${formatOutcome(step.outcome, step.stepNumber)}
-            </div>
-            ${executedAt ? `
-                <div class="step-timestamp">
-                    🕐 ${executedAt}
-                </div>
-            ` : ''}
-            <div style="display:flex;gap:5px;margin-bottom:8px">
-                ${isContact3 ? `
-                    <button class="btn-small btn-sent ${isSent ? 'btn-sent-active' : ''}"
-                        onclick="updateStep(${step.id}, '${isSent ? 'PENDING' : 'SENT'}', ${followUpId})">
-                        ${isSent ? '✓ INVIATO' : '📤 INVIA'}
-                    </button>
-                ` : `
-                    <button class="btn-small btn-green" onclick="updateStep(${step.id}, 'ANSWERED', ${followUpId})">✅</button>
-                    <button class="btn-small btn-red" onclick="updateStep(${step.id}, 'NO_ANSWER', ${followUpId})">❌</button>
-                `}
-            </div>
-            <textarea
-                class="input-field"
-                placeholder="Note..."
-                style="font-size:12px;padding:8px;margin-bottom:0"
-                onblur="saveNote(${step.id}, this.value)"
-            >${step.notes || ''}</textarea>
-        </div>
-        `;
-    }).join('');
-}
-
 async function updateStep(stepId, outcome, followUpId) {
+    if (isModerator()) return;
     try {
         await fetch(`/api/followups/steps/${stepId}`, {
             method: 'PATCH',
@@ -333,6 +347,7 @@ async function updateStep(stepId, outcome, followUpId) {
 }
 
 async function saveNote(stepId, notes) {
+    if (isModerator()) return;
     try {
         await fetch(`/api/followups/steps/${stepId}`, {
             method: 'PATCH',
@@ -345,6 +360,7 @@ async function saveNote(stepId, notes) {
 }
 
 async function setStatus(followUpId, status) {
+    if (isModerator()) return;
     try {
         await fetch(`/api/followups/${followUpId}`, {
             method: 'PATCH',
@@ -358,6 +374,7 @@ async function setStatus(followUpId, status) {
 }
 
 async function toggleAppointment(followUpId, current) {
+    if (isModerator()) return;
     try {
         await fetch(`/api/followups/${followUpId}`, {
             method: 'PATCH',
@@ -371,6 +388,7 @@ async function toggleAppointment(followUpId, current) {
 }
 
 async function deleteFollowUp(id) {
+    if (isModerator()) return;
     if (!confirm('Sei sicuro di voler eliminare questo follow-up?')) return;
     try {
         await fetch(`/api/followups/${id}`, { method: 'DELETE' });
@@ -381,6 +399,7 @@ async function deleteFollowUp(id) {
 }
 
 async function editFollowUp(id, currentName) {
+    if (isModerator()) return;
     const newName = prompt('Modifica nome cliente:', currentName);
     if (!newName || newName === currentName) return;
     try {
@@ -396,6 +415,7 @@ async function editFollowUp(id, currentName) {
 }
 
 async function createFollowUp() {
+    if (isModerator()) return;
     const fullName = document.getElementById('fuFullName').value.trim();
     const email = document.getElementById('fuEmail').value.trim();
     const phone = document.getElementById('fuPhone').value.trim();
@@ -452,6 +472,7 @@ async function createFollowUp() {
 }
 
 function showNewFollowUp() {
+    if (isModerator()) return;
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('fuWorkDate').value = today;
     document.getElementById('newFollowUpForm').style.display = 'block';

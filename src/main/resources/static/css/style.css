@@ -1029,3 +1029,136 @@ select.input-field {
     background: var(--input-bg);
     color: var(--input-color);
 }
+/* ===== REGISTRO CONTATTI ===== */
+.contact-week-section {
+    background: var(--folder-bg);
+    border: 1.5px solid var(--folder-border);
+    border-radius: 16px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+}
+
+.contact-week-header {
+    background: var(--folder-tab-bg);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    border-bottom: 2px solid #1a4080;
+    font-size: 13px;
+    font-weight: 800;
+    color: #1a4080;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    user-select: none;
+    transition: all 0.2s;
+}
+
+[data-theme="light"] .contact-week-header { color: #1a4080; }
+
+.contact-week-header:hover { background: rgba(26,64,128,0.08); }
+
+.contact-day-section {
+    margin: 12px;
+    background: var(--bg-card);
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+
+.contact-day-header {
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    background: var(--step-bg);
+    border-bottom: 1px solid var(--border);
+    text-transform: capitalize;
+}
+
+.contact-table-wrapper {
+    overflow-x: auto;
+}
+
+.contact-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.contact-table thead tr {
+    background: var(--folder-tab-bg);
+}
+
+.contact-table th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+}
+
+.contact-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-primary);
+    vertical-align: middle;
+}
+
+.contact-table tbody tr:last-child td { border-bottom: none; }
+
+.contact-table tbody tr:hover {
+    background: rgba(26,64,128,0.04);
+}
+
+.contact-category-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.cat-Info_Vendita { background: rgba(26,64,128,0.12); color: #1a4080; }
+.cat-Info_Noleggio { background: rgba(0,200,83,0.12); color: #00c853; }
+.cat-Service { background: rgba(240,192,64,0.15); color: #d4a820; }
+.cat-Info_Acquisto_effettuato { background: rgba(74,144,217,0.15); color: #4a90d9; }
+.cat-Ritardo_Consegna { background: rgba(255,61,61,0.12); color: #ff3d3d; }
+.cat-Pratica_Leasing { background: rgba(124,77,255,0.12); color: #7c4dff; }
+.cat-Pratica_Finanziamento { background: rgba(255,152,0,0.12); color: #ff9800; }
+.cat-Altro { background: rgba(138,143,170,0.12); color: #8a8faa; }
+
+[data-theme="light"] .cat-Info_Vendita { color: #0d2a5e; }
+[data-theme="light"] .cat-Info_Noleggio { color: #007a30; }
+[data-theme="light"] .cat-Service { color: #8a6000; }
+
+/* ===== PRINT STYLES ===== */
+@media print {
+    .navbar, .filter-bar, .form-card, .btn-primary,
+    .btn-gold, .btn-secondary, .btn-small, .theme-switch,
+    .btn-logout, #newContactForm, .charts-grid, .stats-grid {
+        display: none !important;
+    }
+
+    body { background: #fff !important; color: #000 !important; }
+
+    .contact-table { font-size: 11px; }
+    .contact-table th, .contact-table td { padding: 6px 10px; }
+    .contact-week-section { border: 1px solid #ccc; margin-bottom: 10px; }
+    .contact-week-header { background: #f0f0f0 !important; color: #000 !important; }
+    .contact-day-header { background: #f8f8f8 !important; }
+
+    .page-header h2 {
+        color: #000 !important;
+        font-size: 18px;
+        margin-bottom: 10px;
+    }
+
+    @page { margin: 15mm; }
+}
