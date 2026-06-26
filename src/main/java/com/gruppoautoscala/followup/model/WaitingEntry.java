@@ -3,6 +3,7 @@ package com.gruppoautoscala.followup.model;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
@@ -38,6 +39,9 @@ public class WaitingEntry {
 
     @Column(nullable = false, length = 20)
     private String status = "WAITING";
+
+    @Column(name = "recall_date")
+    private LocalDate recallDate;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();

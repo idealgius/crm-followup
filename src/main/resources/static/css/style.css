@@ -1162,3 +1162,101 @@ select.input-field {
 
     @page { margin: 15mm; }
 }
+/* ===== RECALL BADGES ===== */
+.recall-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.recall-today {
+    background: rgba(240,192,64,0.25);
+    color: #f0c040;
+    border: 1.5px solid #f0c040;
+    animation: pulse-recall 1.5s ease-in-out infinite;
+}
+
+.recall-past {
+    background: rgba(255,61,61,0.12);
+    color: #ff3d3d;
+    border: 1.5px solid #ff3d3d;
+}
+
+.recall-future {
+    background: rgba(74,144,217,0.12);
+    color: #4a90d9;
+    border: 1.5px solid #4a90d9;
+}
+
+.recall-card-today {
+    border-color: #f0c040 !important;
+    box-shadow: 0 0 16px rgba(240,192,64,0.3) !important;
+}
+
+.recall-card-past {
+    border-color: #ff3d3d !important;
+    box-shadow: 0 0 12px rgba(255,61,61,0.2) !important;
+}
+
+@keyframes pulse-recall {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(240,192,64,0.4); }
+    50% { box-shadow: 0 0 0 6px rgba(240,192,64,0); }
+}/* ===== CONTACT TREE ===== */
+.contact-tree-section {
+    background: var(--folder-bg);
+    border: 1.5px solid var(--folder-border);
+    border-radius: 16px;
+    margin-bottom: 12px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+}
+
+.contact-tree-header {
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    font-weight: 800;
+    user-select: none;
+    transition: all 0.2s;
+}
+
+.contact-tree-year {
+    background: var(--folder-tab-bg);
+    font-size: 14px;
+    color: var(--text-primary);
+    border-bottom: 2px solid #1a4080;
+}
+
+.contact-tree-month {
+    background: var(--bg-card);
+    font-size: 13px;
+    color: #1a4080;
+    border-bottom: 1px solid var(--border);
+}
+
+.contact-tree-week {
+    background: var(--step-bg);
+    font-size: 12px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+}
+
+.contact-tree-header:hover { background: rgba(26,64,128,0.06); }
+
+.contact-tree-indent {
+    padding-left: 16px;
+}
+
+.tree-count {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-left: 8px;
+}

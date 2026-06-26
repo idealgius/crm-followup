@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -40,6 +41,10 @@ public class WaitingListController {
         if (body.get("price") != null && !body.get("price").toString().isEmpty()) {
             price = new BigDecimal(body.get("price").toString());
         }
+        LocalDate recallDate = null;
+        if (body.get("recallDate") != null && !body.get("recallDate").toString().isEmpty()) {
+            recallDate = LocalDate.parse(body.get("recallDate").toString());
+        }
         WaitingEntry entry = waitingListService.create(
             userOpt.get(),
             (String) body.get("fullName"),
@@ -47,7 +52,8 @@ public class WaitingListController {
             (String) body.get("brand"),
             (String) body.get("model"),
             price,
-            (String) body.get("notes")
+            (String) body.get("notes"),
+            recallDate
         );
         return ResponseEntity.ok(entry);
     }
@@ -78,6 +84,11 @@ public class WaitingListController {
         if (body.containsKey("price") && body.get("price") != null) {
             entry.setPrice(new BigDecimal(body.get("price").toString()));
         }
+        if (body.containsKey("recallDate")) {
+            String rd = (String) body.get("recallDate");
+            entry.setRecallDate(rd != null && !rd.isEmpty() ? LocalDate.parse(rd) : null);
+        }
+        entry.setUpdatedAt(java.time.LocalDateTime.now());
         return ResponseEntity.ok(waitingListService.update(entry));
     }
 

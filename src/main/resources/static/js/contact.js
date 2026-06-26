@@ -23,69 +23,115 @@ function renderContactLogs(logs) {
         return;
     }
 
-    // Raggruppa per data
-    const grouped = {};
+    // Struttura: anno → mese → settimana → giorno
+    const tree = {};
     logs.forEach(log => {
         const date = log.contactDate.split('T')[0];
-        if (!grouped[date]) grouped[date] = [];
-        grouped[date].push(log);
+        const d = new Date(date);
+        const year = d.getFullYear().toString();
+        const month = d.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
+        const week = getWeekKey(date);
+
+        if (!tree[year]) tree[year] = {};
+        if (!tree[year][month]) tree[year][month] = {};
+        if (!tree[year][month][week]) tree[year][month][week] = {};
+        if (!tree[year][month][week][date]) tree[year][month][week][date] = [];
+        tree[year][month][week][date].push(log);
     });
 
-    // Raggruppa per settimana
-    const byWeek = {};
-    Object.entries(grouped).sort().forEach(([date, items]) => {
-        const weekKey = getWeekKey(date);
-        if (!byWeek[weekKey]) byWeek[weekKey] = {};
-        byWeek[weekKey][date] = items;
-    });
-
-    container.innerHTML = Object.entries(byWeek).sort().map(([weekKey, days]) => `
-        <div class="contact-week-section">
-            <div class="contact-week-header" onclick="toggleContactWeek('${weekKey}')">
-                <span>📅 ${weekKey}</span>
-                <span class="folder-arrow" id="week-arrow-${weekKey}">▼</span>
+    container.innerHTML = Object.entries(tree).sort((a,b) => b[0]-a[0]).map(([year, months]) => {
+        const yearKey = `year-${year}`;
+        const yearCount = Object.values(months).flatMap(w => Object.values(w)).flatMap(d => Object.values(d)).flat().length;
+        return `
+        <div class="contact-tree-section">
+            <div class="contact-tree-header contact-tree-year" onclick="toggleTree('${yearKey}')">
+                <span>📁 ${year} <span class="tree-count">${yearCount} contatti</span></span>
+                <span class="folder-arrow" id="arrow-${yearKey}">▼</span>
             </div>
-            <div id="week-body-${weekKey}">
-                ${Object.entries(days).sort().map(([date, items]) => `
-                    <div class="contact-day-section">
-                        <div class="contact-day-header">
-                            ${formatDateIT(date)} — <span style="color:var(--text-secondary)">${items.length} contatti</span>
+            <div id="body-${yearKey}">
+                ${Object.entries(months).sort().map(([month, weeks]) => {
+                    const monthKey = `month-${year}-${month.replace(/\s/g,'_')}`;
+                    const monthCount = Object.values(weeks).flatMap(d => Object.values(d)).flat().length;
+                    return `
+                    <div class="contact-tree-indent">
+                        <div class="contact-tree-header contact-tree-month" onclick="toggleTree('${monthKey}')">
+                            <span>📂 ${month} <span class="tree-count">${monthCount} contatti</span></span>
+                            <span class="folder-arrow" id="arrow-${monthKey}">▼</span>
                         </div>
-                        <div class="contact-table-wrapper">
-                            <table class="contact-table">
-                                <thead>
-                                    <tr>
-                                        <th>Orario</th>
-                                        <th>Categoria</th>
-                                        <th>Note</th>
-                                        <th>Operatore</th>
-                                        <th>Azioni</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${items.map(log => renderContactRow(log)).join('')}
-                                </tbody>
-                            </table>
+                        <div id="body-${monthKey}">
+                            ${Object.entries(weeks).sort().map(([week, days]) => {
+                                const weekKey = `week-${week.replace(/\s/g,'_')}`;
+                                const weekCount = Object.values(days).flat().length;
+                                return `
+                                <div class="contact-tree-indent">
+                                    <div class="contact-tree-header contact-tree-week" onclick="toggleTree('${weekKey}')">
+                                        <span>🗓️ ${week} <span class="tree-count">${weekCount} contatti</span></span>
+                                        <span class="folder-arrow" id="arrow-${weekKey}">▼</span>
+                                    </div>
+                                    <div id="body-${weekKey}">
+                                        ${Object.entries(days).sort().map(([date, items]) => `
+                                            <div class="contact-tree-indent">
+                                                <div class="contact-day-section">
+                                                    <div class="contact-day-header">
+                                                        ${formatDateIT(date)} — <span style="color:var(--text-secondary)">${items.length} contatti</span>
+                                                        <button class="btn-small btn-secondary" onclick="printDay('${date}')" style="float:right;padding:2px 8px;font-size:10px">🖨️</button>
+                                                    </div>
+                                                    <div class="contact-table-wrapper">
+                                                        <table class="contact-table">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Orario</th>
+                                                                    <th>Categoria</th>
+                                                                    <th>Note</th>
+                                                                    <th>Operatore</th>
+                                                                    <th>Azioni</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                ${items.map(log => renderContactRow(log)).join('')}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                                `;
+                            }).join('')}
                         </div>
                     </div>
-                `).join('')}
+                    `;
+                }).join('')}
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
+}
+
+function toggleTree(key) {
+    const body = document.getElementById(`body-${key}`);
+    const arrow = document.getElementById(`arrow-${key}`);
+    if (body) {
+        const isHidden = body.style.display === 'none';
+        body.style.display = isHidden ? 'block' : 'none';
+        if (arrow) arrow.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(-90deg)';
+    }
 }
 
 function renderContactRow(log) {
     const time = log.contactDate.split('T')[1].substring(0, 5);
     const isOwner = currentUser && log.user.id === currentUser.id;
-    const isAdmin = currentUser && currentUser.role === 'ADMIN';
-    const canEdit = isOwner || isAdmin;
+    const isAdmin = currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'GESTORE');
+    const isMod = currentUser && currentUser.role === 'MODERATORE';
+    const targetIsAdmin = log.user.role === 'ADMIN' || log.user.role === 'GESTORE';
+    const canEdit = isAdmin || isOwner || (isMod && !targetIsAdmin);
 
     return `
         <tr id="contact-row-${log.id}">
             <td style="font-weight:700;color:var(--text-primary);white-space:nowrap">${time}</td>
             <td>
                 <span class="contact-category-badge cat-${log.category.replace(/\s+/g, '_')}">${log.category}</span>
-                ${log.otherNote ? `<span style="font-size:11px;color:var(--text-secondary);margin-left:6px">${log.otherNote}</span>` : ''}
             </td>
             <td style="font-size:12px;color:var(--text-secondary)">${log.otherNote || '—'}</td>
             <td style="font-size:12px;color:var(--text-secondary)">${log.user.fullName}</td>
@@ -99,14 +145,37 @@ function renderContactRow(log) {
     `;
 }
 
-function toggleContactWeek(weekKey) {
-    const body = document.getElementById(`week-body-${weekKey}`);
-    const arrow = document.getElementById(`week-arrow-${weekKey}`);
-    if (body) {
-        const isHidden = body.style.display === 'none';
-        body.style.display = isHidden ? 'block' : 'none';
-        if (arrow) arrow.style.transform = isHidden ? 'rotate(0deg)' : 'rotate(-90deg)';
-    }
+function printDay(date) {
+    const dayLogs = contactLogs.filter(l => l.contactDate.split('T')[0] === date);
+    const win = window.open('', '_blank');
+    win.document.write(`
+        <html><head><title>Registro ${date}</title>
+        <style>
+            body { font-family: Arial, sans-serif; font-size: 12px; padding: 20px; }
+            h2 { font-size: 16px; margin-bottom: 10px; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+            th { background: #f0f0f0; font-weight: 700; font-size: 10px; text-transform: uppercase; }
+            @page { margin: 15mm; }
+        </style></head><body>
+        <h2>Registro Contatti — ${formatDateIT(date)}</h2>
+        <table>
+            <thead><tr><th>Orario</th><th>Categoria</th><th>Note</th><th>Operatore</th></tr></thead>
+            <tbody>
+                ${dayLogs.map(log => `
+                    <tr>
+                        <td>${log.contactDate.split('T')[1].substring(0,5)}</td>
+                        <td>${log.category}</td>
+                        <td>${log.otherNote || '—'}</td>
+                        <td>${log.user.fullName}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+        </body></html>
+    `);
+    win.document.close();
+    win.print();
 }
 
 async function loadContactStats(from, to) {
@@ -159,9 +228,10 @@ function renderContactChart(stats) {
         },
         options: {
             responsive: true,
+            maintainAspectRatio: true,
             plugins: {
                 legend: {
-                    position: 'bottom',
+                    position: 'right',
                     labels: { color: 'var(--text-secondary)', font: { size: 11 }, padding: 12 }
                 }
             }

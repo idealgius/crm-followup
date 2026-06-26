@@ -9,18 +9,20 @@ function toggleTheme() {
 
 function applyRolePermissions(role) {
     const isAdmin = role === 'ADMIN';
+    const isGestore = role === 'GESTORE';
     const isModerator = role === 'MODERATORE';
+    const canSeeAll = isAdmin || isGestore || isModerator;
 
-    document.getElementById('navDashboard').style.display = (isAdmin || isModerator) ? 'inline-block' : 'none';
-    document.getElementById('navFollowups').style.display = (isAdmin || isModerator) ? 'inline-block' : 'none';
-    document.getElementById('navWaiting').style.display = (isAdmin || isModerator) ? 'inline-block' : 'none';
+    document.getElementById('navDashboard').style.display = canSeeAll ? 'inline-block' : 'none';
+    document.getElementById('navFollowups').style.display = canSeeAll ? 'inline-block' : 'none';
+    document.getElementById('navWaiting').style.display = canSeeAll ? 'inline-block' : 'none';
     document.getElementById('navContacts').style.display = 'inline-block';
-    document.getElementById('adminLink').style.display = isAdmin ? 'inline-block' : 'none';
+    document.getElementById('adminLink').style.display = (isAdmin || isGestore) ? 'inline-block' : 'none';
 }
 
 function showPage(page) {
     const role = currentUser?.role || 'UTENTE';
-    const canSeeAll = role === 'ADMIN' || role === 'MODERATORE';
+    const canSeeAll = role === 'ADMIN' || role === 'GESTORE' || role === 'MODERATORE';
 
     if (!canSeeAll && page !== 'contacts') return;
 

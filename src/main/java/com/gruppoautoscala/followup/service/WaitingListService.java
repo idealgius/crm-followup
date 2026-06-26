@@ -5,9 +5,13 @@ import com.gruppoautoscala.followup.model.WaitingEntry;
 import com.gruppoautoscala.followup.repository.WaitingEntryRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class WaitingListService {
@@ -16,7 +20,8 @@ public class WaitingListService {
     private WaitingEntryRepository waitingEntryRepository;
 
     public WaitingEntry create(User user, String fullName, String contact,
-                               String brand, String model, java.math.BigDecimal price, String notes) {
+                               String brand, String model, BigDecimal price,
+                               String notes, LocalDate recallDate) {
         WaitingEntry entry = new WaitingEntry();
         entry.setUser(user);
         entry.setFullName(fullName);
@@ -25,12 +30,18 @@ public class WaitingListService {
         entry.setModel(model);
         entry.setPrice(price);
         entry.setNotes(notes);
+        entry.setRecallDate(recallDate);
         entry.setStatus("WAITING");
         return waitingEntryRepository.save(entry);
     }
 
     public List<WaitingEntry> getAll() {
-        return waitingEntryRepository.findAll();
+        return waitingEntryRepository.findAll().stream()
+            .sorted(Comparator.comparing(
+                WaitingEntry::getRecallDate,
+                Comparator.nullsLast(Comparator.naturalOrder())
+            ))
+            .collect(Collectors.toList());
     }
 
     public List<WaitingEntry> getByStatus(String status) {

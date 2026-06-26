@@ -15,13 +15,31 @@ function renderWaitingList(entries) {
         container.innerHTML = `
             <div class="empty-state">
                 <h3>🚗</h3>
-                <p>Nessun cliente in attesa</p>
+                <p>Nessun cliente in lista recall</p>
             </div>`;
         return;
     }
 
-    container.innerHTML = entries.map(e => `
-        <div class="waiting-card">
+    const today = new Date().toISOString().split('T')[0];
+
+    container.innerHTML = entries.map(e => {
+        const isRecallToday = e.recallDate === today;
+        const isRecallPast = e.recallDate && e.recallDate < today;
+        const isRecallSoon = e.recallDate && e.recallDate > today;
+
+        let recallBadge = '';
+        if (e.recallDate) {
+            if (isRecallToday) {
+                recallBadge = `<span class="recall-badge recall-today">🔔 RECALL OGGI · ${formatDateIT(e.recallDate)}</span>`;
+            } else if (isRecallPast) {
+                recallBadge = `<span class="recall-badge recall-past">⚠️ RECALL SCADUTO · ${formatDateIT(e.recallDate)}</span>`;
+            } else {
+                recallBadge = `<span class="recall-badge recall-future">📅 RECALL · ${formatDateIT(e.recallDate)}</span>`;
+            }
+        }
+
+        return `
+        <div class="waiting-card ${isRecallToday ? 'recall-card-today' : isRecallPast ? 'recall-card-past' : ''}">
             <div>
                 <div class="waiting-name">${e.fullName}</div>
                 <div class="waiting-details">
@@ -29,8 +47,9 @@ function renderWaitingList(entries) {
                     ${e.price ? ' · 💰 €' + Number(e.price).toLocaleString('it-IT') : ''}
                     ${e.notes ? '<br>📝 ' + e.notes : ''}
                 </div>
-                <div style="margin-top:8px">
+                <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
                     <span class="status-badge status-${e.status}">${formatWaitingStatus(e.status)}</span>
+                    ${recallBadge}
                 </div>
             </div>
             <div class="waiting-actions">
@@ -45,7 +64,23 @@ function renderWaitingList(entries) {
                 <button class="btn-small btn-red" onclick="deleteWaiting(${e.id})">🗑️</button>
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
+
+    // Alert per recall di oggi
+    const recallsToday = entries.filter(e => e.recallDate === today);
+    if (recallsToday.length > 0) {
+        const names = recallsToday.map(e => e.fullName).join(', ');
+        setTimeout(() => {
+            alert(`🔔 RECALL DI OGGI:\n${names}`);
+        }, 500);
+    }
+}
+
+function formatDateIT(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 async function createWaiting() {
@@ -55,6 +90,7 @@ async function createWaiting() {
     const model = document.getElementById('wModel').value;
     const price = document.getElementById('wPrice').value;
     const notes = document.getElementById('wNotes').value;
+    const recallDate = document.getElementById('wRecallDate').value;
 
     if (!fullName || !contact || !brand || !model) {
         alert('Nome, contatto, marchio e modello sono obbligatori');
@@ -65,7 +101,7 @@ async function createWaiting() {
         const res = await fetch('/api/waiting', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fullName, contact, brand, model, price, notes })
+            body: JSON.stringify({ fullName, contact, brand, model, price, notes, recallDate })
         });
 
         if (!res.ok) {
@@ -112,11 +148,14 @@ async function editWaiting(id) {
     const newNotes = prompt('Note:', e.notes || '');
     if (newNotes === null) return;
 
+    const newRecallDate = prompt('Data recall (YYYY-MM-DD, lascia vuoto per rimuovere):', e.recallDate || '');
+    if (newRecallDate === null) return;
+
     try {
         await fetch(`/api/waiting/${id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ notes: newNotes })
+            body: JSON.stringify({ notes: newNotes, recallDate: newRecallDate || null })
         });
         loadWaitingList();
     } catch (err) {
@@ -136,6 +175,7 @@ function hideNewWaiting() {
     document.getElementById('wModel').value = '';
     document.getElementById('wPrice').value = '';
     document.getElementById('wNotes').value = '';
+    document.getElementById('wRecallDate').value = '';
 }
 
 function formatWaitingStatus(status) {
