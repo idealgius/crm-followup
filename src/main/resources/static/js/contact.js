@@ -23,7 +23,6 @@ function renderContactLogs(logs) {
         return;
     }
 
-    // Struttura: anno → mese → settimana → giorno
     const tree = {};
     logs.forEach(log => {
         const date = log.contactDate.split('T')[0];
@@ -207,6 +206,7 @@ function renderContactChart(stats) {
     if (!ctx) return;
     if (contactChart) contactChart.destroy();
 
+    const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
     const byCategory = stats.byCategory || {};
     const labels = Object.keys(byCategory);
     const data = Object.values(byCategory);
@@ -223,7 +223,7 @@ function renderContactChart(stats) {
                 data,
                 backgroundColor: colors.slice(0, labels.length),
                 borderWidth: 2,
-                borderColor: 'var(--bg-main)'
+                borderColor: isDark ? '#0d0f1a' : '#ffffff'
             }]
         },
         options: {
@@ -232,7 +232,11 @@ function renderContactChart(stats) {
             plugins: {
                 legend: {
                     position: 'right',
-                    labels: { color: 'var(--text-secondary)', font: { size: 11 }, padding: 12 }
+                    labels: {
+                        color: isDark ? '#8a8faa' : '#000000',
+                        font: { size: 11 },
+                        padding: 12
+                    }
                 }
             }
         }
