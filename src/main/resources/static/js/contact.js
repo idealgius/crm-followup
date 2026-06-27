@@ -22,14 +22,18 @@ const MONTH_NAMES_IT = [
 
 const DAY_NAMES_SHORT = ['Lun','Mar','Mer','Gio','Ven','Sab'];
 
-async function loadContactLogs(from, to) {
+async function loadContactLogs(from, to, restoreDayView) {
     try {
         let url = '/api/contacts';
         if (from && to) url += `?from=${from}&to=${to}`;
         const res = await fetch(url);
         if (!res.ok) return;
         contactLogs = await res.json();
-        renderContactLogs(contactLogs);
+        if (restoreDayView) {
+            showDayView(restoreDayView);
+        } else {
+            renderContactLogs(contactLogs);
+        }
         loadContactStats(from, to);
         renderContactCalendar();
     } catch (err) {
@@ -151,7 +155,6 @@ function renderContactLogs(logs) {
 }
 
 function renderWeekDayCards(days) {
-    // Ottieni la settimana (lun-sab) dal primo giorno disponibile
     const firstDate = Object.keys(days).sort()[0];
     const d = new Date(firstDate);
     const dayOfWeek = d.getDay() || 7;
@@ -298,7 +301,6 @@ function renderContactCalendar() {
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Raggruppa log per giorno
     const byDay = {};
     contactLogs.forEach(log => {
         const date = log.contactDate.split('T')[0];
@@ -410,6 +412,7 @@ async function createContactLog() {
     if (category === 'Altro' && !otherNote) { alert('Inserisci la motivazione per "Altro"'); return; }
 
     const contactDate = `${dateVal}T${timeVal}:00`;
+    const savedDayView = currentDayView || dateVal;
 
     try {
         const res = await fetch('/api/contacts', {
@@ -421,7 +424,7 @@ async function createContactLog() {
         hideNewContactForm();
         const from = document.getElementById('contactFrom')?.value;
         const to = document.getElementById('contactTo')?.value;
-        loadContactLogs(from, to);
+        await loadContactLogs(from, to, savedDayView);
     } catch (err) {
         console.error('Errore creazione contatto:', err);
     }
@@ -429,11 +432,12 @@ async function createContactLog() {
 
 async function deleteContactLog(id) {
     if (!confirm('Eliminare questo contatto?')) return;
+    const savedDayView = currentDayView;
     try {
         await fetch(`/api/contacts/${id}`, { method: 'DELETE' });
         const from = document.getElementById('contactFrom')?.value;
         const to = document.getElementById('contactTo')?.value;
-        loadContactLogs(from, to);
+        await loadContactLogs(from, to, savedDayView);
     } catch (err) {
         console.error('Errore eliminazione:', err);
     }
@@ -446,6 +450,7 @@ async function editContactLog(id) {
     const newCategory = prompt('Categoria:', log.category);
     if (!newCategory) return;
     const newNote = prompt('Note (opzionale):', log.otherNote || '');
+    const savedDayView = currentDayView;
 
     try {
         await fetch(`/api/contacts/${id}`, {
@@ -455,15 +460,15 @@ async function editContactLog(id) {
         });
         const from = document.getElementById('contactFrom')?.value;
         const to = document.getElementById('contactTo')?.value;
-        loadContactLogs(from, to);
+        await loadContactLogs(from, to, savedDayView);
     } catch (err) {
         console.error('Errore modifica:', err);
     }
 }
 
 function showNewContactForm() {
+    const dateStr = currentDayView || new Date().toISOString().split('T')[0];
     const now = new Date();
-    const dateStr = now.toISOString().split('T')[0];
     const timeStr = now.toTimeString().substring(0, 5);
     document.getElementById('contactDate').value = dateStr;
     document.getElementById('contactTime').value = timeStr;
