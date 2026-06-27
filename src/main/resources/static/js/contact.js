@@ -1,4 +1,26 @@
 let contactLogs = [];
+let contactCalendarYear = new Date().getFullYear();
+let contactCalendarMonth = new Date().getMonth() + 1;
+
+const CATEGORY_COLORS = {
+    'Info Vendita': '#1a4080',
+    'Info Noleggio': '#00c853',
+    'Service': '#f0c040',
+    'Info Acquisto effettuato': '#4a90d9',
+    'Ritardo Consegna': '#ff3d3d',
+    'Pratica Leasing': '#7c4dff',
+    'Pratica Finanziamento': '#ff9800',
+    'Amministrazione': '#00bcd4',
+    'Info + Appuntamento': '#e91e63',
+    'Altro': '#8a8faa'
+};
+
+const MONTH_NAMES_IT = [
+    'Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
+    'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'
+];
+
+const DAY_NAMES_SHORT = ['Lun','Mar','Mer','Gio','Ven','Sab'];
 
 async function loadContactLogs(from, to) {
     try {
@@ -9,11 +31,56 @@ async function loadContactLogs(from, to) {
         contactLogs = await res.json();
         renderContactLogs(contactLogs);
         loadContactStats(from, to);
+        renderContactCalendar();
     } catch (err) {
         console.error('Errore caricamento contatti:', err);
     }
 }
 
+// ===== VISTA ELENCO GIORNO =====
+let currentDayView = null;
+
+function showDayView(date) {
+    currentDayView = date;
+    const container = document.getElementById('contactLogsList');
+    const items = contactLogs.filter(l => l.contactDate.split('T')[0] === date);
+
+    container.innerHTML = `
+        <div style="margin-bottom:16px;display:flex;align-items:center;gap:12px">
+            <button class="btn-secondary" onclick="closeDayView()" style="padding:8px 16px;font-size:12px">← INDIETRO</button>
+            <span style="font-size:16px;font-weight:800;color:var(--text-primary)">${formatDateIT(date)}</span>
+            <button class="btn-small btn-secondary" onclick="printDay('${date}')" style="margin-left:auto">🖨️ STAMPA</button>
+        </div>
+        <div class="contact-day-section">
+            <div class="contact-table-wrapper">
+                <table class="contact-table">
+                    <thead>
+                        <tr>
+                            <th>Orario</th>
+                            <th>Categoria</th>
+                            <th>Note</th>
+                            <th>Operatore</th>
+                            <th>Azioni</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${items.length > 0
+                            ? items.map(log => renderContactRow(log)).join('')
+                            : '<tr><td colspan="5" style="text-align:center;color:var(--text-secondary);padding:20px">Nessun contatto</td></tr>'
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+}
+
+function closeDayView() {
+    currentDayView = null;
+    renderContactLogs(contactLogs);
+}
+
+// ===== RENDER TREE =====
 function renderContactLogs(logs) {
     const container = document.getElementById('contactLogsList');
     if (!container) return;
@@ -59,7 +126,7 @@ function renderContactLogs(logs) {
                         </div>
                         <div id="body-${monthKey}">
                             ${Object.entries(weeks).sort().map(([week, days]) => {
-                                const weekKey = `week-${week.replace(/\s/g,'_')}`;
+                                const weekKey = `week-${week.replace(/[\s—]/g,'_')}`;
                                 const weekCount = Object.values(days).flat().length;
                                 return `
                                 <div class="contact-tree-indent">
@@ -67,33 +134,8 @@ function renderContactLogs(logs) {
                                         <span>🗓️ ${week} <span class="tree-count">${weekCount} contatti</span></span>
                                         <span class="folder-arrow" id="arrow-${weekKey}">▼</span>
                                     </div>
-                                    <div id="body-${weekKey}">
-                                        ${Object.entries(days).sort().map(([date, items]) => `
-                                            <div class="contact-tree-indent">
-                                                <div class="contact-day-section">
-                                                    <div class="contact-day-header">
-                                                        ${formatDateIT(date)} — <span style="color:var(--text-secondary)">${items.length} contatti</span>
-                                                        <button class="btn-small btn-secondary" onclick="printDay('${date}')" style="float:right;padding:2px 8px;font-size:10px">🖨️</button>
-                                                    </div>
-                                                    <div class="contact-table-wrapper">
-                                                        <table class="contact-table">
-                                                            <thead>
-                                                                <tr>
-                                                                    <th>Orario</th>
-                                                                    <th>Categoria</th>
-                                                                    <th>Note</th>
-                                                                    <th>Operatore</th>
-                                                                    <th>Azioni</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                ${items.map(log => renderContactRow(log)).join('')}
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        `).join('')}
+                                    <div id="body-${weekKey}" style="display:none">
+                                        ${renderWeekDayCards(days)}
                                     </div>
                                 </div>
                                 `;
@@ -106,6 +148,63 @@ function renderContactLogs(logs) {
         </div>
         `;
     }).join('');
+}
+
+function renderWeekDayCards(days) {
+    // Ottieni la settimana (lun-sab) dal primo giorno disponibile
+    const firstDate = Object.keys(days).sort()[0];
+    const d = new Date(firstDate);
+    const dayOfWeek = d.getDay() || 7;
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - (dayOfWeek - 1));
+
+    const weekDates = [];
+    for (let i = 0; i < 6; i++) {
+        const day = new Date(monday);
+        day.setDate(monday.getDate() + i);
+        weekDates.push(day.toISOString().split('T')[0]);
+    }
+
+    return `
+        <div class="contact-day-cards-grid">
+            ${weekDates.map((date, idx) => {
+                const items = days[date] || [];
+                const dayName = DAY_NAMES_SHORT[idx];
+                const dayNum = new Date(date).getDate();
+                const hasData = items.length > 0;
+                const dominantColor = hasData ? getDominantColor(items) : null;
+                const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+                const emptyBg = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)';
+                const bgStyle = hasData
+                    ? `background: ${dominantColor}22; border-color: ${dominantColor};`
+                    : `background: ${emptyBg};`;
+
+                return `
+                <div class="contact-day-card ${hasData ? 'contact-day-card-active' : 'contact-day-card-empty'}"
+                    style="${bgStyle}"
+                    ${hasData ? `onclick="showDayView('${date}')"` : ''}>
+                    <div class="contact-day-card-name">${dayName}</div>
+                    <div class="contact-day-card-num" style="${hasData ? `color:${dominantColor}` : ''}">${dayNum}</div>
+                    ${hasData ? `
+                        <div class="contact-day-card-count">${items.length}</div>
+                        <div class="contact-day-card-label">contatti</div>
+                    ` : `
+                        <div class="contact-day-card-empty-label">—</div>
+                    `}
+                </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+}
+
+function getDominantColor(items) {
+    const counts = {};
+    items.forEach(log => {
+        counts[log.category] = (counts[log.category] || 0) + 1;
+    });
+    const dominant = Object.entries(counts).sort((a,b) => b[1]-a[1])[0][0];
+    return CATEGORY_COLORS[dominant] || '#1a4080';
 }
 
 function toggleTree(key) {
@@ -130,7 +229,7 @@ function renderContactRow(log) {
         <tr id="contact-row-${log.id}">
             <td style="font-weight:700;color:var(--text-primary);white-space:nowrap">${time}</td>
             <td>
-                <span class="contact-category-badge cat-${log.category.replace(/\s+/g, '_')}">${log.category}</span>
+                <span class="contact-category-badge cat-${log.category.replace(/[\s+]/g, '_')}">${log.category}</span>
             </td>
             <td style="font-size:12px;color:var(--text-secondary)">${log.otherNote || '—'}</td>
             <td style="font-size:12px;color:var(--text-secondary)">${log.user.fullName}</td>
@@ -177,6 +276,65 @@ function printDay(date) {
     win.print();
 }
 
+// ===== CALENDARIO CONTATTI =====
+function renderContactCalendar() {
+    const container = document.getElementById('contactCalendar');
+    const title = document.getElementById('contactCalendarTitle');
+    if (!container || !title) return;
+
+    title.textContent = `${MONTH_NAMES_IT[contactCalendarMonth - 1]} ${contactCalendarYear}`;
+
+    const firstDay = new Date(contactCalendarYear, contactCalendarMonth - 1, 1);
+    const daysInMonth = new Date(contactCalendarYear, contactCalendarMonth, 0).getDate();
+    let startWeekday = firstDay.getDay();
+    startWeekday = startWeekday === 0 ? 6 : startWeekday - 1;
+
+    const weekdays = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+    let html = weekdays.map(d => `<div class="cal-weekday">${d}</div>`).join('');
+
+    for (let i = 0; i < startWeekday; i++) {
+        html += '<div class="cal-day cal-day-empty"></div>';
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+
+    // Raggruppa log per giorno
+    const byDay = {};
+    contactLogs.forEach(log => {
+        const date = log.contactDate.split('T')[0];
+        if (!byDay[date]) byDay[date] = [];
+        byDay[date].push(log);
+    });
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${contactCalendarYear}-${String(contactCalendarMonth).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+        const items = byDay[dateStr] || [];
+        const isToday = dateStr === today;
+
+        let bgStyle = '';
+        let borderStyle = '';
+        if (items.length > 0) {
+            const color = getDominantColor(items);
+            bgStyle = `background:${color}33;`;
+            borderStyle = `border-color:${color};`;
+        }
+
+        html += `<button type="button" class="cal-day ${isToday ? 'cal-day-today' : ''}"
+            style="${bgStyle}${borderStyle}"
+            onclick="showDayView('${dateStr}')">${day}</button>`;
+    }
+
+    container.innerHTML = html;
+}
+
+function changeContactCalendarMonth(delta) {
+    contactCalendarMonth += delta;
+    if (contactCalendarMonth > 12) { contactCalendarMonth = 1; contactCalendarYear++; }
+    else if (contactCalendarMonth < 1) { contactCalendarMonth = 12; contactCalendarYear--; }
+    renderContactCalendar();
+}
+
+// ===== STATS =====
 async function loadContactStats(from, to) {
     try {
         let url = '/api/contacts/stats';
@@ -210,10 +368,7 @@ function renderContactChart(stats) {
     const byCategory = stats.byCategory || {};
     const labels = Object.keys(byCategory);
     const data = Object.values(byCategory);
-    const colors = [
-        '#1a4080','#f0c040','#00c853','#ff9800','#ff3d3d',
-        '#7c4dff','#00bcd4','#e91e63'
-    ];
+    const colors = labels.map(l => CATEGORY_COLORS[l] || '#8a8faa');
 
     contactChart = new Chart(ctx.getContext('2d'), {
         type: 'doughnut',
@@ -221,7 +376,7 @@ function renderContactChart(stats) {
             labels,
             datasets: [{
                 data,
-                backgroundColor: colors.slice(0, labels.length),
+                backgroundColor: colors,
                 borderWidth: 2,
                 borderColor: isDark ? '#0d0f1a' : '#ffffff'
             }]
@@ -243,6 +398,7 @@ function renderContactChart(stats) {
     });
 }
 
+// ===== CRUD =====
 async function createContactLog() {
     const category = document.getElementById('contactCategory').value;
     const otherNote = document.getElementById('contactOtherNote').value.trim();

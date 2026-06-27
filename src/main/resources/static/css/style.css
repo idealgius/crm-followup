@@ -1260,3 +1260,73 @@ select.input-field {
     color: var(--text-secondary);
     margin-left: 8px;
 }
+/* ===== CONTACT DAY CARDS ===== */
+.contact-day-cards-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    padding: 16px;
+}
+
+.contact-day-card {
+    border-radius: 14px;
+    border: 1.5px solid var(--border);
+    padding: 16px 12px;
+    text-align: center;
+    transition: all 0.2s;
+    min-height: 110px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+.contact-day-card-active {
+    cursor: pointer;
+}
+
+.contact-day-card-active:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+}
+
+.contact-day-card-empty {
+    cursor: default;
+    opacity: 0.5;
+}
+
+.contact-day-card-name {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+}
+
+.contact-day-card-num {
+    font-size: 28px;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.contact-day-card-count {
+    font-size: 18px;
+    font-weight: 900;
+    color: var(--text-primary);
+    line-height: 1;
+}
+
+.contact-day-card-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.contact-day-card-empty-label {
+    font-size: 20px;
+    color: var(--text-secondary);
+    opacity: 0.4;
+}

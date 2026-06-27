@@ -296,10 +296,18 @@
                 <div class="stat-value" id="statService">0%</div>
             </div>
         </div>
-        <div style="margin-bottom:20px">
-            <div class="chart-card" style="max-width:420px">
+        <div style="margin-bottom:20px;display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+            <div class="chart-card" style="max-width:460px;flex:1">
                 <h3>DISTRIBUZIONE CATEGORIE</h3>
-                <canvas id="chartContacts" style="max-height:260px"></canvas>
+                <canvas id="chartContacts" style="max-height:280px"></canvas>
+            </div>
+            <div class="calendar-card" style="flex:1;min-width:300px">
+                <div class="calendar-header">
+                    <button type="button" class="cal-nav-btn" onclick="changeContactCalendarMonth(-1)">‹</button>
+                    <h3 id="contactCalendarTitle">Calendario Contatti</h3>
+                    <button type="button" class="cal-nav-btn" onclick="changeContactCalendarMonth(1)">›</button>
+                </div>
+                <div id="contactCalendar" class="fu-calendar"></div>
             </div>
         </div>
         <div id="newContactForm" class="form-card" style="display:none">
@@ -324,6 +332,8 @@
                         <option>Ritardo Consegna</option>
                         <option>Pratica Leasing</option>
                         <option>Pratica Finanziamento</option>
+                        <option>Amministrazione</option>
+                        <option>Info + Appuntamento</option>
                         <option>Altro</option>
                     </select>
                 </div>
