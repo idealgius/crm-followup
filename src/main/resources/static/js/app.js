@@ -18,6 +18,12 @@ function applyRolePermissions(role) {
     document.getElementById('navWaiting').style.display = canSeeAll ? 'inline-block' : 'none';
     document.getElementById('navContacts').style.display = 'inline-block';
     document.getElementById('adminLink').style.display = (isAdmin || isGestore) ? 'inline-block' : 'none';
+
+    // UTENTE: nasconde filtro operatore nel registro contatti
+    if (role === 'UTENTE') {
+        const opFilter = document.getElementById('contactOperatorFilter');
+        if (opFilter) opFilter.style.display = 'none';
+    }
 }
 
 function showPage(page) {
