@@ -1,6 +1,9 @@
 let contactLogs = [];
+let contactLogsFiltered = [];
 let contactCalendarYear = new Date().getFullYear();
 let contactCalendarMonth = new Date().getMonth() + 1;
+let selectedSede = '';
+let contactChartByOperator = null;
 
 const CATEGORY_COLORS = {
     'Info Vendita': '#1a4080',
@@ -22,6 +25,11 @@ const MONTH_NAMES_IT = [
 
 const DAY_NAMES_SHORT = ['Lun','Mar','Mer','Gio','Ven','Sab'];
 
+const OPERATOR_COLORS = [
+    '#1a4080','#00c853','#f0c040','#e91e63','#7c4dff',
+    '#ff9800','#00bcd4','#ff3d3d','#4a90d9','#8a8faa'
+];
+
 async function loadContactLogs(from, to, restoreDayView) {
     try {
         let url = '/api/contacts';
@@ -29,16 +37,101 @@ async function loadContactLogs(from, to, restoreDayView) {
         const res = await fetch(url);
         if (!res.ok) return;
         contactLogs = await res.json();
-        if (restoreDayView) {
-            showDayView(restoreDayView);
-        } else {
-            renderContactLogs(contactLogs);
-        }
-        loadContactStats(from, to);
-        renderContactCalendar();
+        populateOperatorFilter();
+        applyContactFilters(restoreDayView);
     } catch (err) {
         console.error('Errore caricamento contatti:', err);
     }
+}
+
+function populateOperatorFilter() {
+    const select = document.getElementById('contactOperatorFilter');
+    if (!select) return;
+    const current = select.value;
+    const operators = [...new Set(contactLogs.map(l => l.user.fullName))].sort();
+    select.innerHTML = '<option value="">Tutti gli operatori</option>' +
+        operators.map(op => `<option value="${op}" ${op === current ? 'selected' : ''}>${op}</option>`).join('');
+}
+
+function applyContactFilters(restoreDayView) {
+    const operator = document.getElementById('contactOperatorFilter')?.value || '';
+    contactLogsFiltered = operator
+        ? contactLogs.filter(l => l.user.fullName === operator)
+        : [...contactLogs];
+
+    if (restoreDayView) {
+        showDayView(restoreDayView);
+    } else {
+        renderContactLogs(contactLogsFiltered);
+    }
+    renderContactCalendar();
+    renderContactChartByOperator();
+    renderContactStatsFromLogs(contactLogsFiltered);
+    renderContactChartFromLogs(contactLogsFiltered);
+}
+
+// ===== STATS CALCOLATE DAI LOG =====
+function renderContactStatsFromLogs(logs) {
+    const total = logs.length;
+    const byCategory = {};
+    logs.forEach(log => {
+        byCategory[log.category] = (byCategory[log.category] || 0) + 1;
+    });
+
+    const infoVendita = byCategory['Info Vendita'] || 0;
+    const infoNoleggio = byCategory['Info Noleggio'] || 0;
+    const service = byCategory['Service'] || 0;
+
+    const el = id => document.getElementById(id);
+    if (el('statContactTotal')) el('statContactTotal').textContent = total;
+    if (el('statInfoVendita')) el('statInfoVendita').textContent = (total > 0 ? Math.round(infoVendita * 1000 / total) / 10 : 0) + '%';
+    if (el('statInfoNoleggio')) el('statInfoNoleggio').textContent = (total > 0 ? Math.round(infoNoleggio * 1000 / total) / 10 : 0) + '%';
+    if (el('statService')) el('statService').textContent = (total > 0 ? Math.round(service * 1000 / total) / 10 : 0) + '%';
+}
+
+let contactChart = null;
+
+function renderContactChartFromLogs(logs) {
+    const ctx = document.getElementById('chartContacts');
+    if (!ctx) return;
+    if (contactChart) contactChart.destroy();
+
+    const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+    const byCategory = {};
+    logs.forEach(log => {
+        byCategory[log.category] = (byCategory[log.category] || 0) + 1;
+    });
+
+    const labels = Object.keys(byCategory);
+    const data = Object.values(byCategory);
+    const colors = labels.map(l => CATEGORY_COLORS[l] || '#8a8faa');
+
+    contactChart = new Chart(ctx.getContext('2d'), {
+        type: 'doughnut',
+        data: {
+            labels,
+            datasets: [{
+                data,
+                backgroundColor: colors,
+                borderWidth: 2,
+                borderColor: isDark ? '#0d0f1a' : '#ffffff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: {
+                        color: isDark ? '#8a8faa' : '#000000',
+                        font: { size: 11 },
+                        padding: 12
+                    }
+                }
+            }
+        }
+    });
 }
 
 // ===== VISTA ELENCO GIORNO =====
@@ -47,7 +140,7 @@ let currentDayView = null;
 function showDayView(date) {
     currentDayView = date;
     const container = document.getElementById('contactLogsList');
-    const items = contactLogs.filter(l => l.contactDate.split('T')[0] === date);
+    const items = contactLogsFiltered.filter(l => l.contactDate.split('T')[0] === date);
 
     container.innerHTML = `
         <div style="margin-bottom:16px;display:flex;align-items:center;gap:12px">
@@ -81,7 +174,7 @@ function showDayView(date) {
 
 function closeDayView() {
     currentDayView = null;
-    renderContactLogs(contactLogs);
+    renderContactLogs(contactLogsFiltered);
 }
 
 // ===== RENDER TREE =====
@@ -228,13 +321,16 @@ function renderContactRow(log) {
     const targetIsAdmin = log.user.role === 'ADMIN' || log.user.role === 'GESTORE';
     const canEdit = isAdmin || isOwner || (isMod && !targetIsAdmin);
 
+    const catClass = log.category.replace(/[\s+]/g, '_');
+
     return `
         <tr id="contact-row-${log.id}">
             <td style="font-weight:700;color:var(--text-primary);white-space:nowrap">${time}</td>
             <td>
-                <span class="contact-category-badge cat-${log.category.replace(/[\s+]/g, '_')}">${log.category}</span>
+                <span class="contact-category-badge cat-${catClass}">${log.category}</span>
+                ${log.category === 'Info + Appuntamento' && log.otherNote ? `<span style="font-size:11px;background:rgba(233,30,99,0.1);color:#e91e63;padding:2px 8px;border-radius:8px;margin-left:6px">📍 ${log.otherNote}</span>` : ''}
             </td>
-            <td style="font-size:12px;color:var(--text-secondary)">${log.otherNote || '—'}</td>
+            <td style="font-size:12px;color:var(--text-secondary)">${log.category !== 'Info + Appuntamento' ? (log.otherNote || '—') : ''}</td>
             <td style="font-size:12px;color:var(--text-secondary)">${log.user.fullName}</td>
             <td>
                 ${canEdit ? `
@@ -247,7 +343,7 @@ function renderContactRow(log) {
 }
 
 function printDay(date) {
-    const dayLogs = contactLogs.filter(l => l.contactDate.split('T')[0] === date);
+    const dayLogs = contactLogsFiltered.filter(l => l.contactDate.split('T')[0] === date);
     const win = window.open('', '_blank');
     win.document.write(`
         <html><head><title>Registro ${date}</title>
@@ -266,8 +362,8 @@ function printDay(date) {
                 ${dayLogs.map(log => `
                     <tr>
                         <td>${log.contactDate.split('T')[1].substring(0,5)}</td>
-                        <td>${log.category}</td>
-                        <td>${log.otherNote || '—'}</td>
+                        <td>${log.category}${log.category === 'Info + Appuntamento' && log.otherNote ? ' — ' + log.otherNote : ''}</td>
+                        <td>${log.category !== 'Info + Appuntamento' ? (log.otherNote || '—') : ''}</td>
                         <td>${log.user.fullName}</td>
                     </tr>
                 `).join('')}
@@ -300,9 +396,8 @@ function renderContactCalendar() {
     }
 
     const today = new Date().toISOString().split('T')[0];
-
     const byDay = {};
-    contactLogs.forEach(log => {
+    contactLogsFiltered.forEach(log => {
         const date = log.contactDate.split('T')[0];
         if (!byDay[date]) byDay[date] = [];
         byDay[date].push(log);
@@ -312,7 +407,6 @@ function renderContactCalendar() {
         const dateStr = `${contactCalendarYear}-${String(contactCalendarMonth).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
         const items = byDay[dateStr] || [];
         const isToday = dateStr === today;
-
         let bgStyle = '';
         let borderStyle = '';
         if (items.length > 0) {
@@ -320,7 +414,6 @@ function renderContactCalendar() {
             bgStyle = `background:${color}33;`;
             borderStyle = `border-color:${color};`;
         }
-
         html += `<button type="button" class="cal-day ${isToday ? 'cal-day-today' : ''}"
             style="${bgStyle}${borderStyle}"
             onclick="showDayView('${dateStr}')">${day}</button>`;
@@ -336,51 +429,35 @@ function changeContactCalendarMonth(delta) {
     renderContactCalendar();
 }
 
-// ===== STATS =====
-async function loadContactStats(from, to) {
-    try {
-        let url = '/api/contacts/stats';
-        if (from && to) url += `?from=${from}&to=${to}`;
-        const res = await fetch(url);
-        if (!res.ok) return;
-        const stats = await res.json();
-        renderContactStats(stats);
-        renderContactChart(stats);
-    } catch (err) {
-        console.error('Errore statistiche contatti:', err);
-    }
-}
-
-function renderContactStats(stats) {
-    const el = id => document.getElementById(id);
-    if (el('statContactTotal')) el('statContactTotal').textContent = stats.total || 0;
-    if (el('statInfoVendita')) el('statInfoVendita').textContent = (stats.infoVenditaPct || 0) + '%';
-    if (el('statInfoNoleggio')) el('statInfoNoleggio').textContent = (stats.infoNoleggioP_ct || 0) + '%';
-    if (el('statService')) el('statService').textContent = (stats.servicePct || 0) + '%';
-}
-
-let contactChart = null;
-
-function renderContactChart(stats) {
-    const ctx = document.getElementById('chartContacts');
+// ===== GRAFICO OPERATORI =====
+function renderContactChartByOperator() {
+    const ctx = document.getElementById('chartContactsByOperator');
     if (!ctx) return;
-    if (contactChart) contactChart.destroy();
+    if (contactChartByOperator) contactChartByOperator.destroy();
 
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-    const byCategory = stats.byCategory || {};
-    const labels = Object.keys(byCategory);
-    const data = Object.values(byCategory);
-    const colors = labels.map(l => CATEGORY_COLORS[l] || '#8a8faa');
 
-    contactChart = new Chart(ctx.getContext('2d'), {
+    const byOperator = {};
+    contactLogs.forEach(log => {
+        const op = log.user.fullName;
+        if (!byOperator[op]) byOperator[op] = 0;
+        byOperator[op]++;
+    });
+
+    const total = Object.values(byOperator).reduce((a,b) => a+b, 0);
+    const labels = Object.keys(byOperator);
+    const data = labels.map(op => total > 0 ? Math.round(byOperator[op] * 1000 / total) / 10 : 0);
+    const colors = labels.map((_, i) => OPERATOR_COLORS[i % OPERATOR_COLORS.length]);
+
+    contactChartByOperator = new Chart(ctx.getContext('2d'), {
         type: 'doughnut',
         data: {
             labels,
             datasets: [{
                 data,
-                backgroundColor: colors,
-                borderWidth: 2,
-                borderColor: isDark ? '#0d0f1a' : '#ffffff'
+                backgroundColor: colors.map(c => c + 'bb'),
+                borderColor: colors,
+                borderWidth: 2
             }]
         },
         options: {
@@ -391,12 +468,27 @@ function renderContactChart(stats) {
                     position: 'right',
                     labels: {
                         color: isDark ? '#8a8faa' : '#000000',
-                        font: { size: 11 },
-                        padding: 12
+                        font: { size: 10 },
+                        padding: 10
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ` ${ctx.label}: ${ctx.raw}%`
                     }
                 }
             }
         }
+    });
+}
+
+// ===== SEDE APPUNTAMENTO =====
+function selectSede(sede) {
+    selectedSede = sede;
+    document.getElementById('contactAppuntamentoSede').value = sede;
+    ['Agnano','Casamarciano','Salerno'].forEach(s => {
+        const btn = document.getElementById(`sede-${s}`);
+        if (btn) btn.classList.toggle('btn-sede-active', s === sede);
     });
 }
 
@@ -406,19 +498,22 @@ async function createContactLog() {
     const otherNote = document.getElementById('contactOtherNote').value.trim();
     const dateVal = document.getElementById('contactDate').value;
     const timeVal = document.getElementById('contactTime').value;
+    const sede = document.getElementById('contactAppuntamentoSede')?.value || '';
 
     if (!category) { alert('Seleziona una categoria'); return; }
     if (!dateVal || !timeVal) { alert('Inserisci data e orario'); return; }
     if (category === 'Altro' && !otherNote) { alert('Inserisci la motivazione per "Altro"'); return; }
+    if (category === 'Info + Appuntamento' && !sede) { alert('Seleziona la sede dell\'appuntamento'); return; }
 
     const contactDate = `${dateVal}T${timeVal}:00`;
     const savedDayView = currentDayView || dateVal;
+    const finalNote = category === 'Info + Appuntamento' ? sede : otherNote;
 
     try {
         const res = await fetch('/api/contacts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ category, otherNote, contactDate })
+            body: JSON.stringify({ category, otherNote: finalNote, contactDate })
         });
         if (!res.ok) { alert('Errore nella creazione'); return; }
         hideNewContactForm();
@@ -481,11 +576,27 @@ function hideNewContactForm() {
     document.getElementById('contactCategory').value = '';
     document.getElementById('contactOtherNote').value = '';
     document.getElementById('contactOtherNoteRow').style.display = 'none';
+    document.getElementById('contactAppuntamentoRow').style.display = 'none';
+    document.getElementById('contactAppuntamentoSede').value = '';
+    selectedSede = '';
+    ['Agnano','Casamarciano','Salerno'].forEach(s => {
+        const btn = document.getElementById(`sede-${s}`);
+        if (btn) btn.classList.remove('btn-sede-active');
+    });
 }
 
 function onCategoryChange() {
     const cat = document.getElementById('contactCategory').value;
     document.getElementById('contactOtherNoteRow').style.display = cat === 'Altro' ? 'block' : 'none';
+    document.getElementById('contactAppuntamentoRow').style.display = cat === 'Info + Appuntamento' ? 'block' : 'none';
+    if (cat !== 'Info + Appuntamento') {
+        selectedSede = '';
+        document.getElementById('contactAppuntamentoSede').value = '';
+        ['Agnano','Casamarciano','Salerno'].forEach(s => {
+            const btn = document.getElementById(`sede-${s}`);
+            if (btn) btn.classList.remove('btn-sede-active');
+        });
+    }
 }
 
 function printContactLogs() {

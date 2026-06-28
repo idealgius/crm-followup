@@ -374,9 +374,7 @@ select.input-dark {
 .filter-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
 /* ===== SEARCH BAR ===== */
-.search-bar {
-    margin-bottom: 20px;
-}
+.search-bar { margin-bottom: 20px; }
 
 .search-results-header {
     font-size: 11px;
@@ -441,24 +439,14 @@ select.input-dark {
 .stat-card.purple::after { background: #7c4dff; }
 
 .stat-card:hover { transform: translateY(-3px); }
+.stat-card-clickable { cursor: pointer; }
+.stat-card-clickable:hover { box-shadow: 0 8px 24px rgba(26,64,128,0.18); }
+.stat-card-clickable:active { transform: translateY(-1px); }
 
-.stat-card-clickable {
-    cursor: pointer;
-}
+/* ===== CALENDAR & MODAL ===== */
+.dashboard-extras { margin-bottom: 28px; }
 
-.stat-card-clickable:hover {
-    box-shadow: 0 8px 24px rgba(26,64,128,0.18);
-}
-
-.stat-card-clickable:active {
-    transform: translateY(-1px);
-}
-
-/* ===== DASHBOARD CALENDAR & MODAL ===== */
-.dashboard-extras {
-    margin-bottom: 28px;
-}
-
+/* calendario base — usato in registro contatti, ecc. */
 .calendar-card {
     background: var(--bg-card);
     border: 1.5px solid var(--border);
@@ -466,6 +454,11 @@ select.input-dark {
     padding: 20px;
     box-shadow: var(--shadow);
     max-width: 420px;
+}
+
+/* nella dashboard la griglia gestisce la larghezza */
+.dashboard-grid-2x2 .calendar-card {
+    max-width: 100% !important;
 }
 
 .calendar-header {
@@ -545,26 +538,10 @@ select.input-dark {
 }
 
 .cal-day:hover { border-color: #1a4080; }
-
-.cal-day-empty {
-    border: none;
-    background: transparent;
-    cursor: default;
-}
-
-.cal-day-pending {
-    background: rgba(240,192,64,0.35);
-    border-color: #f0c040;
-}
-
-.cal-day-complete {
-    background: rgba(0,200,83,0.28);
-    border-color: #00c853;
-}
-
-.cal-day-today {
-    box-shadow: 0 0 0 2px #1a4080;
-}
+.cal-day-empty { border: none; background: transparent; cursor: default; }
+.cal-day-pending { background: rgba(240,192,64,0.35); border-color: #f0c040; }
+.cal-day-complete { background: rgba(0,200,83,0.28); border-color: #00c853; }
+.cal-day-today { box-shadow: 0 0 0 2px #1a4080; }
 
 .modal-overlay {
     position: fixed;
@@ -632,9 +609,7 @@ select.input-dark {
     transition: border-color 0.2s;
 }
 
-.stat-detail-card:hover {
-    border-color: #f0c040;
-}
+.stat-detail-card:hover { border-color: #f0c040; }
 
 .stat-label {
     font-size: 10px;
@@ -748,20 +723,14 @@ select.input-dark {
     user-select: none;
 }
 
-.consultant-folder-tab:hover {
-    background: rgba(26,64,128,0.08);
-}
+.consultant-folder-tab:hover { background: rgba(26,64,128,0.08); }
 
 .tab-complete {
     background: linear-gradient(135deg, rgba(240,192,64,0.15), rgba(240,192,64,0.05)) !important;
     border-bottom-color: #f0c040 !important;
 }
 
-.folder-tab-left {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-}
+.folder-tab-left { display: flex; align-items: center; gap: 14px; }
 
 .folder-icon {
     width: 40px;
@@ -774,9 +743,7 @@ select.input-dark {
     flex-shrink: 0;
 }
 
-.folder-icon-complete {
-    background: rgba(240,192,64,0.15) !important;
-}
+.folder-icon-complete { background: rgba(240,192,64,0.15) !important; }
 
 .folder-consultant-name {
     font-size: 15px;
@@ -787,12 +754,7 @@ select.input-dark {
 
 [data-theme="light"] .folder-consultant-name { color: #0d1a2e; }
 
-.folder-stats {
-    display: flex;
-    gap: 8px;
-    margin-top: 4px;
-    flex-wrap: wrap;
-}
+.folder-stats { display: flex; gap: 8px; margin-top: 4px; flex-wrap: wrap; }
 
 .folder-stat-item {
     font-size: 11px;
@@ -807,11 +769,7 @@ select.input-dark {
 .stat-abandoned { background: rgba(255,61,61,0.12); color: #ff3d3d; }
 .stat-appointment { background: rgba(240,192,64,0.15); color: #d4a820; }
 
-.folder-tab-right {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
+.folder-tab-right { display: flex; align-items: center; gap: 12px; }
 
 .folder-complete-badge {
     background: #f0c040;
@@ -876,12 +834,7 @@ select.input-dark {
     line-height: 1.6;
 }
 
-.followup-actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-bottom: 12px;
-}
+.followup-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 
 /* ===== STATUS BADGES ===== */
 .status-badge {
@@ -931,11 +884,7 @@ select.input-dark {
     text-transform: uppercase;
 }
 
-.step-outcome {
-    font-size: 11px;
-    font-weight: 700;
-    margin-bottom: 6px;
-}
+.step-outcome { font-size: 11px; font-weight: 700; margin-bottom: 6px; }
 
 .outcome-PENDING { color: var(--text-secondary); }
 .outcome-ANSWERED { color: #00c853; }
@@ -979,11 +928,7 @@ select.input-dark {
     box-shadow: 0 6px 20px rgba(26,64,128,0.12);
 }
 
-.waiting-name {
-    font-size: 16px;
-    font-weight: 800;
-    color: var(--text-primary);
-}
+.waiting-name { font-size: 16px; font-weight: 800; color: var(--text-primary); }
 
 .waiting-details {
     font-size: 12px;
@@ -1029,6 +974,7 @@ select.input-field {
     background: var(--input-bg);
     color: var(--input-color);
 }
+
 /* ===== REGISTRO CONTATTI ===== */
 .contact-week-section {
     background: var(--folder-bg);
@@ -1057,7 +1003,6 @@ select.input-field {
 }
 
 [data-theme="light"] .contact-week-header { color: #1a4080; }
-
 .contact-week-header:hover { background: rgba(26,64,128,0.08); }
 
 .contact-day-section {
@@ -1078,9 +1023,7 @@ select.input-field {
     text-transform: capitalize;
 }
 
-.contact-table-wrapper {
-    overflow-x: auto;
-}
+.contact-table-wrapper { overflow-x: auto; }
 
 .contact-table {
     width: 100%;
@@ -1088,9 +1031,7 @@ select.input-field {
     font-size: 13px;
 }
 
-.contact-table thead tr {
-    background: var(--folder-tab-bg);
-}
+.contact-table thead tr { background: var(--folder-tab-bg); }
 
 .contact-table th {
     padding: 10px 14px;
@@ -1111,10 +1052,7 @@ select.input-field {
 }
 
 .contact-table tbody tr:last-child td { border-bottom: none; }
-
-.contact-table tbody tr:hover {
-    background: rgba(26,64,128,0.04);
-}
+.contact-table tbody tr:hover { background: rgba(26,64,128,0.04); }
 
 .contact-category-badge {
     display: inline-block;
@@ -1132,36 +1070,14 @@ select.input-field {
 .cat-Ritardo_Consegna { background: rgba(255,61,61,0.12); color: #ff3d3d; }
 .cat-Pratica_Leasing { background: rgba(124,77,255,0.12); color: #7c4dff; }
 .cat-Pratica_Finanziamento { background: rgba(255,152,0,0.12); color: #ff9800; }
+.cat-Amministrazione { background: rgba(0,188,212,0.12); color: #00bcd4; }
+.cat-Info___Appuntamento { background: rgba(233,30,99,0.12); color: #e91e63; }
 .cat-Altro { background: rgba(138,143,170,0.12); color: #8a8faa; }
 
 [data-theme="light"] .cat-Info_Vendita { color: #0d2a5e; }
 [data-theme="light"] .cat-Info_Noleggio { color: #007a30; }
 [data-theme="light"] .cat-Service { color: #8a6000; }
 
-/* ===== PRINT STYLES ===== */
-@media print {
-    .navbar, .filter-bar, .form-card, .btn-primary,
-    .btn-gold, .btn-secondary, .btn-small, .theme-switch,
-    .btn-logout, #newContactForm, .charts-grid, .stats-grid {
-        display: none !important;
-    }
-
-    body { background: #fff !important; color: #000 !important; }
-
-    .contact-table { font-size: 11px; }
-    .contact-table th, .contact-table td { padding: 6px 10px; }
-    .contact-week-section { border: 1px solid #ccc; margin-bottom: 10px; }
-    .contact-week-header { background: #f0f0f0 !important; color: #000 !important; }
-    .contact-day-header { background: #f8f8f8 !important; }
-
-    .page-header h2 {
-        color: #000 !important;
-        font-size: 18px;
-        margin-bottom: 10px;
-    }
-
-    @page { margin: 15mm; }
-}
 /* ===== RECALL BADGES ===== */
 .recall-badge {
     display: inline-block;
@@ -1206,7 +1122,9 @@ select.input-field {
 @keyframes pulse-recall {
     0%, 100% { box-shadow: 0 0 0 0 rgba(240,192,64,0.4); }
     50% { box-shadow: 0 0 0 6px rgba(240,192,64,0); }
-}/* ===== CONTACT TREE ===== */
+}
+
+/* ===== CONTACT TREE ===== */
 .contact-tree-section {
     background: var(--folder-bg);
     border: 1.5px solid var(--folder-border);
@@ -1250,9 +1168,7 @@ select.input-field {
 
 .contact-tree-header:hover { background: rgba(26,64,128,0.06); }
 
-.contact-tree-indent {
-    padding-left: 16px;
-}
+.contact-tree-indent { padding-left: 16px; }
 
 .tree-count {
     font-size: 11px;
@@ -1260,6 +1176,7 @@ select.input-field {
     color: var(--text-secondary);
     margin-left: 8px;
 }
+
 /* ===== CONTACT DAY CARDS ===== */
 .contact-day-cards-grid {
     display: grid;
@@ -1282,19 +1199,14 @@ select.input-field {
     gap: 4px;
 }
 
-.contact-day-card-active {
-    cursor: pointer;
-}
+.contact-day-card-active { cursor: pointer; }
 
 .contact-day-card-active:hover {
     transform: translateY(-3px);
     box-shadow: 0 8px 24px rgba(0,0,0,0.15);
 }
 
-.contact-day-card-empty {
-    cursor: default;
-    opacity: 0.5;
-}
+.contact-day-card-empty { cursor: default; opacity: 0.5; }
 
 .contact-day-card-name {
     font-size: 10px;
@@ -1329,4 +1241,113 @@ select.input-field {
     font-size: 20px;
     color: var(--text-secondary);
     opacity: 0.4;
+}
+
+/* ===== BOTTONI SEDE APPUNTAMENTO ===== */
+.btn-sede {
+    background: var(--step-bg);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.5px;
+}
+
+.btn-sede:hover {
+    border-color: #e91e63;
+    color: #e91e63;
+    background: rgba(233,30,99,0.08);
+}
+
+.btn-sede-active {
+    background: rgba(233,30,99,0.15) !important;
+    border-color: #e91e63 !important;
+    color: #e91e63 !important;
+    box-shadow: 0 0 0 2px rgba(233,30,99,0.2);
+}
+
+/* ===== DASHBOARD GRID 2x2 ===== */
+.dashboard-grid-2x2 {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    margin-bottom: 28px;
+}
+
+.dashboard-grid-2x2 .dashboard-cell {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.dashboard-grid-2x2 .calendar-card {
+    max-width: 100% !important;
+}
+
+.dashboard-grid-2x2 canvas {
+    max-height: 220px;
+}
+
+@media (max-width: 900px) {
+    .dashboard-grid-2x2 {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ===== PRINT ===== */
+@media print {
+    .navbar, .filter-bar, .form-card, .btn-primary,
+    .btn-gold, .btn-secondary, .btn-small, .theme-switch,
+    .btn-logout, #newContactForm, #contactCalendarCard,
+    .contact-tree-section, .contact-day-cards-grid,
+    .contact-week-section, .dashboard-extras,
+    .charts-grid, .search-bar, #searchResults,
+    .followup-actions, .steps-grid {
+        display: none !important;
+    }
+
+    #contactStatsPrint {
+        display: grid !important;
+        grid-template-columns: repeat(4, 1fr) !important;
+        margin-bottom: 16px !important;
+    }
+
+    #contactChartPrint {
+        display: flex !important;
+        margin-bottom: 16px !important;
+    }
+
+    body { background: #fff !important; color: #000 !important; }
+
+    .stat-card {
+        border: 1px solid #ccc !important;
+        box-shadow: none !important;
+        background: #fff !important;
+    }
+
+    .stat-label { color: #555 !important; }
+    .stat-value { color: #000 !important; }
+
+    .chart-card {
+        border: 1px solid #ccc !important;
+        box-shadow: none !important;
+        background: #fff !important;
+        max-width: 400px !important;
+    }
+
+    .chart-card h3 { color: #000 !important; }
+
+    .contact-table { font-size: 11px; }
+    .contact-table th, .contact-table td { padding: 6px 10px; }
+
+    .page-header h2 {
+        color: #000 !important;
+        font-size: 18px !important;
+        margin-bottom: 10px !important;
+    }
+
+    @page { margin: 15mm; }
 }

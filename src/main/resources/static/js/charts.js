@@ -3,6 +3,9 @@ let chartWaiting = null;
 let calendarYear = new Date().getFullYear();
 let calendarMonth = new Date().getMonth() + 1;
 let calendarDays = {};
+let recallCalendarYear = new Date().getFullYear();
+let recallCalendarMonth = new Date().getMonth() + 1;
+let recallEntries = [];
 
 const STAT_DETAIL_TITLES = {
     all: 'Follow-up totali',
@@ -28,11 +31,15 @@ async function loadStats() {
     const { from, to, qs } = getStatsQueryParams();
     if (!from || !to) return;
 
+    const consultant = document.getElementById('statsConsultant')?.value || '';
+    let calQs = `year=${calendarYear}&month=${calendarMonth}`;
+    if (consultant) calQs += `&consultant=${encodeURIComponent(consultant)}`;
+
     try {
-        const [fuRes, wRes] = await Promise.all([
+        const [fuRes, wRes, calRes] = await Promise.all([
             fetch(`/api/stats/followups?${qs}`),
             fetch('/api/stats/waiting'),
-            loadCalendar()
+            fetch(`/api/stats/calendar?${calQs}`)
         ]);
 
         if (fuRes.ok) {
@@ -48,10 +55,29 @@ async function loadStats() {
         if (wRes.ok) {
             const wStats = await wRes.json();
             renderWaitingChart(wStats);
+            // Carica anche i recall per il calendario
+            await loadRecallEntries();
+        }
+
+        if (calRes.ok) {
+            const calData = await calRes.json();
+            calendarDays = calData.days || {};
+            renderCalendar();
         }
 
     } catch (err) {
         console.error('Errore caricamento statistiche:', err);
+    }
+}
+
+async function loadRecallEntries() {
+    try {
+        const res = await fetch('/api/waiting');
+        if (!res.ok) return;
+        recallEntries = await res.json();
+        renderRecallCalendar();
+    } catch (err) {
+        console.error('Errore caricamento recall:', err);
     }
 }
 
@@ -73,14 +99,16 @@ async function loadCalendar() {
 
 function changeCalendarMonth(delta) {
     calendarMonth += delta;
-    if (calendarMonth > 12) {
-        calendarMonth = 1;
-        calendarYear++;
-    } else if (calendarMonth < 1) {
-        calendarMonth = 12;
-        calendarYear--;
-    }
+    if (calendarMonth > 12) { calendarMonth = 1; calendarYear++; }
+    else if (calendarMonth < 1) { calendarMonth = 12; calendarYear--; }
     loadCalendar();
+}
+
+function changeRecallCalendarMonth(delta) {
+    recallCalendarMonth += delta;
+    if (recallCalendarMonth > 12) { recallCalendarMonth = 1; recallCalendarYear++; }
+    else if (recallCalendarMonth < 1) { recallCalendarMonth = 12; recallCalendarYear--; }
+    renderRecallCalendar();
 }
 
 function renderCalendar() {
@@ -112,8 +140,68 @@ function renderCalendar() {
             dayClass += info.complete ? ' cal-day-complete' : ' cal-day-pending';
         }
         if (dateStr === today) dayClass += ' cal-day-today';
-
         html += `<button type="button" class="${dayClass}" onclick="openCalendarDay('${dateStr}')">${day}</button>`;
+    }
+
+    container.innerHTML = html;
+}
+
+function renderRecallCalendar() {
+    const container = document.getElementById('recallCalendar');
+    const title = document.getElementById('recallCalendarTitle');
+    if (!container || !title) return;
+
+    title.textContent = `${MONTH_NAMES[recallCalendarMonth - 1]} ${recallCalendarYear}`;
+
+    const firstDay = new Date(recallCalendarYear, recallCalendarMonth - 1, 1);
+    const daysInMonth = new Date(recallCalendarYear, recallCalendarMonth, 0).getDate();
+    let startWeekday = firstDay.getDay();
+    startWeekday = startWeekday === 0 ? 6 : startWeekday - 1;
+
+    const today = new Date().toISOString().split('T')[0];
+
+    // Raggruppa recall per data
+    const byDay = {};
+    recallEntries.forEach(e => {
+        if (e.recallDate) {
+            if (!byDay[e.recallDate]) byDay[e.recallDate] = [];
+            byDay[e.recallDate].push(e);
+        }
+    });
+
+    const weekdays = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+    let html = weekdays.map(d => `<div class="cal-weekday">${d}</div>`).join('');
+
+    for (let i = 0; i < startWeekday; i++) {
+        html += '<div class="cal-day cal-day-empty"></div>';
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${recallCalendarYear}-${String(recallCalendarMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const entries = byDay[dateStr] || [];
+        const isToday = dateStr === today;
+        const isPast = dateStr < today;
+
+        let bgStyle = '';
+        let borderStyle = '';
+        let title2 = '';
+
+        if (entries.length > 0) {
+            if (isToday) {
+                bgStyle = 'background:rgba(240,192,64,0.35);';
+                borderStyle = 'border-color:#f0c040;';
+            } else if (isPast) {
+                bgStyle = 'background:rgba(255,61,61,0.2);';
+                borderStyle = 'border-color:#ff3d3d;';
+            } else {
+                bgStyle = 'background:rgba(74,144,217,0.2);';
+                borderStyle = 'border-color:#4a90d9;';
+            }
+            title2 = `title="${entries.map(e => e.fullName).join(', ')}"`;
+        }
+
+        const todayClass = isToday ? ' cal-day-today' : '';
+        html += `<button type="button" class="cal-day${todayClass}" style="${bgStyle}${borderStyle}" ${title2}>${day}${entries.length > 0 ? `<span style="display:block;font-size:9px;font-weight:900">${entries.length}</span>` : ''}</button>`;
     }
 
     container.innerHTML = html;
@@ -157,9 +245,7 @@ async function showStatDetail(type) {
 
 function renderStatDetailList(items, from, to, consultant) {
     const list = document.getElementById('statDetailList');
-    const filterNote = consultant
-        ? ` · Consulente: ${consultant}`
-        : '';
+    const filterNote = consultant ? ` · Consulente: ${consultant}` : '';
     const rangeNote = from === to ? from : `${from} → ${to}`;
 
     if (!items || items.length === 0) {
@@ -220,6 +306,10 @@ function renderFollowUpChart(stats) {
     const ctx = document.getElementById('chartFollowUp').getContext('2d');
     if (chartFollowUp) chartFollowUp.destroy();
 
+    const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+    const gridColor = isDark ? '#2a2d3e' : '#e0e0e0';
+    const tickColor = isDark ? '#8a8faa' : '#555';
+
     chartFollowUp = new Chart(ctx, {
         type: 'bar',
         data: {
@@ -228,36 +318,23 @@ function renderFollowUpChart(stats) {
                 label: 'Follow-Up',
                 data: [stats.total, stats.responded, stats.appointments, stats.abandoned],
                 backgroundColor: [
-                    'rgba(33, 150, 243, 0.7)',
-                    'rgba(0, 200, 83, 0.7)',
-                    'rgba(240, 192, 64, 0.7)',
-                    'rgba(255, 68, 68, 0.7)'
+                    'rgba(33,150,243,0.7)',
+                    'rgba(0,200,83,0.7)',
+                    'rgba(240,192,64,0.7)',
+                    'rgba(255,68,68,0.7)'
                 ],
-                borderColor: [
-                    '#2196f3',
-                    '#00c853',
-                    '#f0c040',
-                    '#ff4444'
-                ],
+                borderColor: ['#2196f3','#00c853','#f0c040','#ff4444'],
                 borderWidth: 2,
                 borderRadius: 6
             }]
         },
         options: {
             responsive: true,
-            plugins: {
-                legend: { display: false }
-            },
+            animation: { duration: 300 },
+            plugins: { legend: { display: false } },
             scales: {
-                x: {
-                    ticks: { color: '#888' },
-                    grid: { color: '#2a2d3e' }
-                },
-                y: {
-                    ticks: { color: '#888' },
-                    grid: { color: '#2a2d3e' },
-                    beginAtZero: true
-                }
+                x: { ticks: { color: tickColor }, grid: { color: gridColor } },
+                y: { ticks: { color: tickColor }, grid: { color: gridColor }, beginAtZero: true }
             }
         }
     });
@@ -267,41 +344,33 @@ function renderWaitingChart(stats) {
     const ctx = document.getElementById('chartWaiting').getContext('2d');
     if (chartWaiting) chartWaiting.destroy();
 
+    const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+    const legendColor = isDark ? '#8a8faa' : '#555';
+
     chartWaiting = new Chart(ctx, {
         type: 'doughnut',
         data: {
             labels: ['In Attesa', 'Richiamati', 'Appuntamento', 'Interessati', 'Chiusi'],
             datasets: [{
-                data: [
-                    stats.waiting,
-                    stats.called,
-                    stats.appointments,
-                    stats.interested,
-                    stats.closed
-                ],
+                data: [stats.waiting, stats.called, stats.appointments, stats.interested, stats.closed],
                 backgroundColor: [
-                    'rgba(33, 150, 243, 0.7)',
-                    'rgba(255, 152, 0, 0.7)',
-                    'rgba(240, 192, 64, 0.7)',
-                    'rgba(0, 200, 83, 0.7)',
-                    'rgba(156, 39, 176, 0.7)'
+                    'rgba(33,150,243,0.7)',
+                    'rgba(255,152,0,0.7)',
+                    'rgba(240,192,64,0.7)',
+                    'rgba(0,200,83,0.7)',
+                    'rgba(156,39,176,0.7)'
                 ],
-                borderColor: [
-                    '#2196f3',
-                    '#ff9800',
-                    '#f0c040',
-                    '#00c853',
-                    '#9c27b0'
-                ],
+                borderColor: ['#2196f3','#ff9800','#f0c040','#00c853','#9c27b0'],
                 borderWidth: 2
             }]
         },
         options: {
             responsive: true,
+            animation: { duration: 300 },
             plugins: {
                 legend: {
                     position: 'bottom',
-                    labels: { color: '#888', font: { size: 11 } }
+                    labels: { color: legendColor, font: { size: 11 } }
                 }
             }
         }

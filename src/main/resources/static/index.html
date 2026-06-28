@@ -103,26 +103,39 @@
                 <div class="stat-value" id="statAppointmentRate">0%</div>
             </div>
         </div>
-        <div class="dashboard-extras">
-            <div class="calendar-card">
+
+        <!-- DASHBOARD: griglia 2x2 -->
+        <div class="dashboard-grid-2x2">
+            <div class="dashboard-cell" style="background:var(--bg-card);border:1.5px solid var(--border);border-radius:14px;padding:20px;box-shadow:var(--shadow);max-width:420px">
                 <div class="calendar-header">
                     <button type="button" class="cal-nav-btn" onclick="changeCalendarMonth(-1)">‹</button>
                     <h3 id="calendarTitle">Calendario Follow-up</h3>
                     <button type="button" class="cal-nav-btn" onclick="changeCalendarMonth(1)">›</button>
                 </div>
                 <div class="calendar-legend">
-                    <span class="cal-legend-item"><span class="cal-dot cal-dot-pending"></span> Follow-up in corso</span>
-                    <span class="cal-legend-item"><span class="cal-dot cal-dot-complete"></span> Tutti completati</span>
+                    <span class="cal-legend-item"><span class="cal-dot cal-dot-pending"></span> In corso</span>
+                    <span class="cal-legend-item"><span class="cal-dot cal-dot-complete"></span> Completati</span>
                 </div>
                 <div id="fuCalendar" class="fu-calendar"></div>
             </div>
-        </div>
-        <div class="charts-grid">
-            <div class="chart-card">
+            <div class="dashboard-cell" style="background:var(--bg-card);border:1.5px solid var(--border);border-radius:14px;padding:20px;box-shadow:var(--shadow);max-width:420px">
+                <div class="calendar-header">
+                    <button type="button" class="cal-nav-btn" onclick="changeRecallCalendarMonth(-1)">‹</button>
+                    <h3 id="recallCalendarTitle">Calendario Recall</h3>
+                    <button type="button" class="cal-nav-btn" onclick="changeRecallCalendarMonth(1)">›</button>
+                </div>
+                <div class="calendar-legend">
+                    <span class="cal-legend-item"><span class="cal-dot" style="background:#f0c040"></span> Recall oggi</span>
+                    <span class="cal-legend-item"><span class="cal-dot" style="background:#ff3d3d"></span> Scaduto</span>
+                    <span class="cal-legend-item"><span class="cal-dot" style="background:#4a90d9"></span> Futuro</span>
+                </div>
+                <div id="recallCalendar" class="fu-calendar"></div>
+            </div>
+            <div class="chart-card dashboard-cell">
                 <h3>FOLLOW-UP vs RISPOSTE vs APPUNTAMENTI</h3>
                 <canvas id="chartFollowUp"></canvas>
             </div>
-            <div class="chart-card">
+            <div class="chart-card dashboard-cell">
                 <h3>LISTA RECALL</h3>
                 <canvas id="chartWaiting"></canvas>
             </div>
@@ -273,12 +286,15 @@
             <div class="filter-bar">
                 <input type="date" id="contactFrom" class="input-dark">
                 <input type="date" id="contactTo" class="input-dark">
+                <select id="contactOperatorFilter" class="input-dark" onchange="applyContactFilters()">
+                    <option value="">Tutti gli operatori</option>
+                </select>
                 <button onclick="loadContactLogs(document.getElementById('contactFrom').value, document.getElementById('contactTo').value)" class="btn-gold">FILTRA</button>
                 <button onclick="showNewContactForm()" class="btn-primary" style="width:auto;padding:10px 20px">+ NUOVO</button>
                 <button onclick="printContactLogs()" class="btn-secondary" style="padding:10px 20px">🖨️ STAMPA</button>
             </div>
         </div>
-        <div class="stats-grid" style="margin-bottom:20px">
+        <div id="contactStatsPrint" class="stats-grid" style="margin-bottom:20px">
             <div class="stat-card blue">
                 <div class="stat-label">TOTALE CONTATTI</div>
                 <div class="stat-value" id="statContactTotal">0</div>
@@ -296,12 +312,16 @@
                 <div class="stat-value" id="statService">0%</div>
             </div>
         </div>
-        <div style="margin-bottom:20px;display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
-            <div class="chart-card" style="max-width:460px;flex:1">
+        <div id="contactChartPrint" style="margin-bottom:20px;display:flex;gap:20px;flex-wrap:wrap;align-items:stretch">
+            <div class="chart-card" style="max-width:480px;min-width:280px">
                 <h3>DISTRIBUZIONE CATEGORIE</h3>
-                <canvas id="chartContacts" style="max-height:280px"></canvas>
+                <canvas id="chartContacts"></canvas>
             </div>
-            <div class="calendar-card" style="flex:1;min-width:300px">
+            <div class="chart-card" style="max-width:480px;min-width:280px">
+                <h3>CHIAMATE PER OPERATORE</h3>
+                <canvas id="chartContactsByOperator"></canvas>
+            </div>
+            <div class="calendar-card" id="contactCalendarCard" style="flex:1;min-width:280px">
                 <div class="calendar-header">
                     <button type="button" class="cal-nav-btn" onclick="changeContactCalendarMonth(-1)">‹</button>
                     <h3 id="contactCalendarTitle">Calendario Contatti</h3>
@@ -336,6 +356,15 @@
                         <option>Info + Appuntamento</option>
                         <option>Altro</option>
                     </select>
+                </div>
+                <div id="contactAppuntamentoRow" style="display:none">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">SEDE APPUNTAMENTO *</label>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap">
+                        <button type="button" class="btn-sede" id="sede-Agnano" onclick="selectSede('Agnano')">📍 Agnano</button>
+                        <button type="button" class="btn-sede" id="sede-Casamarciano" onclick="selectSede('Casamarciano')">📍 Casamarciano</button>
+                        <button type="button" class="btn-sede" id="sede-Salerno" onclick="selectSede('Salerno')">📍 Salerno</button>
+                    </div>
+                    <input type="hidden" id="contactAppuntamentoSede" value="">
                 </div>
                 <div id="contactOtherNoteRow" style="display:none">
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MOTIVAZIONE *</label>

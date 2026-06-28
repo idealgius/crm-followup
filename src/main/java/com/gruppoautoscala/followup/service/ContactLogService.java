@@ -72,7 +72,7 @@ public class ContactLogService {
         long service = byCategory.getOrDefault("Service", 0L);
 
         stats.put("infoVenditaPct", total > 0 ? Math.round(infoVendita * 1000.0 / total) / 10.0 : 0);
-        stats.put("infoNoleggioP ct", total > 0 ? Math.round(infoNoleggio * 1000.0 / total) / 10.0 : 0);
+        stats.put("infoNoleggioP_ct", total > 0 ? Math.round(infoNoleggio * 1000.0 / total) / 10.0 : 0);
         stats.put("servicePct", total > 0 ? Math.round(service * 1000.0 / total) / 10.0 : 0);
 
         return stats;
