@@ -32,8 +32,9 @@
 
     <!-- NAVBAR -->
     <nav class="navbar">
-        <div class="nav-logo">
+        <div class="nav-logo" style="display:flex;align-items:center;gap:12px">
             <img src="/img/logo.webp" alt="Gruppo Autoscala">
+            <span style="font-family:'Inter',sans-serif;font-weight:800;font-size:13px;letter-spacing:2px;color:#f0c040;opacity:0.9">BDC</span>
         </div>
         <div class="nav-links">
             <a href="#" class="nav-link active" id="navDashboard" onclick="showPage('dashboard')">📊 DASHBOARD</a>
@@ -293,6 +294,7 @@
                 <button onclick="loadContactLogs(document.getElementById('contactFrom').value, document.getElementById('contactTo').value)" class="btn-gold">FILTRA</button>
                 <button id="contactResetBtn" onclick="resetContactFilters()" class="btn-secondary" style="display:none;padding:10px 16px">↺ RESET</button>
                 <button onclick="showNewContactForm()" class="btn-primary" style="width:auto;padding:10px 20px">+ NUOVO</button>
+                <button onclick="exportContactsExcel()" class="btn-secondary" style="padding:10px 16px">📥 EXCEL</button>
                 <button onclick="printContactLogs()" class="btn-secondary" style="padding:10px 20px">🖨️ STAMPA</button>
             </div>
         </div>
@@ -315,13 +317,21 @@
             </div>
         </div>
         <div id="contactChartPrint" style="margin-bottom:20px;display:flex;gap:20px;flex-wrap:wrap;align-items:stretch">
-            <div class="chart-card" style="max-width:480px;min-width:280px">
+            <div class="chart-card" style="max-width:660px;min-width:320px">
                 <h3>DISTRIBUZIONE CATEGORIE</h3>
-                <canvas id="chartContacts"></canvas>
+                <canvas id="chartContacts" style="max-height:300px"></canvas>
             </div>
-            <div id="chartOperatoreWrapper" class="chart-card" style="display:none;max-width:480px;min-width:280px">
+            <div id="chartOperatoreWrapper" class="chart-card" style="display:none;max-width:660px;min-width:320px">
                 <h3>CHIAMATE PER OPERATORE</h3>
-                <canvas id="chartContactsByOperator"></canvas>
+                <canvas id="chartContactsByOperator" style="max-height:300px"></canvas>
+            </div>
+            <div class="chart-card" style="max-width:480px;min-width:280px">
+                <h3>APPUNTAMENTI PER SEDE</h3>
+                <canvas id="chartAppuntamentiSede" style="max-height:300px"></canvas>
+            </div>
+            <div class="chart-card" style="max-width:480px;min-width:280px">
+                <h3>INFO ACQUISTO EFFETTUATO</h3>
+                <canvas id="chartInfoAcquisto" style="max-height:300px"></canvas>
             </div>
             <div class="calendar-card" id="contactCalendarCard" style="flex:1;min-width:280px">
                 <div class="calendar-header">
@@ -351,13 +361,21 @@
                         <option>Info Noleggio</option>
                         <option>Service</option>
                         <option>Info Acquisto effettuato</option>
-                        <option>Ritardo Consegna</option>
                         <option>Pratica Leasing</option>
                         <option>Pratica Finanziamento</option>
                         <option>Amministrazione</option>
                         <option>Info + Appuntamento</option>
                         <option>Altro</option>
                     </select>
+                </div>
+                <div id="contactAcquistoRow" style="display:none">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TIPOLOGIA ACQUISTO *</label>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap">
+                        <button type="button" class="btn-sede" id="acquisto-InfoConsegna" onclick="selectAcquisto('Info Consegna')">📦 Info Consegna</button>
+                        <button type="button" class="btn-sede" id="acquisto-RitardoConsegna" onclick="selectAcquisto('Ritardo Consegna')">⏰ Ritardo Consegna</button>
+                        <button type="button" class="btn-sede" id="acquisto-InfoDocumentazione" onclick="selectAcquisto('Info Documentazione')">📄 Info Documentazione</button>
+                    </div>
+                    <input type="hidden" id="contactAcquistoTipo" value="">
                 </div>
                 <div id="contactAppuntamentoRow" style="display:none">
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">SEDE APPUNTAMENTO *</label>
@@ -410,6 +428,7 @@
 
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <script src="/js/auth.js"></script>
 <script src="/js/followup.js"></script>
 <script src="/js/waiting.js"></script>

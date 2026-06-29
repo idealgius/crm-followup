@@ -3,14 +3,16 @@ let contactLogsFiltered = [];
 let contactCalendarYear = new Date().getFullYear();
 let contactCalendarMonth = new Date().getMonth() + 1;
 let selectedSede = '';
+let selectedAcquisto = '';
 let contactChartByOperator = null;
+let contactChartSede = null;
+let contactChartAcquisto = null;
 
 const CATEGORY_COLORS = {
     'Info Vendita': '#1a4080',
     'Info Noleggio': '#00c853',
     'Service': '#f0c040',
     'Info Acquisto effettuato': '#4a90d9',
-    'Ritardo Consegna': '#ff3d3d',
     'Pratica Leasing': '#7c4dff',
     'Pratica Finanziamento': '#ff9800',
     'Amministrazione': '#00bcd4',
@@ -30,7 +32,7 @@ const OPERATOR_COLORS = [
     '#ff9800','#00bcd4','#ff3d3d','#4a90d9','#8a8faa'
 ];
 
-// ===== UTILITY: parsing date locale (evita slittamento UTC) =====
+// ===== UTILITY =====
 function parseLocalDate(dateStr) {
     const [y, m, d] = dateStr.split('-').map(Number);
     return new Date(y, m - 1, d);
@@ -79,6 +81,8 @@ function applyContactFilters(restoreDayView) {
     renderContactChartByOperator();
     renderContactStatsFromLogs(contactLogsFiltered);
     renderContactChartFromLogs(contactLogsFiltered);
+    renderChartAppuntamentiSede(contactLogsFiltered);
+    renderChartInfoAcquisto(contactLogsFiltered);
 }
 
 // ===== RESET FILTRI =====
@@ -103,7 +107,7 @@ function resetContactFilters() {
     loadContactLogs(firstDay, today);
 }
 
-// ===== STATS CALCOLATE DAI LOG =====
+// ===== STATS =====
 function renderContactStatsFromLogs(logs) {
     const total = logs.length;
     const byCategory = {};
@@ -111,7 +115,7 @@ function renderContactStatsFromLogs(logs) {
         byCategory[log.category] = (byCategory[log.category] || 0) + 1;
     });
 
-    const infoVendita = byCategory['Info Vendita'] || 0;
+    const infoVendita = (byCategory['Info Vendita'] || 0) + (byCategory['Info + Appuntamento'] || 0);
     const infoNoleggio = byCategory['Info Noleggio'] || 0;
     const service = byCategory['Service'] || 0;
 
@@ -132,9 +136,11 @@ function renderContactChartFromLogs(logs) {
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
     const byCategory = {};
     logs.forEach(log => {
-        byCategory[log.category] = (byCategory[log.category] || 0) + 1;
+        const cat = log.category === 'Info + Appuntamento' ? 'Info Vendita' : log.category;
+        byCategory[cat] = (byCategory[cat] || 0) + 1;
     });
 
+    const total = logs.length;
     const labels = Object.keys(byCategory);
     const data = Object.values(byCategory);
     const colors = labels.map(l => CATEGORY_COLORS[l] || '#8a8faa');
@@ -159,12 +165,285 @@ function renderContactChartFromLogs(logs) {
                     labels: {
                         color: isDark ? '#8a8faa' : '#000000',
                         font: { size: 11 },
-                        padding: 12
+                        padding: 12,
+                        generateLabels: chart => {
+                            const d = chart.data;
+                            return d.labels.map((label, i) => {
+                                const val = d.datasets[0].data[i];
+                                const pct = total > 0 ? Math.round(val * 1000 / total) / 10 : 0;
+                                return {
+                                    text: `${label}: ${val} (${pct}%)`,
+                                    fillStyle: d.datasets[0].backgroundColor[i],
+                                    strokeStyle: d.datasets[0].backgroundColor[i],
+                                    lineWidth: 0,
+                                    index: i
+                                };
+                            });
+                        }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            const val = ctx.raw;
+                            const pct = total > 0 ? Math.round(val * 1000 / total) / 10 : 0;
+                            return ` ${ctx.label}: ${val} (${pct}%)`;
+                        }
                     }
                 }
             }
         }
     });
+}
+
+// ===== GRAFICO APPUNTAMENTI PER SEDE =====
+function renderChartAppuntamentiSede(logs) {
+    const ctx = document.getElementById('chartAppuntamentiSede');
+    if (!ctx) return;
+    if (contactChartSede) contactChartSede.destroy();
+
+    const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+    const sedi = ['Agnano', 'Casamarciano', 'Salerno'];
+    const counts = { 'Agnano': 0, 'Casamarciano': 0, 'Salerno': 0 };
+
+    logs.forEach(log => {
+        if (log.category === 'Info + Appuntamento' && log.otherNote) {
+            const sede = log.otherNote.trim();
+            if (counts[sede] !== undefined) counts[sede]++;
+        }
+    });
+
+    const total = sedi.reduce((a, s) => a + counts[s], 0);
+    const textColor = isDark ? '#8a8faa' : '#555555';
+    const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
+
+    contactChartSede = new Chart(ctx.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: sedi,
+            datasets: [{
+                label: 'Appuntamenti',
+                data: sedi.map(s => counts[s]),
+                backgroundColor: ['#e91e6399', '#1a408099', '#00c85399'],
+                borderColor: ['#e91e63', '#1a4080', '#00c853'],
+                borderWidth: 2,
+                borderRadius: 8,
+                borderSkipped: false
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            const val = ctx.raw;
+                            const pct = total > 0 ? Math.round(val * 1000 / total) / 10 : 0;
+                            return ` ${val} appuntamenti (${pct}%)`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { ticks: { color: textColor, font: { size: 12, weight: '700' } }, grid: { display: false } },
+                y: { beginAtZero: true, ticks: { color: textColor, stepSize: 1 }, grid: { color: gridColor } }
+            }
+        }
+    });
+}
+
+// ===== GRAFICO INFO ACQUISTO EFFETTUATO =====
+function renderChartInfoAcquisto(logs) {
+    const ctx = document.getElementById('chartInfoAcquisto');
+    if (!ctx) return;
+    if (contactChartAcquisto) contactChartAcquisto.destroy();
+
+    const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+    const tipologie = ['Info Consegna', 'Ritardo Consegna', 'Info Documentazione'];
+    const counts = { 'Info Consegna': 0, 'Ritardo Consegna': 0, 'Info Documentazione': 0 };
+
+    logs.forEach(log => {
+        if (log.category === 'Info Acquisto effettuato' && log.otherNote) {
+            const tipo = log.otherNote.trim();
+            if (counts[tipo] !== undefined) counts[tipo]++;
+        }
+    });
+
+    const total = tipologie.reduce((a, t) => a + counts[t], 0);
+    const textColor = isDark ? '#8a8faa' : '#555555';
+    const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
+
+    contactChartAcquisto = new Chart(ctx.getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: tipologie,
+            datasets: [{
+                label: 'Contatti',
+                data: tipologie.map(t => counts[t]),
+                backgroundColor: ['#4a90d999', '#ff3d3d99', '#00bcd499'],
+                borderColor: ['#4a90d9', '#ff3d3d', '#00bcd4'],
+                borderWidth: 2,
+                borderRadius: 8,
+                borderSkipped: false
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            const val = ctx.raw;
+                            const pct = total > 0 ? Math.round(val * 1000 / total) / 10 : 0;
+                            return ` ${val} contatti (${pct}%)`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { ticks: { color: textColor, font: { size: 11, weight: '700' } }, grid: { display: false } },
+                y: { beginAtZero: true, ticks: { color: textColor, stepSize: 1 }, grid: { color: gridColor } }
+            }
+        }
+    });
+}
+
+// ===== EXPORT EXCEL =====
+function exportContactsExcel() {
+    if (!contactLogsFiltered || contactLogsFiltered.length === 0) {
+        alert('Nessun dato da esportare');
+        return;
+    }
+
+    const total = contactLogsFiltered.length;
+
+    // Calcola percentuale per categoria
+    const byCategory = {};
+    contactLogsFiltered.forEach(log => {
+        const cat = log.category === 'Info + Appuntamento' ? 'Info Vendita' : log.category;
+        byCategory[cat] = (byCategory[cat] || 0) + 1;
+    });
+
+    // Calcola percentuale per operatore
+    const byOperator = {};
+    contactLogsFiltered.forEach(log => {
+        byOperator[log.user.fullName] = (byOperator[log.user.fullName] || 0) + 1;
+    });
+
+    // Calcola sede appuntamenti
+    const bySede = { 'Agnano': 0, 'Casamarciano': 0, 'Salerno': 0 };
+    contactLogsFiltered.forEach(log => {
+        if (log.category === 'Info + Appuntamento' && log.otherNote && bySede[log.otherNote.trim()] !== undefined) {
+            bySede[log.otherNote.trim()]++;
+        }
+    });
+
+    // Calcola info acquisto
+    const byAcquisto = { 'Info Consegna': 0, 'Ritardo Consegna': 0, 'Info Documentazione': 0 };
+    contactLogsFiltered.forEach(log => {
+        if (log.category === 'Info Acquisto effettuato' && log.otherNote && byAcquisto[log.otherNote.trim()] !== undefined) {
+            byAcquisto[log.otherNote.trim()]++;
+        }
+    });
+
+    const wb = XLSX.utils.book_new();
+
+    // ===== FOGLIO 1: DATI COMPLETI =====
+    const rows = contactLogsFiltered.map(log => {
+        const catForPct = log.category === 'Info + Appuntamento' ? 'Info Vendita' : log.category;
+        const catCount = byCategory[catForPct] || 0;
+        const catPct = total > 0 ? Math.round(catCount * 1000 / total) / 10 : 0;
+        const opCount = byOperator[log.user.fullName] || 0;
+        const opPct = total > 0 ? Math.round(opCount * 1000 / total) / 10 : 0;
+
+        return {
+            'Data': log.contactDate.split('T')[0],
+            'Orario': log.contactDate.split('T')[1].substring(0, 5),
+            'Categoria': log.category,
+            'Dettaglio': log.otherNote || '',
+            'Operatore': log.user.fullName,
+            'Ruolo': log.user.role,
+            '% Categoria': catPct + '%',
+            'N. per Categoria': catCount,
+            '% Operatore': opPct + '%',
+            'N. per Operatore': opCount
+        };
+    });
+
+    const ws1 = XLSX.utils.json_to_sheet(rows);
+    ws1['!cols'] = [
+        { wch: 12 }, { wch: 8 }, { wch: 25 }, { wch: 25 },
+        { wch: 22 }, { wch: 12 }, { wch: 14 }, { wch: 16 },
+        { wch: 14 }, { wch: 16 }
+    ];
+    XLSX.utils.book_append_sheet(wb, ws1, 'Dati Registro');
+
+    // ===== FOGLIO 2: RIEPILOGO CON GRAFICI =====
+    const ws2Data = [];
+
+    ws2Data.push({ 'Sezione': '=== DISTRIBUZIONE CATEGORIE ===', 'Valore': '', 'Numero': '', 'Percentuale': '' });
+    Object.entries(byCategory).sort((a,b) => b[1]-a[1]).forEach(([cat, cnt]) => {
+        ws2Data.push({
+            'Sezione': cat,
+            'Valore': cat,
+            'Numero': cnt,
+            'Percentuale': (total > 0 ? Math.round(cnt * 1000 / total) / 10 : 0) + '%'
+        });
+    });
+    ws2Data.push({ 'Sezione': 'TOTALE', 'Valore': '', 'Numero': total, 'Percentuale': '100%' });
+
+    ws2Data.push({ 'Sezione': '', 'Valore': '', 'Numero': '', 'Percentuale': '' });
+    ws2Data.push({ 'Sezione': '=== CHIAMATE PER OPERATORE ===', 'Valore': '', 'Numero': '', 'Percentuale': '' });
+    Object.entries(byOperator).sort((a,b) => b[1]-a[1]).forEach(([op, cnt]) => {
+        ws2Data.push({
+            'Sezione': op,
+            'Valore': op,
+            'Numero': cnt,
+            'Percentuale': (total > 0 ? Math.round(cnt * 1000 / total) / 10 : 0) + '%'
+        });
+    });
+
+    ws2Data.push({ 'Sezione': '', 'Valore': '', 'Numero': '', 'Percentuale': '' });
+    ws2Data.push({ 'Sezione': '=== APPUNTAMENTI PER SEDE ===', 'Valore': '', 'Numero': '', 'Percentuale': '' });
+    const totalSede = Object.values(bySede).reduce((a,b) => a+b, 0);
+    Object.entries(bySede).forEach(([sede, cnt]) => {
+        ws2Data.push({
+            'Sezione': sede,
+            'Valore': sede,
+            'Numero': cnt,
+            'Percentuale': (totalSede > 0 ? Math.round(cnt * 1000 / totalSede) / 10 : 0) + '%'
+        });
+    });
+
+    ws2Data.push({ 'Sezione': '', 'Valore': '', 'Numero': '', 'Percentuale': '' });
+    ws2Data.push({ 'Sezione': '=== INFO ACQUISTO EFFETTUATO ===', 'Valore': '', 'Numero': '', 'Percentuale': '' });
+    const totalAcquisto = Object.values(byAcquisto).reduce((a,b) => a+b, 0);
+    Object.entries(byAcquisto).forEach(([tipo, cnt]) => {
+        ws2Data.push({
+            'Sezione': tipo,
+            'Valore': tipo,
+            'Numero': cnt,
+            'Percentuale': (totalAcquisto > 0 ? Math.round(cnt * 1000 / totalAcquisto) / 10 : 0) + '%'
+        });
+    });
+
+    const ws2 = XLSX.utils.json_to_sheet(ws2Data);
+    ws2['!cols'] = [{ wch: 35 }, { wch: 30 }, { wch: 12 }, { wch: 14 }];
+
+    // Grafici Excel nativi — definiti come chart objects nel workbook
+    // SheetJS CE non supporta grafici nativi, ma strutturiamo i dati
+    // in modo ottimale per creare pivot/grafici manualmente in Excel
+
+    XLSX.utils.book_append_sheet(wb, ws2, 'Riepilogo Statistiche');
+
+    const from = document.getElementById('contactFrom')?.value || '';
+    const to = document.getElementById('contactTo')?.value || '';
+    const filename = `registro_contatti_${from}_${to}.xlsx`;
+    XLSX.writeFile(wb, filename);
 }
 
 // ===== VISTA ELENCO GIORNO =====
@@ -177,6 +456,8 @@ function showDayView(date) {
 
     renderContactStatsFromLogs(items);
     renderContactChartFromLogs(items);
+    renderChartAppuntamentiSede(items);
+    renderChartInfoAcquisto(items);
 
     container.innerHTML = `
         <div style="margin-bottom:16px;display:flex;align-items:center;gap:12px">
@@ -213,6 +494,8 @@ function closeDayView() {
     renderContactLogs(contactLogsFiltered);
     renderContactStatsFromLogs(contactLogsFiltered);
     renderContactChartFromLogs(contactLogsFiltered);
+    renderChartAppuntamentiSede(contactLogsFiltered);
+    renderChartInfoAcquisto(contactLogsFiltered);
 }
 
 // ===== RENDER TREE =====
@@ -382,8 +665,9 @@ function renderContactRow(log) {
             <td>
                 <span class="contact-category-badge cat-${catClass}">${log.category}</span>
                 ${log.category === 'Info + Appuntamento' && log.otherNote ? `<span style="font-size:11px;background:rgba(233,30,99,0.1);color:#e91e63;padding:2px 8px;border-radius:8px;margin-left:6px">📍 ${log.otherNote}</span>` : ''}
+                ${log.category === 'Info Acquisto effettuato' && log.otherNote ? `<span style="font-size:11px;background:rgba(74,144,217,0.1);color:#4a90d9;padding:2px 8px;border-radius:8px;margin-left:6px">📋 ${log.otherNote}</span>` : ''}
             </td>
-            <td style="font-size:12px;color:var(--text-secondary)">${log.category !== 'Info + Appuntamento' ? (log.otherNote || '—') : ''}</td>
+            <td style="font-size:12px;color:var(--text-secondary)">${(log.category !== 'Info + Appuntamento' && log.category !== 'Info Acquisto effettuato') ? (log.otherNote || '—') : ''}</td>
             <td style="font-size:12px;color:var(--text-secondary)">${log.user.fullName}</td>
             <td>
                 ${canEdit ? `
@@ -410,13 +694,13 @@ function printDay(date) {
         </style></head><body>
         <h2>Registro Contatti — ${formatDateIT(date)}</h2>
         <table>
-            <thead><tr><th>Orario</th><th>Categoria</th><th>Note</th><th>Operatore</th></tr></thead>
+            <thead><tr><th>Orario</th><th>Categoria</th><th>Dettaglio</th><th>Operatore</th></tr></thead>
             <tbody>
                 ${dayLogs.map(log => `
                     <tr>
                         <td>${log.contactDate.split('T')[1].substring(0,5)}</td>
-                        <td>${log.category}${log.category === 'Info + Appuntamento' && log.otherNote ? ' — ' + log.otherNote : ''}</td>
-                        <td>${log.category !== 'Info + Appuntamento' ? (log.otherNote || '—') : ''}</td>
+                        <td>${log.category}</td>
+                        <td>${log.otherNote || '—'}</td>
                         <td>${log.user.fullName}</td>
                     </tr>
                 `).join('')}
@@ -489,7 +773,6 @@ function renderContactChartByOperator() {
     if (contactChartByOperator) contactChartByOperator.destroy();
 
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-
     const byOperator = {};
     contactLogs.forEach(log => {
         const op = log.user.fullName;
@@ -499,19 +782,14 @@ function renderContactChartByOperator() {
 
     const total = Object.values(byOperator).reduce((a,b) => a+b, 0);
     const labels = Object.keys(byOperator);
-    const data = labels.map(op => total > 0 ? Math.round(byOperator[op] * 1000 / total) / 10 : 0);
+    const data = labels.map(op => byOperator[op]);
     const colors = labels.map((_, i) => OPERATOR_COLORS[i % OPERATOR_COLORS.length]);
 
     contactChartByOperator = new Chart(ctx.getContext('2d'), {
         type: 'doughnut',
         data: {
             labels,
-            datasets: [{
-                data,
-                backgroundColor: colors.map(c => c + 'bb'),
-                borderColor: colors,
-                borderWidth: 2
-            }]
+            datasets: [{ data, backgroundColor: colors.map(c => c + 'bb'), borderColor: colors, borderWidth: 2 }]
         },
         options: {
             responsive: true,
@@ -522,12 +800,30 @@ function renderContactChartByOperator() {
                     labels: {
                         color: isDark ? '#8a8faa' : '#000000',
                         font: { size: 10 },
-                        padding: 10
+                        padding: 10,
+                        generateLabels: chart => {
+                            const d = chart.data;
+                            return d.labels.map((label, i) => {
+                                const val = d.datasets[0].data[i];
+                                const pct = total > 0 ? Math.round(val * 1000 / total) / 10 : 0;
+                                return {
+                                    text: `${label}: ${val} (${pct}%)`,
+                                    fillStyle: colors[i] + 'bb',
+                                    strokeStyle: colors[i],
+                                    lineWidth: 0,
+                                    index: i
+                                };
+                            });
+                        }
                     }
                 },
                 tooltip: {
                     callbacks: {
-                        label: ctx => ` ${ctx.label}: ${ctx.raw}%`
+                        label: ctx => {
+                            const val = ctx.raw;
+                            const pct = total > 0 ? Math.round(val * 1000 / total) / 10 : 0;
+                            return ` ${ctx.label}: ${val} (${pct}%)`;
+                        }
                     }
                 }
             }
@@ -545,6 +841,23 @@ function selectSede(sede) {
     });
 }
 
+// ===== TIPOLOGIA ACQUISTO =====
+function selectAcquisto(tipo) {
+    selectedAcquisto = tipo;
+    document.getElementById('contactAcquistoTipo').value = tipo;
+    ['InfoConsegna','RitardoConsegna','InfoDocumentazione'].forEach(k => {
+        const btn = document.getElementById(`acquisto-${k}`);
+        if (btn) btn.classList.remove('btn-sede-active');
+    });
+    const keyMap = {
+        'Info Consegna': 'InfoConsegna',
+        'Ritardo Consegna': 'RitardoConsegna',
+        'Info Documentazione': 'InfoDocumentazione'
+    };
+    const btn = document.getElementById(`acquisto-${keyMap[tipo]}`);
+    if (btn) btn.classList.add('btn-sede-active');
+}
+
 // ===== CRUD =====
 async function createContactLog() {
     const category = document.getElementById('contactCategory').value;
@@ -552,15 +865,19 @@ async function createContactLog() {
     const dateVal = document.getElementById('contactDate').value;
     const timeVal = document.getElementById('contactTime').value;
     const sede = document.getElementById('contactAppuntamentoSede')?.value || '';
+    const acquistoTipo = document.getElementById('contactAcquistoTipo')?.value || '';
 
     if (!category) { alert('Seleziona una categoria'); return; }
     if (!dateVal || !timeVal) { alert('Inserisci data e orario'); return; }
     if (category === 'Altro' && !otherNote) { alert('Inserisci la motivazione per "Altro"'); return; }
     if (category === 'Info + Appuntamento' && !sede) { alert('Seleziona la sede dell\'appuntamento'); return; }
+    if (category === 'Info Acquisto effettuato' && !acquistoTipo) { alert('Seleziona la tipologia acquisto'); return; }
 
     const contactDate = `${dateVal}T${timeVal}:00`;
     const savedDayView = currentDayView || dateVal;
-    const finalNote = category === 'Info + Appuntamento' ? sede : otherNote;
+    let finalNote = otherNote;
+    if (category === 'Info + Appuntamento') finalNote = sede;
+    if (category === 'Info Acquisto effettuato') finalNote = acquistoTipo;
 
     try {
         const res = await fetch('/api/contacts', {
@@ -597,7 +914,7 @@ async function editContactLog(id) {
 
     const newCategory = prompt('Categoria:', log.category);
     if (!newCategory) return;
-    const newNote = prompt('Note (opzionale):', log.otherNote || '');
+    const newNote = prompt('Note/Dettaglio (opzionale):', log.otherNote || '');
     const savedDayView = currentDayView;
 
     try {
@@ -630,10 +947,17 @@ function hideNewContactForm() {
     document.getElementById('contactOtherNote').value = '';
     document.getElementById('contactOtherNoteRow').style.display = 'none';
     document.getElementById('contactAppuntamentoRow').style.display = 'none';
+    document.getElementById('contactAcquistoRow').style.display = 'none';
     document.getElementById('contactAppuntamentoSede').value = '';
+    document.getElementById('contactAcquistoTipo').value = '';
     selectedSede = '';
+    selectedAcquisto = '';
     ['Agnano','Casamarciano','Salerno'].forEach(s => {
         const btn = document.getElementById(`sede-${s}`);
+        if (btn) btn.classList.remove('btn-sede-active');
+    });
+    ['InfoConsegna','RitardoConsegna','InfoDocumentazione'].forEach(k => {
+        const btn = document.getElementById(`acquisto-${k}`);
         if (btn) btn.classList.remove('btn-sede-active');
     });
 }
@@ -642,11 +966,21 @@ function onCategoryChange() {
     const cat = document.getElementById('contactCategory').value;
     document.getElementById('contactOtherNoteRow').style.display = cat === 'Altro' ? 'block' : 'none';
     document.getElementById('contactAppuntamentoRow').style.display = cat === 'Info + Appuntamento' ? 'block' : 'none';
+    document.getElementById('contactAcquistoRow').style.display = cat === 'Info Acquisto effettuato' ? 'block' : 'none';
+
     if (cat !== 'Info + Appuntamento') {
         selectedSede = '';
         document.getElementById('contactAppuntamentoSede').value = '';
         ['Agnano','Casamarciano','Salerno'].forEach(s => {
             const btn = document.getElementById(`sede-${s}`);
+            if (btn) btn.classList.remove('btn-sede-active');
+        });
+    }
+    if (cat !== 'Info Acquisto effettuato') {
+        selectedAcquisto = '';
+        document.getElementById('contactAcquistoTipo').value = '';
+        ['InfoConsegna','RitardoConsegna','InfoDocumentazione'].forEach(k => {
+            const btn = document.getElementById(`acquisto-${k}`);
             if (btn) btn.classList.remove('btn-sede-active');
         });
     }

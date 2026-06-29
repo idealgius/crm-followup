@@ -22,7 +22,17 @@ async function loadFollowUps() {
             );
         }
 
-        renderFollowUps(followUps);
+        // Carica tutti gli steps in parallelo
+        const stepsMap = {};
+        await Promise.all(followUps.map(async fu => {
+            try {
+                const r = await fetch(`/api/followups/${fu.id}/steps`);
+                if (r.ok) stepsMap[fu.id] = await r.json();
+                else stepsMap[fu.id] = [];
+            } catch { stepsMap[fu.id] = []; }
+        }));
+
+        renderFollowUps(followUps, stepsMap);
     } catch (err) {
         console.error('Errore caricamento follow-up:', err);
     }
@@ -51,7 +61,7 @@ function toggleSection(consultantKey) {
     }
 }
 
-function renderFollowUps(followUps) {
+function renderFollowUps(followUps, stepsMap) {
     const container = document.getElementById('followUpsList');
     if (followUps.length === 0) {
         container.innerHTML = `
@@ -111,18 +121,16 @@ function renderFollowUps(followUps) {
                 </div>
             </div>
             <div class="consultant-folder-body" id="section-body-${key}" style="display:${isCollapsed ? 'none' : 'block'}">
-                ${items.map(fu => renderFollowUpCard(fu)).join('')}
+                ${items.map(fu => renderFollowUpCard(fu, stepsMap[fu.id] || [])).join('')}
             </div>
         </div>
         `;
     }).join('');
-
-    followUps.forEach(fu => loadSteps(fu.id));
 }
 
-function renderFollowUpCard(fu) {
+function renderFollowUpCard(fu, steps) {
     const readOnly = isModerator();
-    const stepsHtml = '<div style="color:var(--text-secondary);font-size:12px;padding:8px">Caricamento...</div>';
+    const stepsHtml = steps.map(s => renderStepCard(s, fu.id)).join('');
 
     return `
         <div class="followup-card" id="fu-${fu.id}">

@@ -24,9 +24,9 @@ function applyRolePermissions(role) {
         if (wrapper) wrapper.style.display = 'none';
         const resetBtn = document.getElementById('contactResetBtn');
         if (resetBtn) resetBtn.style.display = 'none';
-        // grafico operatori nascosto per UTENTE (già nascosto di default in index.html)
+        const chartOp = document.getElementById('chartOperatoreWrapper');
+        if (chartOp) chartOp.style.display = 'none';
     } else {
-        // Per tutti gli altri ruoli mostra il grafico operatori
         const chartOp = document.getElementById('chartOperatoreWrapper');
         if (chartOp) chartOp.style.display = 'block';
     }
