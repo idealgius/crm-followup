@@ -104,7 +104,6 @@
             </div>
         </div>
 
-        <!-- DASHBOARD: griglia 2x2 -->
         <div class="dashboard-grid-2x2">
             <div class="dashboard-cell" style="background:var(--bg-card);border:1.5px solid var(--border);border-radius:14px;padding:20px;box-shadow:var(--shadow);max-width:420px">
                 <div class="calendar-header">
@@ -284,12 +283,15 @@
         <div class="page-header">
             <h2>REGISTRO CONTATTI</h2>
             <div class="filter-bar">
-                <input type="date" id="contactFrom" class="input-dark">
-                <input type="date" id="contactTo" class="input-dark">
-                <select id="contactOperatorFilter" class="input-dark" onchange="applyContactFilters()">
-                    <option value="">Tutti gli operatori</option>
-                </select>
+                <input type="date" id="contactFrom" class="input-dark" onchange="showContactResetBtn()">
+                <input type="date" id="contactTo" class="input-dark" onchange="showContactResetBtn()">
+                <span id="contactOperatorFilterWrapper">
+                    <select id="contactOperatorFilter" class="input-dark" onchange="applyContactFilters();showContactResetBtn()">
+                        <option value="">Tutti gli operatori</option>
+                    </select>
+                </span>
                 <button onclick="loadContactLogs(document.getElementById('contactFrom').value, document.getElementById('contactTo').value)" class="btn-gold">FILTRA</button>
+                <button id="contactResetBtn" onclick="resetContactFilters()" class="btn-secondary" style="display:none;padding:10px 16px">↺ RESET</button>
                 <button onclick="showNewContactForm()" class="btn-primary" style="width:auto;padding:10px 20px">+ NUOVO</button>
                 <button onclick="printContactLogs()" class="btn-secondary" style="padding:10px 20px">🖨️ STAMPA</button>
             </div>
@@ -317,7 +319,7 @@
                 <h3>DISTRIBUZIONE CATEGORIE</h3>
                 <canvas id="chartContacts"></canvas>
             </div>
-            <div class="chart-card" style="max-width:480px;min-width:280px">
+            <div id="chartOperatoreWrapper" class="chart-card" style="display:none;max-width:480px;min-width:280px">
                 <h3>CHIAMATE PER OPERATORE</h3>
                 <canvas id="chartContactsByOperator"></canvas>
             </div>

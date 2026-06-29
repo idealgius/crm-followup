@@ -30,6 +30,17 @@ const OPERATOR_COLORS = [
     '#ff9800','#00bcd4','#ff3d3d','#4a90d9','#8a8faa'
 ];
 
+// ===== UTILITY: parsing date locale (evita slittamento UTC) =====
+function parseLocalDate(dateStr) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(y, m - 1, d);
+}
+
+function todayStr() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
 async function loadContactLogs(from, to, restoreDayView) {
     try {
         let url = '/api/contacts';
@@ -68,6 +79,28 @@ function applyContactFilters(restoreDayView) {
     renderContactChartByOperator();
     renderContactStatsFromLogs(contactLogsFiltered);
     renderContactChartFromLogs(contactLogsFiltered);
+}
+
+// ===== RESET FILTRI =====
+function showContactResetBtn() {
+    const btn = document.getElementById('contactResetBtn');
+    if (btn && currentUser?.role !== 'UTENTE') btn.style.display = 'inline-block';
+}
+
+function resetContactFilters() {
+    const today = todayStr();
+    const firstDay = (() => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
+    })();
+    document.getElementById('contactFrom').value = firstDay;
+    document.getElementById('contactTo').value = today;
+    const op = document.getElementById('contactOperatorFilter');
+    if (op) op.value = '';
+    currentDayView = null;
+    const btn = document.getElementById('contactResetBtn');
+    if (btn) btn.style.display = 'none';
+    loadContactLogs(firstDay, today);
 }
 
 // ===== STATS CALCOLATE DAI LOG =====
@@ -142,6 +175,9 @@ function showDayView(date) {
     const container = document.getElementById('contactLogsList');
     const items = contactLogsFiltered.filter(l => l.contactDate.split('T')[0] === date);
 
+    renderContactStatsFromLogs(items);
+    renderContactChartFromLogs(items);
+
     container.innerHTML = `
         <div style="margin-bottom:16px;display:flex;align-items:center;gap:12px">
             <button class="btn-secondary" onclick="closeDayView()" style="padding:8px 16px;font-size:12px">← INDIETRO</button>
@@ -175,9 +211,19 @@ function showDayView(date) {
 function closeDayView() {
     currentDayView = null;
     renderContactLogs(contactLogsFiltered);
+    renderContactStatsFromLogs(contactLogsFiltered);
+    renderContactChartFromLogs(contactLogsFiltered);
 }
 
 // ===== RENDER TREE =====
+function getISOWeekMonday(dateStr) {
+    const d = parseLocalDate(dateStr);
+    const day = d.getDay() || 7;
+    d.setDate(d.getDate() - (day - 1));
+    d.setHours(0, 0, 0, 0);
+    return d;
+}
+
 function renderContactLogs(logs) {
     const container = document.getElementById('contactLogsList');
     if (!container) return;
@@ -190,21 +236,27 @@ function renderContactLogs(logs) {
     const tree = {};
     logs.forEach(log => {
         const date = log.contactDate.split('T')[0];
-        const d = new Date(date);
+        const d = parseLocalDate(date);
         const year = d.getFullYear().toString();
         const month = d.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
         const week = getWeekKey(date);
 
         if (!tree[year]) tree[year] = {};
         if (!tree[year][month]) tree[year][month] = {};
-        if (!tree[year][month][week]) tree[year][month][week] = {};
-        if (!tree[year][month][week][date]) tree[year][month][week][date] = [];
-        tree[year][month][week][date].push(log);
+        if (!tree[year][month][week]) tree[year][month][week] = { days: {}, monday: getISOWeekMonday(date) };
+        if (!tree[year][month][week].days[date]) tree[year][month][week].days[date] = [];
+        tree[year][month][week].days[date].push(log);
     });
+
+    const today = todayStr();
 
     container.innerHTML = Object.entries(tree).sort((a,b) => b[0]-a[0]).map(([year, months]) => {
         const yearKey = `year-${year}`;
-        const yearCount = Object.values(months).flatMap(w => Object.values(w)).flatMap(d => Object.values(d)).flat().length;
+        const yearCount = Object.values(months)
+            .flatMap(w => Object.values(w))
+            .flatMap(w => Object.values(w.days))
+            .flat().length;
+
         return `
         <div class="contact-tree-section">
             <div class="contact-tree-header contact-tree-year" onclick="toggleTree('${yearKey}')">
@@ -214,7 +266,9 @@ function renderContactLogs(logs) {
             <div id="body-${yearKey}">
                 ${Object.entries(months).sort().map(([month, weeks]) => {
                     const monthKey = `month-${year}-${month.replace(/\s/g,'_')}`;
-                    const monthCount = Object.values(weeks).flatMap(d => Object.values(d)).flat().length;
+                    const monthCount = Object.values(weeks)
+                        .flatMap(w => Object.values(w.days))
+                        .flat().length;
                     return `
                     <div class="contact-tree-indent">
                         <div class="contact-tree-header contact-tree-month" onclick="toggleTree('${monthKey}')">
@@ -222,17 +276,19 @@ function renderContactLogs(logs) {
                             <span class="folder-arrow" id="arrow-${monthKey}">▼</span>
                         </div>
                         <div id="body-${monthKey}">
-                            ${Object.entries(weeks).sort().map(([week, days]) => {
+                            ${Object.entries(weeks).sort().map(([week, weekData]) => {
                                 const weekKey = `week-${week.replace(/[\s—]/g,'_')}`;
-                                const weekCount = Object.values(days).flat().length;
+                                const weekCount = Object.values(weekData.days).flat().length;
+                                const todayMonday = getISOWeekMonday(today);
+                                const isCurrentWeek = weekData.monday.getTime() === todayMonday.getTime();
                                 return `
                                 <div class="contact-tree-indent">
                                     <div class="contact-tree-header contact-tree-week" onclick="toggleTree('${weekKey}')">
                                         <span>🗓️ ${week} <span class="tree-count">${weekCount} contatti</span></span>
                                         <span class="folder-arrow" id="arrow-${weekKey}">▼</span>
                                     </div>
-                                    <div id="body-${weekKey}" style="display:none">
-                                        ${renderWeekDayCards(days)}
+                                    <div id="body-${weekKey}" style="display:${isCurrentWeek ? 'block' : 'none'}">
+                                        ${renderWeekDayCards(weekData.days, weekData.monday)}
                                     </div>
                                 </div>
                                 `;
@@ -247,18 +303,15 @@ function renderContactLogs(logs) {
     }).join('');
 }
 
-function renderWeekDayCards(days) {
-    const firstDate = Object.keys(days).sort()[0];
-    const d = new Date(firstDate);
-    const dayOfWeek = d.getDay() || 7;
-    const monday = new Date(d);
-    monday.setDate(d.getDate() - (dayOfWeek - 1));
-
+function renderWeekDayCards(days, monday) {
     const weekDates = [];
     for (let i = 0; i < 6; i++) {
         const day = new Date(monday);
         day.setDate(monday.getDate() + i);
-        weekDates.push(day.toISOString().split('T')[0]);
+        const y = day.getFullYear();
+        const m = String(day.getMonth()+1).padStart(2,'0');
+        const d = String(day.getDate()).padStart(2,'0');
+        weekDates.push(`${y}-${m}-${d}`);
     }
 
     return `
@@ -266,7 +319,7 @@ function renderWeekDayCards(days) {
             ${weekDates.map((date, idx) => {
                 const items = days[date] || [];
                 const dayName = DAY_NAMES_SHORT[idx];
-                const dayNum = new Date(date).getDate();
+                const dayNum = parseLocalDate(date).getDate();
                 const hasData = items.length > 0;
                 const dominantColor = hasData ? getDominantColor(items) : null;
                 const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
@@ -395,7 +448,7 @@ function renderContactCalendar() {
         html += '<div class="cal-day cal-day-empty"></div>';
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayStr();
     const byDay = {};
     contactLogsFiltered.forEach(log => {
         const date = log.contactDate.split('T')[0];
@@ -562,7 +615,7 @@ async function editContactLog(id) {
 }
 
 function showNewContactForm() {
-    const dateStr = currentDayView || new Date().toISOString().split('T')[0];
+    const dateStr = currentDayView || todayStr();
     const now = new Date();
     const timeStr = now.toTimeString().substring(0, 5);
     document.getElementById('contactDate').value = dateStr;
@@ -604,7 +657,7 @@ function printContactLogs() {
 }
 
 function getWeekKey(dateStr) {
-    const d = new Date(dateStr);
+    const d = parseLocalDate(dateStr);
     const day = d.getDay() || 7;
     d.setDate(d.getDate() + 4 - day);
     const yearStart = new Date(d.getFullYear(), 0, 1);
@@ -613,6 +666,6 @@ function getWeekKey(dateStr) {
 }
 
 function formatDateIT(dateStr) {
-    const d = new Date(dateStr);
+    const d = parseLocalDate(dateStr);
     return d.toLocaleDateString('it-IT', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
 }

@@ -20,8 +20,15 @@ function applyRolePermissions(role) {
     document.getElementById('adminLink').style.display = (isAdmin || isGestore) ? 'inline-block' : 'none';
 
     if (role === 'UTENTE') {
-        const opFilter = document.getElementById('contactOperatorFilter');
-        if (opFilter) opFilter.style.display = 'none';
+        const wrapper = document.getElementById('contactOperatorFilterWrapper');
+        if (wrapper) wrapper.style.display = 'none';
+        const resetBtn = document.getElementById('contactResetBtn');
+        if (resetBtn) resetBtn.style.display = 'none';
+        // grafico operatori nascosto per UTENTE (già nascosto di default in index.html)
+    } else {
+        // Per tutti gli altri ruoli mostra il grafico operatori
+        const chartOp = document.getElementById('chartOperatoreWrapper');
+        if (chartOp) chartOp.style.display = 'block';
     }
 }
 
@@ -82,7 +89,6 @@ window.onload = function() {
     const savedTheme = localStorage.getItem('theme') || 'dark';
     document.documentElement.setAttribute('data-theme', savedTheme);
 
-    // Nascondi tutto subito prima di sapere il ruolo
     document.getElementById('mainApp').style.display = 'none';
     document.getElementById('loginPage').style.display = 'none';
 
@@ -100,14 +106,11 @@ window.onload = function() {
         .then(data => {
             currentUser = data;
             document.getElementById('navUserName').textContent = data.fullName || data.email;
-
-            // Prima applica permessi, poi mostra app
             applyRolePermissions(data.role);
             document.getElementById('loginPage').style.display = 'none';
             document.getElementById('mainApp').style.display = 'block';
 
             const defaultPage = data.role === 'UTENTE' ? 'contacts' : 'dashboard';
-            // Per UTENTE ignora sessionStorage per evitare flash su pagine non permesse
             const savedPage = data.role === 'UTENTE' ? 'contacts' : (sessionStorage.getItem('currentPage') || defaultPage);
             showPage(savedPage);
 
