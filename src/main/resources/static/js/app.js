@@ -5,6 +5,20 @@ function toggleTheme() {
     const isDark = html.getAttribute('data-theme') !== 'light';
     html.setAttribute('data-theme', isDark ? 'light' : 'dark');
     localStorage.setItem('theme', isDark ? 'light' : 'dark');
+    refreshChartsOnThemeChange();
+}
+
+function refreshChartsOnThemeChange() {
+    if (typeof contactLogsFiltered !== 'undefined' && contactLogsFiltered) {
+        if (typeof renderContactChartFromLogs === 'function') renderContactChartFromLogs(contactLogsFiltered);
+        if (typeof renderContactChartByOperator === 'function') renderContactChartByOperator();
+        if (typeof renderChartAppuntamentiSede === 'function') renderChartAppuntamentiSede(contactLogsFiltered);
+        if (typeof renderChartInfoAcquisto === 'function') renderChartInfoAcquisto(contactLogsFiltered);
+        if (typeof renderChartFonteVendita === 'function') renderChartFonteVendita(contactLogsFiltered);
+    }
+    if (typeof loadStats === 'function' && document.getElementById('dashboardPage')?.style.display === 'block') {
+        loadStats();
+    }
 }
 
 function applyRolePermissions(role) {
@@ -27,6 +41,8 @@ function applyRolePermissions(role) {
         const chartOp = document.getElementById('chartOperatoreWrapper');
         if (chartOp) chartOp.style.display = 'none';
     } else {
+        const wrapper = document.getElementById('contactOperatorFilterWrapper');
+        if (wrapper) wrapper.style.display = 'inline-block';
         const chartOp = document.getElementById('chartOperatoreWrapper');
         if (chartOp) chartOp.style.display = 'block';
     }
@@ -74,10 +90,14 @@ function showPage(page) {
             document.getElementById('contactFrom').value = firstDay;
             document.getElementById('contactTo').value = today;
         }
-        loadContactLogs(
-            document.getElementById('contactFrom').value,
-            document.getElementById('contactTo').value
-        );
+        // Il canvas è ora visibile (display:block appena impostato sopra),
+        // ma diamo un tick al browser per il reflow prima che Chart.js calcoli le dimensioni
+        setTimeout(() => {
+            loadContactLogs(
+                document.getElementById('contactFrom').value,
+                document.getElementById('contactTo').value
+            );
+        }, 0);
     } else if (page === 'admin') {
         document.getElementById('adminPage').style.display = 'block';
         document.getElementById('adminLink').classList.add('active');
@@ -105,14 +125,14 @@ window.onload = function() {
         })
         .then(data => {
             currentUser = data;
+            sessionStorage.removeItem('currentPage');
             document.getElementById('navUserName').textContent = data.fullName || data.email;
             applyRolePermissions(data.role);
             document.getElementById('loginPage').style.display = 'none';
             document.getElementById('mainApp').style.display = 'block';
 
             const defaultPage = data.role === 'UTENTE' ? 'contacts' : 'dashboard';
-            const savedPage = data.role === 'UTENTE' ? 'contacts' : (sessionStorage.getItem('currentPage') || defaultPage);
-            showPage(savedPage);
+            showPage(defaultPage);
 
             if (data.role !== 'UTENTE') loadStats();
         })

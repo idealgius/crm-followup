@@ -26,11 +26,18 @@ async function login() {
         }
 
         currentUser = data;
+        sessionStorage.removeItem('currentPage');
+
         document.getElementById('navUserName').textContent = data.fullName || data.email;
+        applyRolePermissions(data.role);
+
         document.getElementById('loginPage').style.display = 'none';
         document.getElementById('mainApp').style.display = 'block';
-        showPage('dashboard');
-        loadStats();
+
+        const defaultPage = data.role === 'UTENTE' ? 'contacts' : 'dashboard';
+        showPage(defaultPage);
+
+        if (data.role !== 'UTENTE') loadStats();
 
     } catch (err) {
         errorDiv.textContent = 'Errore di connessione: ' + err.message;
@@ -78,6 +85,20 @@ async function register() {
 async function logout() {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
     currentUser = null;
+    sessionStorage.removeItem('currentPage');
+
+    // Reset navbar: nasconde tutto finché il prossimo login non riapplica i permessi corretti
+    document.getElementById('navDashboard').style.display = 'none';
+    document.getElementById('navFollowups').style.display = 'none';
+    document.getElementById('navWaiting').style.display = 'none';
+    document.getElementById('adminLink').style.display = 'none';
+    const chartOp = document.getElementById('chartOperatoreWrapper');
+    if (chartOp) chartOp.style.display = 'none';
+    const wrapper = document.getElementById('contactOperatorFilterWrapper');
+    if (wrapper) wrapper.style.display = 'inline-block';
+    const resetBtn = document.getElementById('contactResetBtn');
+    if (resetBtn) resetBtn.style.display = 'none';
+
     document.getElementById('mainApp').style.display = 'none';
     document.getElementById('loginPage').style.display = 'flex';
 }

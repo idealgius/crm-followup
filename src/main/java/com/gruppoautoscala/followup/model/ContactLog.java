@@ -23,6 +23,12 @@ public class ContactLog {
     @Column(name = "other_note", length = 500)
     private String otherNote;
 
+    @Column(name = "nominativo_appuntamento", length = 200)
+    private String nominativoAppuntamento;
+
+    @Column(name = "link_appuntamento", length = 500)
+    private String linkAppuntamento;
+
     @Column(name = "contact_date", nullable = false)
     private LocalDateTime contactDate;
 

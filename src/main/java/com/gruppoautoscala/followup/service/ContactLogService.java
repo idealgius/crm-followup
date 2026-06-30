@@ -17,11 +17,15 @@ public class ContactLogService {
     @Autowired
     private ContactLogRepository contactLogRepository;
 
-    public ContactLog create(User user, String category, String otherNote, LocalDateTime contactDate) {
+    public ContactLog create(User user, String category, String otherNote,
+                              String nominativoAppuntamento, String linkAppuntamento,
+                              LocalDateTime contactDate) {
         ContactLog log = new ContactLog();
         log.setUser(user);
         log.setCategory(category);
         log.setOtherNote(otherNote);
+        log.setNominativoAppuntamento(nominativoAppuntamento);
+        log.setLinkAppuntamento(linkAppuntamento);
         log.setContactDate(contactDate != null ? contactDate : LocalDateTime.now());
         return contactLogRepository.save(log);
     }

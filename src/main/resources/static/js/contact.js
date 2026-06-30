@@ -4,9 +4,11 @@ let contactCalendarYear = new Date().getFullYear();
 let contactCalendarMonth = new Date().getMonth() + 1;
 let selectedSede = '';
 let selectedAcquisto = '';
+let selectedFonte = '';
 let contactChartByOperator = null;
 let contactChartSede = null;
 let contactChartAcquisto = null;
+let contactChartFonte = null;
 
 const CATEGORY_COLORS = {
     'Info Vendita': '#1a4080',
@@ -20,23 +22,17 @@ const CATEGORY_COLORS = {
     'Altro': '#8a8faa'
 };
 
-const ACQUISTO_COLORS = {
-    'Info Consegna': '#4a90d9',
-    'Ritardo Consegna': '#ff3d3d',
-    'Info Documentazione': '#00bcd4'
-};
+const ACQUISTO_COLORS = { 'Info Consegna': '#4a90d9', 'Ritardo Consegna': '#ff3d3d', 'Info Documentazione': '#00bcd4' };
 
-const MONTH_NAMES_IT = [
-    'Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
-    'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'
-];
+const FONTE_LIST = ['Sito', 'Google ADS', 'Autoscout', 'Facebook', 'Instagram', 'TikTok', 'Non ricorda'];
+const FONTE_COLORS = ['#1a4080', '#f0c040', '#e91e63', '#4a90d9', '#7c4dff', '#ff3d3d', '#8a8faa'];
 
+const SEDI_LIST = ['Agnano', 'Casamarciano', 'Salerno'];
+const SEDE_COLORS = ['#e91e63', '#1a4080', '#00c853'];
+
+const MONTH_NAMES_IT = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
 const DAY_NAMES_SHORT = ['Lun','Mar','Mer','Gio','Ven','Sab'];
-
-const OPERATOR_COLORS = [
-    '#1a4080','#00c853','#f0c040','#e91e63','#7c4dff',
-    '#ff9800','#00bcd4','#ff3d3d','#4a90d9','#8a8faa'
-];
+const OPERATOR_COLORS = ['#1a4080','#00c853','#f0c040','#e91e63','#7c4dff','#ff9800','#00bcd4','#ff3d3d','#4a90d9','#8a8faa'];
 
 function parseLocalDate(dateStr) {
     const [y, m, d] = dateStr.split('-').map(Number);
@@ -61,9 +57,7 @@ async function loadContactLogs(from, to, restoreDayView) {
         contactLogs = await res.json();
         populateOperatorFilter();
         applyContactFilters(restoreDayView);
-    } catch (err) {
-        console.error('Errore caricamento contatti:', err);
-    }
+    } catch (err) { console.error('Errore caricamento contatti:', err); }
 }
 
 function populateOperatorFilter() {
@@ -77,21 +71,15 @@ function populateOperatorFilter() {
 
 function applyContactFilters(restoreDayView) {
     const operator = document.getElementById('contactOperatorFilter')?.value || '';
-    contactLogsFiltered = operator
-        ? contactLogs.filter(l => l.user.fullName === operator)
-        : [...contactLogs];
-
-    if (restoreDayView) {
-        showDayView(restoreDayView);
-    } else {
-        renderContactLogs(contactLogsFiltered);
-    }
+    contactLogsFiltered = operator ? contactLogs.filter(l => l.user.fullName === operator) : [...contactLogs];
+    if (restoreDayView) { showDayView(restoreDayView); } else { renderContactLogs(contactLogsFiltered); }
     renderContactCalendar();
     renderContactChartByOperator();
     renderContactStatsFromLogs(contactLogsFiltered);
     renderContactChartFromLogs(contactLogsFiltered);
     renderChartAppuntamentiSede(contactLogsFiltered);
     renderChartInfoAcquisto(contactLogsFiltered);
+    renderChartFonteVendita(contactLogsFiltered);
 }
 
 function showContactResetBtn() {
@@ -101,10 +89,7 @@ function showContactResetBtn() {
 
 function resetContactFilters() {
     const today = todayStr();
-    const firstDay = (() => {
-        const d = new Date();
-        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
-    })();
+    const firstDay = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; })();
     document.getElementById('contactFrom').value = firstDay;
     document.getElementById('contactTo').value = today;
     const op = document.getElementById('contactOperatorFilter');
@@ -124,9 +109,9 @@ function renderContactStatsFromLogs(logs) {
     const service = byCategory['Service'] || 0;
     const el = id => document.getElementById(id);
     if (el('statContactTotal')) el('statContactTotal').textContent = total;
-    if (el('statInfoVendita')) el('statInfoVendita').textContent = (total > 0 ? Math.round(infoVendita * 1000 / total) / 10 : 0) + '%';
-    if (el('statInfoNoleggio')) el('statInfoNoleggio').textContent = (total > 0 ? Math.round(infoNoleggio * 1000 / total) / 10 : 0) + '%';
-    if (el('statService')) el('statService').textContent = (total > 0 ? Math.round(service * 1000 / total) / 10 : 0) + '%';
+    if (el('statInfoVendita')) el('statInfoVendita').textContent = (total > 0 ? Math.round(infoVendita*1000/total)/10 : 0)+'%';
+    if (el('statInfoNoleggio')) el('statInfoNoleggio').textContent = (total > 0 ? Math.round(infoNoleggio*1000/total)/10 : 0)+'%';
+    if (el('statService')) el('statService').textContent = (total > 0 ? Math.round(service*1000/total)/10 : 0)+'%';
 }
 
 let contactChart = null;
@@ -158,24 +143,23 @@ function renderContactChartFromLogs(logs) {
                         color: legendColor, font: { size: 12 }, padding: 14, boxWidth: 14,
                         generateLabels: chart => chart.data.labels.map((label, i) => {
                             const val = chart.data.datasets[0].data[i];
-                            const pct = total > 0 ? Math.round(val * 1000 / total) / 10 : 0;
+                            const pct = total > 0 ? Math.round(val*1000/total)/10 : 0;
                             return { text: `${label}: ${val} (${pct}%)`, fillStyle: colors[i], strokeStyle: colors[i], fontColor: legendColor, lineWidth: 0, index: i };
                         })
                     }
                 },
-                tooltip: { callbacks: { label: ctx => { const val = ctx.raw; const pct = total > 0 ? Math.round(val * 1000 / total) / 10 : 0; return ` ${ctx.label}: ${val} (${pct}%)`; } } }
+                tooltip: { callbacks: { label: ctx => { const val = ctx.raw; const pct = total > 0 ? Math.round(val*1000/total)/10 : 0; return ` ${ctx.label}: ${val} (${pct}%)`; } } }
             }
         }
     });
 }
 
-// ===== GRAFICO APPUNTAMENTI PER SEDE — BARRE =====
+// ===== GRAFICO APPUNTAMENTI PER SEDE — BARRE CLICCABILI =====
 function renderChartAppuntamentiSede(logs) {
     const ctx = document.getElementById('chartAppuntamentiSede');
     if (!ctx) return;
     if (contactChartSede) contactChartSede.destroy();
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-    const sedi = ['Agnano', 'Casamarciano', 'Salerno'];
     const counts = { 'Agnano': 0, 'Casamarciano': 0, 'Salerno': 0 };
     logs.forEach(log => {
         if (log.category === 'Info + Appuntamento' && log.otherNote) {
@@ -183,36 +167,83 @@ function renderChartAppuntamentiSede(logs) {
             if (counts[sede] !== undefined) counts[sede]++;
         }
     });
-    const total = sedi.reduce((a, s) => a + counts[s], 0);
+    const total = SEDI_LIST.reduce((a, s) => a + counts[s], 0);
     const textColor = isDark ? '#8a8faa' : '#555555';
     const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
     contactChartSede = new Chart(ctx.getContext('2d'), {
         type: 'bar',
         data: {
-            labels: sedi,
+            labels: SEDI_LIST,
             datasets: [{
                 label: 'Appuntamenti',
-                data: sedi.map(s => counts[s]),
-                backgroundColor: ['#e91e6399', '#1a408099', '#00c85399'],
-                borderColor: ['#e91e63', '#1a4080', '#00c853'],
+                data: SEDI_LIST.map(s => counts[s]),
+                backgroundColor: ['#e91e6399','#1a408099','#00c85399'],
+                borderColor: SEDE_COLORS,
                 borderWidth: 2, borderRadius: 8, borderSkipped: false
             }]
         },
         options: {
             responsive: true, maintainAspectRatio: true,
+            onClick: (evt, elements) => {
+                if (elements.length > 0) {
+                    const idx = elements[0].index;
+                    showSedeDetail(SEDI_LIST[idx]);
+                }
+            },
+            onHover: (evt, elements) => {
+                evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+            },
             plugins: {
                 legend: { display: false },
-                tooltip: { callbacks: { label: ctx => { const val = ctx.raw; const pct = total > 0 ? Math.round(val * 1000 / total) / 10 : 0; return ` ${val} appuntamenti (${pct}%)`; } } }
+                tooltip: { callbacks: { label: ctx => { const val = ctx.raw; const pct = total > 0 ? Math.round(val*1000/total)/10 : 0; return ` ${val} appuntamenti (${pct}%) — clicca per dettaglio`; } } }
             },
             scales: {
-                x: { ticks: { color: textColor, font: { size: 12, weight: '700' } }, grid: { display: false } },
+                x: { ticks: { color: textColor, font: { size: 11, weight: '700' } }, grid: { display: false } },
                 y: { beginAtZero: true, ticks: { color: textColor, stepSize: 1 }, grid: { color: gridColor } }
             }
         }
     });
 }
 
-// ===== GRAFICO INFO ACQUISTO — TORTA =====
+// ===== DETTAGLIO SEDE (rispetta filtri attivi) =====
+function showSedeDetail(sede) {
+    const items = contactLogsFiltered.filter(log => log.category === 'Info + Appuntamento' && log.otherNote === sede);
+    const modal = document.getElementById('sedeDetailModal');
+    const title = document.getElementById('sedeDetailTitle');
+    const list = document.getElementById('sedeDetailList');
+    if (!modal || !title || !list) return;
+
+    title.textContent = `Appuntamenti — ${sede} (${items.length})`;
+
+    if (items.length === 0) {
+        list.innerHTML = '<div class="empty-state" style="padding:20px"><p>Nessun appuntamento per questa sede nel periodo filtrato</p></div>';
+    } else {
+        list.innerHTML = items.map(log => {
+            const date = log.contactDate.split('T')[0];
+            const time = log.contactDate.split('T')[1].substring(0,5);
+            return `
+                <div class="followup-card" style="margin-bottom:10px">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                        <div>
+                            <div style="font-weight:800;color:var(--text-primary);font-size:14px">${log.nominativoAppuntamento || 'Nominativo non specificato'}</div>
+                            <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">📅 ${formatDateIT(date)} · 🕐 ${time}</div>
+                            <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">👤 ${log.user.fullName}</div>
+                        </div>
+                        ${log.linkAppuntamento ? `<a href="${log.linkAppuntamento}" target="_blank" rel="noopener" class="btn-small btn-blue" style="text-decoration:none">🔗 Apri Link</a>` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    modal.style.display = 'flex';
+}
+
+function closeSedeDetail(event) {
+    if (event && event.target.id !== 'sedeDetailModal') return;
+    document.getElementById('sedeDetailModal').style.display = 'none';
+}
+
 function renderChartInfoAcquisto(logs) {
     const ctx = document.getElementById('chartInfoAcquisto');
     if (!ctx) return;
@@ -236,17 +267,67 @@ function renderChartInfoAcquisto(logs) {
             responsive: true, maintainAspectRatio: true,
             plugins: {
                 legend: {
-                    position: 'right',
+                    position: 'bottom',
                     labels: {
-                        color: legendColor, font: { size: 12 }, padding: 14, boxWidth: 14,
+                        color: legendColor, font: { size: 11 }, padding: 10, boxWidth: 12,
                         generateLabels: chart => chart.data.labels.map((label, i) => {
                             const val = chart.data.datasets[0].data[i];
-                            const pct = total > 0 ? Math.round(val * 1000 / total) / 10 : 0;
+                            const pct = total > 0 ? Math.round(val*1000/total)/10 : 0;
                             return { text: `${label}: ${val} (${pct}%)`, fillStyle: acquistoColors[i], strokeStyle: acquistoColors[i], fontColor: legendColor, lineWidth: 0, index: i };
                         })
                     }
                 },
-                tooltip: { callbacks: { label: ctx => { const val = ctx.raw; const pct = total > 0 ? Math.round(val * 1000 / total) / 10 : 0; return ` ${val} contatti (${pct}%)`; } } }
+                tooltip: { callbacks: { label: ctx => { const val = ctx.raw; const pct = total > 0 ? Math.round(val*1000/total)/10 : 0; return ` ${val} contatti (${pct}%)`; } } }
+            }
+        }
+    });
+}
+
+function renderChartFonteVendita(logs) {
+    const ctx = document.getElementById('chartFonteVendita');
+    if (!ctx) return;
+    if (contactChartFonte) contactChartFonte.destroy();
+
+    const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+    const counts = {};
+    FONTE_LIST.forEach(f => counts[f] = 0);
+
+    logs.forEach(log => {
+        if (log.category === 'Info Vendita' && log.otherNote) {
+            const f = log.otherNote.trim();
+            if (counts[f] !== undefined) counts[f]++;
+        }
+    });
+
+    const total = Object.values(counts).reduce((a,b) => a+b, 0);
+    const wrapper = document.getElementById('chartFonteWrapper');
+
+    if (total === 0) {
+        if (wrapper) wrapper.style.display = 'none';
+        return;
+    }
+    if (wrapper) wrapper.style.display = 'block';
+
+    const legendColor = getLegendColor();
+
+    contactChartFonte = new Chart(ctx.getContext('2d'), {
+        type: 'doughnut',
+        data: { labels: FONTE_LIST, datasets: [{ data: FONTE_LIST.map(f => counts[f]), backgroundColor: FONTE_COLORS, borderWidth: 2, borderColor: isDark ? '#0d0f1a' : '#ffffff' }] },
+        options: {
+            responsive: true, maintainAspectRatio: true,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        color: legendColor, font: { size: 11 }, padding: 10, boxWidth: 12,
+                        generateLabels: chart => chart.data.labels.map((label, i) => {
+                            const val = chart.data.datasets[0].data[i];
+                            const pct = total > 0 ? Math.round(val*1000/total)/10 : 0;
+                            return { text: `${label}: ${val} (${pct}%)`, fillStyle: FONTE_COLORS[i], strokeStyle: FONTE_COLORS[i], fontColor: legendColor, lineWidth: 0, index: i };
+                        })
+                    }
+                },
+                tooltip: { callbacks: { label: ctx => { const val = ctx.raw; const pct = total > 0 ? Math.round(val*1000/total)/10 : 0; return ` ${val} contatti (${pct}%)`; } } }
             }
         }
     });
@@ -264,36 +345,65 @@ function exportContactsExcel() {
     contactLogsFiltered.forEach(log => { if (log.category === 'Info + Appuntamento' && log.otherNote && bySede[log.otherNote.trim()] !== undefined) bySede[log.otherNote.trim()]++; });
     const byAcquisto = { 'Info Consegna': 0, 'Ritardo Consegna': 0, 'Info Documentazione': 0 };
     contactLogsFiltered.forEach(log => { if (log.category === 'Info Acquisto effettuato' && log.otherNote && byAcquisto[log.otherNote.trim()] !== undefined) byAcquisto[log.otherNote.trim()]++; });
+    const byFonte = {};
+    FONTE_LIST.forEach(f => byFonte[f] = 0);
+    contactLogsFiltered.forEach(log => { if (log.category === 'Info Vendita' && log.otherNote && byFonte[log.otherNote.trim()] !== undefined) byFonte[log.otherNote.trim()]++; });
+
     const wb = XLSX.utils.book_new();
+
     const rows = contactLogsFiltered.map(log => {
         const catForPct = log.category === 'Info + Appuntamento' ? 'Info Vendita' : log.category;
         const catCount = byCategory[catForPct] || 0;
-        const catPct = total > 0 ? Math.round(catCount * 1000 / total) / 10 : 0;
+        const catPct = total > 0 ? Math.round(catCount*1000/total)/10 : 0;
         const opCount = byOperator[log.user.fullName] || 0;
-        const opPct = total > 0 ? Math.round(opCount * 1000 / total) / 10 : 0;
-        return { 'Data': log.contactDate.split('T')[0], 'Orario': log.contactDate.split('T')[1].substring(0,5), 'Categoria': log.category, 'Dettaglio': log.otherNote || '', 'Operatore': log.user.fullName, 'Ruolo': log.user.role, '% Categoria': catPct+'%', 'N. per Categoria': catCount, '% Operatore': opPct+'%', 'N. per Operatore': opCount };
+        const opPct = total > 0 ? Math.round(opCount*1000/total)/10 : 0;
+        return {
+            'Data': log.contactDate.split('T')[0],
+            'Orario': log.contactDate.split('T')[1].substring(0,5),
+            'Categoria': log.category,
+            'Dettaglio': log.otherNote || '',
+            'Nominativo Appuntamento': log.nominativoAppuntamento || '',
+            'Link Appuntamento': log.linkAppuntamento || '',
+            'Operatore': log.user.fullName,
+            'Ruolo': log.user.role,
+            '% Categoria': catPct+'%',
+            'N. per Categoria': catCount,
+            '% Operatore': opPct+'%',
+            'N. per Operatore': opCount
+        };
     });
     const ws1 = XLSX.utils.json_to_sheet(rows);
-    ws1['!cols'] = [{ wch:12 },{ wch:8 },{ wch:25 },{ wch:25 },{ wch:22 },{ wch:12 },{ wch:14 },{ wch:16 },{ wch:14 },{ wch:16 }];
+    ws1['!cols'] = [{ wch:12 },{ wch:8 },{ wch:25 },{ wch:25 },{ wch:22 },{ wch:30 },{ wch:22 },{ wch:12 },{ wch:14 },{ wch:16 },{ wch:14 },{ wch:16 }];
     XLSX.utils.book_append_sheet(wb, ws1, 'Dati Registro');
+
     const ws2Data = [];
     ws2Data.push({ 'Sezione': '=== DISTRIBUZIONE CATEGORIE ===', 'Valore': '', 'Numero': '', 'Percentuale': '' });
     Object.entries(byCategory).sort((a,b) => b[1]-a[1]).forEach(([cat, cnt]) => ws2Data.push({ 'Sezione': cat, 'Valore': cat, 'Numero': cnt, 'Percentuale': (total > 0 ? Math.round(cnt*1000/total)/10 : 0)+'%' }));
     ws2Data.push({ 'Sezione': 'TOTALE', 'Valore': '', 'Numero': total, 'Percentuale': '100%' });
+
     ws2Data.push({ 'Sezione': '', 'Valore': '', 'Numero': '', 'Percentuale': '' });
     ws2Data.push({ 'Sezione': '=== CHIAMATE PER OPERATORE ===', 'Valore': '', 'Numero': '', 'Percentuale': '' });
     Object.entries(byOperator).sort((a,b) => b[1]-a[1]).forEach(([op, cnt]) => ws2Data.push({ 'Sezione': op, 'Valore': op, 'Numero': cnt, 'Percentuale': (total > 0 ? Math.round(cnt*1000/total)/10 : 0)+'%' }));
+
     ws2Data.push({ 'Sezione': '', 'Valore': '', 'Numero': '', 'Percentuale': '' });
     ws2Data.push({ 'Sezione': '=== APPUNTAMENTI PER SEDE ===', 'Valore': '', 'Numero': '', 'Percentuale': '' });
     const totalSede = Object.values(bySede).reduce((a,b) => a+b, 0);
     Object.entries(bySede).forEach(([sede, cnt]) => ws2Data.push({ 'Sezione': sede, 'Valore': sede, 'Numero': cnt, 'Percentuale': (totalSede > 0 ? Math.round(cnt*1000/totalSede)/10 : 0)+'%' }));
+
     ws2Data.push({ 'Sezione': '', 'Valore': '', 'Numero': '', 'Percentuale': '' });
     ws2Data.push({ 'Sezione': '=== INFO ACQUISTO EFFETTUATO ===', 'Valore': '', 'Numero': '', 'Percentuale': '' });
     const totalAcquisto = Object.values(byAcquisto).reduce((a,b) => a+b, 0);
     Object.entries(byAcquisto).forEach(([tipo, cnt]) => ws2Data.push({ 'Sezione': tipo, 'Valore': tipo, 'Numero': cnt, 'Percentuale': (totalAcquisto > 0 ? Math.round(cnt*1000/totalAcquisto)/10 : 0)+'%' }));
+
+    ws2Data.push({ 'Sezione': '', 'Valore': '', 'Numero': '', 'Percentuale': '' });
+    ws2Data.push({ 'Sezione': '=== FONTE INFO VENDITA ===', 'Valore': '', 'Numero': '', 'Percentuale': '' });
+    const totalFonte = Object.values(byFonte).reduce((a,b) => a+b, 0);
+    Object.entries(byFonte).sort((a,b) => b[1]-a[1]).forEach(([fonte, cnt]) => ws2Data.push({ 'Sezione': fonte, 'Valore': fonte, 'Numero': cnt, 'Percentuale': (totalFonte > 0 ? Math.round(cnt*1000/totalFonte)/10 : 0)+'%' }));
+
     const ws2 = XLSX.utils.json_to_sheet(ws2Data);
     ws2['!cols'] = [{ wch:35 },{ wch:30 },{ wch:12 },{ wch:14 }];
     XLSX.utils.book_append_sheet(wb, ws2, 'Riepilogo Statistiche');
+
     const from = document.getElementById('contactFrom')?.value || '';
     const to = document.getElementById('contactTo')?.value || '';
     XLSX.writeFile(wb, `registro_contatti_${from}_${to}.xlsx`);
@@ -309,6 +419,7 @@ function showDayView(date) {
     renderContactChartFromLogs(items);
     renderChartAppuntamentiSede(items);
     renderChartInfoAcquisto(items);
+    renderChartFonteVendita(items);
     container.innerHTML = `
         <div style="margin-bottom:16px;display:flex;align-items:center;gap:12px">
             <button class="btn-secondary" onclick="closeDayView()" style="padding:8px 16px;font-size:12px">← INDIETRO</button>
@@ -334,6 +445,7 @@ function closeDayView() {
     renderContactChartFromLogs(contactLogsFiltered);
     renderChartAppuntamentiSede(contactLogsFiltered);
     renderChartInfoAcquisto(contactLogsFiltered);
+    renderChartFonteVendita(contactLogsFiltered);
 }
 
 function getISOWeekMonday(dateStr) {
@@ -465,9 +577,12 @@ function renderContactRow(log) {
             <td>
                 <span class="contact-category-badge cat-${catClass}">${log.category}</span>
                 ${log.category === 'Info + Appuntamento' && log.otherNote ? `<span style="font-size:11px;background:rgba(233,30,99,0.1);color:#e91e63;padding:2px 8px;border-radius:8px;margin-left:6px">📍 ${log.otherNote}</span>` : ''}
+                ${log.category === 'Info + Appuntamento' && log.nominativoAppuntamento ? `<span style="font-size:11px;background:rgba(233,30,99,0.08);color:#e91e63;padding:2px 8px;border-radius:8px;margin-left:6px">👤 ${log.nominativoAppuntamento}</span>` : ''}
+                ${log.category === 'Info + Appuntamento' && log.linkAppuntamento ? `<a href="${log.linkAppuntamento}" target="_blank" rel="noopener" style="font-size:11px;background:rgba(74,144,217,0.1);color:#4a90d9;padding:2px 8px;border-radius:8px;margin-left:6px;text-decoration:none">🔗 Link</a>` : ''}
                 ${log.category === 'Info Acquisto effettuato' && log.otherNote ? `<span style="font-size:11px;background:rgba(74,144,217,0.1);color:#4a90d9;padding:2px 8px;border-radius:8px;margin-left:6px">📋 ${log.otherNote}</span>` : ''}
+                ${log.category === 'Info Vendita' && log.otherNote ? `<span style="font-size:11px;background:rgba(26,64,128,0.1);color:#1a4080;padding:2px 8px;border-radius:8px;margin-left:6px">🌐 ${log.otherNote}</span>` : ''}
             </td>
-            <td style="font-size:12px;color:var(--text-secondary)">${(log.category !== 'Info + Appuntamento' && log.category !== 'Info Acquisto effettuato') ? (log.otherNote || '—') : ''}</td>
+            <td style="font-size:12px;color:var(--text-secondary)">${(log.category !== 'Info + Appuntamento' && log.category !== 'Info Acquisto effettuato' && log.category !== 'Info Vendita') ? (log.otherNote || '—') : ''}</td>
             <td style="font-size:12px;color:var(--text-secondary)">${log.user.fullName}</td>
             <td>${canEdit ? `<button class="btn-small btn-orange" onclick="editContactLog(${log.id})" style="margin-right:4px">✏️</button><button class="btn-small btn-red" onclick="deleteContactLog(${log.id})">🗑️</button>` : ''}</td>
         </tr>`;
@@ -555,7 +670,7 @@ function renderContactChartByOperator() {
 function selectSede(sede) {
     selectedSede = sede;
     document.getElementById('contactAppuntamentoSede').value = sede;
-    ['Agnano','Casamarciano','Salerno'].forEach(s => { const btn = document.getElementById(`sede-${s}`); if (btn) btn.classList.toggle('btn-sede-active', s === sede); });
+    SEDI_LIST.forEach(s => { const btn = document.getElementById(`sede-${s}`); if (btn) btn.classList.toggle('btn-sede-active', s === sede); });
 }
 
 function selectAcquisto(tipo) {
@@ -567,25 +682,50 @@ function selectAcquisto(tipo) {
     if (btn) btn.classList.add('btn-sede-active');
 }
 
+function selectFonte(fonte) {
+    selectedFonte = fonte;
+    document.getElementById('contactFonte').value = fonte;
+    const fonteKeyMap = { 'Sito': 'Sito', 'Google ADS': 'GoogleADS', 'Autoscout': 'Autoscout', 'Facebook': 'Facebook', 'Instagram': 'Instagram', 'TikTok': 'TikTok', 'Non ricorda': 'NonRicorda' };
+    Object.keys(fonteKeyMap).forEach(f => {
+        const btn = document.getElementById(`fonte-${fonteKeyMap[f]}`);
+        if (btn) btn.classList.toggle('btn-sede-active', f === fonte);
+    });
+}
+
 async function createContactLog() {
     const category = document.getElementById('contactCategory').value;
     const otherNote = document.getElementById('contactOtherNote').value.trim();
     const dateVal = document.getElementById('contactDate').value;
     const timeVal = document.getElementById('contactTime').value;
     const sede = document.getElementById('contactAppuntamentoSede')?.value || '';
+    const nominativo = document.getElementById('contactAppuntamentoNominativo')?.value.trim() || '';
+    const link = document.getElementById('contactAppuntamentoLink')?.value.trim() || '';
     const acquistoTipo = document.getElementById('contactAcquistoTipo')?.value || '';
+    const fonte = document.getElementById('contactFonte')?.value || '';
+
     if (!category) { alert('Seleziona una categoria'); return; }
     if (!dateVal || !timeVal) { alert('Inserisci data e orario'); return; }
     if (category === 'Altro' && !otherNote) { alert('Inserisci la motivazione per "Altro"'); return; }
     if (category === 'Info + Appuntamento' && !sede) { alert('Seleziona la sede dell\'appuntamento'); return; }
+    if (category === 'Info + Appuntamento' && !nominativo) { alert('Inserisci il nominativo del cliente'); return; }
     if (category === 'Info Acquisto effettuato' && !acquistoTipo) { alert('Seleziona la tipologia acquisto'); return; }
+    if (category === 'Info Vendita' && !fonte) { alert('Seleziona la fonte'); return; }
+
     const contactDate = `${dateVal}T${timeVal}:00`;
     const savedDayView = currentDayView || dateVal;
     let finalNote = otherNote;
     if (category === 'Info + Appuntamento') finalNote = sede;
     if (category === 'Info Acquisto effettuato') finalNote = acquistoTipo;
+    if (category === 'Info Vendita') finalNote = fonte;
+
+    const payload = { category, otherNote: finalNote, contactDate };
+    if (category === 'Info + Appuntamento') {
+        payload.nominativoAppuntamento = nominativo;
+        payload.linkAppuntamento = link || null;
+    }
+
     try {
-        const res = await fetch('/api/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category, otherNote: finalNote, contactDate }) });
+        const res = await fetch('/api/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         if (!res.ok) { alert('Errore nella creazione'); return; }
         hideNewContactForm();
         const from = document.getElementById('contactFrom')?.value;
@@ -636,11 +776,16 @@ function hideNewContactForm() {
     document.getElementById('contactOtherNoteRow').style.display = 'none';
     document.getElementById('contactAppuntamentoRow').style.display = 'none';
     document.getElementById('contactAcquistoRow').style.display = 'none';
+    document.getElementById('contactFonteRow').style.display = 'none';
     document.getElementById('contactAppuntamentoSede').value = '';
+    document.getElementById('contactAppuntamentoNominativo').value = '';
+    document.getElementById('contactAppuntamentoLink').value = '';
     document.getElementById('contactAcquistoTipo').value = '';
-    selectedSede = ''; selectedAcquisto = '';
-    ['Agnano','Casamarciano','Salerno'].forEach(s => { const btn = document.getElementById(`sede-${s}`); if (btn) btn.classList.remove('btn-sede-active'); });
+    document.getElementById('contactFonte').value = '';
+    selectedSede = ''; selectedAcquisto = ''; selectedFonte = '';
+    SEDI_LIST.forEach(s => { const btn = document.getElementById(`sede-${s}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['InfoConsegna','RitardoConsegna','InfoDocumentazione'].forEach(k => { const btn = document.getElementById(`acquisto-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
+    ['Sito','GoogleADS','Autoscout','Facebook','Instagram','TikTok','NonRicorda'].forEach(k => { const btn = document.getElementById(`fonte-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
 }
 
 function onCategoryChange() {
@@ -648,8 +793,17 @@ function onCategoryChange() {
     document.getElementById('contactOtherNoteRow').style.display = cat === 'Altro' ? 'block' : 'none';
     document.getElementById('contactAppuntamentoRow').style.display = cat === 'Info + Appuntamento' ? 'block' : 'none';
     document.getElementById('contactAcquistoRow').style.display = cat === 'Info Acquisto effettuato' ? 'block' : 'none';
-    if (cat !== 'Info + Appuntamento') { selectedSede = ''; document.getElementById('contactAppuntamentoSede').value = ''; ['Agnano','Casamarciano','Salerno'].forEach(s => { const btn = document.getElementById(`sede-${s}`); if (btn) btn.classList.remove('btn-sede-active'); }); }
+    document.getElementById('contactFonteRow').style.display = cat === 'Info Vendita' ? 'block' : 'none';
+
+    if (cat !== 'Info + Appuntamento') {
+        selectedSede = '';
+        document.getElementById('contactAppuntamentoSede').value = '';
+        document.getElementById('contactAppuntamentoNominativo').value = '';
+        document.getElementById('contactAppuntamentoLink').value = '';
+        SEDI_LIST.forEach(s => { const btn = document.getElementById(`sede-${s}`); if (btn) btn.classList.remove('btn-sede-active'); });
+    }
     if (cat !== 'Info Acquisto effettuato') { selectedAcquisto = ''; document.getElementById('contactAcquistoTipo').value = ''; ['InfoConsegna','RitardoConsegna','InfoDocumentazione'].forEach(k => { const btn = document.getElementById(`acquisto-${k}`); if (btn) btn.classList.remove('btn-sede-active'); }); }
+    if (cat !== 'Info Vendita') { selectedFonte = ''; document.getElementById('contactFonte').value = ''; ['Sito','GoogleADS','Autoscout','Facebook','Instagram','TikTok','NonRicorda'].forEach(k => { const btn = document.getElementById(`fonte-${k}`); if (btn) btn.classList.remove('btn-sede-active'); }); }
 }
 
 function printContactLogs() { window.print(); }

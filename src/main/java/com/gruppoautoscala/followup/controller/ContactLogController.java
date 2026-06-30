@@ -48,6 +48,8 @@ public class ContactLogController {
             m.put("id", log.getId());
             m.put("category", log.getCategory());
             m.put("otherNote", log.getOtherNote());
+            m.put("nominativoAppuntamento", log.getNominativoAppuntamento());
+            m.put("linkAppuntamento", log.getLinkAppuntamento());
             m.put("contactDate", log.getContactDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
             m.put("createdAt", log.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
             Map<String, Object> userMap = new HashMap<>();
@@ -70,16 +72,21 @@ public class ContactLogController {
 
         String category = (String) body.get("category");
         String otherNote = (String) body.get("otherNote");
+        String nominativoAppuntamento = (String) body.get("nominativoAppuntamento");
+        String linkAppuntamento = (String) body.get("linkAppuntamento");
         LocalDateTime contactDate = body.get("contactDate") != null
             ? LocalDateTime.parse((String) body.get("contactDate"))
             : LocalDateTime.now();
 
-        ContactLog log = contactLogService.create(userOpt.get(), category, otherNote, contactDate);
+        ContactLog log = contactLogService.create(userOpt.get(), category, otherNote,
+                nominativoAppuntamento, linkAppuntamento, contactDate);
 
         Map<String, Object> result = new HashMap<>();
         result.put("id", log.getId());
         result.put("category", log.getCategory());
         result.put("otherNote", log.getOtherNote());
+        result.put("nominativoAppuntamento", log.getNominativoAppuntamento());
+        result.put("linkAppuntamento", log.getLinkAppuntamento());
         result.put("contactDate", log.getContactDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
         Map<String, Object> userMap = new HashMap<>();
         userMap.put("id", log.getUser().getId());
@@ -106,6 +113,8 @@ public class ContactLogController {
 
         if (body.containsKey("category")) log.setCategory((String) body.get("category"));
         if (body.containsKey("otherNote")) log.setOtherNote((String) body.get("otherNote"));
+        if (body.containsKey("nominativoAppuntamento")) log.setNominativoAppuntamento((String) body.get("nominativoAppuntamento"));
+        if (body.containsKey("linkAppuntamento")) log.setLinkAppuntamento((String) body.get("linkAppuntamento"));
         if (body.containsKey("contactDate")) {
             log.setContactDate(LocalDateTime.parse((String) body.get("contactDate")));
         }
