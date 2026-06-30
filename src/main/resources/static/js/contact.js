@@ -24,8 +24,8 @@ const CATEGORY_COLORS = {
 
 const ACQUISTO_COLORS = { 'Info Consegna': '#4a90d9', 'Ritardo Consegna': '#ff3d3d', 'Info Documentazione': '#00bcd4' };
 
-const FONTE_LIST = ['Sito', 'Google ADS', 'Autoscout', 'Facebook', 'Instagram', 'TikTok', 'Non ricorda'];
-const FONTE_COLORS = ['#1a4080', '#f0c040', '#e91e63', '#4a90d9', '#7c4dff', '#ff3d3d', '#8a8faa'];
+const FONTE_LIST = ['Sito', 'Google ADS', 'Autoscout', 'Facebook', 'Instagram', 'TikTok', 'Richiesta cliente', 'Non ricorda'];
+const FONTE_COLORS = ['#1a4080', '#f0c040', '#e91e63', '#4a90d9', '#7c4dff', '#ff3d3d', '#00c853', '#8a8faa'];
 
 const SEDI_LIST = ['Agnano', 'Casamarciano', 'Salerno'];
 const SEDE_COLORS = ['#e91e63', '#1a4080', '#00c853'];
@@ -154,7 +154,6 @@ function renderContactChartFromLogs(logs) {
     });
 }
 
-// ===== GRAFICO APPUNTAMENTI PER SEDE — BARRE CLICCABILI =====
 function renderChartAppuntamentiSede(logs) {
     const ctx = document.getElementById('chartAppuntamentiSede');
     if (!ctx) return;
@@ -205,7 +204,6 @@ function renderChartAppuntamentiSede(logs) {
     });
 }
 
-// ===== DETTAGLIO SEDE (rispetta filtri attivi) =====
 function showSedeDetail(sede) {
     const items = contactLogsFiltered.filter(log => log.category === 'Info + Appuntamento' && log.otherNote === sede);
     const modal = document.getElementById('sedeDetailModal');
@@ -685,7 +683,7 @@ function selectAcquisto(tipo) {
 function selectFonte(fonte) {
     selectedFonte = fonte;
     document.getElementById('contactFonte').value = fonte;
-    const fonteKeyMap = { 'Sito': 'Sito', 'Google ADS': 'GoogleADS', 'Autoscout': 'Autoscout', 'Facebook': 'Facebook', 'Instagram': 'Instagram', 'TikTok': 'TikTok', 'Non ricorda': 'NonRicorda' };
+    const fonteKeyMap = { 'Sito': 'Sito', 'Google ADS': 'GoogleADS', 'Autoscout': 'Autoscout', 'Facebook': 'Facebook', 'Instagram': 'Instagram', 'TikTok': 'TikTok', 'Richiesta cliente': 'RichiestaCliente', 'Non ricorda': 'NonRicorda' };
     Object.keys(fonteKeyMap).forEach(f => {
         const btn = document.getElementById(`fonte-${fonteKeyMap[f]}`);
         if (btn) btn.classList.toggle('btn-sede-active', f === fonte);
@@ -785,7 +783,7 @@ function hideNewContactForm() {
     selectedSede = ''; selectedAcquisto = ''; selectedFonte = '';
     SEDI_LIST.forEach(s => { const btn = document.getElementById(`sede-${s}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['InfoConsegna','RitardoConsegna','InfoDocumentazione'].forEach(k => { const btn = document.getElementById(`acquisto-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
-    ['Sito','GoogleADS','Autoscout','Facebook','Instagram','TikTok','NonRicorda'].forEach(k => { const btn = document.getElementById(`fonte-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
+    ['Sito','GoogleADS','Autoscout','Facebook','Instagram','TikTok','RichiestaCliente','NonRicorda'].forEach(k => { const btn = document.getElementById(`fonte-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
 }
 
 function onCategoryChange() {
@@ -803,7 +801,7 @@ function onCategoryChange() {
         SEDI_LIST.forEach(s => { const btn = document.getElementById(`sede-${s}`); if (btn) btn.classList.remove('btn-sede-active'); });
     }
     if (cat !== 'Info Acquisto effettuato') { selectedAcquisto = ''; document.getElementById('contactAcquistoTipo').value = ''; ['InfoConsegna','RitardoConsegna','InfoDocumentazione'].forEach(k => { const btn = document.getElementById(`acquisto-${k}`); if (btn) btn.classList.remove('btn-sede-active'); }); }
-    if (cat !== 'Info Vendita') { selectedFonte = ''; document.getElementById('contactFonte').value = ''; ['Sito','GoogleADS','Autoscout','Facebook','Instagram','TikTok','NonRicorda'].forEach(k => { const btn = document.getElementById(`fonte-${k}`); if (btn) btn.classList.remove('btn-sede-active'); }); }
+    if (cat !== 'Info Vendita') { selectedFonte = ''; document.getElementById('contactFonte').value = ''; ['Sito','GoogleADS','Autoscout','Facebook','Instagram','TikTok','RichiestaCliente','NonRicorda'].forEach(k => { const btn = document.getElementById(`fonte-${k}`); if (btn) btn.classList.remove('btn-sede-active'); }); }
 }
 
 function printContactLogs() { window.print(); }

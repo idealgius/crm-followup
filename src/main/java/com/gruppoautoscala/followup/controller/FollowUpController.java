@@ -14,12 +14,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/followups")
 public class FollowUpController {
+
+    private static final ZoneId ITALY_ZONE = ZoneId.of("Europe/Rome");
 
     @Autowired private FollowUpService followUpService;
     @Autowired private CustomerRepository customerRepository;
@@ -190,7 +194,7 @@ public class FollowUpController {
         FollowUpStep step = stepOpt.get();
         if (body.containsKey("outcome")) step.setOutcome((String) body.get("outcome"));
         if (body.containsKey("notes")) step.setNotes((String) body.get("notes"));
-        if (body.containsKey("executedAt")) step.setExecutedAt(java.time.LocalDateTime.now());
+        if (body.containsKey("executedAt")) step.setExecutedAt(LocalDateTime.now(ITALY_ZONE));
         return ResponseEntity.ok(followUpStepRepository.save(step));
     }
 }
