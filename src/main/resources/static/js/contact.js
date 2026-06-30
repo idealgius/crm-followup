@@ -299,11 +299,6 @@ function renderChartFonteVendita(logs) {
 
     const total = Object.values(counts).reduce((a,b) => a+b, 0);
     const wrapper = document.getElementById('chartFonteWrapper');
-
-    if (total === 0) {
-        if (wrapper) wrapper.style.display = 'none';
-        return;
-    }
     if (wrapper) wrapper.style.display = 'block';
 
     const legendColor = getLegendColor();
