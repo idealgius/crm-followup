@@ -4,8 +4,11 @@ import com.gruppoautoscala.followup.model.ContactLog;
 import com.gruppoautoscala.followup.model.User;
 import com.gruppoautoscala.followup.repository.UserRepository;
 import com.gruppoautoscala.followup.service.ContactLogService;
+import com.gruppoautoscala.followup.service.ExcelExportService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
@@ -25,6 +28,8 @@ public class ContactLogController {
 
     @Autowired
     private UserRepository userRepository;
+
+    private final ExcelExportService excelExportService = new ExcelExportService();
 
     @GetMapping
     public ResponseEntity<?> getAll(
@@ -60,6 +65,43 @@ public class ContactLogController {
         }).collect(Collectors.toList());
 
         return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/export-excel")
+    public ResponseEntity<?> exportExcel(
+            @RequestParam(required = false) String from,
+            @RequestParam(required = false) String to,
+            @RequestParam(required = false) String operator,
+            HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+
+        List<ContactLog> logs;
+        if (from != null && to != null) {
+            LocalDateTime fromDt = LocalDateTime.parse(from + "T00:00:00");
+            LocalDateTime toDt = LocalDateTime.parse(to + "T23:59:59");
+            logs = contactLogService.getByDateRange(fromDt, toDt);
+        } else {
+            logs = contactLogService.getAll();
+        }
+
+        if (operator != null && !operator.isBlank()) {
+            logs = logs.stream()
+                .filter(l -> operator.equalsIgnoreCase(l.getUser().getFullName()))
+                .collect(Collectors.toList());
+        }
+
+        try {
+            byte[] excelBytes = excelExportService.export(logs);
+            String filename = "registro_contatti_" + (from != null ? from : "tutti") + "_" + (to != null ? to : "") + ".xlsx";
+
+            return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(excelBytes);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Errore generazione Excel: " + e.getMessage()));
+        }
     }
 
     @PostMapping

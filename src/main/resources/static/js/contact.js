@@ -326,80 +326,20 @@ function renderChartFonteVendita(logs) {
     });
 }
 
-// ===== EXPORT EXCEL =====
+// ===== EXPORT EXCEL — ora generato dal server con Apache POI =====
 function exportContactsExcel() {
     if (!contactLogsFiltered || contactLogsFiltered.length === 0) { alert('Nessun dato da esportare'); return; }
-    const total = contactLogsFiltered.length;
-    const byCategory = {};
-    contactLogsFiltered.forEach(log => { const cat = log.category === 'Info + Appuntamento' ? 'Info Vendita' : log.category; byCategory[cat] = (byCategory[cat] || 0) + 1; });
-    const byOperator = {};
-    contactLogsFiltered.forEach(log => { byOperator[log.user.fullName] = (byOperator[log.user.fullName] || 0) + 1; });
-    const bySede = { 'Agnano': 0, 'Casamarciano': 0, 'Salerno': 0 };
-    contactLogsFiltered.forEach(log => { if (log.category === 'Info + Appuntamento' && log.otherNote && bySede[log.otherNote.trim()] !== undefined) bySede[log.otherNote.trim()]++; });
-    const byAcquisto = { 'Info Consegna': 0, 'Ritardo Consegna': 0, 'Info Documentazione': 0 };
-    contactLogsFiltered.forEach(log => { if (log.category === 'Info Acquisto effettuato' && log.otherNote && byAcquisto[log.otherNote.trim()] !== undefined) byAcquisto[log.otherNote.trim()]++; });
-    const byFonte = {};
-    FONTE_LIST.forEach(f => byFonte[f] = 0);
-    contactLogsFiltered.forEach(log => { if (log.category === 'Info Vendita' && log.otherNote && byFonte[log.otherNote.trim()] !== undefined) byFonte[log.otherNote.trim()]++; });
-
-    const wb = XLSX.utils.book_new();
-
-    const rows = contactLogsFiltered.map(log => {
-        const catForPct = log.category === 'Info + Appuntamento' ? 'Info Vendita' : log.category;
-        const catCount = byCategory[catForPct] || 0;
-        const catPct = total > 0 ? Math.round(catCount*1000/total)/10 : 0;
-        const opCount = byOperator[log.user.fullName] || 0;
-        const opPct = total > 0 ? Math.round(opCount*1000/total)/10 : 0;
-        return {
-            'Data': log.contactDate.split('T')[0],
-            'Orario': log.contactDate.split('T')[1].substring(0,5),
-            'Categoria': log.category,
-            'Dettaglio': log.otherNote || '',
-            'Nominativo Appuntamento': log.nominativoAppuntamento || '',
-            'Link Appuntamento': log.linkAppuntamento || '',
-            'Operatore': log.user.fullName,
-            'Ruolo': log.user.role,
-            '% Categoria': catPct+'%',
-            'N. per Categoria': catCount,
-            '% Operatore': opPct+'%',
-            'N. per Operatore': opCount
-        };
-    });
-    const ws1 = XLSX.utils.json_to_sheet(rows);
-    ws1['!cols'] = [{ wch:12 },{ wch:8 },{ wch:25 },{ wch:25 },{ wch:22 },{ wch:30 },{ wch:22 },{ wch:12 },{ wch:14 },{ wch:16 },{ wch:14 },{ wch:16 }];
-    XLSX.utils.book_append_sheet(wb, ws1, 'Dati Registro');
-
-    const ws2Data = [];
-    ws2Data.push({ 'Sezione': '=== DISTRIBUZIONE CATEGORIE ===', 'Valore': '', 'Numero': '', 'Percentuale': '' });
-    Object.entries(byCategory).sort((a,b) => b[1]-a[1]).forEach(([cat, cnt]) => ws2Data.push({ 'Sezione': cat, 'Valore': cat, 'Numero': cnt, 'Percentuale': (total > 0 ? Math.round(cnt*1000/total)/10 : 0)+'%' }));
-    ws2Data.push({ 'Sezione': 'TOTALE', 'Valore': '', 'Numero': total, 'Percentuale': '100%' });
-
-    ws2Data.push({ 'Sezione': '', 'Valore': '', 'Numero': '', 'Percentuale': '' });
-    ws2Data.push({ 'Sezione': '=== CHIAMATE PER OPERATORE ===', 'Valore': '', 'Numero': '', 'Percentuale': '' });
-    Object.entries(byOperator).sort((a,b) => b[1]-a[1]).forEach(([op, cnt]) => ws2Data.push({ 'Sezione': op, 'Valore': op, 'Numero': cnt, 'Percentuale': (total > 0 ? Math.round(cnt*1000/total)/10 : 0)+'%' }));
-
-    ws2Data.push({ 'Sezione': '', 'Valore': '', 'Numero': '', 'Percentuale': '' });
-    ws2Data.push({ 'Sezione': '=== APPUNTAMENTI PER SEDE ===', 'Valore': '', 'Numero': '', 'Percentuale': '' });
-    const totalSede = Object.values(bySede).reduce((a,b) => a+b, 0);
-    Object.entries(bySede).forEach(([sede, cnt]) => ws2Data.push({ 'Sezione': sede, 'Valore': sede, 'Numero': cnt, 'Percentuale': (totalSede > 0 ? Math.round(cnt*1000/totalSede)/10 : 0)+'%' }));
-
-    ws2Data.push({ 'Sezione': '', 'Valore': '', 'Numero': '', 'Percentuale': '' });
-    ws2Data.push({ 'Sezione': '=== INFO ACQUISTO EFFETTUATO ===', 'Valore': '', 'Numero': '', 'Percentuale': '' });
-    const totalAcquisto = Object.values(byAcquisto).reduce((a,b) => a+b, 0);
-    Object.entries(byAcquisto).forEach(([tipo, cnt]) => ws2Data.push({ 'Sezione': tipo, 'Valore': tipo, 'Numero': cnt, 'Percentuale': (totalAcquisto > 0 ? Math.round(cnt*1000/totalAcquisto)/10 : 0)+'%' }));
-
-    ws2Data.push({ 'Sezione': '', 'Valore': '', 'Numero': '', 'Percentuale': '' });
-    ws2Data.push({ 'Sezione': '=== FONTE INFO VENDITA ===', 'Valore': '', 'Numero': '', 'Percentuale': '' });
-    const totalFonte = Object.values(byFonte).reduce((a,b) => a+b, 0);
-    Object.entries(byFonte).sort((a,b) => b[1]-a[1]).forEach(([fonte, cnt]) => ws2Data.push({ 'Sezione': fonte, 'Valore': fonte, 'Numero': cnt, 'Percentuale': (totalFonte > 0 ? Math.round(cnt*1000/totalFonte)/10 : 0)+'%' }));
-
-    const ws2 = XLSX.utils.json_to_sheet(ws2Data);
-    ws2['!cols'] = [{ wch:35 },{ wch:30 },{ wch:12 },{ wch:14 }];
-    XLSX.utils.book_append_sheet(wb, ws2, 'Riepilogo Statistiche');
 
     const from = document.getElementById('contactFrom')?.value || '';
     const to = document.getElementById('contactTo')?.value || '';
-    XLSX.writeFile(wb, `registro_contatti_${from}_${to}.xlsx`);
+    const operator = document.getElementById('contactOperatorFilter')?.value || '';
+
+    let url = '/api/contacts/export-excel?';
+    if (from) url += `from=${from}&`;
+    if (to) url += `to=${to}&`;
+    if (operator) url += `operator=${encodeURIComponent(operator)}&`;
+
+    window.open(url, '_blank');
 }
 
 let currentDayView = null;
