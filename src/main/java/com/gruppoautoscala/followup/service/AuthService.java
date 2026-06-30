@@ -35,4 +35,15 @@ public class AuthService {
     public boolean checkPassword(User user, String rawPassword) {
         return passwordEncoder.matches(rawPassword, user.getPasswordHash());
     }
+
+    public void changePassword(User user, String currentPassword, String newPassword) {
+        if (!checkPassword(user, currentPassword)) {
+            throw new RuntimeException("Password attuale non corretta");
+        }
+        if (newPassword == null || newPassword.length() < 6) {
+            throw new RuntimeException("La nuova password deve avere almeno 6 caratteri");
+        }
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+    }
 }

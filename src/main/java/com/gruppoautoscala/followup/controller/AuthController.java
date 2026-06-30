@@ -82,6 +82,33 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/change-password")
+    public ResponseEntity<?> changePassword(@RequestBody Map<String, String> body, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+
+        String currentPassword = body.get("currentPassword");
+        String newPassword = body.get("newPassword");
+        String confirmPassword = body.get("confirmPassword");
+
+        if (currentPassword == null || newPassword == null || confirmPassword == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Tutti i campi sono obbligatori"));
+        }
+        if (!newPassword.equals(confirmPassword)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Le password non coincidono"));
+        }
+
+        Optional<User> userOpt = userRepository.findById(userId);
+        if (userOpt.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "Utente non trovato"));
+
+        try {
+            authService.changePassword(userOpt.get(), currentPassword, newPassword);
+            return ResponseEntity.ok(Map.of("message", "Password aggiornata con successo"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @GetMapping("/users")
     public ResponseEntity<?> getUsers(HttpSession session) {
         String role = (String) session.getAttribute("userRole");

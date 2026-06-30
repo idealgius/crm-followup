@@ -36,10 +36,12 @@ async function loadStats() {
     if (consultant) calQs += `&consultant=${encodeURIComponent(consultant)}`;
 
     try {
-        const [fuRes, wRes, calRes] = await Promise.all([
+        // Tutte e 4 le chiamate in parallelo, nessuna sequenziale
+        const [fuRes, wRes, calRes, recallRes] = await Promise.all([
             fetch(`/api/stats/followups?${qs}`),
             fetch('/api/stats/waiting'),
-            fetch(`/api/stats/calendar?${calQs}`)
+            fetch(`/api/stats/calendar?${calQs}`),
+            fetch('/api/waiting')
         ]);
 
         if (fuRes.ok) {
@@ -55,14 +57,17 @@ async function loadStats() {
         if (wRes.ok) {
             const wStats = await wRes.json();
             renderWaitingChart(wStats);
-            // Carica anche i recall per il calendario
-            await loadRecallEntries();
         }
 
         if (calRes.ok) {
             const calData = await calRes.json();
             calendarDays = calData.days || {};
             renderCalendar();
+        }
+
+        if (recallRes.ok) {
+            recallEntries = await recallRes.json();
+            renderRecallCalendar();
         }
 
     } catch (err) {
@@ -160,7 +165,6 @@ function renderRecallCalendar() {
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Raggruppa recall per data
     const byDay = {};
     recallEntries.forEach(e => {
         if (e.recallDate) {
