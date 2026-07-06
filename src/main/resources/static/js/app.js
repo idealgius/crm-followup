@@ -15,6 +15,8 @@ function refreshChartsOnThemeChange() {
         if (typeof renderChartAppuntamentiSede === 'function') renderChartAppuntamentiSede(contactLogsFiltered);
         if (typeof renderChartInfoAcquisto === 'function') renderChartInfoAcquisto(contactLogsFiltered);
         if (typeof renderChartFonteVendita === 'function') renderChartFonteVendita(contactLogsFiltered);
+        if (typeof renderChartService === 'function') renderChartService(contactLogsFiltered);
+        if (typeof renderChartMarche === 'function') renderChartMarche(contactLogsFiltered);
     }
     if (typeof loadStats === 'function' && document.getElementById('dashboardPage')?.style.display === 'block') {
         loadStats();
@@ -31,6 +33,7 @@ function applyRolePermissions(role) {
     document.getElementById('navFollowups').style.display = canSeeAll ? 'inline-block' : 'none';
     document.getElementById('navWaiting').style.display = canSeeAll ? 'inline-block' : 'none';
     document.getElementById('navContacts').style.display = 'inline-block';
+    document.getElementById('navPromo').style.display = canSeeAll ? 'inline-block' : 'none';
     document.getElementById('adminLink').style.display = (isAdmin || isGestore) ? 'inline-block' : 'none';
 
     if (role === 'UTENTE') {
@@ -60,6 +63,7 @@ function showPage(page) {
     document.getElementById('followupsPage').style.display = 'none';
     document.getElementById('waitingPage').style.display = 'none';
     document.getElementById('contactsPage').style.display = 'none';
+    document.getElementById('promoPage').style.display = 'none';
     document.getElementById('adminPage').style.display = 'none';
 
     document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
@@ -90,14 +94,17 @@ function showPage(page) {
             document.getElementById('contactFrom').value = firstDay;
             document.getElementById('contactTo').value = today;
         }
-        // Il canvas è ora visibile (display:block appena impostato sopra),
-        // ma diamo un tick al browser per il reflow prima che Chart.js calcoli le dimensioni
         setTimeout(() => {
             loadContactLogs(
                 document.getElementById('contactFrom').value,
                 document.getElementById('contactTo').value
             );
         }, 0);
+    } else if (page === 'promo') {
+        document.getElementById('promoPage').style.display = 'block';
+        document.getElementById('navPromo').classList.add('active');
+        if (typeof loadPromo === 'function') loadPromo();
+        if (typeof renderPromoMarchiButtons === 'function') renderPromoMarchiButtons();
     } else if (page === 'admin') {
         document.getElementById('adminPage').style.display = 'block';
         document.getElementById('adminLink').classList.add('active');
@@ -134,7 +141,10 @@ window.onload = function() {
             const defaultPage = data.role === 'UTENTE' ? 'contacts' : 'dashboard';
             showPage(defaultPage);
 
-            if (data.role !== 'UTENTE') loadStats();
+            if (data.role !== 'UTENTE') {
+                loadStats();
+                if (typeof loadPromo === 'function') loadPromo();
+            }
         })
         .catch(() => {
             document.getElementById('loginPage').style.display = 'flex';

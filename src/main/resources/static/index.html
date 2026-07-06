@@ -41,27 +41,21 @@
             <a href="#" class="nav-link" id="navFollowups" onclick="showPage('followups')">📋 FOLLOW-UP</a>
             <a href="#" class="nav-link" id="navWaiting" onclick="showPage('waiting')">🔔 RECALL</a>
             <a href="#" class="nav-link" id="navContacts" onclick="showPage('contacts')">📞 REGISTRO CONTATTI</a>
+            <a href="#" class="nav-link" id="navPromo" style="display:none" onclick="showPage('promo')">🎯 PROMO</a>
             <a href="#" class="nav-link" id="adminLink" style="display:none" onclick="showPage('admin')">⚙️ UTENTI</a>
         </div>
         <div class="nav-user">
             <div class="theme-switch" onclick="toggleTheme()">
                 <span class="theme-icon">🌙</span>
-                <div class="switch-track">
-                    <div class="switch-thumb"></div>
-                </div>
+                <div class="switch-track"><div class="switch-thumb"></div></div>
                 <span class="theme-icon">☀️</span>
             </div>
-
-            <!-- DROPDOWN NOME UTENTE -->
             <div class="user-dropdown-wrapper" style="position:relative">
                 <span id="navUserName" onclick="toggleUserDropdown()" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px"></span>
                 <div id="userDropdownMenu" style="display:none;position:absolute;top:130%;right:0;background:var(--bg-card);border:1.5px solid var(--border);border-radius:10px;box-shadow:var(--shadow);min-width:180px;z-index:200;overflow:hidden">
-                    <button type="button" onclick="openChangePasswordModal()" style="width:100%;text-align:left;padding:12px 16px;background:none;border:none;color:var(--text-primary);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:8px">
-                        🔒 Cambia Password
-                    </button>
+                    <button type="button" onclick="openChangePasswordModal()" style="width:100%;text-align:left;padding:12px 16px;background:none;border:none;color:var(--text-primary);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:8px">🔒 Cambia Password</button>
                 </div>
             </div>
-
             <button onclick="logout()" class="btn-logout">ESCI</button>
         </div>
     </nav>
@@ -76,16 +70,12 @@
             <div class="modal-body">
                 <div id="changePasswordError" class="error-msg" style="display:none;margin-bottom:12px"></div>
                 <div id="changePasswordSuccess" style="display:none;margin-bottom:12px;color:#00c853;font-size:13px;font-weight:700"></div>
-
                 <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">PASSWORD ATTUALE *</label>
                 <input type="password" id="currentPasswordInput" placeholder="Password attuale" class="input-field">
-
                 <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NUOVA PASSWORD *</label>
                 <input type="password" id="newPasswordInput" placeholder="Nuova password (min. 6 caratteri)" class="input-field">
-
                 <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">CONFERMA NUOVA PASSWORD *</label>
                 <input type="password" id="confirmPasswordInput" placeholder="Ripeti la nuova password" class="input-field">
-
                 <div class="form-actions" style="margin-top:10px">
                     <button onclick="submitChangePassword()" class="btn-gold">SALVA</button>
                     <button onclick="closeChangePasswordModal()" class="btn-secondary">ANNULLA</button>
@@ -103,46 +93,22 @@
                 <input type="date" id="statsTo" class="input-dark">
                 <select id="statsConsultant" class="input-dark" onchange="loadStats()">
                     <option value="">Tutti i consulenti</option>
-                    <option>Ambrosino Luca</option>
-                    <option>Capitelli Silvio</option>
-                    <option>Castaldo Marco</option>
-                    <option>Castaldo Roberto</option>
-                    <option>Filosa Claudio</option>
-                    <option>Fiore Guido</option>
-                    <option>Gerardi Claudio</option>
-                    <option>Giordano Luca</option>
-                    <option>Montuori Francesco</option>
-                    <option>Palumbo Enrico</option>
-                    <option>Scala Rosario</option>
-                    <option>Zaritto Davide</option>
+                    <option>Ambrosino Luca</option><option>Capitelli Silvio</option><option>Castaldo Marco</option>
+                    <option>Castaldo Roberto</option><option>Filosa Claudio</option><option>Fiore Guido</option>
+                    <option>Gerardi Claudio</option><option>Giordano Luca</option><option>Montuori Francesco</option>
+                    <option>Palumbo Enrico</option><option>Scala Rosario</option><option>Zaritto Davide</option>
                     <option>Zuppa Mattia</option>
                 </select>
                 <button onclick="loadStats()" class="btn-gold">AGGIORNA</button>
             </div>
         </div>
         <div class="stats-grid">
-            <div class="stat-card green stat-card-clickable" onclick="showStatDetail('all')" title="Clicca per vedere l'elenco">
-                <div class="stat-label">FOLLOW-UP TOTALI</div>
-                <div class="stat-value" id="statTotal">0</div>
-            </div>
-            <div class="stat-card blue stat-card-clickable" onclick="showStatDetail('responded')" title="Clicca per vedere l'elenco">
-                <div class="stat-label">RISPOSTE RICEVUTE</div>
-                <div class="stat-value" id="statResponded">0</div>
-            </div>
-            <div class="stat-card gold stat-card-clickable" onclick="showStatDetail('appointments')" title="Clicca per vedere l'elenco">
-                <div class="stat-label">APPUNTAMENTI</div>
-                <div class="stat-value" id="statAppointments">0</div>
-            </div>
-            <div class="stat-card pink">
-                <div class="stat-label">TASSO RISPOSTA</div>
-                <div class="stat-value" id="statResponseRate">0%</div>
-            </div>
-            <div class="stat-card purple">
-                <div class="stat-label">TASSO APPUNTAMENTI</div>
-                <div class="stat-value" id="statAppointmentRate">0%</div>
-            </div>
+            <div class="stat-card green stat-card-clickable" onclick="showStatDetail('all')"><div class="stat-label">FOLLOW-UP TOTALI</div><div class="stat-value" id="statTotal">0</div></div>
+            <div class="stat-card blue stat-card-clickable" onclick="showStatDetail('responded')"><div class="stat-label">RISPOSTE RICEVUTE</div><div class="stat-value" id="statResponded">0</div></div>
+            <div class="stat-card gold stat-card-clickable" onclick="showStatDetail('appointments')"><div class="stat-label">APPUNTAMENTI</div><div class="stat-value" id="statAppointments">0</div></div>
+            <div class="stat-card pink"><div class="stat-label">TASSO RISPOSTA</div><div class="stat-value" id="statResponseRate">0%</div></div>
+            <div class="stat-card purple"><div class="stat-label">TASSO APPUNTAMENTI</div><div class="stat-value" id="statAppointmentRate">0%</div></div>
         </div>
-
         <div class="dashboard-grid-2x2">
             <div class="dashboard-cell" style="background:var(--bg-card);border:1.5px solid var(--border);border-radius:14px;padding:20px;box-shadow:var(--shadow);max-width:420px">
                 <div class="calendar-header">
@@ -169,24 +135,15 @@
                 </div>
                 <div id="recallCalendar" class="fu-calendar"></div>
             </div>
-            <div class="chart-card dashboard-cell">
-                <h3>FOLLOW-UP vs RISPOSTE vs APPUNTAMENTI</h3>
-                <canvas id="chartFollowUp"></canvas>
-            </div>
-            <div class="chart-card dashboard-cell">
-                <h3>LISTA RECALL</h3>
-                <canvas id="chartWaiting"></canvas>
-            </div>
+            <div class="chart-card dashboard-cell"><h3>FOLLOW-UP vs RISPOSTE vs APPUNTAMENTI</h3><canvas id="chartFollowUp"></canvas></div>
+            <div class="chart-card dashboard-cell"><h3>LISTA RECALL</h3><canvas id="chartWaiting"></canvas></div>
         </div>
     </div>
 
     <!-- MODAL DETTAGLIO STATS -->
     <div id="statDetailModal" class="modal-overlay" style="display:none" onclick="closeStatDetail(event)">
         <div class="modal-box" onclick="event.stopPropagation()">
-            <div class="modal-header">
-                <h3 id="statDetailTitle">Dettaglio</h3>
-                <button type="button" class="modal-close" onclick="closeStatDetail()">✕</button>
-            </div>
+            <div class="modal-header"><h3 id="statDetailTitle">Dettaglio</h3><button type="button" class="modal-close" onclick="closeStatDetail()">✕</button></div>
             <div id="statDetailList" class="modal-body"></div>
         </div>
     </div>
@@ -199,18 +156,10 @@
                 <input type="date" id="workDateFilter" class="input-dark">
                 <select id="consultantFilter" class="input-dark" onchange="loadFollowUps()">
                     <option value="">Tutti i consulenti</option>
-                    <option>Ambrosino Luca</option>
-                    <option>Capitelli Silvio</option>
-                    <option>Castaldo Marco</option>
-                    <option>Castaldo Roberto</option>
-                    <option>Filosa Claudio</option>
-                    <option>Fiore Guido</option>
-                    <option>Gerardi Claudio</option>
-                    <option>Giordano Luca</option>
-                    <option>Montuori Francesco</option>
-                    <option>Palumbo Enrico</option>
-                    <option>Scala Rosario</option>
-                    <option>Zaritto Davide</option>
+                    <option>Ambrosino Luca</option><option>Capitelli Silvio</option><option>Castaldo Marco</option>
+                    <option>Castaldo Roberto</option><option>Filosa Claudio</option><option>Fiore Guido</option>
+                    <option>Gerardi Claudio</option><option>Giordano Luca</option><option>Montuori Francesco</option>
+                    <option>Palumbo Enrico</option><option>Scala Rosario</option><option>Zaritto Davide</option>
                     <option>Zuppa Mattia</option>
                 </select>
                 <button onclick="loadFollowUps()" class="btn-gold">CARICA</button>
@@ -219,39 +168,19 @@
         </div>
         <div class="search-bar">
             <div style="display:flex;gap:10px;align-items:center">
-                <input type="text" id="searchInput"
-                    placeholder="🔍 Cerca cliente per nome o numero (in tutti i giorni)..."
-                    class="input-field"
-                    style="margin-bottom:0;flex:1"
-                    oninput="searchFollowUps(this.value)">
-                <select id="searchConsultantFilter" class="input-dark"
-                    onchange="searchFollowUps(document.getElementById('searchInput').value)"
-                    style="min-width:180px">
+                <input type="text" id="searchInput" placeholder="🔍 Cerca cliente per nome o numero..." class="input-field" style="margin-bottom:0;flex:1" oninput="searchFollowUps(this.value)">
+                <select id="searchConsultantFilter" class="input-dark" onchange="searchFollowUps(document.getElementById('searchInput').value)" style="min-width:180px">
                     <option value="">Tutti i consulenti</option>
-                    <option>Ambrosino Luca</option>
-                    <option>Capitelli Silvio</option>
-                    <option>Castaldo Marco</option>
-                    <option>Castaldo Roberto</option>
-                    <option>Filosa Claudio</option>
-                    <option>Fiore Guido</option>
-                    <option>Gerardi Claudio</option>
-                    <option>Giordano Luca</option>
-                    <option>Montuori Francesco</option>
-                    <option>Palumbo Enrico</option>
-                    <option>Scala Rosario</option>
-                    <option>Zaritto Davide</option>
+                    <option>Ambrosino Luca</option><option>Capitelli Silvio</option><option>Castaldo Marco</option>
+                    <option>Castaldo Roberto</option><option>Filosa Claudio</option><option>Fiore Guido</option>
+                    <option>Gerardi Claudio</option><option>Giordano Luca</option><option>Montuori Francesco</option>
+                    <option>Palumbo Enrico</option><option>Scala Rosario</option><option>Zaritto Davide</option>
                     <option>Zuppa Mattia</option>
                 </select>
             </div>
         </div>
         <div id="searchResults" style="display:none">
-            <div class="search-results-header">
-                RISULTATI RICERCA
-                <span style="float:right;cursor:pointer;font-size:13px;color:var(--text-secondary)"
-                    onclick="document.getElementById('searchResults').style.display='none';document.getElementById('searchInput').value=''">
-                    ✕ Chiudi
-                </span>
-            </div>
+            <div class="search-results-header">RISULTATI RICERCA<span style="float:right;cursor:pointer;font-size:13px;color:var(--text-secondary)" onclick="document.getElementById('searchResults').style.display='none';document.getElementById('searchInput').value=''">✕ Chiudi</span></div>
             <div id="searchResultsList"></div>
         </div>
         <div id="newFollowUpForm" class="form-card" style="display:none">
@@ -263,23 +192,13 @@
                 <input type="date" id="fuWorkDate" class="input-field">
                 <select id="fuConsultant" class="input-field">
                     <option value="">Seleziona Consulente *</option>
-                    <option>Ambrosino Luca</option>
-                    <option>Capitelli Silvio</option>
-                    <option>Castaldo Marco</option>
-                    <option>Castaldo Roberto</option>
-                    <option>Filosa Claudio</option>
-                    <option>Fiore Guido</option>
-                    <option>Gerardi Claudio</option>
-                    <option>Giordano Luca</option>
-                    <option>Montuori Francesco</option>
-                    <option>Palumbo Enrico</option>
-                    <option>Scala Rosario</option>
-                    <option>Zaritto Davide</option>
+                    <option>Ambrosino Luca</option><option>Capitelli Silvio</option><option>Castaldo Marco</option>
+                    <option>Castaldo Roberto</option><option>Filosa Claudio</option><option>Fiore Guido</option>
+                    <option>Gerardi Claudio</option><option>Giordano Luca</option><option>Montuori Francesco</option>
+                    <option>Palumbo Enrico</option><option>Scala Rosario</option><option>Zaritto Davide</option>
                     <option>Zuppa Mattia</option>
                 </select>
-                <label class="checkbox-label">
-                    <input type="checkbox" id="fuEmailOnly"> Solo Email (nessun telefono)
-                </label>
+                <label class="checkbox-label"><input type="checkbox" id="fuEmailOnly"> Solo Email (nessun telefono)</label>
             </div>
             <div class="form-actions">
                 <button onclick="createFollowUp()" class="btn-gold">CREA FOLLOW-UP</button>
@@ -336,26 +255,15 @@
                 <button onclick="printContactLogs()" class="btn-secondary" style="padding:10px 20px">🖨️ STAMPA</button>
             </div>
         </div>
+
         <div id="contactStatsPrint" class="stats-grid" style="margin-bottom:20px">
-            <div class="stat-card blue">
-                <div class="stat-label">TOTALE CONTATTI</div>
-                <div class="stat-value" id="statContactTotal">0</div>
-            </div>
-            <div class="stat-card green">
-                <div class="stat-label">INFO VENDITA</div>
-                <div class="stat-value" id="statInfoVendita">0%</div>
-            </div>
-            <div class="stat-card gold">
-                <div class="stat-label">INFO NOLEGGIO</div>
-                <div class="stat-value" id="statInfoNoleggio">0%</div>
-            </div>
-            <div class="stat-card purple">
-                <div class="stat-label">SERVICE</div>
-                <div class="stat-value" id="statService">0%</div>
-            </div>
+            <div class="stat-card blue"><div class="stat-label">TOTALE CONTATTI</div><div class="stat-value" id="statContactTotal">0</div></div>
+            <div class="stat-card green"><div class="stat-label">INFO VENDITA</div><div class="stat-value" id="statInfoVendita">0%</div></div>
+            <div class="stat-card gold"><div class="stat-label">INFO NOLEGGIO</div><div class="stat-value" id="statInfoNoleggio">0%</div></div>
+            <div class="stat-card purple"><div class="stat-label">SERVICE</div><div class="stat-value" id="statService">0%</div></div>
         </div>
 
-        <!-- GRAFICI -->
+        <!-- GRAFICI PRINCIPALI -->
         <div id="contactChartPrint" style="margin-bottom:20px;display:flex;gap:20px;flex-wrap:wrap;align-items:stretch">
 
             <!-- SHAPE 1: Distribuzione Categorie + Chiamate Operatore -->
@@ -370,7 +278,7 @@
                 </div>
             </div>
 
-            <!-- SHAPE 2: Calendario sopra + Appuntamenti Sede sotto -->
+            <!-- SHAPE 2: Calendario + Appuntamenti Sede -->
             <div class="chart-card" style="width:380px;min-width:380px;max-width:380px;min-height:560px;display:flex;flex-direction:column;gap:24px;justify-content:space-between">
                 <div>
                     <div class="calendar-header" style="margin-bottom:8px">
@@ -386,31 +294,73 @@
                 </div>
             </div>
 
-            <!-- SHAPE 3: Info Acquisto + Fonte Vendita in colonna -->
+            <!-- SHAPE 3: Info Acquisto + Fonte Vendita -->
             <div class="chart-card" style="width:340px;min-width:340px;max-width:340px;display:flex;flex-direction:column;gap:24px">
                 <div>
                     <h3>INFO ACQUISTO EFFETTUATO</h3>
-                    <canvas id="chartInfoAcquisto" style="max-height:200px"></canvas>
+                    <canvas id="chartInfoAcquisto" style="max-height:260px"></canvas>
                 </div>
-                <div id="chartFonteWrapper" style="display:none">
+                <div id="chartFonteWrapper">
                     <h3 style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);margin-bottom:12px;text-transform:uppercase">FONTE INFO VENDITA</h3>
                     <canvas id="chartFonteVendita" style="max-height:280px"></canvas>
                 </div>
             </div>
 
+            <!-- SHAPE 4: Service barre orizzontali -->
+            <div class="chart-card" style="width:340px;min-width:340px;max-width:340px;display:flex;flex-direction:column;gap:24px">
+                <div>
+                    <h3>TIPOLOGIE SERVICE</h3>
+                    <canvas id="chartService" style="max-height:260px"></canvas>
+                </div>
+            </div>
+
+            <!-- SHAPE 5: Performance Marche — layout custom HTML, non Chart.js -->
+            <div class="chart-card" style="width:420px;min-width:420px;max-width:420px;display:flex;flex-direction:column;gap:16px">
+                <h3>PERFORMANCE MARCHE</h3>
+                <div id="chartMarcheCustom" style="display:flex;flex-direction:column;gap:10px"></div>
+            </div>
+
+        </div>
+
+        <!-- GRAFICI PROMO IN REGISTRO CONTATTI -->
+        <div id="contactPromoChartsSection" style="display:none;margin-bottom:20px">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+                <h3 style="font-size:13px;font-weight:700;letter-spacing:1px;color:var(--accent-gold);text-transform:uppercase;margin:0">🎯 STATISTICHE PROMO ATTIVA</h3>
+                <button class="btn-secondary" onclick="toggleContactPromoCharts()" id="toggleContactPromoBtn" style="padding:6px 14px;font-size:12px">▼ Mostra</button>
+            </div>
+            <div id="contactPromoChartsContent" style="display:none">
+                <!-- Stat cards promo -->
+                <div id="contactPromoStatCards" class="stats-grid" style="margin-bottom:20px"></div>
+                <!-- Grafici promo -->
+                <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:stretch">
+                    <!-- Modelli richiesti — layout custom come marche -->
+                    <div class="chart-card" style="width:420px;min-width:420px;flex:1">
+                        <h3>MODELLI RICHIESTI IN PROMO</h3>
+                        <div id="chartPromoModelliCustom" style="display:flex;flex-direction:column;gap:10px;margin-top:8px"></div>
+                    </div>
+                    <!-- Richieste vs Appuntamenti -->
+                    <div class="chart-card" style="width:320px;min-width:320px">
+                        <h3>RICHIESTE vs APPUNTAMENTI</h3>
+                        <canvas id="chartPromoAppContact" style="max-height:260px"></canvas>
+                    </div>
+                    <!-- Richiesta promo torta -->
+                    <div class="chart-card" style="width:300px;min-width:300px">
+                        <h3>RICHIESTA PROMO</h3>
+                        <canvas id="chartPromoRichiestaContact" style="max-height:260px"></canvas>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- MODAL DETTAGLIO SEDE -->
         <div id="sedeDetailModal" class="modal-overlay" style="display:none" onclick="closeSedeDetail(event)">
             <div class="modal-box" onclick="event.stopPropagation()">
-                <div class="modal-header">
-                    <h3 id="sedeDetailTitle">Appuntamenti</h3>
-                    <button type="button" class="modal-close" onclick="closeSedeDetail()">✕</button>
-                </div>
+                <div class="modal-header"><h3 id="sedeDetailTitle">Appuntamenti</h3><button type="button" class="modal-close" onclick="closeSedeDetail()">✕</button></div>
                 <div id="sedeDetailList" class="modal-body"></div>
             </div>
         </div>
 
+        <!-- FORM NUOVO CONTATTO -->
         <div id="newContactForm" class="form-card" style="display:none">
             <h3>NUOVO CONTATTO</h3>
             <div class="form-grid">
@@ -434,10 +384,12 @@
                         <option>Pratica Finanziamento</option>
                         <option>Amministrazione</option>
                         <option>Info + Appuntamento</option>
+                        <option id="promoOption" style="display:none">Info Vendita in Promo</option>
                         <option>Altro</option>
                     </select>
                 </div>
-                <!-- FONTE INFO VENDITA -->
+
+                <!-- FONTE -->
                 <div id="contactFonteRow" style="display:none">
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">FONTE *</label>
                     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -452,15 +404,107 @@
                     </div>
                     <input type="hidden" id="contactFonte" value="">
                 </div>
+
+                <!-- MARCA E MODELLO -->
+                <div id="contactMarcaModelloRow" style="display:none">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MARCA (opzionale)</label>
+                    <div style="position:relative;margin-bottom:14px">
+                        <input type="text" id="contactMarcaInput" placeholder="Clicca o cerca marca..." class="input-field" style="margin-bottom:0;cursor:pointer"
+                               oninput="filterMarche(this.value)"
+                               onfocus="showMarcheDropdown()"
+                               autocomplete="off">
+                        <div id="marcaDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1.5px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;box-shadow:var(--shadow)"></div>
+                        <input type="hidden" id="contactMarca" value="">
+                    </div>
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLO (opzionale)</label>
+                    <input type="text" id="contactModello" placeholder="Es. 208 1.2 PureTech 100cv..." class="input-field" style="margin-bottom:14px">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">LINK AUTO (opzionale)</label>
+                    <input type="url" id="contactLinkAuto" placeholder="https://..." class="input-field">
+                </div>
+
+                <!-- INFO VENDITA IN PROMO -->
+                <div id="contactPromoRow" style="display:none">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLO RICHIESTO *</label>
+                    <div style="position:relative;margin-bottom:14px">
+                        <!-- Se inserimento manuale consentito: input + dropdown -->
+                        <div id="promoModelloInputWrapper">
+                            <input type="text" id="promoModelloInput" placeholder="Clicca per scegliere modello..." class="input-field" style="margin-bottom:0;cursor:pointer"
+                                   oninput="filterPromoModelli(this.value)"
+                                   onfocus="showPromoModelliDropdown()"
+                                   autocomplete="off">
+                        </div>
+                        <!-- Se inserimento manuale NON consentito: solo select -->
+                        <div id="promoModelloSelectWrapper" style="display:none">
+                            <select id="promoModelloSelect" class="input-field" style="margin-bottom:0" onchange="selectPromoModelloFromSelect(this.value)">
+                                <option value="">Seleziona modello...</option>
+                            </select>
+                        </div>
+                        <div id="promoModelloDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1.5px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:100;box-shadow:var(--shadow)"></div>
+                        <input type="hidden" id="promoModelloRichiesto" value="">
+                    </div>
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:8px">RICHIESTA PROMO *</label>
+                    <div style="display:flex;gap:10px;margin-bottom:14px">
+                        <button type="button" class="btn-sede" id="promo-richiestaPromo-si" onclick="selectPromoField('richiestaPromo', true)">✅ Sì</button>
+                        <button type="button" class="btn-sede" id="promo-richiestaPromo-no" onclick="selectPromoField('richiestaPromo', false)">❌ No</button>
+                    </div>
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:8px">PROPOSTA PROMO *</label>
+                    <div style="display:flex;gap:10px;margin-bottom:14px">
+                        <button type="button" class="btn-sede" id="promo-propostaPromo-si" onclick="selectPromoField('propostaPromo', true)">✅ Sì</button>
+                        <button type="button" class="btn-sede" id="promo-propostaPromo-no" onclick="selectPromoField('propostaPromo', false)">❌ No</button>
+                    </div>
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:8px">RICHIEDE TEST DRIVE *</label>
+                    <div style="display:flex;gap:10px;margin-bottom:14px">
+                        <button type="button" class="btn-sede" id="promo-testDrive-si" onclick="selectPromoField('testDrive', true)">✅ Sì</button>
+                        <button type="button" class="btn-sede" id="promo-testDrive-no" onclick="selectPromoField('testDrive', false)">❌ No</button>
+                    </div>
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:8px">APPUNTAMENTO *</label>
+                    <div style="display:flex;gap:10px;margin-bottom:14px">
+                        <button type="button" class="btn-sede" id="promo-appuntamento-si" onclick="selectPromoField('appuntamento', true)">✅ Sì</button>
+                        <button type="button" class="btn-sede" id="promo-appuntamento-no" onclick="selectPromoField('appuntamento', false)">❌ No</button>
+                    </div>
+                    <div id="promoSedeRow" style="display:none">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">SEDE APPUNTAMENTO *</label>
+                        <div style="display:flex;gap:10px;flex-wrap:wrap">
+                            <button type="button" class="btn-sede" id="promoSede-Agnano" onclick="selectPromoSede('Agnano')">📍 Agnano</button>
+                            <button type="button" class="btn-sede" id="promoSede-Casamarciano" onclick="selectPromoSede('Casamarciano')">📍 Casamarciano</button>
+                            <button type="button" class="btn-sede" id="promoSede-Salerno" onclick="selectPromoSede('Salerno')">📍 Salerno</button>
+                        </div>
+                        <input type="hidden" id="promoSedeAppuntamento" value="">
+                    </div>
+                </div>
+
+                <!-- TIPOLOGIA ACQUISTO -->
                 <div id="contactAcquistoRow" style="display:none">
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TIPOLOGIA ACQUISTO *</label>
-                    <div style="display:flex;gap:10px;flex-wrap:wrap">
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
                         <button type="button" class="btn-sede" id="acquisto-InfoConsegna" onclick="selectAcquisto('Info Consegna')">📦 Info Consegna</button>
                         <button type="button" class="btn-sede" id="acquisto-RitardoConsegna" onclick="selectAcquisto('Ritardo Consegna')">⏰ Ritardo Consegna</button>
                         <button type="button" class="btn-sede" id="acquisto-InfoDocumentazione" onclick="selectAcquisto('Info Documentazione')">📄 Info Documentazione</button>
+                        <button type="button" class="btn-sede" id="acquisto-SecondaChiave" onclick="selectAcquisto('Seconda chiave')">🔑 Seconda chiave</button>
+                        <button type="button" class="btn-sede" id="acquisto-InfoGeneriche" onclick="selectAcquisto('Info generiche')">ℹ️ Info generiche</button>
                     </div>
                     <input type="hidden" id="contactAcquistoTipo" value="">
+                    <div id="contactAcquistoNoteRow" style="display:none">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA (opzionale)</label>
+                        <input type="text" id="contactAcquistoNote" placeholder="Inserisci nota..." class="input-field">
+                    </div>
                 </div>
+
+                <!-- SERVICE -->
+                <div id="contactServiceRow" style="display:none">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TIPOLOGIA SERVICE *</label>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap">
+                        <button type="button" class="btn-sede" id="service-Tagliando" onclick="selectService('Tagliando')">🔧 Tagliando</button>
+                        <button type="button" class="btn-sede" id="service-DispositivoSatellitare" onclick="selectService('Dispositivo satellitare')">🛰️ Dispositivo satellitare</button>
+                        <button type="button" class="btn-sede" id="service-Prenotazione" onclick="selectService('Prenotazione')">📅 Prenotazione</button>
+                        <button type="button" class="btn-sede" id="service-LavorazioneInCorso" onclick="selectService('Lavorazione in corso')">⚙️ Lavorazione in corso</button>
+                        <button type="button" class="btn-sede" id="service-DoctorGlass" onclick="selectService('Doctor Glass')">🔍 Doctor Glass</button>
+                        <button type="button" class="btn-sede" id="service-CambioGomme" onclick="selectService('Cambio Gomme')">🔄 Cambio Gomme</button>
+                    </div>
+                    <input type="hidden" id="contactServiceTipo" value="">
+                </div>
+
+                <!-- SEDE APPUNTAMENTO -->
                 <div id="contactAppuntamentoRow" style="display:none">
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">SEDE APPUNTAMENTO *</label>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
@@ -469,13 +513,13 @@
                         <button type="button" class="btn-sede" id="sede-Salerno" onclick="selectSede('Salerno')">📍 Salerno</button>
                     </div>
                     <input type="hidden" id="contactAppuntamentoSede" value="">
-
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOMINATIVO CLIENTE *</label>
                     <input type="text" id="contactAppuntamentoNominativo" placeholder="Nome e Cognome cliente" class="input-field" style="margin-bottom:14px">
-
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">LINK APPUNTAMENTO (opzionale)</label>
                     <input type="url" id="contactAppuntamentoLink" placeholder="https://..." class="input-field">
                 </div>
+
+                <!-- ALTRO -->
                 <div id="contactOtherNoteRow" style="display:none">
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MOTIVAZIONE *</label>
                     <input type="text" id="contactOtherNote" placeholder="Descrivi il motivo..." class="input-field">
@@ -487,6 +531,60 @@
             </div>
         </div>
         <div id="contactLogsList"></div>
+    </div>
+
+    <!-- PROMO PAGE -->
+    <div id="promoPage" class="page" style="display:none">
+        <div class="page-header">
+            <h2>🎯 GESTIONE PROMO</h2>
+            <button onclick="showNewPromoForm()" class="btn-primary" style="width:auto;padding:10px 20px">+ NUOVA PROMO</button>
+        </div>
+        <div id="newPromoForm" class="form-card" style="display:none">
+            <h3 id="promoFormTitle">NUOVA PROMO</h3>
+            <div class="form-grid">
+                <div>
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOME PROMO *</label>
+                    <input type="text" id="promoNome" placeholder="Es. Promo Estate 2026 Peugeot" class="input-field">
+                </div>
+                <div>
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MARCHI * (seleziona uno o più)</label>
+                    <div id="promoMarchiContainer" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px"></div>
+                    <input type="hidden" id="promoMarchiSelected" value="">
+                </div>
+                <div>
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLI (opzionale — uno per riga)</label>
+                    <textarea id="promoModelliInput" placeholder="Es:&#10;208 1.2 PureTech 100cv&#10;2008 1.5 BlueHDi 110cv&#10;..." class="input-field" style="height:100px"></textarea>
+                    <label class="checkbox-label" style="margin-top:8px">
+                        <input type="checkbox" id="promoConsentiManuale" checked> Consenti inserimento modello manuale
+                    </label>
+                </div>
+                <div style="display:flex;gap:20px">
+                    <div style="flex:1">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">DATA INIZIO *</label>
+                        <input type="date" id="promoDataInizio" class="input-field">
+                    </div>
+                    <div style="flex:1">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">DATA SCADENZA *</label>
+                        <input type="date" id="promoDataScadenza" class="input-field">
+                    </div>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button onclick="savePromo()" class="btn-gold" id="promoSaveBtn">SALVA PROMO</button>
+                <button onclick="hideNewPromoForm()" class="btn-secondary">ANNULLA</button>
+            </div>
+        </div>
+        <div id="promoAttiveSection">
+            <h3 style="font-size:13px;font-weight:700;letter-spacing:1px;color:var(--accent-gold);margin-bottom:16px;text-transform:uppercase">● PROMO ATTIVE</h3>
+            <div id="promoAttiveList"></div>
+        </div>
+        <div id="promoArchivioSection" style="margin-top:32px">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;cursor:pointer" onclick="toggleArchivioPromo()">
+                <h3 style="font-size:13px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);text-transform:uppercase;margin:0">📁 ARCHIVIO PROMO</h3>
+                <span id="archivioArrow" style="color:var(--text-secondary)">▼</span>
+            </div>
+            <div id="promoArchivioList" style="display:none"></div>
+        </div>
     </div>
 
     <!-- ADMIN PAGE -->
@@ -524,6 +622,7 @@
 <script src="/js/waiting.js"></script>
 <script src="/js/charts.js"></script>
 <script src="/js/contact.js"></script>
+<script src="/js/promo.js"></script>
 <script src="/js/admin.js"></script>
 <script src="/js/app.js"></script>
 </body>

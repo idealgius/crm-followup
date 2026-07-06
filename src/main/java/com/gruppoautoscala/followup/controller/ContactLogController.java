@@ -55,11 +55,18 @@ public class ContactLogController {
             m.put("otherNote", log.getOtherNote());
             m.put("nominativoAppuntamento", log.getNominativoAppuntamento());
             m.put("linkAppuntamento", log.getLinkAppuntamento());
+            m.put("marca", log.getMarca());
+            m.put("modello", log.getModello());
+            m.put("linkAuto", log.getLinkAuto());
+            m.put("serviceTipo", log.getServiceTipo());
+            m.put("serviceNote", log.getServiceNote());
+            m.put("acquistoNote", log.getAcquistoNote());
             m.put("contactDate", log.getContactDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
             m.put("createdAt", log.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
             Map<String, Object> userMap = new HashMap<>();
             userMap.put("id", log.getUser().getId());
             userMap.put("fullName", log.getUser().getFullName());
+            userMap.put("role", log.getUser().getRole());
             m.put("user", userMap);
             return m;
         }).collect(Collectors.toList());
@@ -94,7 +101,6 @@ public class ContactLogController {
         try {
             byte[] excelBytes = excelExportService.export(logs);
             String filename = "registro_contatti_" + (from != null ? from : "tutti") + "_" + (to != null ? to : "") + ".xlsx";
-
             return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
                 .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
@@ -116,12 +122,21 @@ public class ContactLogController {
         String otherNote = (String) body.get("otherNote");
         String nominativoAppuntamento = (String) body.get("nominativoAppuntamento");
         String linkAppuntamento = (String) body.get("linkAppuntamento");
+        String marca = (String) body.get("marca");
+        String modello = (String) body.get("modello");
+        String linkAuto = (String) body.get("linkAuto");
+        String serviceTipo = (String) body.get("serviceTipo");
+        String serviceNote = (String) body.get("serviceNote");
+        String acquistoNote = (String) body.get("acquistoNote");
         LocalDateTime contactDate = body.get("contactDate") != null
             ? LocalDateTime.parse((String) body.get("contactDate"))
             : LocalDateTime.now();
 
         ContactLog log = contactLogService.create(userOpt.get(), category, otherNote,
-                nominativoAppuntamento, linkAppuntamento, contactDate);
+                nominativoAppuntamento, linkAppuntamento,
+                marca, modello, linkAuto,
+                serviceTipo, serviceNote, acquistoNote,
+                contactDate);
 
         Map<String, Object> result = new HashMap<>();
         result.put("id", log.getId());
@@ -129,6 +144,12 @@ public class ContactLogController {
         result.put("otherNote", log.getOtherNote());
         result.put("nominativoAppuntamento", log.getNominativoAppuntamento());
         result.put("linkAppuntamento", log.getLinkAppuntamento());
+        result.put("marca", log.getMarca());
+        result.put("modello", log.getModello());
+        result.put("linkAuto", log.getLinkAuto());
+        result.put("serviceTipo", log.getServiceTipo());
+        result.put("serviceNote", log.getServiceNote());
+        result.put("acquistoNote", log.getAcquistoNote());
         result.put("contactDate", log.getContactDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
         Map<String, Object> userMap = new HashMap<>();
         userMap.put("id", log.getUser().getId());
@@ -149,7 +170,7 @@ public class ContactLogController {
         if (logOpt.isEmpty()) return ResponseEntity.notFound().build();
 
         ContactLog log = logOpt.get();
-        if (!"ADMIN".equals(role) && !log.getUser().getId().equals(userId)) {
+        if (!"ADMIN".equals(role) && !"GESTORE".equals(role) && !log.getUser().getId().equals(userId)) {
             return ResponseEntity.status(403).body(Map.of("error", "Non autorizzato"));
         }
 
@@ -157,6 +178,12 @@ public class ContactLogController {
         if (body.containsKey("otherNote")) log.setOtherNote((String) body.get("otherNote"));
         if (body.containsKey("nominativoAppuntamento")) log.setNominativoAppuntamento((String) body.get("nominativoAppuntamento"));
         if (body.containsKey("linkAppuntamento")) log.setLinkAppuntamento((String) body.get("linkAppuntamento"));
+        if (body.containsKey("marca")) log.setMarca((String) body.get("marca"));
+        if (body.containsKey("modello")) log.setModello((String) body.get("modello"));
+        if (body.containsKey("linkAuto")) log.setLinkAuto((String) body.get("linkAuto"));
+        if (body.containsKey("serviceTipo")) log.setServiceTipo((String) body.get("serviceTipo"));
+        if (body.containsKey("serviceNote")) log.setServiceNote((String) body.get("serviceNote"));
+        if (body.containsKey("acquistoNote")) log.setAcquistoNote((String) body.get("acquistoNote"));
         if (body.containsKey("contactDate")) {
             log.setContactDate(LocalDateTime.parse((String) body.get("contactDate")));
         }
@@ -174,7 +201,7 @@ public class ContactLogController {
         if (logOpt.isEmpty()) return ResponseEntity.notFound().build();
 
         ContactLog log = logOpt.get();
-        if (!"ADMIN".equals(role) && !log.getUser().getId().equals(userId)) {
+        if (!"ADMIN".equals(role) && !"GESTORE".equals(role) && !log.getUser().getId().equals(userId)) {
             return ResponseEntity.status(403).body(Map.of("error", "Non autorizzato"));
         }
 

@@ -29,6 +29,24 @@ public class ContactLog {
     @Column(name = "link_appuntamento", length = 500)
     private String linkAppuntamento;
 
+    @Column(name = "marca", length = 100)
+    private String marca;
+
+    @Column(name = "modello", length = 200)
+    private String modello;
+
+    @Column(name = "link_auto", length = 500)
+    private String linkAuto;
+
+    @Column(name = "service_tipo", length = 100)
+    private String serviceTipo;
+
+    @Column(name = "service_note", length = 500)
+    private String serviceNote;
+
+    @Column(name = "acquisto_note", length = 500)
+    private String acquistoNote;
+
     @Column(name = "contact_date", nullable = false)
     private LocalDateTime contactDate;
 

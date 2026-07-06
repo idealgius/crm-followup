@@ -19,13 +19,21 @@ public class ContactLogService {
 
     public ContactLog create(User user, String category, String otherNote,
                               String nominativoAppuntamento, String linkAppuntamento,
-                              LocalDateTime contactDate) {
+                              String marca, String modello, String linkAuto,
+                              String serviceTipo, String serviceNote,
+                              String acquistoNote, LocalDateTime contactDate) {
         ContactLog log = new ContactLog();
         log.setUser(user);
         log.setCategory(category);
         log.setOtherNote(otherNote);
         log.setNominativoAppuntamento(nominativoAppuntamento);
         log.setLinkAppuntamento(linkAppuntamento);
+        log.setMarca(marca);
+        log.setModello(modello);
+        log.setLinkAuto(linkAuto);
+        log.setServiceTipo(serviceTipo);
+        log.setServiceNote(serviceNote);
+        log.setAcquistoNote(acquistoNote);
         log.setContactDate(contactDate != null ? contactDate : LocalDateTime.now());
         return contactLogRepository.save(log);
     }
