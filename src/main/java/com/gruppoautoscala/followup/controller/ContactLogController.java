@@ -61,6 +61,8 @@ public class ContactLogController {
             m.put("serviceTipo", log.getServiceTipo());
             m.put("serviceNote", log.getServiceNote());
             m.put("acquistoNote", log.getAcquistoNote());
+            m.put("noleggioTipo", log.getNoleggioTipo());
+            m.put("noleggioLink", log.getNoleggioLink());
             m.put("contactDate", log.getContactDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
             m.put("createdAt", log.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
             Map<String, Object> userMap = new HashMap<>();
@@ -128,6 +130,8 @@ public class ContactLogController {
         String serviceTipo = (String) body.get("serviceTipo");
         String serviceNote = (String) body.get("serviceNote");
         String acquistoNote = (String) body.get("acquistoNote");
+        String noleggioTipo = (String) body.get("noleggioTipo");
+        String noleggioLink = (String) body.get("noleggioLink");
         LocalDateTime contactDate = body.get("contactDate") != null
             ? LocalDateTime.parse((String) body.get("contactDate"))
             : LocalDateTime.now();
@@ -136,6 +140,7 @@ public class ContactLogController {
                 nominativoAppuntamento, linkAppuntamento,
                 marca, modello, linkAuto,
                 serviceTipo, serviceNote, acquistoNote,
+                noleggioTipo, noleggioLink,
                 contactDate);
 
         Map<String, Object> result = new HashMap<>();
@@ -150,6 +155,8 @@ public class ContactLogController {
         result.put("serviceTipo", log.getServiceTipo());
         result.put("serviceNote", log.getServiceNote());
         result.put("acquistoNote", log.getAcquistoNote());
+        result.put("noleggioTipo", log.getNoleggioTipo());
+        result.put("noleggioLink", log.getNoleggioLink());
         result.put("contactDate", log.getContactDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
         Map<String, Object> userMap = new HashMap<>();
         userMap.put("id", log.getUser().getId());
@@ -184,6 +191,8 @@ public class ContactLogController {
         if (body.containsKey("serviceTipo")) log.setServiceTipo((String) body.get("serviceTipo"));
         if (body.containsKey("serviceNote")) log.setServiceNote((String) body.get("serviceNote"));
         if (body.containsKey("acquistoNote")) log.setAcquistoNote((String) body.get("acquistoNote"));
+        if (body.containsKey("noleggioTipo")) log.setNoleggioTipo((String) body.get("noleggioTipo"));
+        if (body.containsKey("noleggioLink")) log.setNoleggioLink((String) body.get("noleggioLink"));
         if (body.containsKey("contactDate")) {
             log.setContactDate(LocalDateTime.parse((String) body.get("contactDate")));
         }

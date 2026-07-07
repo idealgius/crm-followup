@@ -248,6 +248,20 @@
                         <option value="">Tutti gli operatori</option>
                     </select>
                 </span>
+                <!-- FILTRO CATEGORIA -->
+                <select id="contactCategoryFilter" class="input-dark" onchange="applyContactFilters();showContactResetBtn()">
+                    <option value="">Tutte le categorie</option>
+                    <option>Info Vendita</option>
+                    <option>Info Noleggio</option>
+                    <option>Service</option>
+                    <option>Info Acquisto effettuato</option>
+                    <option>Pratica Leasing</option>
+                    <option>Pratica Finanziamento</option>
+                    <option>Amministrazione</option>
+                    <option>Info + Appuntamento</option>
+                    <option>Info Vendita in Promo</option>
+                    <option>Altro</option>
+                </select>
                 <button onclick="loadContactLogs(document.getElementById('contactFrom').value, document.getElementById('contactTo').value)" class="btn-gold">FILTRA</button>
                 <button id="contactResetBtn" onclick="resetContactFilters()" class="btn-secondary" style="display:none;padding:10px 16px">↺ RESET</button>
                 <button onclick="showNewContactForm()" class="btn-primary" style="width:auto;padding:10px 20px">+ NUOVO</button>
@@ -314,10 +328,22 @@
                 </div>
             </div>
 
-            <!-- SHAPE 5: Performance Marche — layout custom HTML, non Chart.js -->
+            <!-- SHAPE 5: Performance Marche HTML custom -->
             <div class="chart-card" style="width:420px;min-width:420px;max-width:420px;display:flex;flex-direction:column;gap:16px">
                 <h3>PERFORMANCE MARCHE</h3>
                 <div id="chartMarcheCustom" style="display:flex;flex-direction:column;gap:10px"></div>
+            </div>
+
+            <!-- SHAPE 6: Info Noleggio — Tipologia + Lead -->
+            <div class="chart-card" style="width:380px;min-width:380px;max-width:380px;display:flex;flex-direction:column;gap:24px" id="chartNoleggioWrapper" style="display:none">
+                <div>
+                    <h3>TIPOLOGIA NOLEGGIO</h3>
+                    <canvas id="chartNoleggioTipo" style="max-height:220px"></canvas>
+                </div>
+                <div>
+                    <h3 style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);margin-bottom:12px;text-transform:uppercase">SOLO INFO vs LEAD GENERATA</h3>
+                    <canvas id="chartNoleggioLead" style="max-height:220px"></canvas>
+                </div>
             </div>
 
         </div>
@@ -329,21 +355,16 @@
                 <button class="btn-secondary" onclick="toggleContactPromoCharts()" id="toggleContactPromoBtn" style="padding:6px 14px;font-size:12px">▼ Mostra</button>
             </div>
             <div id="contactPromoChartsContent" style="display:none">
-                <!-- Stat cards promo -->
                 <div id="contactPromoStatCards" class="stats-grid" style="margin-bottom:20px"></div>
-                <!-- Grafici promo -->
                 <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:stretch">
-                    <!-- Modelli richiesti — layout custom come marche -->
                     <div class="chart-card" style="width:420px;min-width:420px;flex:1">
                         <h3>MODELLI RICHIESTI IN PROMO</h3>
                         <div id="chartPromoModelliCustom" style="display:flex;flex-direction:column;gap:10px;margin-top:8px"></div>
                     </div>
-                    <!-- Richieste vs Appuntamenti -->
                     <div class="chart-card" style="width:320px;min-width:320px">
                         <h3>RICHIESTE vs APPUNTAMENTI</h3>
                         <canvas id="chartPromoAppContact" style="max-height:260px"></canvas>
                     </div>
-                    <!-- Richiesta promo torta -->
                     <div class="chart-card" style="width:300px;min-width:300px">
                         <h3>RICHIESTA PROMO</h3>
                         <canvas id="chartPromoRichiestaContact" style="max-height:260px"></canvas>
@@ -405,14 +426,24 @@
                     <input type="hidden" id="contactFonte" value="">
                 </div>
 
+                <!-- INFO NOLEGGIO -->
+                <div id="contactNoleggioRow" style="display:none">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TIPOLOGIA CLIENTE *</label>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+                        <button type="button" class="btn-sede" id="noleggio-Privato" onclick="selectNoleggioTipo('Privato')">👤 Privato</button>
+                        <button type="button" class="btn-sede" id="noleggio-PIVA" onclick="selectNoleggioTipo('Partita IVA')">🏢 Partita IVA</button>
+                    </div>
+                    <input type="hidden" id="contactNoleggioTipo" value="">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">LINK VEICOLO (opzionale)</label>
+                    <input type="url" id="contactNoleggioLink" placeholder="https://..." class="input-field">
+                </div>
+
                 <!-- MARCA E MODELLO -->
                 <div id="contactMarcaModelloRow" style="display:none">
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MARCA (opzionale)</label>
                     <div style="position:relative;margin-bottom:14px">
                         <input type="text" id="contactMarcaInput" placeholder="Clicca o cerca marca..." class="input-field" style="margin-bottom:0;cursor:pointer"
-                               oninput="filterMarche(this.value)"
-                               onfocus="showMarcheDropdown()"
-                               autocomplete="off">
+                               oninput="filterMarche(this.value)" onfocus="showMarcheDropdown()" autocomplete="off">
                         <div id="marcaDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1.5px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;box-shadow:var(--shadow)"></div>
                         <input type="hidden" id="contactMarca" value="">
                     </div>
@@ -426,14 +457,10 @@
                 <div id="contactPromoRow" style="display:none">
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLO RICHIESTO *</label>
                     <div style="position:relative;margin-bottom:14px">
-                        <!-- Se inserimento manuale consentito: input + dropdown -->
                         <div id="promoModelloInputWrapper">
                             <input type="text" id="promoModelloInput" placeholder="Clicca per scegliere modello..." class="input-field" style="margin-bottom:0;cursor:pointer"
-                                   oninput="filterPromoModelli(this.value)"
-                                   onfocus="showPromoModelliDropdown()"
-                                   autocomplete="off">
+                                   oninput="filterPromoModelli(this.value)" onfocus="showPromoModelliDropdown()" autocomplete="off">
                         </div>
-                        <!-- Se inserimento manuale NON consentito: solo select -->
                         <div id="promoModelloSelectWrapper" style="display:none">
                             <select id="promoModelloSelect" class="input-field" style="margin-bottom:0" onchange="selectPromoModelloFromSelect(this.value)">
                                 <option value="">Seleziona modello...</option>
