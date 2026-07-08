@@ -26,13 +26,10 @@ const CATEGORY_COLORS = {
 
 const ACQUISTO_LIST = ['Info Consegna', 'Ritardo Consegna', 'Info Documentazione', 'Seconda chiave', 'Info generiche'];
 const ACQUISTO_COLORS = ['#4a90d9', '#ff3d3d', '#00bcd4', '#f0c040', '#7c4dff'];
-
 const FONTE_LIST = ['Sito', 'Google ADS', 'Autoscout', 'Facebook', 'Instagram', 'TikTok', 'Richiesta cliente', 'Non ricorda'];
 const FONTE_COLORS = ['#1a4080', '#f0c040', '#e91e63', '#4a90d9', '#7c4dff', '#ff3d3d', '#00c853', '#8a8faa'];
-
 const SERVICE_LIST = ['Tagliando', 'Dispositivo satellitare', 'Prenotazione', 'Lavorazione in corso', 'Doctor Glass', 'Cambio Gomme'];
 const SERVICE_COLORS = ['#f0c040', '#4a90d9', '#00c853', '#7c4dff', '#ff9800', '#00bcd4'];
-
 const SEDI_LIST = ['Agnano', 'Casamarciano', 'Salerno'];
 const SEDE_COLORS = ['#e91e63', '#1a4080', '#00c853'];
 
@@ -78,7 +75,6 @@ function normalizeText(str) {
         .replace(/š/g,'s').replace(/č/g,'c').replace(/ž/g,'z');
 }
 
-// ===== TENDINA MARCHE =====
 function showMarcheDropdown() { filterMarche('', true); }
 
 function filterMarche(query, showAll) {
@@ -103,7 +99,6 @@ function selectMarca(marca) {
     document.getElementById('marcaDropdown').style.display = 'none';
 }
 
-// ===== TENDINA MODELLI PROMO =====
 function showPromoModelliDropdown() {
     const promoAttiva = typeof promoAttive !== 'undefined' && promoAttive.length > 0 ? promoAttive[0] : null;
     if (!promoAttiva) return;
@@ -318,7 +313,7 @@ function renderChartAppuntamentiSede(logs) {
             plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => { const val = ctx.raw; const pct = total > 0 ? Math.round(val*1000/total)/10 : 0; return ` Valore: ${val} — ${pct}%`; } } } },
             scales: {
                 x: { ticks: { color: textColor, font: { size: 11, weight: '700' }, maxRotation: 0 }, grid: { display: false } },
-                y: { beginAtZero: true, ticks: { color: textColor, stepSize: 1 }, grid: { color: gridColor } }
+                y: { beginAtZero: true, ticks: { color: textColor, precision: 0 }, grid: { color: gridColor } }
             }
         }
     });
@@ -421,6 +416,7 @@ function renderChartFonteVendita(logs) {
     });
 }
 
+// ===== FIX: precision:0 senza stepSize per numeri interi corretti =====
 function renderChartService(logs) {
     const ctx = document.getElementById('chartService');
     if (!ctx) return;
@@ -438,7 +434,10 @@ function renderChartService(logs) {
         options: {
             indexAxis: 'y', responsive: true, maintainAspectRatio: false,
             plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => { const val = ctx.raw; const pct = total > 0 ? Math.round(val*1000/total)/10 : 0; return ` Valore: ${val} — ${pct}%`; } } } },
-            scales: { x: { beginAtZero: true, ticks: { color: textColor, stepSize: 1 }, grid: { color: gridColor } }, y: { ticks: { color: textColor, font: { size: 11, weight: '600' } }, grid: { display: false } } }
+            scales: {
+                x: { beginAtZero: true, ticks: { color: textColor, precision: 0 }, grid: { color: gridColor } },
+                y: { ticks: { color: textColor, font: { size: 11, weight: '600' } }, grid: { display: false } }
+            }
         }
     });
 }
@@ -467,20 +466,17 @@ function renderChartMarcheCustom(logs) {
     }).join('');
 }
 
-// ===== GRAFICI NOLEGGIO =====
 function renderChartNoleggio(logs) {
     const wrapper = document.getElementById('chartNoleggioWrapper');
     const noleggioLogs = logs.filter(l => l.category === 'Info Noleggio');
     if (!wrapper) return;
     if (noleggioLogs.length === 0) { wrapper.style.display = 'none'; return; }
     wrapper.style.display = 'flex';
-
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
     const legendColor = getLegendColor();
     const textColor = isDark ? '#8a8faa' : '#555555';
     const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
 
-    // Torta Privato vs Partita IVA
     if (contactChartNoleggioTipo) { contactChartNoleggioTipo.destroy(); contactChartNoleggioTipo = null; }
     const ctxTipo = document.getElementById('chartNoleggioTipo');
     if (ctxTipo) {
@@ -489,10 +485,7 @@ function renderChartNoleggio(logs) {
         const total = privati + piva;
         contactChartNoleggioTipo = new Chart(ctxTipo.getContext('2d'), {
             type: 'doughnut',
-            data: {
-                labels: ['Privato', 'Partita IVA'],
-                datasets: [{ data: [privati, piva], backgroundColor: ['#4a90d999','#e91e6399'], borderColor: ['#4a90d9','#e91e63'], borderWidth: 2 }]
-            },
+            data: { labels: ['Privato', 'Partita IVA'], datasets: [{ data: [privati, piva], backgroundColor: ['#4a90d999','#e91e6399'], borderColor: ['#4a90d9','#e91e63'], borderWidth: 2 }] },
             options: {
                 responsive: true, maintainAspectRatio: true,
                 plugins: {
@@ -509,7 +502,6 @@ function renderChartNoleggio(logs) {
         });
     }
 
-    // Barre Solo info vs Lead generata
     if (contactChartNoleggioLead) { contactChartNoleggioLead.destroy(); contactChartNoleggioLead = null; }
     const ctxLead = document.getElementById('chartNoleggioLead');
     if (ctxLead) {
@@ -518,26 +510,19 @@ function renderChartNoleggio(logs) {
         const total = soloInfo + leadGenerata;
         contactChartNoleggioLead = new Chart(ctxLead.getContext('2d'), {
             type: 'bar',
-            data: {
-                labels: ['Solo info', 'Lead generata'],
-                datasets: [{ data: [soloInfo, leadGenerata], backgroundColor: ['#8a8faa99','#00c85399'], borderColor: ['#8a8faa','#00c853'], borderWidth: 2, borderRadius: 8, borderSkipped: false }]
-            },
+            data: { labels: ['Solo info', 'Lead generata'], datasets: [{ data: [soloInfo, leadGenerata], backgroundColor: ['#8a8faa99','#00c85399'], borderColor: ['#8a8faa','#00c853'], borderWidth: 2, borderRadius: 8, borderSkipped: false }] },
             options: {
                 responsive: true, maintainAspectRatio: true,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: { callbacks: { label: ctx => { const val = ctx.raw; const pct = total > 0 ? Math.round(val*1000/total)/10 : 0; return ` Valore: ${val} — ${pct}%`; } } }
-                },
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => { const val = ctx.raw; const pct = total > 0 ? Math.round(val*1000/total)/10 : 0; return ` Valore: ${val} — ${pct}%`; } } } },
                 scales: {
                     x: { ticks: { color: textColor, font: { size: 11, weight: '700' }, maxRotation: 0 }, grid: { display: false } },
-                    y: { beginAtZero: true, ticks: { color: textColor, stepSize: 1 }, grid: { color: gridColor } }
+                    y: { beginAtZero: true, ticks: { color: textColor, precision: 0 }, grid: { color: gridColor } }
                 }
             }
         });
     }
 }
 
-// ===== GRAFICI PROMO =====
 function updateContactPromoCharts(logs) {
     const section = document.getElementById('contactPromoChartsSection');
     if (!section) return;
@@ -630,12 +615,21 @@ async function loadPromoStatsForContactCharts(totalFromLogs, textColor, gridColo
                 type: 'bar',
                 data: {
                     labels: ['Contatti', 'Appuntamenti', 'Rich. Promo', 'Test Drive'],
-                    datasets: [{ data: [realTotal, stats.appuntamenti, stats.richiestaPromoSi, stats.testDriveSi], backgroundColor: ['#1a408099','#e91e6399','#00c85399','#7c4dff99'], borderColor: ['#1a4080','#e91e63','#00c853','#7c4dff'], borderWidth: 2, borderRadius: 8, borderSkipped: false }]
+                    datasets: [{ data: [realTotal, stats.appuntamenti, stats.richiestaPromoSi, stats.testDriveSi],
+                        backgroundColor: ['#1a408099','#e91e6399','#00c85399','#7c4dff99'],
+                        borderColor: ['#1a4080','#e91e63','#00c853','#7c4dff'],
+                        borderWidth: 2, borderRadius: 8, borderSkipped: false }]
                 },
                 options: {
                     responsive: true, maintainAspectRatio: true,
-                    plugins: { legend: { display: false }, tooltip: { callbacks: { title: ctx => ['Totale contatti promo','Appuntamenti fissati','Richiesta promo Sì','Test Drive Sì'][ctx[0].dataIndex], label: ctx => { const val = ctx.raw; const pct = realTotal > 0 ? Math.round(val*1000/realTotal)/10 : 0; return ` Valore: ${val} — ${pct}%`; } } } },
-                    scales: { x: { ticks: { color: textColor, font: { size: 11, weight: '600' }, maxRotation: 0 }, grid: { display: false } }, y: { beginAtZero: true, ticks: { color: textColor, stepSize: 1 }, grid: { color: gridColor } } }
+                    plugins: { legend: { display: false }, tooltip: { callbacks: {
+                        title: ctx => ['Totale contatti promo','Appuntamenti fissati','Richiesta promo Sì','Test Drive Sì'][ctx[0].dataIndex],
+                        label: ctx => { const val = ctx.raw; const pct = realTotal > 0 ? Math.round(val*1000/realTotal)/10 : 0; return ` Valore: ${val} — ${pct}%`; }
+                    } } },
+                    scales: {
+                        x: { ticks: { color: textColor, font: { size: 11, weight: '600' }, maxRotation: 0 }, grid: { display: false } },
+                        y: { beginAtZero: true, ticks: { color: textColor, precision: 0 }, grid: { color: gridColor } }
+                    }
                 }
             });
         }
@@ -842,10 +836,10 @@ function renderContactRow(log) {
             ${(log.category === 'Info Vendita' || log.category === 'Info + Appuntamento') && log.otherNote && FONTE_LIST.includes(log.otherNote) ? `<span style="font-size:11px;background:rgba(26,64,128,0.1);color:#1a4080;padding:2px 8px;border-radius:8px;margin-left:6px">🌐 ${log.otherNote}</span>` : ''}
             ${log.category === 'Service' && log.serviceTipo ? `<span style="font-size:11px;background:rgba(240,192,64,0.1);color:#f0c040;padding:2px 8px;border-radius:8px;margin-left:6px">🔧 ${log.serviceTipo}</span>` : ''}
             ${log.category === 'Info Noleggio' && log.noleggioTipo ? `<span style="font-size:11px;background:rgba(0,200,83,0.1);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px">${log.noleggioTipo === 'Privato' ? '👤' : '🏢'} ${log.noleggioTipo}</span>` : ''}
-            ${log.category === 'Info Noleggio' && log.noleggioLink ? `<a href="${log.noleggioLink}" target="_blank" rel="noopener" style="font-size:11px;background:rgba(0,200,83,0.1);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px;text-decoration:none">🔗 Veicolo</a>` : ''}
+            ${log.category === 'Info Noleggio' && log.noleggioLink ? `<a href="${log.noleggioLink}" target="_blank" rel="noopener" style="font-size:11px;background:rgba(0,200,83,0.1);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px;text-decoration:none">🔗 Lead</a>` : ''}
             ${log.category === 'Info Vendita in Promo' ? `<span style="font-size:11px;background:rgba(240,192,64,0.15);color:#f0c040;padding:2px 8px;border-radius:8px;margin-left:6px">🎯 PROMO</span>` : ''}
             ${log.marca ? `<span style="font-size:11px;background:rgba(0,200,83,0.1);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px">🚗 ${log.marca}${log.modello?' '+log.modello:''}</span>` : ''}
-            ${log.linkAuto ? `<a href="${log.linkAuto}" target="_blank" rel="noopener" style="font-size:11px;background:rgba(124,77,255,0.1);color:#7c4dff;padding:2px 8px;border-radius:8px;margin-left:6px;text-decoration:none">🔗 Auto</a>` : ''}
+            ${log.linkAuto ? `<a href="${log.linkAuto}" target="_blank" rel="noopener" style="font-size:11px;background:rgba(124,77,255,0.1);color:#7c4dff;padding:2px 8px;border-radius:8px;margin-left:6px;text-decoration:none">🔗 Lead</a>` : ''}
         </td>
         <td style="font-size:12px;color:var(--text-secondary)">${(log.category !== 'Info + Appuntamento' && log.category !== 'Info Acquisto effettuato' && log.category !== 'Info Vendita' && log.category !== 'Service' && log.category !== 'Info Vendita in Promo' && log.category !== 'Info Noleggio') ? (log.otherNote||'—') : (log.acquistoNote||log.serviceNote||'—')}</td>
         <td style="font-size:12px;color:var(--text-secondary)">${log.user.fullName}</td>

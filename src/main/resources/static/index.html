@@ -248,7 +248,6 @@
                         <option value="">Tutti gli operatori</option>
                     </select>
                 </span>
-                <!-- FILTRO CATEGORIA -->
                 <select id="contactCategoryFilter" class="input-dark" onchange="applyContactFilters();showContactResetBtn()">
                     <option value="">Tutte le categorie</option>
                     <option>Info Vendita</option>
@@ -279,8 +278,6 @@
 
         <!-- GRAFICI PRINCIPALI -->
         <div id="contactChartPrint" style="margin-bottom:20px;display:flex;gap:20px;flex-wrap:wrap;align-items:stretch">
-
-            <!-- SHAPE 1: Distribuzione Categorie + Chiamate Operatore -->
             <div class="chart-card" style="width:520px;min-width:520px;max-width:520px;display:flex;flex-direction:column;gap:24px">
                 <div>
                     <h3>DISTRIBUZIONE CATEGORIE</h3>
@@ -291,8 +288,6 @@
                     <canvas id="chartContactsByOperator" style="max-height:240px"></canvas>
                 </div>
             </div>
-
-            <!-- SHAPE 2: Calendario + Appuntamenti Sede -->
             <div class="chart-card" style="width:380px;min-width:380px;max-width:380px;min-height:560px;display:flex;flex-direction:column;gap:24px;justify-content:space-between">
                 <div>
                     <div class="calendar-header" style="margin-bottom:8px">
@@ -307,8 +302,6 @@
                     <canvas id="chartAppuntamentiSede" style="max-height:200px"></canvas>
                 </div>
             </div>
-
-            <!-- SHAPE 3: Info Acquisto + Fonte Vendita -->
             <div class="chart-card" style="width:340px;min-width:340px;max-width:340px;display:flex;flex-direction:column;gap:24px">
                 <div>
                     <h3>INFO ACQUISTO EFFETTUATO</h3>
@@ -319,22 +312,16 @@
                     <canvas id="chartFonteVendita" style="max-height:280px"></canvas>
                 </div>
             </div>
-
-            <!-- SHAPE 4: Service barre orizzontali -->
             <div class="chart-card" style="width:340px;min-width:340px;max-width:340px;display:flex;flex-direction:column;gap:24px">
                 <div>
                     <h3>TIPOLOGIE SERVICE</h3>
                     <canvas id="chartService" style="max-height:260px"></canvas>
                 </div>
             </div>
-
-            <!-- SHAPE 5: Performance Marche HTML custom -->
             <div class="chart-card" style="width:420px;min-width:420px;max-width:420px;display:flex;flex-direction:column;gap:16px">
                 <h3>PERFORMANCE MARCHE</h3>
                 <div id="chartMarcheCustom" style="display:flex;flex-direction:column;gap:10px"></div>
             </div>
-
-            <!-- SHAPE 6: Info Noleggio — Tipologia + Lead -->
             <div class="chart-card" style="width:380px;min-width:380px;max-width:380px;display:flex;flex-direction:column;gap:24px" id="chartNoleggioWrapper" style="display:none">
                 <div>
                     <h3>TIPOLOGIA NOLEGGIO</h3>
@@ -345,10 +332,9 @@
                     <canvas id="chartNoleggioLead" style="max-height:220px"></canvas>
                 </div>
             </div>
-
         </div>
 
-        <!-- GRAFICI PROMO IN REGISTRO CONTATTI -->
+        <!-- GRAFICI PROMO -->
         <div id="contactPromoChartsSection" style="display:none;margin-bottom:20px">
             <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
                 <h3 style="font-size:13px;font-weight:700;letter-spacing:1px;color:var(--accent-gold);text-transform:uppercase;margin:0">🎯 STATISTICHE PROMO ATTIVA</h3>
@@ -434,7 +420,7 @@
                         <button type="button" class="btn-sede" id="noleggio-PIVA" onclick="selectNoleggioTipo('Partita IVA')">🏢 Partita IVA</button>
                     </div>
                     <input type="hidden" id="contactNoleggioTipo" value="">
-                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">LINK VEICOLO (opzionale)</label>
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">LEAD (opzionale)</label>
                     <input type="url" id="contactNoleggioLink" placeholder="https://..." class="input-field">
                 </div>
 
@@ -449,7 +435,7 @@
                     </div>
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLO (opzionale)</label>
                     <input type="text" id="contactModello" placeholder="Es. 208 1.2 PureTech 100cv..." class="input-field" style="margin-bottom:14px">
-                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">LINK AUTO (opzionale)</label>
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">LEAD (opzionale)</label>
                     <input type="url" id="contactLinkAuto" placeholder="https://..." class="input-field">
                 </div>
 
