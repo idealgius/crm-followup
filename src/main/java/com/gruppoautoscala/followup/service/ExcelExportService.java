@@ -5,6 +5,11 @@ import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xddf.usermodel.chart.*;
 import org.apache.poi.xssf.usermodel.*;
+import org.openxmlformats.schemas.drawingml.x2006.chart.CTCatAx;
+import org.openxmlformats.schemas.drawingml.x2006.chart.CTChartSpace;
+import org.openxmlformats.schemas.drawingml.x2006.chart.CTPlotArea;
+import org.openxmlformats.schemas.drawingml.x2006.main.CTTextBody;
+import org.openxmlformats.schemas.drawingml.x2006.main.CTTextBodyProperties;
 
 import java.io.ByteArrayOutputStream;
 import java.time.format.DateTimeFormatter;
@@ -304,11 +309,48 @@ public class ExcelExportService {
 
         XDDFBarChartData barChart = (XDDFBarChartData) chart.createData(ChartTypes.BAR, bottomAxis, leftAxis);
         barChart.setBarDirection(BarDirection.COL);
+        barChart.setGapWidth(50); // larghezza barre uniforme su tutti i grafici
 
         XDDFBarChartData.Series series = (XDDFBarChartData.Series) barChart.addSeries(categories, values);
         series.setTitle(title, null);
 
         chart.plot(barChart);
+
+        // Etichette asse categorie sempre orizzontali (agendo sull'XML del chart, non dell'asse)
+        forceHorizontalLabels(chart);
+    }
+
+    /**
+     * Forza a 0 la rotazione del testo per tutti gli assi categoria del grafico.
+     * XDDFCategoryAxis non espone un metodo setTextRotation/getXmlObject pubblico,
+     * quindi si naviga l'XML nativo a partire da XSSFChart.getCTChartSpace(),
+     * che è pubblico e stabile tra le versioni di POI.
+     *
+     * IMPORTANTE: lo schema OOXML per CT_TextBody richiede in sequenza
+     * bodyPr (obbligatorio), lstStyle (opzionale) e almeno un elemento
+     * <a:p> (paragrafo, obbligatorio, minOccurs=1). Se manca il paragrafo,
+     * l'XML del chart non è valido: Excel lo segnala come "contenuto
+     * danneggiato" e, recuperando il file, scarta l'intero grafico.
+     * Per questo va sempre garantita la presenza di almeno un <a:p/>.
+     */
+    private void forceHorizontalLabels(XSSFChart chart) {
+        CTChartSpace ctChartSpace = chart.getCTChartSpace();
+        CTPlotArea plotArea = ctChartSpace.getChart().getPlotArea();
+        for (CTCatAx catAx : plotArea.getCatAxArray()) {
+            CTTextBody txPr = catAx.isSetTxPr() ? catAx.getTxPr() : catAx.addNewTxPr();
+
+            CTTextBodyProperties bodyPr = txPr.getBodyPr();
+            if (bodyPr == null) {
+                bodyPr = txPr.addNewBodyPr();
+            }
+            bodyPr.setRot(0); // 0 = orizzontale
+
+            // Elemento obbligatorio dallo schema: senza questo l'XML è invalido
+            // e Excel scarta il grafico durante il "recupero contenuto".
+            if (txPr.sizeOfPArray() == 0) {
+                txPr.addNewP();
+            }
+        }
     }
 
     private CellStyle createHeaderStyle(XSSFWorkbook wb) {

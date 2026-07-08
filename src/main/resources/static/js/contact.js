@@ -24,6 +24,13 @@ const CATEGORY_COLORS = {
     'Altro': '#8a8faa'
 };
 
+// Lista completa categorie, usata per popolare il filtro categoria nella vista giornaliera
+const ALL_CATEGORIES = [
+    'Info Vendita', 'Info Noleggio', 'Service', 'Info Acquisto effettuato',
+    'Pratica Leasing', 'Pratica Finanziamento', 'Amministrazione',
+    'Info + Appuntamento', 'Info Vendita in Promo', 'Altro'
+];
+
 const ACQUISTO_LIST = ['Info Consegna', 'Ritardo Consegna', 'Info Documentazione', 'Seconda chiave', 'Info generiche'];
 const ACQUISTO_COLORS = ['#4a90d9', '#ff3d3d', '#00bcd4', '#f0c040', '#7c4dff'];
 const FONTE_LIST = ['Sito', 'Google ADS', 'Autoscout', 'Facebook', 'Instagram', 'TikTok', 'Richiesta cliente', 'Non ricorda'];
@@ -32,6 +39,7 @@ const SERVICE_LIST = ['Tagliando', 'Dispositivo satellitare', 'Prenotazione', 'L
 const SERVICE_COLORS = ['#f0c040', '#4a90d9', '#00c853', '#7c4dff', '#ff9800', '#00bcd4'];
 const SEDI_LIST = ['Agnano', 'Casamarciano', 'Salerno'];
 const SEDE_COLORS = ['#e91e63', '#1a4080', '#00c853'];
+const NOLEGGIO_TIPO_LIST = ['Privato', 'Partita IVA'];
 
 const MARCHE_LIST = [
     'ALFA ROMEO', 'AUDI', 'BMW', 'BYD', 'CITROEN', 'CUPRA', 'DACIA', 'DR', 'DS',
@@ -240,6 +248,8 @@ function resetContactFilters() {
     const cat = document.getElementById('contactCategoryFilter');
     if (cat) cat.value = '';
     currentDayView = null;
+    dayViewCategoryFilter = '';
+    dayViewSubFilter = '';
     const btn = document.getElementById('contactResetBtn');
     if (btn) btn.style.display = 'none';
     loadContactLogs(firstDay, today);
@@ -664,12 +674,88 @@ function exportContactsExcel() {
     window.open(url, '_blank');
 }
 
+// ============================================================
+// VISTA GIORNALIERA — con filtro categoria + sottocategoria
+// ============================================================
+
 let currentDayView = null;
+let dayViewCategoryFilter = '';
+let dayViewSubFilter = '';
+
+/**
+ * Restituisce la lista di sottocategorie possibili per una data categoria,
+ * oppure null se quella categoria non ha sottocategorie.
+ */
+function getSubcategoryList(category) {
+    switch (category) {
+        case 'Info Vendita':
+        case 'Info Vendita in Promo':
+        case 'Info + Appuntamento':
+            return FONTE_LIST;
+        case 'Service':
+            return SERVICE_LIST;
+        case 'Info Noleggio':
+            return NOLEGGIO_TIPO_LIST;
+        case 'Info Acquisto effettuato':
+            return ACQUISTO_LIST;
+        default:
+            return null;
+    }
+}
+
+/**
+ * Estrae il valore di sottocategoria da un log, in base alla categoria.
+ * NB: per "Info + Appuntamento" la fonte viene salvata nel campo serviceTipo
+ * (vedi createContactLog), non in otherNote — mappatura invariata rispetto
+ * al comportamento già esistente dell'app.
+ */
+function getSubcategoryValue(log) {
+    switch (log.category) {
+        case 'Info Vendita':
+        case 'Info Vendita in Promo':
+            return log.otherNote || '';
+        case 'Info + Appuntamento':
+            return log.serviceTipo || '';
+        case 'Service':
+            return log.serviceTipo || '';
+        case 'Info Noleggio':
+            return log.noleggioTipo || '';
+        case 'Info Acquisto effettuato':
+            return log.otherNote || '';
+        default:
+            return '';
+    }
+}
+
+function getDayViewBaseItems(date) {
+    return contactLogsFiltered.filter(l => l.contactDate.split('T')[0] === date);
+}
+
+function getDayViewFilteredItems(date) {
+    let items = getDayViewBaseItems(date);
+    if (dayViewCategoryFilter) {
+        items = items.filter(l => l.category === dayViewCategoryFilter);
+        if (dayViewSubFilter) items = items.filter(l => getSubcategoryValue(l) === dayViewSubFilter);
+    }
+    return items;
+}
 
 function showDayView(date) {
     currentDayView = date;
+    dayViewCategoryFilter = '';
+    dayViewSubFilter = '';
+    renderDayView();
+}
+
+function renderDayView() {
+    const date = currentDayView;
+    if (!date) return;
     const container = document.getElementById('contactLogsList');
-    const items = contactLogsFiltered.filter(l => l.contactDate.split('T')[0] === date);
+    if (!container) return;
+
+    const baseItems = getDayViewBaseItems(date);
+    const items = getDayViewFilteredItems(date);
+
     renderContactStatsFromLogs(items);
     renderContactChartFromLogs(items);
     renderChartAppuntamentiSede(items);
@@ -678,24 +764,71 @@ function showDayView(date) {
     renderChartService(items);
     renderChartMarcheCustom(items);
     renderChartNoleggio(items);
+
+    // Categorie effettivamente presenti in quel giorno (prima del filtro sottocategoria)
+    const categoriesPresent = ALL_CATEGORIES.filter(c => baseItems.some(l => l.category === c));
+
+    // Sottocategorie effettivamente presenti per la categoria selezionata
+    const subList = dayViewCategoryFilter ? getSubcategoryList(dayViewCategoryFilter) : null;
+    const subPresent = subList
+        ? subList.filter(s => baseItems.some(l => l.category === dayViewCategoryFilter && getSubcategoryValue(l) === s))
+        : [];
+
+    const filtersActive = !!(dayViewCategoryFilter || dayViewSubFilter);
+
     container.innerHTML = `
-        <div style="margin-bottom:16px;display:flex;align-items:center;gap:12px">
+        <div style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
             <button class="btn-secondary" onclick="closeDayView()" style="padding:8px 16px;font-size:12px">← INDIETRO</button>
             <span style="font-size:16px;font-weight:800;color:var(--text-primary)">${formatDateIT(date)}</span>
+
+            <select id="dayViewCategoryFilter" class="input-dark" style="min-width:190px" onchange="onDayViewCategoryChange(this.value)">
+                <option value="">Tutte le categorie</option>
+                ${categoriesPresent.map(c => `<option value="${c}" ${c===dayViewCategoryFilter?'selected':''}>${c}</option>`).join('')}
+            </select>
+
+            ${subList ? `
+            <select id="dayViewSubFilter" class="input-dark" style="min-width:190px" onchange="onDayViewSubFilterChange(this.value)">
+                <option value="">Tutte le sottocategorie</option>
+                ${subPresent.map(s => `<option value="${s}" ${s===dayViewSubFilter?'selected':''}>${s}</option>`).join('')}
+            </select>` : ''}
+
+            ${filtersActive ? `<button class="btn-secondary" onclick="resetDayViewFilters()" style="padding:8px 16px;font-size:12px">↺ RESET</button>` : ''}
+
+            <span style="font-size:12px;color:var(--text-secondary);font-weight:700">${items.length} contatt${items.length===1?'o':'i'}</span>
+
             <button class="btn-small btn-secondary" onclick="printDay('${date}')" style="margin-left:auto">🖨️ STAMPA</button>
         </div>
         <div class="contact-day-section">
             <div class="contact-table-wrapper">
                 <table class="contact-table">
                     <thead><tr><th>Orario</th><th>Categoria</th><th>Note</th><th>Operatore</th><th>Azioni</th></tr></thead>
-                    <tbody>${items.length > 0 ? items.map(log => renderContactRow(log)).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--text-secondary);padding:20px">Nessun contatto</td></tr>'}</tbody>
+                    <tbody>${items.length > 0 ? items.map(log => renderContactRow(log)).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--text-secondary);padding:20px">Nessun contatto per i filtri selezionati</td></tr>'}</tbody>
                 </table>
             </div>
         </div>`;
 }
 
+function onDayViewCategoryChange(value) {
+    dayViewCategoryFilter = value;
+    dayViewSubFilter = '';
+    renderDayView();
+}
+
+function onDayViewSubFilterChange(value) {
+    dayViewSubFilter = value;
+    renderDayView();
+}
+
+function resetDayViewFilters() {
+    dayViewCategoryFilter = '';
+    dayViewSubFilter = '';
+    renderDayView();
+}
+
 function closeDayView() {
     currentDayView = null;
+    dayViewCategoryFilter = '';
+    dayViewSubFilter = '';
     renderContactLogs(contactLogsFiltered);
     renderContactStatsFromLogs(contactLogsFiltered);
     renderContactChartFromLogs(contactLogsFiltered);
@@ -706,6 +839,10 @@ function closeDayView() {
     renderChartMarcheCustom(contactLogsFiltered);
     renderChartNoleggio(contactLogsFiltered);
 }
+
+// ============================================================
+// FINE VISTA GIORNALIERA
+// ============================================================
 
 function getISOWeekMonday(dateStr) {
     const d = parseLocalDate(dateStr);
@@ -848,7 +985,10 @@ function renderContactRow(log) {
 }
 
 function printDay(date) {
-    const dayLogs = contactLogsFiltered.filter(l => l.contactDate.split('T')[0] === date);
+    // Se la vista giornaliera per questa data è aperta, stampa rispettando i filtri attivi
+    const dayLogs = (currentDayView === date)
+        ? getDayViewFilteredItems(date)
+        : contactLogsFiltered.filter(l => l.contactDate.split('T')[0] === date);
     const win = window.open('', '_blank');
     win.document.write(`<html><head><title>Registro ${date}</title><style>body{font-family:Arial,sans-serif;font-size:12px;padding:20px}h2{font-size:16px;margin-bottom:10px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:6px 10px;text-align:left}th{background:#f0f0f0;font-weight:700;font-size:10px;text-transform:uppercase}@page{margin:15mm}</style></head><body>
         <h2>Registro Contatti — ${formatDateIT(date)}</h2>
