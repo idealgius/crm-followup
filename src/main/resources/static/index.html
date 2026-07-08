@@ -34,7 +34,7 @@
     <nav class="navbar">
         <div class="nav-logo" style="display:flex;align-items:center;gap:12px">
             <img src="/img/logo.webp" alt="Gruppo Autoscala">
-            <span style="font-family:'Inter',sans-serif;font-weight:800;font-size:13px;letter-spacing:2px;color:#f0c040;opacity:0.9">BDC</span>
+            <span id="navBrandBadge" style="font-family:'Inter',sans-serif;font-weight:800;font-size:13px;letter-spacing:2px;color:#f0c040;opacity:0.9">BDC</span>
         </div>
         <div class="nav-links">
             <a href="#" class="nav-link active" id="navDashboard" onclick="showPage('dashboard')">📊 DASHBOARD</a>
@@ -42,6 +42,7 @@
             <a href="#" class="nav-link" id="navWaiting" onclick="showPage('waiting')">🔔 RECALL</a>
             <a href="#" class="nav-link" id="navContacts" onclick="showPage('contacts')">📞 REGISTRO CONTATTI</a>
             <a href="#" class="nav-link" id="navPromo" style="display:none" onclick="showPage('promo')">🎯 PROMO</a>
+            <a href="#" class="nav-link" id="navRent" style="display:none" onclick="showPage('rent')">🚗 RENT</a>
             <a href="#" class="nav-link" id="adminLink" style="display:none" onclick="showPage('admin')">⚙️ UTENTI</a>
         </div>
         <div class="nav-user">
@@ -506,7 +507,7 @@
                 <!-- SERVICE -->
                 <div id="contactServiceRow" style="display:none">
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TIPOLOGIA SERVICE *</label>
-                    <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
                         <button type="button" class="btn-sede" id="service-Tagliando" onclick="selectService('Tagliando')">🔧 Tagliando</button>
                         <button type="button" class="btn-sede" id="service-DispositivoSatellitare" onclick="selectService('Dispositivo satellitare')">🛰️ Dispositivo satellitare</button>
                         <button type="button" class="btn-sede" id="service-Prenotazione" onclick="selectService('Prenotazione')">📅 Prenotazione</button>
@@ -515,6 +516,15 @@
                         <button type="button" class="btn-sede" id="service-CambioGomme" onclick="selectService('Cambio Gomme')">🔄 Cambio Gomme</button>
                     </div>
                     <input type="hidden" id="contactServiceTipo" value="">
+
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOME CLIENTE *</label>
+                    <input type="text" id="serviceNomeCliente" placeholder="Nome cliente" class="input-field">
+
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">COGNOME CLIENTE *</label>
+                    <input type="text" id="serviceCognomeCliente" placeholder="Cognome cliente" class="input-field">
+
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TARGA (opzionale)</label>
+                    <input type="text" id="serviceTarga" placeholder="Es. AB123CD" class="input-field" style="text-transform:uppercase">
                 </div>
 
                 <!-- SEDE APPUNTAMENTO -->
@@ -617,6 +627,7 @@
                     <option value="MODERATORE">Moderatore</option>
                     <option value="GESTORE">Gestore</option>
                     <option value="ADMIN">Admin</option>
+                    <option value="NOLEGGIO">Noleggio</option>
                 </select>
             </div>
             <div class="form-actions">
@@ -625,6 +636,122 @@
             </div>
         </div>
         <div id="usersList"></div>
+    </div>
+
+    <!-- RENT PAGE (Dashboard Noleggio) -->
+    <div id="rentPage" class="page" style="display:none">
+        <div class="page-header">
+            <h2>🚗 RENT — GESTIONE NOLEGGIO</h2>
+            <div class="filter-bar">
+                <select id="rentStatoFilter" class="input-dark" onchange="applyRentFilters()">
+                    <option value="">Tutti gli stati</option>
+                    <option value="SOLO_INFO">Solo Info</option>
+                    <option value="TRATTATIVA_IN_CORSO">Trattativa in corso</option>
+                    <option value="DA_RICHIAMARE">Da richiamare</option>
+                    <option value="CONCLUSA">Conclusa</option>
+                </select>
+                <select id="rentMarchioFilter" class="input-dark" onchange="applyRentFilters()">
+                    <option value="">Tutti i marchi</option>
+                </select>
+                <select id="rentFonteFilter" class="input-dark" onchange="applyRentFilters()">
+                    <option value="">Tutte le fonti</option>
+                </select>
+                <button onclick="showNewRentForm()" class="btn-primary" style="width:auto;padding:10px 20px">+ NUOVA TRATTATIVA</button>
+            </div>
+        </div>
+
+        <!-- STATS -->
+        <div class="stats-grid" style="margin-bottom:28px">
+            <div class="stat-card blue"><div class="stat-label">TOTALE TRATTATIVE</div><div class="stat-value" id="rentStatTotal">0</div></div>
+            <div class="stat-card gold"><div class="stat-label">SOLO INFO</div><div class="stat-value" id="rentStatSoloInfo">0</div></div>
+            <div class="stat-card purple"><div class="stat-label">IN CORSO</div><div class="stat-value" id="rentStatInCorso">0</div></div>
+            <div class="stat-card pink"><div class="stat-label">DA RICHIAMARE</div><div class="stat-value" id="rentStatDaRichiamare">0</div></div>
+            <div class="stat-card green"><div class="stat-label">CONCLUSE</div><div class="stat-value" id="rentStatConcluse">0</div></div>
+        </div>
+
+        <!-- GRAFICI -->
+        <div style="margin-bottom:28px;display:flex;gap:20px;flex-wrap:wrap;align-items:stretch">
+            <div class="chart-card" style="width:360px;min-width:360px;flex:1">
+                <h3>DISTRIBUZIONE STATO TRATTATIVE</h3>
+                <canvas id="chartRentStato" style="max-height:260px"></canvas>
+            </div>
+            <div class="chart-card" style="width:360px;min-width:360px;flex:1">
+                <h3>FONTE TRATTATIVE</h3>
+                <canvas id="chartRentFonte" style="max-height:260px"></canvas>
+            </div>
+            <div class="chart-card" style="width:360px;min-width:360px;flex:1">
+                <h3>PERFORMANCE MARCHI</h3>
+                <div id="chartRentMarchiCustom" style="display:flex;flex-direction:column;gap:10px"></div>
+            </div>
+        </div>
+
+        <!-- MODAL RECALL DI OGGI -->
+        <div id="rentRecallModal" class="modal-overlay" style="display:none" onclick="closeRentRecallModal(event)">
+            <div class="modal-box" onclick="event.stopPropagation()">
+                <div class="modal-header"><h3>🔔 Recall Noleggio di Oggi</h3><button type="button" class="modal-close" onclick="closeRentRecallModal()">✕</button></div>
+                <div id="rentRecallList" class="modal-body"></div>
+            </div>
+        </div>
+
+        <!-- FORM NUOVA/MODIFICA TRATTATIVA -->
+        <div id="newRentForm" class="form-card" style="display:none">
+            <h3 id="rentFormTitle">NUOVA TRATTATIVA</h3>
+            <input type="hidden" id="rentEditId" value="">
+            <div class="form-grid">
+                <input type="text" id="rentNome" placeholder="Nome *" class="input-field">
+                <input type="text" id="rentCognome" placeholder="Cognome *" class="input-field">
+                <input type="text" id="rentCellulare" placeholder="Cellulare (opzionale)" class="input-field">
+                <input type="email" id="rentEmail" placeholder="Email (opzionale)" class="input-field">
+                <input type="text" id="rentMarchio" placeholder="Marchio *" class="input-field">
+                <input type="text" id="rentModello" placeholder="Modello (opzionale)" class="input-field">
+                <textarea id="rentNote" placeholder="Note aggiuntive (opzionale)" class="input-field"></textarea>
+                <input type="url" id="rentLinkLeadspark" placeholder="Link Leadspark (opzionale)" class="input-field">
+                <input type="url" id="rentLinkAutoRichiesta" placeholder="Link auto richiesta (opzionale)" class="input-field">
+            </div>
+
+            <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:8px">FONTE *</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+                <button type="button" class="btn-sede" id="rentFonte-Sito" onclick="selectRentFonte('Sito')">🌐 Sito</button>
+                <button type="button" class="btn-sede" id="rentFonte-GoogleADS" onclick="selectRentFonte('Google ADS')">🎯 Google ADS</button>
+                <button type="button" class="btn-sede" id="rentFonte-Autoscout" onclick="selectRentFonte('Autoscout')">🚗 Autoscout</button>
+                <button type="button" class="btn-sede" id="rentFonte-Facebook" onclick="selectRentFonte('Facebook')">📘 Facebook</button>
+                <button type="button" class="btn-sede" id="rentFonte-Instagram" onclick="selectRentFonte('Instagram')">📸 Instagram</button>
+                <button type="button" class="btn-sede" id="rentFonte-TikTok" onclick="selectRentFonte('TikTok')">🎵 TikTok</button>
+                <button type="button" class="btn-sede" id="rentFonte-RichiestaCliente" onclick="selectRentFonte('Richiesta cliente')">📞 Richiesta cliente</button>
+                <button type="button" class="btn-sede" id="rentFonte-NonRicorda" onclick="selectRentFonte('Non ricorda')">❓ Non ricorda</button>
+            </div>
+            <input type="hidden" id="rentFonteValue" value="">
+
+            <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:8px">STATO *</label>
+            <select id="rentStato" class="input-field" onchange="onRentStatoChange()">
+                <option value="SOLO_INFO">Solo Info</option>
+                <option value="TRATTATIVA_IN_CORSO">Trattativa in corso</option>
+                <option value="DA_RICHIAMARE">Da richiamare</option>
+                <option value="CONCLUSA">Conclusa</option>
+            </select>
+
+            <div id="rentDataRichiamoRow" style="display:none;margin-top:14px">
+                <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">DATA RICHIAMO *</label>
+                <input type="date" id="rentDataRichiamo" class="input-field">
+            </div>
+
+            <div class="form-actions" style="margin-top:16px">
+                <button onclick="saveRentTrattativa()" class="btn-gold">SALVA TRATTATIVA</button>
+                <button onclick="hideNewRentForm()" class="btn-secondary">ANNULLA</button>
+            </div>
+        </div>
+
+        <!-- LISTA TRATTATIVE -->
+        <h3 style="font-size:13px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);margin-bottom:16px;text-transform:uppercase">GESTIONE TRATTATIVE</h3>
+        <div id="rentTrattativeList" style="margin-bottom:32px"></div>
+
+        <!-- INFO NOLEGGIO DA REGISTRO CONTATTI (sola lettura) -->
+        <h3 style="font-size:13px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);margin-bottom:16px;text-transform:uppercase">📋 INFO NOLEGGIO DA REGISTRO CONTATTI (TUTTI GLI OPERATORI)</h3>
+        <div class="filter-bar" style="margin-bottom:16px">
+            <input type="date" id="rentContattiFrom" class="input-dark" onchange="loadRentContattiNoleggio()">
+            <input type="date" id="rentContattiTo" class="input-dark" onchange="loadRentContattiNoleggio()">
+        </div>
+        <div id="rentContattiNoleggioList"></div>
     </div>
 
 </div>
@@ -637,6 +764,7 @@
 <script src="/js/contact.js"></script>
 <script src="/js/promo.js"></script>
 <script src="/js/admin.js"></script>
+<script src="/js/rent.js"></script>
 <script src="/js/app.js"></script>
 </body>
 </html>

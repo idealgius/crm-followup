@@ -1351,3 +1351,67 @@ select.input-field {
 
     @page { margin: 15mm; }
 }
+/* ===== TEMA RENT (NOLEGGIO) ===== */
+/* Attivato su <body data-role-theme="noleggio"> quando si è nel ruolo NOLEGGIO
+   o si sta visitando la pagina RENT come MODERATORE/GESTORE/ADMIN */
+
+[data-role-theme="noleggio"] .navbar {
+    border-bottom: 3px solid #0a5c36;
+    background: linear-gradient(180deg, var(--navbar-bg) 0%, #0a1f14 100%);
+}
+
+[data-role-theme="noleggio"] #navBrandBadge {
+    color: #2ecc71 !important;
+}
+
+[data-role-theme="noleggio"] .nav-link:hover,
+[data-role-theme="noleggio"] .nav-link.active {
+    color: #2ecc71;
+    background: rgba(46,204,113,0.14);
+}
+
+[data-role-theme="noleggio"] #rentPage .page-header h2 {
+    color: #2ecc71;
+}
+
+[data-role-theme="noleggio"] #rentPage .btn-primary {
+    background: linear-gradient(135deg, #2ecc71, #1e9e58);
+    color: #04170c;
+}
+
+[data-role-theme="noleggio"] #rentPage .btn-gold {
+    background: linear-gradient(135deg, #2ecc71, #1e9e58);
+    color: #04170c;
+}
+
+[data-role-theme="noleggio"] #rentPage .form-card {
+    border-top: 3px solid #2ecc71;
+}
+
+[data-role-theme="noleggio"] #rentPage .form-card h3,
+[data-role-theme="noleggio"] #rentPage .chart-card h3 {
+    color: #2ecc71;
+}
+
+[data-role-theme="noleggio"] #rentPage .btn-sede:hover {
+    border-color: #2ecc71;
+    color: #2ecc71;
+    background: rgba(46,204,113,0.08);
+}
+
+[data-role-theme="noleggio"] #rentPage .btn-sede-active {
+    background: rgba(46,204,113,0.15) !important;
+    border-color: #2ecc71 !important;
+    color: #2ecc71 !important;
+    box-shadow: 0 0 0 2px rgba(46,204,113,0.2);
+}
+
+[data-role-theme="noleggio"] #rentPage .contact-tree-year,
+[data-role-theme="noleggio"] #rentPage .contact-week-header {
+    border-bottom-color: #2ecc71;
+}
+
+[data-role-theme="noleggio"] #rentRecallModal .modal-box {
+    border-color: #2ecc71;
+    box-shadow: 0 20px 60px rgba(46,204,113,0.15);
+}

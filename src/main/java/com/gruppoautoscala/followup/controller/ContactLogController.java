@@ -63,6 +63,9 @@ public class ContactLogController {
             m.put("acquistoNote", log.getAcquistoNote());
             m.put("noleggioTipo", log.getNoleggioTipo());
             m.put("noleggioLink", log.getNoleggioLink());
+            m.put("serviceNomeCliente", log.getServiceNomeCliente());
+            m.put("serviceCognomeCliente", log.getServiceCognomeCliente());
+            m.put("serviceTarga", log.getServiceTarga());
             m.put("contactDate", log.getContactDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
             m.put("createdAt", log.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
             Map<String, Object> userMap = new HashMap<>();
@@ -132,15 +135,28 @@ public class ContactLogController {
         String acquistoNote = (String) body.get("acquistoNote");
         String noleggioTipo = (String) body.get("noleggioTipo");
         String noleggioLink = (String) body.get("noleggioLink");
+        String serviceNomeCliente = (String) body.get("serviceNomeCliente");
+        String serviceCognomeCliente = (String) body.get("serviceCognomeCliente");
+        String serviceTarga = (String) body.get("serviceTarga");
         LocalDateTime contactDate = body.get("contactDate") != null
             ? LocalDateTime.parse((String) body.get("contactDate"))
             : LocalDateTime.now();
+
+        if ("Service".equals(category)) {
+            if (serviceNomeCliente == null || serviceNomeCliente.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Nome cliente obbligatorio per Service"));
+            }
+            if (serviceCognomeCliente == null || serviceCognomeCliente.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Cognome cliente obbligatorio per Service"));
+            }
+        }
 
         ContactLog log = contactLogService.create(userOpt.get(), category, otherNote,
                 nominativoAppuntamento, linkAppuntamento,
                 marca, modello, linkAuto,
                 serviceTipo, serviceNote, acquistoNote,
                 noleggioTipo, noleggioLink,
+                serviceNomeCliente, serviceCognomeCliente, serviceTarga,
                 contactDate);
 
         Map<String, Object> result = new HashMap<>();
@@ -157,6 +173,9 @@ public class ContactLogController {
         result.put("acquistoNote", log.getAcquistoNote());
         result.put("noleggioTipo", log.getNoleggioTipo());
         result.put("noleggioLink", log.getNoleggioLink());
+        result.put("serviceNomeCliente", log.getServiceNomeCliente());
+        result.put("serviceCognomeCliente", log.getServiceCognomeCliente());
+        result.put("serviceTarga", log.getServiceTarga());
         result.put("contactDate", log.getContactDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
         Map<String, Object> userMap = new HashMap<>();
         userMap.put("id", log.getUser().getId());
@@ -193,6 +212,9 @@ public class ContactLogController {
         if (body.containsKey("acquistoNote")) log.setAcquistoNote((String) body.get("acquistoNote"));
         if (body.containsKey("noleggioTipo")) log.setNoleggioTipo((String) body.get("noleggioTipo"));
         if (body.containsKey("noleggioLink")) log.setNoleggioLink((String) body.get("noleggioLink"));
+        if (body.containsKey("serviceNomeCliente")) log.setServiceNomeCliente((String) body.get("serviceNomeCliente"));
+        if (body.containsKey("serviceCognomeCliente")) log.setServiceCognomeCliente((String) body.get("serviceCognomeCliente"));
+        if (body.containsKey("serviceTarga")) log.setServiceTarga((String) body.get("serviceTarga"));
         if (body.containsKey("contactDate")) {
             log.setContactDate(LocalDateTime.parse((String) body.get("contactDate")));
         }

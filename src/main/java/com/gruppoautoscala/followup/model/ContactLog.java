@@ -53,6 +53,15 @@ public class ContactLog {
     @Column(name = "noleggio_link", length = 500)
     private String noleggioLink;
 
+    @Column(name = "service_nome_cliente", length = 100)
+    private String serviceNomeCliente;
+
+    @Column(name = "service_cognome_cliente", length = 100)
+    private String serviceCognomeCliente;
+
+    @Column(name = "service_targa", length = 20)
+    private String serviceTarga;
+
     @Column(name = "contact_date", nullable = false)
     private LocalDateTime contactDate;
 

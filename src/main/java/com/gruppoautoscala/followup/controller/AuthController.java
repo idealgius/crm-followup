@@ -150,7 +150,7 @@ public class AuthController {
             return ResponseEntity.badRequest().body(Map.of("error", "Non puoi modificare il tuo ruolo"));
 
         String newRole = body.get("role");
-        List<String> validRoles = List.of("UTENTE", "MODERATORE", "GESTORE", "ADMIN");
+        List<String> validRoles = List.of("UTENTE", "MODERATORE", "GESTORE", "ADMIN", "NOLEGGIO");
         if (!validRoles.contains(newRole))
             return ResponseEntity.badRequest().body(Map.of("error", "Ruolo non valido"));
 

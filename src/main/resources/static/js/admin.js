@@ -39,6 +39,7 @@ function renderUsers(users) {
                             <option value="UTENTE" ${u.role === 'UTENTE' ? 'selected' : ''}>Utente</option>
                             <option value="MODERATORE" ${u.role === 'MODERATORE' ? 'selected' : ''}>Moderatore</option>
                             <option value="GESTORE" ${u.role === 'GESTORE' ? 'selected' : ''}>Gestore</option>
+                            <option value="NOLEGGIO" ${u.role === 'NOLEGGIO' ? 'selected' : ''}>Noleggio</option>
                             ${isAdmin ? `<option value="ADMIN" ${u.role === 'ADMIN' ? 'selected' : ''}>Admin</option>` : ''}
                         </select>
                     ` : `
@@ -59,7 +60,8 @@ function formatRole(role) {
         'UTENTE': 'Utente',
         'MODERATORE': 'Moderatore',
         'GESTORE': 'Gestore',
-        'ADMIN': 'Admin'
+        'ADMIN': 'Admin',
+        'NOLEGGIO': 'Noleggio'
     };
     return map[role] || role;
 }

@@ -21,20 +21,32 @@ function refreshChartsOnThemeChange() {
     if (typeof loadStats === 'function' && document.getElementById('dashboardPage')?.style.display === 'block') {
         loadStats();
     }
+    if (typeof refreshRentChartsOnThemeChange === 'function' && document.getElementById('rentPage')?.style.display === 'block') {
+        refreshRentChartsOnThemeChange();
+    }
 }
+
+// Ruoli che vedono la dashboard Rent (in aggiunta o in esclusiva)
+const RENT_ROLES = ['NOLEGGIO', 'MODERATORE', 'GESTORE', 'ADMIN'];
 
 function applyRolePermissions(role) {
     const isAdmin = role === 'ADMIN';
     const isGestore = role === 'GESTORE';
     const isModerator = role === 'MODERATORE';
+    const isNoleggio = role === 'NOLEGGIO';
     const canSeeAll = isAdmin || isGestore || isModerator;
+    const canSeeRent = RENT_ROLES.includes(role);
 
-    document.getElementById('navDashboard').style.display = canSeeAll ? 'inline-block' : 'none';
-    document.getElementById('navFollowups').style.display = canSeeAll ? 'inline-block' : 'none';
-    document.getElementById('navWaiting').style.display = canSeeAll ? 'inline-block' : 'none';
-    document.getElementById('navContacts').style.display = 'inline-block';
-    document.getElementById('navPromo').style.display = canSeeAll ? 'inline-block' : 'none';
-    document.getElementById('adminLink').style.display = (isAdmin || isGestore) ? 'inline-block' : 'none';
+    // Il ruolo NOLEGGIO vede SOLO la dashboard Rent: tutto il resto nascosto
+    document.getElementById('navDashboard').style.display = (canSeeAll && !isNoleggio) ? 'inline-block' : 'none';
+    document.getElementById('navFollowups').style.display = (canSeeAll && !isNoleggio) ? 'inline-block' : 'none';
+    document.getElementById('navWaiting').style.display = (canSeeAll && !isNoleggio) ? 'inline-block' : 'none';
+    document.getElementById('navContacts').style.display = isNoleggio ? 'none' : 'inline-block';
+    document.getElementById('navPromo').style.display = (canSeeAll && !isNoleggio) ? 'inline-block' : 'none';
+    document.getElementById('adminLink').style.display = ((isAdmin || isGestore) && !isNoleggio) ? 'inline-block' : 'none';
+
+    const navRent = document.getElementById('navRent');
+    if (navRent) navRent.style.display = canSeeRent ? 'inline-block' : 'none';
 
     if (role === 'UTENTE') {
         const wrapper = document.getElementById('contactOperatorFilterWrapper');
@@ -51,11 +63,33 @@ function applyRolePermissions(role) {
     }
 }
 
+// Il tema Rent (navbar verde + badge "RENT") dipende dalla pagina in cui ci si trova,
+// non solo dal ruolo: NOLEGGIO lo vede sempre, gli altri ruoli gestionali solo
+// quando sono dentro la pagina Rent, tornando al tema normale altrove.
+function applyPageTheme(page, role) {
+    const isNoleggio = role === 'NOLEGGIO';
+    const isRentPage = page === 'rent';
+    const showRentTheme = isNoleggio || isRentPage;
+
+    const body = document.body;
+    const badge = document.getElementById('navBrandBadge');
+    if (showRentTheme) {
+        body.setAttribute('data-role-theme', 'noleggio');
+        if (badge) badge.textContent = 'RENT';
+    } else {
+        body.removeAttribute('data-role-theme');
+        if (badge) badge.textContent = 'BDC';
+    }
+}
+
 function showPage(page) {
     const role = currentUser?.role || 'UTENTE';
     const canSeeAll = role === 'ADMIN' || role === 'GESTORE' || role === 'MODERATORE';
+    const isNoleggio = role === 'NOLEGGIO';
 
-    if (!canSeeAll && page !== 'contacts') page = 'contacts';
+    // Il ruolo NOLEGGIO è forzato sempre sulla pagina Rent, come UTENTE è forzato su contacts
+    if (isNoleggio && page !== 'rent') page = 'rent';
+    else if (!canSeeAll && !isNoleggio && page !== 'contacts') page = 'contacts';
 
     sessionStorage.setItem('currentPage', page);
 
@@ -65,6 +99,8 @@ function showPage(page) {
     document.getElementById('contactsPage').style.display = 'none';
     document.getElementById('promoPage').style.display = 'none';
     document.getElementById('adminPage').style.display = 'none';
+    const rentPageEl = document.getElementById('rentPage');
+    if (rentPageEl) rentPageEl.style.display = 'none';
 
     document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
 
@@ -109,7 +145,14 @@ function showPage(page) {
         document.getElementById('adminPage').style.display = 'block';
         document.getElementById('adminLink').classList.add('active');
         loadUsers();
+    } else if (page === 'rent') {
+        if (rentPageEl) rentPageEl.style.display = 'block';
+        const navRent = document.getElementById('navRent');
+        if (navRent) navRent.classList.add('active');
+        if (typeof loadRentDashboard === 'function') loadRentDashboard();
     }
+
+    applyPageTheme(page, role);
 }
 
 window.onload = function() {
@@ -138,10 +181,11 @@ window.onload = function() {
             document.getElementById('loginPage').style.display = 'none';
             document.getElementById('mainApp').style.display = 'block';
 
-            const defaultPage = data.role === 'UTENTE' ? 'contacts' : 'dashboard';
+            const isNoleggio = data.role === 'NOLEGGIO';
+            const defaultPage = isNoleggio ? 'rent' : (data.role === 'UTENTE' ? 'contacts' : 'dashboard');
             showPage(defaultPage);
 
-            if (data.role !== 'UTENTE') {
+            if (data.role !== 'UTENTE' && !isNoleggio) {
                 loadStats();
                 if (typeof loadPromo === 'function') loadPromo();
             }
