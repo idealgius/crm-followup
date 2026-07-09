@@ -62,6 +62,26 @@ public class ContactLog {
     @Column(name = "service_targa", length = 20)
     private String serviceTarga;
 
+    // CLIENTE | NON_CLIENTE
+    @Column(name = "service_tipo_cliente", length = 20)
+    private String serviceTipoCliente;
+
+    @Column(name = "service_numero_telefono", length = 50)
+    private String serviceNumeroTelefono;
+
+    // SOLO_INFO | RICHIESTA_CLIENTE — sottostato di "Info Noleggio"
+    @Column(name = "noleggio_richiesta", length = 30)
+    private String noleggioRichiesta;
+
+    @Column(name = "noleggio_nome_cliente", length = 100)
+    private String noleggioNomeCliente;
+
+    @Column(name = "noleggio_cognome_cliente", length = 100)
+    private String noleggioCognomeCliente;
+
+    @Column(name = "noleggio_cellulare", length = 50)
+    private String noleggioCellulare;
+
     @Column(name = "contact_date", nullable = false)
     private LocalDateTime contactDate;
 

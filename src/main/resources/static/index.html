@@ -415,14 +415,33 @@
 
                 <!-- INFO NOLEGGIO -->
                 <div id="contactNoleggioRow" style="display:none">
-                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TIPOLOGIA CLIENTE *</label>
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">RICHIESTA *</label>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
-                        <button type="button" class="btn-sede" id="noleggio-Privato" onclick="selectNoleggioTipo('Privato')">👤 Privato</button>
-                        <button type="button" class="btn-sede" id="noleggio-PIVA" onclick="selectNoleggioTipo('Partita IVA')">🏢 Partita IVA</button>
+                        <button type="button" class="btn-sede" id="noleggioRichiesta-SOLO_INFO" onclick="selectNoleggioRichiesta('SOLO_INFO')">ℹ️ Solo Info</button>
+                        <button type="button" class="btn-sede" id="noleggioRichiesta-RICHIESTA_CLIENTE" onclick="selectNoleggioRichiesta('RICHIESTA_CLIENTE')">📞 Richiesta cliente</button>
                     </div>
-                    <input type="hidden" id="contactNoleggioTipo" value="">
-                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">LEAD (opzionale)</label>
-                    <input type="url" id="contactNoleggioLink" placeholder="https://..." class="input-field">
+                    <input type="hidden" id="contactNoleggioRichiesta" value="">
+
+                    <div id="contactNoleggioRichiestaDettagli" style="display:none">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TIPOLOGIA CLIENTE *</label>
+                        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+                            <button type="button" class="btn-sede" id="noleggio-Privato" onclick="selectNoleggioTipo('Privato')">👤 Privato</button>
+                            <button type="button" class="btn-sede" id="noleggio-PIVA" onclick="selectNoleggioTipo('Partita IVA')">🏢 Partita IVA</button>
+                        </div>
+                        <input type="hidden" id="contactNoleggioTipo" value="">
+
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">LEAD (opzionale)</label>
+                        <input type="url" id="contactNoleggioLink" placeholder="https://..." class="input-field">
+
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOME CLIENTE (opzionale)</label>
+                        <input type="text" id="contactNoleggioNomeCliente" placeholder="Nome" class="input-field">
+
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">COGNOME CLIENTE (opzionale)</label>
+                        <input type="text" id="contactNoleggioCognomeCliente" placeholder="Cognome" class="input-field">
+
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">CELLULARE (opzionale)</label>
+                        <input type="text" id="contactNoleggioCellulare" placeholder="Cellulare" class="input-field">
+                    </div>
                 </div>
 
                 <!-- MARCA E MODELLO -->
@@ -517,14 +536,26 @@
                     </div>
                     <input type="hidden" id="contactServiceTipo" value="">
 
-                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOME CLIENTE *</label>
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TIPOLOGIA CLIENTE *</label>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+                        <button type="button" class="btn-sede" id="serviceCliente-CLIENTE" onclick="selectServiceTipoCliente('CLIENTE')">👤 Cliente</button>
+                        <button type="button" class="btn-sede" id="serviceCliente-NON_CLIENTE" onclick="selectServiceTipoCliente('NON_CLIENTE')">❓ Non Cliente</button>
+                    </div>
+                    <input type="hidden" id="serviceTipoCliente" value="">
+
+                    <label id="serviceNomeClienteLabel" style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOME CLIENTE</label>
                     <input type="text" id="serviceNomeCliente" placeholder="Nome cliente" class="input-field">
 
-                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">COGNOME CLIENTE *</label>
+                    <label id="serviceCognomeClienteLabel" style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">COGNOME CLIENTE</label>
                     <input type="text" id="serviceCognomeCliente" placeholder="Cognome cliente" class="input-field">
 
-                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TARGA (opzionale)</label>
+                    <label id="serviceTargaLabel" style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TARGA</label>
                     <input type="text" id="serviceTarga" placeholder="Es. AB123CD" class="input-field" style="text-transform:uppercase">
+
+                    <div id="serviceNumeroTelefonoRow" style="display:none">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NUMERO DI TELEFONO (opzionale)</label>
+                        <input type="text" id="serviceNumeroTelefono" placeholder="Numero di telefono" class="input-field">
+                    </div>
                 </div>
 
                 <!-- SEDE APPUNTAMENTO -->
@@ -656,7 +687,16 @@
                 <select id="rentFonteFilter" class="input-dark" onchange="applyRentFilters()">
                     <option value="">Tutte le fonti</option>
                 </select>
+                <select id="rentRuoloFilter" class="input-dark" onchange="applyRentFilters()">
+                    <option value="">Tutti gli operatori (ruolo)</option>
+                    <option value="NOLEGGIO">Solo Noleggio</option>
+                    <option value="BDC">Solo BDC</option>
+                </select>
+                <select id="rentOperatoreFilter" class="input-dark" onchange="applyRentFilters()">
+                    <option value="">Tutti gli operatori</option>
+                </select>
                 <button onclick="showNewRentForm()" class="btn-primary" style="width:auto;padding:10px 20px">+ NUOVA TRATTATIVA</button>
+                <button onclick="exportRentExcel()" class="btn-secondary" style="padding:10px 16px">📥 EXCEL</button>
             </div>
         </div>
 
@@ -671,17 +711,21 @@
 
         <!-- GRAFICI -->
         <div style="margin-bottom:28px;display:flex;gap:20px;flex-wrap:wrap;align-items:stretch">
-            <div class="chart-card" style="width:360px;min-width:360px;flex:1">
+            <div class="chart-card" style="width:340px;min-width:340px;flex:1">
                 <h3>DISTRIBUZIONE STATO TRATTATIVE</h3>
                 <canvas id="chartRentStato" style="max-height:260px"></canvas>
             </div>
-            <div class="chart-card" style="width:360px;min-width:360px;flex:1">
+            <div class="chart-card" style="width:340px;min-width:340px;flex:1">
                 <h3>FONTE TRATTATIVE</h3>
                 <canvas id="chartRentFonte" style="max-height:260px"></canvas>
             </div>
-            <div class="chart-card" style="width:360px;min-width:360px;flex:1">
+            <div class="chart-card" style="width:340px;min-width:340px;flex:1">
                 <h3>PERFORMANCE MARCHI</h3>
                 <div id="chartRentMarchiCustom" style="display:flex;flex-direction:column;gap:10px"></div>
+            </div>
+            <div class="chart-card" style="width:340px;min-width:340px;flex:1">
+                <h3>SOLO INFO vs RICHIESTA CLIENTE</h3>
+                <canvas id="chartRentInfoVsRichiesta" style="max-height:260px"></canvas>
             </div>
         </div>
 
@@ -700,9 +744,14 @@
             <div class="form-grid">
                 <input type="text" id="rentNome" placeholder="Nome *" class="input-field">
                 <input type="text" id="rentCognome" placeholder="Cognome *" class="input-field">
-                <input type="text" id="rentCellulare" placeholder="Cellulare (opzionale)" class="input-field">
+                <input type="text" id="rentCellulare" placeholder="Cellulare *" class="input-field">
                 <input type="email" id="rentEmail" placeholder="Email (opzionale)" class="input-field">
-                <input type="text" id="rentMarchio" placeholder="Marchio *" class="input-field">
+                <div style="position:relative">
+                    <input type="text" id="rentMarcaInput" placeholder="Clicca o cerca marchio... *" class="input-field" style="margin-bottom:0;cursor:pointer"
+                           oninput="filterRentMarche(this.value)" onfocus="showRentMarcheDropdown()" autocomplete="off">
+                    <div id="rentMarcaDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1.5px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;box-shadow:var(--shadow)"></div>
+                    <input type="hidden" id="rentMarchio" value="">
+                </div>
                 <input type="text" id="rentModello" placeholder="Modello (opzionale)" class="input-field">
                 <textarea id="rentNote" placeholder="Note aggiuntive (opzionale)" class="input-field"></textarea>
                 <input type="url" id="rentLinkLeadspark" placeholder="Link Leadspark (opzionale)" class="input-field">
@@ -741,11 +790,11 @@
             </div>
         </div>
 
-        <!-- LISTA TRATTATIVE -->
+        <!-- LISTA TRATTATIVE (TABELLA 1) -->
         <h3 style="font-size:13px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);margin-bottom:16px;text-transform:uppercase">GESTIONE TRATTATIVE</h3>
         <div id="rentTrattativeList" style="margin-bottom:32px"></div>
 
-        <!-- INFO NOLEGGIO DA REGISTRO CONTATTI (sola lettura) -->
+        <!-- INFO NOLEGGIO DA REGISTRO CONTATTI (TABELLA 2, sola lettura) -->
         <h3 style="font-size:13px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);margin-bottom:16px;text-transform:uppercase">📋 INFO NOLEGGIO DA REGISTRO CONTATTI (TUTTI GLI OPERATORI)</h3>
         <div class="filter-bar" style="margin-bottom:16px">
             <input type="date" id="rentContattiFrom" class="input-dark" onchange="loadRentContattiNoleggio()">

@@ -7,6 +7,8 @@ let selectedAcquisto = '';
 let selectedFonte = '';
 let selectedService = '';
 let selectedNoleggioTipo = '';
+let selectedNoleggioRichiesta = '';
+let selectedServiceTipoCliente = '';
 let contactChartByOperator = null;
 let contactChartSede = null;
 let contactChartAcquisto = null;
@@ -995,6 +997,7 @@ function renderContactRow(log) {
     const canEdit = isAdmin || isOwner || (isMod && !targetIsAdmin);
     const catClass = log.category.replace(/[\s+]/g, '_');
     const serviceNomeCompleto = [log.serviceNomeCliente, log.serviceCognomeCliente].filter(Boolean).join(' ');
+    const noleggioNomeCompleto = [log.noleggioNomeCliente, log.noleggioCognomeCliente].filter(Boolean).join(' ');
     return `<tr id="contact-row-${log.id}">
         <td style="font-weight:700;color:var(--text-primary);white-space:nowrap">${time}</td>
         <td>
@@ -1007,7 +1010,10 @@ function renderContactRow(log) {
             ${log.category === 'Service' && log.serviceTipo ? `<span style="font-size:11px;background:rgba(240,192,64,0.1);color:#f0c040;padding:2px 8px;border-radius:8px;margin-left:6px">🔧 ${log.serviceTipo}</span>` : ''}
             ${log.category === 'Service' && serviceNomeCompleto ? `<span style="font-size:11px;background:rgba(240,192,64,0.08);color:#f0c040;padding:2px 8px;border-radius:8px;margin-left:6px">👤 ${serviceNomeCompleto}</span>` : ''}
             ${log.category === 'Service' && log.serviceTarga ? `<span style="font-size:11px;background:rgba(240,192,64,0.08);color:#f0c040;padding:2px 8px;border-radius:8px;margin-left:6px">🔖 ${log.serviceTarga}</span>` : ''}
+            ${log.category === 'Info Noleggio' && log.noleggioRichiesta ? `<span style="font-size:11px;background:rgba(0,200,83,0.1);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px">${log.noleggioRichiesta === 'RICHIESTA_CLIENTE' ? '📞 Richiesta cliente' : 'ℹ️ Solo Info'}</span>` : ''}
             ${log.category === 'Info Noleggio' && log.noleggioTipo ? `<span style="font-size:11px;background:rgba(0,200,83,0.1);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px">${log.noleggioTipo === 'Privato' ? '👤' : '🏢'} ${log.noleggioTipo}</span>` : ''}
+            ${log.category === 'Info Noleggio' && noleggioNomeCompleto ? `<span style="font-size:11px;background:rgba(0,200,83,0.08);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px">👤 ${noleggioNomeCompleto}</span>` : ''}
+            ${log.category === 'Info Noleggio' && log.noleggioCellulare ? `<span style="font-size:11px;background:rgba(0,200,83,0.08);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px">📞 ${log.noleggioCellulare}</span>` : ''}
             ${log.category === 'Info Noleggio' && log.noleggioLink ? `<a href="${log.noleggioLink}" target="_blank" rel="noopener" style="font-size:11px;background:rgba(0,200,83,0.1);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px;text-decoration:none">🔗 Lead</a>` : ''}
             ${log.category === 'Info Vendita in Promo' ? `<span style="font-size:11px;background:rgba(240,192,64,0.15);color:#f0c040;padding:2px 8px;border-radius:8px;margin-left:6px">🎯 PROMO</span>` : ''}
             ${log.marca ? `<span style="font-size:11px;background:rgba(0,200,83,0.1);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px">🚗 ${log.marca}${log.modello?' '+log.modello:''}</span>` : ''}
@@ -1095,6 +1101,27 @@ function selectSede(sede) {
     SEDI_LIST.forEach(s => { const btn = document.getElementById(`sede-${s}`); if (btn) btn.classList.toggle('btn-sede-active', s===sede); });
 }
 
+function selectNoleggioRichiesta(richiesta) {
+    selectedNoleggioRichiesta = richiesta;
+    document.getElementById('contactNoleggioRichiesta').value = richiesta;
+    ['SOLO_INFO','RICHIESTA_CLIENTE'].forEach(k => { const btn = document.getElementById(`noleggioRichiesta-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
+    const btn = document.getElementById(`noleggioRichiesta-${richiesta}`);
+    if (btn) btn.classList.add('btn-sede-active');
+
+    const dettagli = document.getElementById('contactNoleggioRichiestaDettagli');
+    if (dettagli) dettagli.style.display = richiesta === 'RICHIESTA_CLIENTE' ? 'block' : 'none';
+
+    // Se si torna a Solo Info, puliamo i campi condizionati per non salvare dati residui
+    if (richiesta === 'SOLO_INFO') {
+        selectedNoleggioTipo = '';
+        const tipoEl = document.getElementById('contactNoleggioTipo'); if (tipoEl) tipoEl.value = '';
+        ['Privato','PIVA'].forEach(k => { const b = document.getElementById(`noleggio-${k}`); if (b) b.classList.remove('btn-sede-active'); });
+        ['contactNoleggioLink','contactNoleggioNomeCliente','contactNoleggioCognomeCliente','contactNoleggioCellulare'].forEach(id => {
+            const el = document.getElementById(id); if (el) el.value = '';
+        });
+    }
+}
+
 function selectNoleggioTipo(tipo) {
     selectedNoleggioTipo = tipo;
     document.getElementById('contactNoleggioTipo').value = tipo;
@@ -1124,6 +1151,30 @@ function selectService(tipo) {
     if (btn) btn.classList.add('btn-sede-active');
 }
 
+function selectServiceTipoCliente(tipo) {
+    selectedServiceTipoCliente = tipo;
+    document.getElementById('serviceTipoCliente').value = tipo;
+    ['CLIENTE','NON_CLIENTE'].forEach(k => { const btn = document.getElementById(`serviceCliente-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
+    const btn = document.getElementById(`serviceCliente-${tipo}`);
+    if (btn) btn.classList.add('btn-sede-active');
+
+    const isCliente = tipo === 'CLIENTE';
+    const nomeLabel = document.getElementById('serviceNomeClienteLabel');
+    const cognomeLabel = document.getElementById('serviceCognomeClienteLabel');
+    const targaLabel = document.getElementById('serviceTargaLabel');
+    const numeroRow = document.getElementById('serviceNumeroTelefonoRow');
+
+    if (nomeLabel) nomeLabel.textContent = isCliente ? 'NOME CLIENTE *' : 'NOME CLIENTE (opzionale)';
+    if (cognomeLabel) cognomeLabel.textContent = isCliente ? 'COGNOME CLIENTE *' : 'COGNOME CLIENTE (opzionale)';
+    if (targaLabel) targaLabel.textContent = isCliente ? 'TARGA *' : 'TARGA (opzionale)';
+    if (numeroRow) numeroRow.style.display = isCliente ? 'none' : 'block';
+
+    if (isCliente) {
+        const numEl = document.getElementById('serviceNumeroTelefono');
+        if (numEl) numEl.value = '';
+    }
+}
+
 function selectFonte(fonte) {
     selectedFonte = fonte;
     document.getElementById('contactFonte').value = fonte;
@@ -1146,11 +1197,17 @@ async function createContactLog() {
     const marca = document.getElementById('contactMarca')?.value.trim() || '';
     const modello = document.getElementById('contactModello')?.value.trim() || '';
     const linkAuto = document.getElementById('contactLinkAuto')?.value.trim() || '';
+    const noleggioRichiesta = document.getElementById('contactNoleggioRichiesta')?.value || '';
     const noleggioTipo = document.getElementById('contactNoleggioTipo')?.value || '';
     const noleggioLink = document.getElementById('contactNoleggioLink')?.value.trim() || '';
+    const noleggioNomeCliente = document.getElementById('contactNoleggioNomeCliente')?.value.trim() || '';
+    const noleggioCognomeCliente = document.getElementById('contactNoleggioCognomeCliente')?.value.trim() || '';
+    const noleggioCellulare = document.getElementById('contactNoleggioCellulare')?.value.trim() || '';
     const serviceNomeCliente = document.getElementById('serviceNomeCliente')?.value.trim() || '';
     const serviceCognomeCliente = document.getElementById('serviceCognomeCliente')?.value.trim() || '';
     const serviceTarga = document.getElementById('serviceTarga')?.value.trim() || '';
+    const serviceTipoCliente = document.getElementById('serviceTipoCliente')?.value || '';
+    const serviceNumeroTelefono = document.getElementById('serviceNumeroTelefono')?.value.trim() || '';
 
     if (!category) { alert('Seleziona una categoria'); return; }
     if (!dateVal || !timeVal) { alert('Inserisci data e orario'); return; }
@@ -1161,9 +1218,12 @@ async function createContactLog() {
     if (category === 'Info Acquisto effettuato' && !acquistoTipo) { alert('Seleziona la tipologia acquisto'); return; }
     if (category === 'Info Vendita' && !fonte) { alert('Seleziona la fonte'); return; }
     if (category === 'Service' && !serviceTipo) { alert('Seleziona la tipologia service'); return; }
-    if (category === 'Service' && !serviceNomeCliente) { alert('Inserisci il nome del cliente'); return; }
-    if (category === 'Service' && !serviceCognomeCliente) { alert('Inserisci il cognome del cliente'); return; }
-    if (category === 'Info Noleggio' && !noleggioTipo) { alert('Seleziona la tipologia cliente'); return; }
+    if (category === 'Service' && !serviceTipoCliente) { alert('Seleziona Cliente o Non Cliente'); return; }
+    if (category === 'Service' && serviceTipoCliente === 'CLIENTE' && !serviceNomeCliente) { alert('Inserisci il nome del cliente'); return; }
+    if (category === 'Service' && serviceTipoCliente === 'CLIENTE' && !serviceCognomeCliente) { alert('Inserisci il cognome del cliente'); return; }
+    if (category === 'Service' && serviceTipoCliente === 'CLIENTE' && !serviceTarga) { alert('Inserisci la targa'); return; }
+    if (category === 'Info Noleggio' && !noleggioRichiesta) { alert('Seleziona Solo Info o Richiesta cliente'); return; }
+    if (category === 'Info Noleggio' && noleggioRichiesta === 'RICHIESTA_CLIENTE' && !noleggioTipo) { alert('Seleziona la tipologia cliente'); return; }
     if (category === 'Info Vendita in Promo' && !fonte) { alert('Seleziona la fonte'); return; }
 
     if (category === 'Info Vendita in Promo') {
@@ -1185,14 +1245,24 @@ async function createContactLog() {
     if (category === 'Info Vendita') finalNote = fonte;
     if (category === 'Info Vendita in Promo') finalNote = fonte;
 
+    const isNoleggio = category === 'Info Noleggio';
+    const isRichiestaCliente = isNoleggio && noleggioRichiesta === 'RICHIESTA_CLIENTE';
+
     const payload = {
         category, otherNote: finalNote, contactDate,
         marca: marca||null, modello: modello||null, linkAuto: linkAuto||null,
         serviceTipo: serviceTipo||null, serviceNote: null, acquistoNote: acquistoNote||null,
-        noleggioTipo: noleggioTipo||null, noleggioLink: noleggioLink||null,
-        serviceNomeCliente: category === 'Service' ? serviceNomeCliente : null,
-        serviceCognomeCliente: category === 'Service' ? serviceCognomeCliente : null,
-        serviceTarga: category === 'Service' ? (serviceTarga || null) : null
+        noleggioTipo: isRichiestaCliente ? (noleggioTipo||null) : null,
+        noleggioLink: isRichiestaCliente ? (noleggioLink||null) : null,
+        serviceNomeCliente: category === 'Service' ? (serviceNomeCliente || null) : null,
+        serviceCognomeCliente: category === 'Service' ? (serviceCognomeCliente || null) : null,
+        serviceTarga: category === 'Service' ? (serviceTarga || null) : null,
+        serviceTipoCliente: category === 'Service' ? serviceTipoCliente : null,
+        serviceNumeroTelefono: category === 'Service' ? (serviceNumeroTelefono || null) : null,
+        noleggioRichiesta: isNoleggio ? noleggioRichiesta : null,
+        noleggioNomeCliente: isRichiestaCliente ? (noleggioNomeCliente || null) : null,
+        noleggioCognomeCliente: isRichiestaCliente ? (noleggioCognomeCliente || null) : null,
+        noleggioCellulare: isRichiestaCliente ? (noleggioCellulare || null) : null
     };
     if (category === 'Info + Appuntamento') { payload.nominativoAppuntamento = nominativo; payload.linkAppuntamento = link||null; payload.serviceTipo = fonte||null; }
 
@@ -1255,17 +1325,27 @@ function hideNewContactForm() {
     ['contactOtherNoteRow','contactAppuntamentoRow','contactAcquistoRow','contactAcquistoNoteRow',
      'contactFonteRow','contactServiceRow','contactMarcaModelloRow','contactPromoRow','contactNoleggioRow']
         .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+    const noleggioDettagli = document.getElementById('contactNoleggioRichiestaDettagli');
+    if (noleggioDettagli) noleggioDettagli.style.display = 'none';
     ['contactAppuntamentoSede','contactAppuntamentoNominativo','contactAppuntamentoLink',
      'contactAcquistoTipo','contactFonte','contactServiceTipo','contactMarcaInput','contactMarca',
      'contactModello','contactLinkAuto','contactAcquistoNote','contactNoleggioTipo','contactNoleggioLink',
-     'serviceNomeCliente','serviceCognomeCliente','serviceTarga']
+     'contactNoleggioRichiesta','contactNoleggioNomeCliente','contactNoleggioCognomeCliente','contactNoleggioCellulare',
+     'serviceNomeCliente','serviceCognomeCliente','serviceTarga','serviceTipoCliente','serviceNumeroTelefono']
         .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-    selectedSede = ''; selectedAcquisto = ''; selectedFonte = ''; selectedService = ''; selectedNoleggioTipo = '';
+    selectedSede = ''; selectedAcquisto = ''; selectedFonte = ''; selectedService = ''; selectedNoleggioTipo = ''; selectedNoleggioRichiesta = '';
     SEDI_LIST.forEach(s => { const btn = document.getElementById(`sede-${s}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche'].forEach(k => { const btn = document.getElementById(`acquisto-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['Sito','GoogleADS','Autoscout','Facebook','Instagram','TikTok','RichiestaCliente','NonRicorda'].forEach(k => { const btn = document.getElementById(`fonte-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['Tagliando','DispositivoSatellitare','Prenotazione','LavorazioneInCorso','DoctorGlass','CambioGomme'].forEach(k => { const btn = document.getElementById(`service-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['Privato','PIVA'].forEach(k => { const btn = document.getElementById(`noleggio-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
+    ['SOLO_INFO','RICHIESTA_CLIENTE'].forEach(k => { const btn = document.getElementById(`noleggioRichiesta-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
+    ['CLIENTE','NON_CLIENTE'].forEach(k => { const btn = document.getElementById(`serviceCliente-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
+    selectedServiceTipoCliente = '';
+    const svcNumRow = document.getElementById('serviceNumeroTelefonoRow'); if (svcNumRow) svcNumRow.style.display = 'none';
+    const nomeLabelReset = document.getElementById('serviceNomeClienteLabel'); if (nomeLabelReset) nomeLabelReset.textContent = 'NOME CLIENTE';
+    const cognomeLabelReset = document.getElementById('serviceCognomeClienteLabel'); if (cognomeLabelReset) cognomeLabelReset.textContent = 'COGNOME CLIENTE';
+    const targaLabelReset = document.getElementById('serviceTargaLabel'); if (targaLabelReset) targaLabelReset.textContent = 'TARGA';
     if (typeof resetPromoForm === 'function') resetPromoForm();
 }
 
@@ -1280,14 +1360,25 @@ function onCategoryChange() {
     document.getElementById('contactMarcaModelloRow').style.display = (cat === 'Info Vendita' || cat === 'Info + Appuntamento') ? 'block' : 'none';
     document.getElementById('contactPromoRow').style.display = cat === 'Info Vendita in Promo' ? 'block' : 'none';
     if (cat === 'Info Vendita in Promo') updatePromoModelloField();
-    if (cat !== 'Info Noleggio') { selectedNoleggioTipo=''; const el=document.getElementById('contactNoleggioTipo'); if(el) el.value=''; const el2=document.getElementById('contactNoleggioLink'); if(el2) el2.value=''; ['Privato','PIVA'].forEach(k=>{const b=document.getElementById(`noleggio-${k}`);if(b)b.classList.remove('btn-sede-active');}); }
+    if (cat !== 'Info Noleggio') {
+        selectedNoleggioTipo = ''; selectedNoleggioRichiesta = '';
+        ['contactNoleggioTipo','contactNoleggioLink','contactNoleggioRichiesta','contactNoleggioNomeCliente','contactNoleggioCognomeCliente','contactNoleggioCellulare'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        ['Privato','PIVA'].forEach(k=>{const b=document.getElementById(`noleggio-${k}`);if(b)b.classList.remove('btn-sede-active');});
+        ['SOLO_INFO','RICHIESTA_CLIENTE'].forEach(k=>{const b=document.getElementById(`noleggioRichiesta-${k}`);if(b)b.classList.remove('btn-sede-active');});
+        const dettagli = document.getElementById('contactNoleggioRichiestaDettagli'); if (dettagli) dettagli.style.display = 'none';
+    }
     if (cat !== 'Info + Appuntamento') { selectedSede=''; const el=document.getElementById('contactAppuntamentoSede'); if(el) el.value=''; const n=document.getElementById('contactAppuntamentoNominativo'); if(n) n.value=''; const l=document.getElementById('contactAppuntamentoLink'); if(l) l.value=''; SEDI_LIST.forEach(s=>{const b=document.getElementById(`sede-${s}`);if(b)b.classList.remove('btn-sede-active');}); }
     if (cat !== 'Info Acquisto effettuato') { selectedAcquisto=''; const el=document.getElementById('contactAcquistoTipo'); if(el) el.value=''; const nr=document.getElementById('contactAcquistoNoteRow'); if(nr) nr.style.display='none'; ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche'].forEach(k=>{const b=document.getElementById(`acquisto-${k}`);if(b)b.classList.remove('btn-sede-active');}); }
     if (cat !== 'Service') {
-        selectedService='';
+        selectedService=''; selectedServiceTipoCliente='';
         const el=document.getElementById('contactServiceTipo'); if(el) el.value='';
         ['Tagliando','DispositivoSatellitare','Prenotazione','LavorazioneInCorso','DoctorGlass','CambioGomme'].forEach(k=>{const b=document.getElementById(`service-${k}`);if(b)b.classList.remove('btn-sede-active');});
-        ['serviceNomeCliente','serviceCognomeCliente','serviceTarga'].forEach(id=>{const e=document.getElementById(id);if(e) e.value='';});
+        ['CLIENTE','NON_CLIENTE'].forEach(k=>{const b=document.getElementById(`serviceCliente-${k}`);if(b)b.classList.remove('btn-sede-active');});
+        ['serviceNomeCliente','serviceCognomeCliente','serviceTarga','serviceTipoCliente','serviceNumeroTelefono'].forEach(id=>{const e=document.getElementById(id);if(e) e.value='';});
+        const svcNumRow2 = document.getElementById('serviceNumeroTelefonoRow'); if (svcNumRow2) svcNumRow2.style.display = 'none';
+        const nl = document.getElementById('serviceNomeClienteLabel'); if (nl) nl.textContent = 'NOME CLIENTE';
+        const cl = document.getElementById('serviceCognomeClienteLabel'); if (cl) cl.textContent = 'COGNOME CLIENTE';
+        const tl = document.getElementById('serviceTargaLabel'); if (tl) tl.textContent = 'TARGA';
     }
     if (cat !== 'Info Vendita' && cat !== 'Info + Appuntamento' && cat !== 'Info Vendita in Promo') { selectedFonte=''; const el=document.getElementById('contactFonte'); if(el) el.value=''; ['Sito','GoogleADS','Autoscout','Facebook','Instagram','TikTok','RichiestaCliente','NonRicorda'].forEach(k=>{const b=document.getElementById(`fonte-${k}`);if(b)b.classList.remove('btn-sede-active');}); }
     if (cat !== 'Info Vendita' && cat !== 'Info + Appuntamento') { ['contactMarcaInput','contactMarca','contactModello','contactLinkAuto'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';}); }

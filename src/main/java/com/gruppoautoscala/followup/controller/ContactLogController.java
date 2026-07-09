@@ -66,6 +66,12 @@ public class ContactLogController {
             m.put("serviceNomeCliente", log.getServiceNomeCliente());
             m.put("serviceCognomeCliente", log.getServiceCognomeCliente());
             m.put("serviceTarga", log.getServiceTarga());
+            m.put("serviceTipoCliente", log.getServiceTipoCliente());
+            m.put("serviceNumeroTelefono", log.getServiceNumeroTelefono());
+            m.put("noleggioRichiesta", log.getNoleggioRichiesta());
+            m.put("noleggioNomeCliente", log.getNoleggioNomeCliente());
+            m.put("noleggioCognomeCliente", log.getNoleggioCognomeCliente());
+            m.put("noleggioCellulare", log.getNoleggioCellulare());
             m.put("contactDate", log.getContactDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
             m.put("createdAt", log.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
             Map<String, Object> userMap = new HashMap<>();
@@ -138,16 +144,36 @@ public class ContactLogController {
         String serviceNomeCliente = (String) body.get("serviceNomeCliente");
         String serviceCognomeCliente = (String) body.get("serviceCognomeCliente");
         String serviceTarga = (String) body.get("serviceTarga");
+        String serviceTipoCliente = (String) body.get("serviceTipoCliente");
+        String serviceNumeroTelefono = (String) body.get("serviceNumeroTelefono");
+        String noleggioRichiesta = (String) body.get("noleggioRichiesta");
+        String noleggioNomeCliente = (String) body.get("noleggioNomeCliente");
+        String noleggioCognomeCliente = (String) body.get("noleggioCognomeCliente");
+        String noleggioCellulare = (String) body.get("noleggioCellulare");
         LocalDateTime contactDate = body.get("contactDate") != null
             ? LocalDateTime.parse((String) body.get("contactDate"))
             : LocalDateTime.now();
 
         if ("Service".equals(category)) {
-            if (serviceNomeCliente == null || serviceNomeCliente.isBlank()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Nome cliente obbligatorio per Service"));
+            if (serviceTipoCliente == null || serviceTipoCliente.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Seleziona Cliente o Non Cliente"));
             }
-            if (serviceCognomeCliente == null || serviceCognomeCliente.isBlank()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Cognome cliente obbligatorio per Service"));
+            if ("CLIENTE".equals(serviceTipoCliente)) {
+                if (serviceNomeCliente == null || serviceNomeCliente.isBlank()) {
+                    return ResponseEntity.badRequest().body(Map.of("error", "Nome cliente obbligatorio"));
+                }
+                if (serviceCognomeCliente == null || serviceCognomeCliente.isBlank()) {
+                    return ResponseEntity.badRequest().body(Map.of("error", "Cognome cliente obbligatorio"));
+                }
+                if (serviceTarga == null || serviceTarga.isBlank()) {
+                    return ResponseEntity.badRequest().body(Map.of("error", "Targa obbligatoria per Cliente"));
+                }
+            }
+        }
+
+        if ("Info Noleggio".equals(category)) {
+            if (noleggioRichiesta == null || noleggioRichiesta.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Seleziona Solo Info o Richiesta cliente"));
             }
         }
 
@@ -157,6 +183,8 @@ public class ContactLogController {
                 serviceTipo, serviceNote, acquistoNote,
                 noleggioTipo, noleggioLink,
                 serviceNomeCliente, serviceCognomeCliente, serviceTarga,
+                serviceTipoCliente, serviceNumeroTelefono,
+                noleggioRichiesta, noleggioNomeCliente, noleggioCognomeCliente, noleggioCellulare,
                 contactDate);
 
         Map<String, Object> result = new HashMap<>();
@@ -176,6 +204,12 @@ public class ContactLogController {
         result.put("serviceNomeCliente", log.getServiceNomeCliente());
         result.put("serviceCognomeCliente", log.getServiceCognomeCliente());
         result.put("serviceTarga", log.getServiceTarga());
+        result.put("serviceTipoCliente", log.getServiceTipoCliente());
+        result.put("serviceNumeroTelefono", log.getServiceNumeroTelefono());
+        result.put("noleggioRichiesta", log.getNoleggioRichiesta());
+        result.put("noleggioNomeCliente", log.getNoleggioNomeCliente());
+        result.put("noleggioCognomeCliente", log.getNoleggioCognomeCliente());
+        result.put("noleggioCellulare", log.getNoleggioCellulare());
         result.put("contactDate", log.getContactDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
         Map<String, Object> userMap = new HashMap<>();
         userMap.put("id", log.getUser().getId());
@@ -215,6 +249,12 @@ public class ContactLogController {
         if (body.containsKey("serviceNomeCliente")) log.setServiceNomeCliente((String) body.get("serviceNomeCliente"));
         if (body.containsKey("serviceCognomeCliente")) log.setServiceCognomeCliente((String) body.get("serviceCognomeCliente"));
         if (body.containsKey("serviceTarga")) log.setServiceTarga((String) body.get("serviceTarga"));
+        if (body.containsKey("serviceTipoCliente")) log.setServiceTipoCliente((String) body.get("serviceTipoCliente"));
+        if (body.containsKey("serviceNumeroTelefono")) log.setServiceNumeroTelefono((String) body.get("serviceNumeroTelefono"));
+        if (body.containsKey("noleggioRichiesta")) log.setNoleggioRichiesta((String) body.get("noleggioRichiesta"));
+        if (body.containsKey("noleggioNomeCliente")) log.setNoleggioNomeCliente((String) body.get("noleggioNomeCliente"));
+        if (body.containsKey("noleggioCognomeCliente")) log.setNoleggioCognomeCliente((String) body.get("noleggioCognomeCliente"));
+        if (body.containsKey("noleggioCellulare")) log.setNoleggioCellulare((String) body.get("noleggioCellulare"));
         if (body.containsKey("contactDate")) {
             log.setContactDate(LocalDateTime.parse((String) body.get("contactDate")));
         }

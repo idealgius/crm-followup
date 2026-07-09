@@ -6,8 +6,11 @@ import com.gruppoautoscala.followup.model.User;
 import com.gruppoautoscala.followup.repository.UserRepository;
 import com.gruppoautoscala.followup.service.ContactLogService;
 import com.gruppoautoscala.followup.service.NoleggioTrattativaService;
+import com.gruppoautoscala.followup.service.NoleggioExcelExportService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
@@ -32,6 +35,8 @@ public class NoleggioTrattativaController {
     @Autowired
     private UserRepository userRepository;
 
+    private final NoleggioExcelExportService excelExportService = new NoleggioExcelExportService();
+
     // Ruoli che possono vedere/gestire la dashboard Rent
     private static final List<String> RENT_ROLES = List.of("NOLEGGIO", "MODERATORE", "GESTORE", "ADMIN");
 
@@ -52,6 +57,25 @@ public class NoleggioTrattativaController {
         return ResponseEntity.ok(list.stream().map(this::toMap).collect(Collectors.toList()));
     }
 
+    @GetMapping("/trattative/export-excel")
+    public ResponseEntity<?> exportExcel(HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        String role = (String) session.getAttribute("userRole");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        if (!canAccessRent(role)) return ResponseEntity.status(403).body(Map.of("error", "Non autorizzato"));
+
+        List<NoleggioTrattativa> list = noleggioService.getAll();
+        try {
+            byte[] excelBytes = excelExportService.export(list);
+            return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"registro_trattative_noleggio.xlsx\"")
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(excelBytes);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Errore generazione Excel: " + e.getMessage()));
+        }
+    }
+
     @PostMapping("/trattative")
     public ResponseEntity<?> create(@RequestBody Map<String, Object> body, HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");
@@ -64,11 +88,13 @@ public class NoleggioTrattativaController {
 
         String nome = (String) body.get("nome");
         String cognome = (String) body.get("cognome");
+        String cellulare = (String) body.get("cellulare");
         String marchio = (String) body.get("marchio");
         String stato = (String) body.getOrDefault("stato", "SOLO_INFO");
 
         if (nome == null || nome.isBlank()) return ResponseEntity.badRequest().body(Map.of("error", "Nome obbligatorio"));
         if (cognome == null || cognome.isBlank()) return ResponseEntity.badRequest().body(Map.of("error", "Cognome obbligatorio"));
+        if (cellulare == null || cellulare.isBlank()) return ResponseEntity.badRequest().body(Map.of("error", "Cellulare obbligatorio"));
         if (marchio == null || marchio.isBlank()) return ResponseEntity.badRequest().body(Map.of("error", "Marchio obbligatorio"));
 
         LocalDate dataRichiamo = null;
@@ -86,7 +112,7 @@ public class NoleggioTrattativaController {
             userOpt.get(),
             nome,
             cognome,
-            (String) body.get("cellulare"),
+            cellulare,
             (String) body.get("email"),
             marchio,
             (String) body.get("modello"),
@@ -115,7 +141,13 @@ public class NoleggioTrattativaController {
 
         if (body.containsKey("nome")) t.setNome((String) body.get("nome"));
         if (body.containsKey("cognome")) t.setCognome((String) body.get("cognome"));
-        if (body.containsKey("cellulare")) t.setCellulare((String) body.get("cellulare"));
+        if (body.containsKey("cellulare")) {
+            String cell = (String) body.get("cellulare");
+            if (cell == null || cell.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Cellulare obbligatorio"));
+            }
+            t.setCellulare(cell);
+        }
         if (body.containsKey("email")) t.setEmail((String) body.get("email"));
         if (body.containsKey("marchio")) t.setMarchio((String) body.get("marchio"));
         if (body.containsKey("modello")) t.setModello((String) body.get("modello"));
@@ -206,10 +238,15 @@ public class NoleggioTrattativaController {
                 m.put("marca", log.getMarca());
                 m.put("modello", log.getModello());
                 m.put("linkAuto", log.getLinkAuto());
+                m.put("noleggioRichiesta", log.getNoleggioRichiesta());
+                m.put("noleggioNomeCliente", log.getNoleggioNomeCliente());
+                m.put("noleggioCognomeCliente", log.getNoleggioCognomeCliente());
+                m.put("noleggioCellulare", log.getNoleggioCellulare());
                 m.put("contactDate", log.getContactDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
                 Map<String, Object> userMap = new HashMap<>();
                 userMap.put("id", log.getUser().getId());
                 userMap.put("fullName", log.getUser().getFullName());
+                userMap.put("role", log.getUser().getRole());
                 m.put("user", userMap);
                 return m;
             }).collect(Collectors.toList());
@@ -236,6 +273,7 @@ public class NoleggioTrattativaController {
         Map<String, Object> userMap = new HashMap<>();
         userMap.put("id", t.getUser().getId());
         userMap.put("fullName", t.getUser().getFullName());
+        userMap.put("role", t.getUser().getRole());
         m.put("user", userMap);
         return m;
     }

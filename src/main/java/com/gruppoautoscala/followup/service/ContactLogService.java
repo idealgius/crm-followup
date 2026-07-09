@@ -24,6 +24,9 @@ public class ContactLogService {
                               String acquistoNote,
                               String noleggioTipo, String noleggioLink,
                               String serviceNomeCliente, String serviceCognomeCliente, String serviceTarga,
+                              String serviceTipoCliente, String serviceNumeroTelefono,
+                              String noleggioRichiesta, String noleggioNomeCliente,
+                              String noleggioCognomeCliente, String noleggioCellulare,
                               LocalDateTime contactDate) {
         ContactLog log = new ContactLog();
         log.setUser(user);
@@ -42,6 +45,12 @@ public class ContactLogService {
         log.setServiceNomeCliente(serviceNomeCliente);
         log.setServiceCognomeCliente(serviceCognomeCliente);
         log.setServiceTarga(serviceTarga);
+        log.setServiceTipoCliente(serviceTipoCliente);
+        log.setServiceNumeroTelefono(serviceNumeroTelefono);
+        log.setNoleggioRichiesta(noleggioRichiesta);
+        log.setNoleggioNomeCliente(noleggioNomeCliente);
+        log.setNoleggioCognomeCliente(noleggioCognomeCliente);
+        log.setNoleggioCellulare(noleggioCellulare);
         log.setContactDate(contactDate != null ? contactDate : LocalDateTime.now());
         return contactLogRepository.save(log);
     }
