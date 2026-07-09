@@ -17,7 +17,9 @@ public class ContactLogService {
     @Autowired
     private ContactLogRepository contactLogRepository;
 
-    public ContactLog create(User user, String category, String otherNote,
+    public ContactLog create(User user, String category,
+                              String clienteNome, String clienteCognome, String clienteNumero,
+                              String otherNote,
                               String nominativoAppuntamento, String linkAppuntamento,
                               String marca, String modello, String linkAuto,
                               String serviceTipo, String serviceNote,
@@ -31,6 +33,9 @@ public class ContactLogService {
         ContactLog log = new ContactLog();
         log.setUser(user);
         log.setCategory(category);
+        log.setClienteNome(clienteNome);
+        log.setClienteCognome(clienteCognome);
+        log.setClienteNumero(clienteNumero);
         log.setOtherNote(otherNote);
         log.setNominativoAppuntamento(nominativoAppuntamento);
         log.setLinkAppuntamento(linkAppuntamento);

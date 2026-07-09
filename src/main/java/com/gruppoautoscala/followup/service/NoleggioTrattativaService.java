@@ -28,6 +28,7 @@ public class NoleggioTrattativaService {
     public NoleggioTrattativa create(User user, String nome, String cognome, String cellulare,
                                       String email, String marchio, String modello, String note,
                                       String fonte, String stato, LocalDate dataRichiamo,
+                                      String noteFallimento, String tipoCliente,
                                       String linkLeadspark, String linkAutoRichiesta) {
         NoleggioTrattativa t = new NoleggioTrattativa();
         t.setUser(user);
@@ -41,6 +42,8 @@ public class NoleggioTrattativaService {
         t.setFonte(fonte);
         t.setStato(stato != null ? stato : "SOLO_INFO");
         t.setDataRichiamo(dataRichiamo);
+        t.setNoteFallimento(noteFallimento);
+        t.setTipoCliente(tipoCliente);
         t.setLinkLeadspark(linkLeadspark);
         t.setLinkAutoRichiesta(linkAutoRichiesta);
         t.setCreatedAt(LocalDateTime.now());

@@ -91,6 +91,8 @@ public class NoleggioTrattativaController {
         String cellulare = (String) body.get("cellulare");
         String marchio = (String) body.get("marchio");
         String stato = (String) body.getOrDefault("stato", "SOLO_INFO");
+        String noteFallimento = (String) body.get("noteFallimento");
+        String tipoCliente = (String) body.get("tipoCliente");
 
         if (nome == null || nome.isBlank()) return ResponseEntity.badRequest().body(Map.of("error", "Nome obbligatorio"));
         if (cognome == null || cognome.isBlank()) return ResponseEntity.badRequest().body(Map.of("error", "Cognome obbligatorio"));
@@ -120,6 +122,8 @@ public class NoleggioTrattativaController {
             (String) body.get("fonte"),
             stato,
             dataRichiamo,
+            "FALLITO".equals(stato) ? noteFallimento : null,
+            tipoCliente,
             (String) body.get("linkLeadspark"),
             (String) body.get("linkAutoRichiesta")
         );
@@ -153,6 +157,7 @@ public class NoleggioTrattativaController {
         if (body.containsKey("modello")) t.setModello((String) body.get("modello"));
         if (body.containsKey("note")) t.setNote((String) body.get("note"));
         if (body.containsKey("fonte")) t.setFonte((String) body.get("fonte"));
+        if (body.containsKey("tipoCliente")) t.setTipoCliente((String) body.get("tipoCliente"));
         if (body.containsKey("linkLeadspark")) t.setLinkLeadspark((String) body.get("linkLeadspark"));
         if (body.containsKey("linkAutoRichiesta")) t.setLinkAutoRichiesta((String) body.get("linkAutoRichiesta"));
 
@@ -167,7 +172,17 @@ public class NoleggioTrattativaController {
                 }
                 t.setDataRichiamo(LocalDate.parse(drStr));
             }
+            if ("FALLITO".equals(nuovoStato)) {
+                Object nf = body.get("noteFallimento");
+                t.setNoteFallimento(nf != null ? nf.toString() : null);
+            } else if (!"FALLITO".equals(nuovoStato) && body.containsKey("stato")) {
+                t.setNoteFallimento(null);
+            }
+        } else if (body.containsKey("noteFallimento") && "FALLITO".equals(t.getStato())) {
+            Object nf = body.get("noteFallimento");
+            t.setNoteFallimento(nf != null ? nf.toString() : null);
         }
+
         if (body.containsKey("dataRichiamo") && !"DA_RICHIAMARE".equals(t.getStato())) {
             Object dr = body.get("dataRichiamo");
             t.setDataRichiamo(dr != null && !dr.toString().isBlank() ? LocalDate.parse(dr.toString()) : null);
@@ -242,6 +257,9 @@ public class NoleggioTrattativaController {
                 m.put("noleggioNomeCliente", log.getNoleggioNomeCliente());
                 m.put("noleggioCognomeCliente", log.getNoleggioCognomeCliente());
                 m.put("noleggioCellulare", log.getNoleggioCellulare());
+                m.put("clienteNome", log.getClienteNome());
+                m.put("clienteCognome", log.getClienteCognome());
+                m.put("clienteNumero", log.getClienteNumero());
                 m.put("contactDate", log.getContactDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
                 Map<String, Object> userMap = new HashMap<>();
                 userMap.put("id", log.getUser().getId());
@@ -267,6 +285,8 @@ public class NoleggioTrattativaController {
         m.put("fonte", t.getFonte());
         m.put("stato", t.getStato());
         m.put("dataRichiamo", t.getDataRichiamo() != null ? t.getDataRichiamo().toString() : null);
+        m.put("noteFallimento", t.getNoteFallimento());
+        m.put("tipoCliente", t.getTipoCliente());
         m.put("linkLeadspark", t.getLinkLeadspark());
         m.put("linkAutoRichiesta", t.getLinkAutoRichiesta());
         m.put("createdAt", t.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));

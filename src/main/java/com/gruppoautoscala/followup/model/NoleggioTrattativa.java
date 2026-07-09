@@ -42,12 +42,20 @@ public class NoleggioTrattativa {
     @Column(length = 50)
     private String fonte;
 
-    // SOLO_INFO | TRATTATIVA_IN_CORSO | DA_RICHIAMARE | CONCLUSA
+    // SOLO_INFO | TRATTATIVA_IN_CORSO | DA_RICHIAMARE | CONCLUSA | FALLITO
     @Column(nullable = false, length = 30)
     private String stato = "SOLO_INFO";
 
     @Column(name = "data_richiamo")
     private LocalDate dataRichiamo;
+
+    // Popolato solo quando stato = FALLITO, opzionale
+    @Column(name = "note_fallimento", columnDefinition = "TEXT")
+    private String noteFallimento;
+
+    // Privato | Partita IVA | Noleggio per aziende
+    @Column(name = "tipo_cliente", length = 30)
+    private String tipoCliente;
 
     @Column(name = "link_leadspark", length = 500)
     private String linkLeadspark;

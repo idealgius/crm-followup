@@ -5,20 +5,29 @@ let chartRentStato = null;
 let chartRentFonte = null;
 let chartRentInfoVsRichiesta = null;
 let selectedRentMarchio = '';
+let selectedRentTipoCliente = '';
 
-const RENT_STATO_LIST = ['SOLO_INFO', 'TRATTATIVA_IN_CORSO', 'DA_RICHIAMARE', 'CONCLUSA'];
+const RENT_STATO_LIST = ['SOLO_INFO', 'TRATTATIVA_IN_CORSO', 'DA_RICHIAMARE', 'CONCLUSA', 'FALLITO'];
 const RENT_STATO_LABELS = {
     'SOLO_INFO': 'Solo Info',
     'TRATTATIVA_IN_CORSO': 'Trattativa in corso',
     'DA_RICHIAMARE': 'Da richiamare',
-    'CONCLUSA': 'Conclusa'
+    'CONCLUSA': 'Conclusa',
+    'FALLITO': 'Fallito'
 };
 const RENT_STATO_COLORS = {
     'SOLO_INFO': '#f0c040',
     'TRATTATIVA_IN_CORSO': '#7c4dff',
     'DA_RICHIAMARE': '#e91e63',
-    'CONCLUSA': '#00c853'
+    'CONCLUSA': '#00c853',
+    'FALLITO': '#ff3d3d'
 };
+
+// Fonti dedicate a Rent — separate da FONTE_LIST usata in Info Vendita
+const RENT_FONTE_LIST = ['Sito', 'Google ADS', 'Autoscout', 'Facebook', 'Instagram', 'TikTok', 'Richiesta cliente', 'Non ricorda', 'Ingresso', 'Cliente Personale'];
+const RENT_FONTE_COLORS = ['#1a4080', '#f0c040', '#e91e63', '#4a90d9', '#7c4dff', '#ff3d3d', '#00c853', '#8a8faa', '#ff6b35', '#26a69a'];
+
+const RENT_TIPO_CLIENTE_LIST = ['Privato', 'Partita IVA', 'Noleggio per aziende'];
 
 // ===== INGRESSO NELLA DASHBOARD RENT =====
 
@@ -42,6 +51,8 @@ async function loadRentTrattative() {
         const res = await fetch('/api/noleggio/trattative');
         if (!res.ok) return;
         rentTrattative = await res.json();
+        // Ordina sempre dal più recente al meno recente
+        rentTrattative.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
         populateRentFilters();
         applyRentFilters();
     } catch (err) {
@@ -183,14 +194,17 @@ function renderRentTrattative(list) {
                                             <span id="arrow-${weekKey}" style="margin-left:auto;font-size:9px;transition:transform 0.3s;${isCurrentWeek?'':'transform:rotate(-90deg)'}">▼</span>
                                         </div>
                                         <div id="body-${weekKey}" style="display:${isCurrentWeek?'block':'none'}">
-                                            ${Object.entries(weekData.days).sort((a,b) => b[0].localeCompare(a[0])).map(([date, items]) => `
+                                            ${Object.entries(weekData.days).sort((a,b) => b[0].localeCompare(a[0])).map(([date, items]) => {
+                                                // Ordina le trattative del giorno dalla più recente alla meno recente
+                                                const itemsSorted = [...items].sort((a,b) => (b.createdAt||'').localeCompare(a.createdAt||''));
+                                                return `
                                                 <div style="margin-bottom:10px;padding-left:14px">
                                                     <div style="font-size:10px;font-weight:800;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">${formatDateIT(date)}</div>
                                                     <div style="display:flex;gap:10px;flex-wrap:wrap">
-                                                        ${items.map(t => renderRentTrattativaCard(t)).join('')}
+                                                        ${itemsSorted.map(t => renderRentTrattativaCard(t)).join('')}
                                                     </div>
-                                                </div>
-                                            `).join('')}
+                                                </div>`;
+                                            }).join('')}
                                         </div>
                                     </div>`;
                                 }).join('')}
@@ -215,12 +229,14 @@ function renderRentTrattativaCard(t) {
             🚗 ${t.marchio}${t.modello?' '+t.modello:''}<br>
             ${t.cellulare ? `📞 ${t.cellulare}<br>` : ''}
             ${t.fonte ? `🌐 ${t.fonte}<br>` : ''}
+            ${t.tipoCliente ? `🏷️ ${t.tipoCliente}<br>` : ''}
             👤 ${t.user?.fullName || '—'}${t.user?.role === 'NOLEGGIO' ? ' <span style="color:#2ecc71;font-weight:700">(Noleggio)</span>' : ''}
         </div>
         <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
             <span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:10px;background:${color}22;color:${color}">${RENT_STATO_LABELS[t.stato] || t.stato}</span>
             ${t.dataRichiamo ? `<span style="font-size:10px;font-weight:700;color:${isRecallPast?'#e91e63':isRecallToday?'#f0c040':'var(--text-secondary)'}">📅 ${formatDateIT(t.dataRichiamo)}</span>` : ''}
         </div>
+        ${t.stato === 'FALLITO' && t.noteFallimento ? `<div style="margin-top:8px;font-size:10px;color:#ff3d3d;background:rgba(255,61,61,0.08);padding:6px 8px;border-radius:6px">❌ ${t.noteFallimento}</div>` : ''}
         <div style="margin-top:8px;display:flex;gap:6px">
             <button class="btn-small btn-blue" onclick="editRentTrattativa(${t.id})">✏️</button>
             <button class="btn-small btn-red" onclick="deleteRentTrattativa(${t.id})">🗑️</button>
@@ -241,27 +257,51 @@ function hideNewRentForm() {
     document.getElementById('newRentForm').style.display = 'none';
     document.getElementById('rentEditId').value = '';
     ['rentNome','rentCognome','rentCellulare','rentEmail','rentModello','rentNote',
-     'rentLinkLeadspark','rentLinkAutoRichiesta','rentDataRichiamo','rentMarcaInput','rentMarchio'].forEach(id => {
+     'rentLinkLeadspark','rentLinkAutoRichiesta','rentDataRichiamo','rentMarcaInput','rentMarchio',
+     'rentNoteFallimento'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = '';
     });
     document.getElementById('rentStato').value = 'SOLO_INFO';
     document.getElementById('rentDataRichiamoRow').style.display = 'none';
+    const noteFallimentoRow = document.getElementById('rentNoteFallimentoRow');
+    if (noteFallimentoRow) noteFallimentoRow.style.display = 'none';
     selectedRentMarchio = '';
-    const fonteKeyMap = { 'Sito':'Sito','Google ADS':'GoogleADS','Autoscout':'Autoscout','Facebook':'Facebook','Instagram':'Instagram','TikTok':'TikTok','Richiesta cliente':'RichiestaCliente','Non ricorda':'NonRicorda' };
+    selectedRentTipoCliente = '';
+    const rentTipoClienteHidden = document.getElementById('rentTipoCliente');
+    if (rentTipoClienteHidden) rentTipoClienteHidden.value = '';
+
+    const fonteKeyMap = { 'Sito':'Sito','Google ADS':'GoogleADS','Autoscout':'Autoscout','Facebook':'Facebook','Instagram':'Instagram','TikTok':'TikTok','Richiesta cliente':'RichiestaCliente','Non ricorda':'NonRicorda','Ingresso':'Ingresso','Cliente Personale':'ClientePersonale' };
     document.getElementById('rentFonteValue').value = '';
     Object.values(fonteKeyMap).forEach(k => {
         const btn = document.getElementById(`rentFonte-${k}`);
+        if (btn) btn.classList.remove('btn-sede-active');
+    });
+
+    const tipoClienteKeyMap = { 'Privato':'Privato','Partita IVA':'PIVA','Noleggio per aziende':'Aziende' };
+    Object.values(tipoClienteKeyMap).forEach(k => {
+        const btn = document.getElementById(`rentTipoCliente-${k}`);
         if (btn) btn.classList.remove('btn-sede-active');
     });
 }
 
 function selectRentFonte(fonte) {
     document.getElementById('rentFonteValue').value = fonte;
-    const fonteKeyMap = { 'Sito':'Sito','Google ADS':'GoogleADS','Autoscout':'Autoscout','Facebook':'Facebook','Instagram':'Instagram','TikTok':'TikTok','Richiesta cliente':'RichiestaCliente','Non ricorda':'NonRicorda' };
+    const fonteKeyMap = { 'Sito':'Sito','Google ADS':'GoogleADS','Autoscout':'Autoscout','Facebook':'Facebook','Instagram':'Instagram','TikTok':'TikTok','Richiesta cliente':'RichiestaCliente','Non ricorda':'NonRicorda','Ingresso':'Ingresso','Cliente Personale':'ClientePersonale' };
     Object.keys(fonteKeyMap).forEach(f => {
         const btn = document.getElementById(`rentFonte-${fonteKeyMap[f]}`);
         if (btn) btn.classList.toggle('btn-sede-active', f === fonte);
+    });
+}
+
+function selectRentTipoCliente(tipo) {
+    selectedRentTipoCliente = tipo;
+    const hidden = document.getElementById('rentTipoCliente');
+    if (hidden) hidden.value = tipo;
+    const tipoClienteKeyMap = { 'Privato':'Privato','Partita IVA':'PIVA','Noleggio per aziende':'Aziende' };
+    Object.keys(tipoClienteKeyMap).forEach(t => {
+        const btn = document.getElementById(`rentTipoCliente-${tipoClienteKeyMap[t]}`);
+        if (btn) btn.classList.toggle('btn-sede-active', t === tipo);
     });
 }
 
@@ -302,6 +342,8 @@ function onRentStatoChange() {
     const stato = document.getElementById('rentStato').value;
     const row = document.getElementById('rentDataRichiamoRow');
     if (row) row.style.display = stato === 'DA_RICHIAMARE' ? 'block' : 'none';
+    const noteFallimentoRow = document.getElementById('rentNoteFallimentoRow');
+    if (noteFallimentoRow) noteFallimentoRow.style.display = stato === 'FALLITO' ? 'block' : 'none';
 }
 
 async function saveRentTrattativa() {
@@ -318,6 +360,8 @@ async function saveRentTrattativa() {
     const stato = document.getElementById('rentStato').value;
     const dataRichiamo = document.getElementById('rentDataRichiamo').value;
     const fonte = document.getElementById('rentFonteValue').value;
+    const tipoCliente = document.getElementById('rentTipoCliente')?.value || '';
+    const noteFallimento = document.getElementById('rentNoteFallimento')?.value.trim() || '';
 
     if (!nome) { alert('Il nome è obbligatorio'); return; }
     if (!cognome) { alert('Il cognome è obbligatorio'); return; }
@@ -334,6 +378,8 @@ async function saveRentTrattativa() {
         fonte: fonte || null,
         stato,
         dataRichiamo: stato === 'DA_RICHIAMARE' ? dataRichiamo : null,
+        noteFallimento: stato === 'FALLITO' ? (noteFallimento || null) : null,
+        tipoCliente: tipoCliente || null,
         linkLeadspark: linkLeadspark || null,
         linkAutoRichiesta: linkAutoRichiesta || null
     };
@@ -376,9 +422,12 @@ function editRentTrattativa(id) {
     document.getElementById('rentLinkAutoRichiesta').value = t.linkAutoRichiesta || '';
     document.getElementById('rentStato').value = t.stato || 'SOLO_INFO';
     document.getElementById('rentDataRichiamo').value = t.dataRichiamo || '';
+    const noteFallimentoEl = document.getElementById('rentNoteFallimento');
+    if (noteFallimentoEl) noteFallimentoEl.value = t.noteFallimento || '';
     onRentStatoChange();
 
     if (t.fonte) selectRentFonte(t.fonte);
+    if (t.tipoCliente) selectRentTipoCliente(t.tipoCliente);
 
     document.getElementById('newRentForm').style.display = 'block';
     document.getElementById('newRentForm').scrollIntoView({ behavior: 'smooth' });
@@ -400,7 +449,7 @@ function exportRentExcel() {
     window.open('/api/noleggio/trattative/export-excel', '_blank');
 }
 
-// ===== GRAFICI =====
+// ===== GRAFICI (tutti cliccabili) =====
 
 function renderChartRentStato(list) {
     const ctx = document.getElementById('chartRentStato');
@@ -422,6 +471,8 @@ function renderChartRentStato(list) {
         },
         options: {
             responsive: true, maintainAspectRatio: true,
+            onClick: (evt, elements) => { if (elements.length > 0) showRentTrattativeDetail('stato', RENT_STATO_LIST[elements[0].index]); },
+            onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
             plugins: {
                 legend: { position: 'bottom', labels: { color: legendColor, font: { size: 11 }, padding: 10, boxWidth: 12,
                     generateLabels: chart => chart.data.labels.map((label, i) => {
@@ -442,22 +493,24 @@ function renderChartRentFonte(list) {
     if (chartRentFonte) chartRentFonte.destroy();
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
     const counts = {};
-    FONTE_LIST.forEach(f => counts[f] = 0);
+    RENT_FONTE_LIST.forEach(f => counts[f] = 0);
     list.forEach(t => { if (t.fonte && counts[t.fonte] !== undefined) counts[t.fonte]++; });
     const total = Object.values(counts).reduce((a,b) => a+b, 0);
     const legendColor = getLegendColor();
 
     chartRentFonte = new Chart(ctx.getContext('2d'), {
         type: 'doughnut',
-        data: { labels: FONTE_LIST, datasets: [{ data: FONTE_LIST.map(f => counts[f]), backgroundColor: FONTE_COLORS, borderWidth: 2, borderColor: isDark ? '#0d0f1a' : '#ffffff' }] },
+        data: { labels: RENT_FONTE_LIST, datasets: [{ data: RENT_FONTE_LIST.map(f => counts[f]), backgroundColor: RENT_FONTE_COLORS, borderWidth: 2, borderColor: isDark ? '#0d0f1a' : '#ffffff' }] },
         options: {
             responsive: true, maintainAspectRatio: true,
+            onClick: (evt, elements) => { if (elements.length > 0) showRentTrattativeDetail('fonte', RENT_FONTE_LIST[elements[0].index]); },
+            onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
             plugins: {
                 legend: { position: 'bottom', labels: { color: legendColor, font: { size: 10 }, padding: 8, boxWidth: 10,
                     generateLabels: chart => chart.data.labels.map((label, i) => {
                         const val = chart.data.datasets[0].data[i];
                         const pct = total > 0 ? Math.round(val*1000/total)/10 : 0;
-                        return { text: `${label}: ${val} (${pct}%)`, fillStyle: FONTE_COLORS[i], strokeStyle: FONTE_COLORS[i], fontColor: legendColor, lineWidth: 0, index: i };
+                        return { text: `${label}: ${val} (${pct}%)`, fillStyle: RENT_FONTE_COLORS[i], strokeStyle: RENT_FONTE_COLORS[i], fontColor: legendColor, lineWidth: 0, index: i };
                     })
                 } },
                 tooltip: { callbacks: { label: ctx => { const val = ctx.raw; const pct = total > 0 ? Math.round(val*1000/total)/10 : 0; return ` Valore: ${val} — ${pct}%`; } } }
@@ -483,7 +536,7 @@ function renderChartRentMarchi(list) {
     container.innerHTML = sorted.map(([marchio, val]) => {
         const pct = Math.round(val/maxVal*100);
         const pctTot = totalMarchi > 0 ? Math.round(val*1000/totalMarchi)/10 : 0;
-        return `<div style="display:flex;align-items:center;gap:12px;padding:4px 0" title="${marchio}: ${val} (${pctTot}%)">
+        return `<div onclick="showRentTrattativeDetail('marchioUpper', '${marchio.replace(/'/g,"\\'")}')" style="display:flex;align-items:center;gap:12px;padding:4px 0;cursor:pointer" title="${marchio}: ${val} (${pctTot}%)">
             <div style="width:120px;font-size:12px;font-weight:700;color:var(--text-primary);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0">${marchio}</div>
             <div style="flex:1;background:var(--border);border-radius:4px;height:10px;overflow:hidden">
                 <div style="width:${pct}%;height:100%;background:${barColor};border-radius:4px;transition:width 0.4s ease"></div>
@@ -502,15 +555,18 @@ function renderChartRentInfoVsRichiesta(list) {
     const richiesta = list.filter(c => c.noleggioRichiesta === 'RICHIESTA_CLIENTE').length;
     const total = soloInfo + richiesta;
     const legendColor = getLegendColor();
+    const richiestaTypes = ['SOLO_INFO', 'RICHIESTA_CLIENTE'];
 
     chartRentInfoVsRichiesta = new Chart(ctx.getContext('2d'), {
         type: 'doughnut',
         data: {
             labels: ['Solo Info', 'Richiesta Cliente'],
-            datasets: [{ data: [soloInfo, richiesta], backgroundColor: ['#8a8faa99','#00c85399'], borderColor: ['#8a8faa','#00c853'], borderWidth: 2, backgroundColor2: isDark ? '#0d0f1a' : '#ffffff' }]
+            datasets: [{ data: [soloInfo, richiesta], backgroundColor: ['#8a8faa99','#00c85399'], borderColor: ['#8a8faa','#00c853'], borderWidth: 2 }]
         },
         options: {
             responsive: true, maintainAspectRatio: true,
+            onClick: (evt, elements) => { if (elements.length > 0) showRentContattiRichiestaDetail(richiestaTypes[elements[0].index]); },
+            onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
             plugins: {
                 legend: { position: 'bottom', labels: { color: legendColor, font: { size: 11 }, padding: 10, boxWidth: 12,
                     generateLabels: chart => chart.data.labels.map((label, i) => {
@@ -531,6 +587,78 @@ function refreshRentChartsOnThemeChange() {
     renderChartRentFonte(rentTrattativeFiltered);
     renderChartRentMarchi(rentTrattativeFiltered);
     renderChartRentInfoVsRichiesta(rentContattiNoleggio);
+}
+
+// ===== DETTAGLIO GRAFICI (nuovo modal: rentDetailModal — da aggiungere in index.html) =====
+
+function showRentTrattativeDetail(filterField, filterValue) {
+    let items;
+    if (filterField === 'marchioUpper') {
+        items = rentTrattativeFiltered.filter(t => (t.marchio || '').trim().toUpperCase() === filterValue);
+    } else {
+        items = rentTrattativeFiltered.filter(t => t[filterField] === filterValue);
+    }
+    const modal = document.getElementById('rentDetailModal');
+    const title = document.getElementById('rentDetailTitle');
+    const list = document.getElementById('rentDetailList');
+    if (!modal || !title || !list) return;
+
+    const labelMap = filterField === 'stato' ? RENT_STATO_LABELS : {};
+    const displayLabel = labelMap[filterValue] || filterValue;
+    title.textContent = `Trattative — ${displayLabel} (${items.length})`;
+
+    if (items.length === 0) {
+        list.innerHTML = '<div class="empty-state" style="padding:20px"><p>Nessuna trattativa per questo filtro</p></div>';
+    } else {
+        list.innerHTML = items.map(t => `
+            <div class="followup-card" style="margin-bottom:10px">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                    <div>
+                        <div style="font-weight:800;color:var(--text-primary);font-size:14px">${t.nome} ${t.cognome}</div>
+                        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">🚗 ${t.marchio}${t.modello?' '+t.modello:''}</div>
+                        ${t.cellulare ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📞 ${t.cellulare}</div>` : ''}
+                        <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">👤 ${t.user?.fullName || '—'}</div>
+                    </div>
+                </div>
+            </div>`).join('');
+    }
+    modal.style.display = 'flex';
+}
+
+function showRentContattiRichiestaDetail(richiestaValue) {
+    const items = rentContattiNoleggio.filter(c => c.noleggioRichiesta === richiestaValue);
+    const modal = document.getElementById('rentDetailModal');
+    const title = document.getElementById('rentDetailTitle');
+    const list = document.getElementById('rentDetailList');
+    if (!modal || !title || !list) return;
+
+    const label = richiestaValue === 'RICHIESTA_CLIENTE' ? 'Richiesta Cliente' : 'Solo Info';
+    title.textContent = `Info Noleggio — ${label} (${items.length})`;
+
+    if (items.length === 0) {
+        list.innerHTML = '<div class="empty-state" style="padding:20px"><p>Nessun contatto per questo filtro</p></div>';
+    } else {
+        list.innerHTML = items.map(c => {
+            const nomeCompleto = [c.noleggioNomeCliente, c.noleggioCognomeCliente].filter(Boolean).join(' ') || [c.clienteNome, c.clienteCognome].filter(Boolean).join(' ');
+            const date = c.contactDate.split('T')[0];
+            const time = c.contactDate.split('T')[1]?.substring(0,5) || '';
+            return `<div class="followup-card" style="margin-bottom:10px">
+                <div>
+                    <div style="font-weight:800;color:var(--text-primary);font-size:14px">${nomeCompleto || 'Nominativo non specificato'}</div>
+                    <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">📅 ${formatDateIT(date)} · 🕐 ${time}</div>
+                    ${c.marca ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">🚗 ${c.marca}${c.modello?' · '+c.modello:''}</div>` : ''}
+                    <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">👤 ${c.user?.fullName || '—'}</div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+    modal.style.display = 'flex';
+}
+
+function closeRentDetailModal(event) {
+    if (event && event.target.id !== 'rentDetailModal') return;
+    const modal = document.getElementById('rentDetailModal');
+    if (modal) modal.style.display = 'none';
 }
 
 // ===== POPUP RECALL DI OGGI/SCADUTI =====
@@ -582,6 +710,8 @@ async function loadRentContattiNoleggio() {
         const res = await fetch(url);
         if (!res.ok) return;
         rentContattiNoleggio = await res.json();
+        // Ordina sempre dal più recente al meno recente
+        rentContattiNoleggio.sort((a, b) => (b.contactDate || '').localeCompare(a.contactDate || ''));
         renderRentContattiNoleggio(rentContattiNoleggio);
         renderChartRentInfoVsRichiesta(rentContattiNoleggio);
     } catch (err) {
@@ -597,18 +727,26 @@ function renderRentContattiNoleggio(list) {
         return;
     }
 
+    const tipoLabel = (tipo) => {
+        if (tipo === 'Privato') return '👤 Privato';
+        if (tipo === 'Partita IVA') return '🏢 Partita IVA';
+        if (tipo === 'Noleggio per aziende') return '🏭 Noleggio per aziende';
+        return '—';
+    };
+
     container.innerHTML = `<div class="contact-table-wrapper"><table class="contact-table">
         <thead><tr><th>Data</th><th>Richiesta</th><th>Tipologia</th><th>Cliente</th><th>Marca/Modello</th><th>Lead</th><th>Operatore</th><th>Azioni</th></tr></thead>
         <tbody>${list.map(c => {
             const date = c.contactDate.split('T')[0];
             const time = c.contactDate.split('T')[1]?.substring(0,5) || '';
-            const nomeCompleto = [c.noleggioNomeCliente, c.noleggioCognomeCliente].filter(Boolean).join(' ');
+            const nomeCompleto = [c.noleggioNomeCliente, c.noleggioCognomeCliente].filter(Boolean).join(' ') || [c.clienteNome, c.clienteCognome].filter(Boolean).join(' ');
+            const cellulare = c.noleggioCellulare || c.clienteNumero;
             const isRichiesta = c.noleggioRichiesta === 'RICHIESTA_CLIENTE';
             return `<tr>
                 <td>${formatDateIT(date)} · ${time}</td>
                 <td>${isRichiesta ? '<span style="color:#00c853;font-weight:700">📞 Richiesta cliente</span>' : '<span style="color:var(--text-secondary)">ℹ️ Solo Info</span>'}</td>
-                <td>${c.noleggioTipo === 'Privato' ? '👤 Privato' : c.noleggioTipo === 'Partita IVA' ? '🏢 Partita IVA' : '—'}</td>
-                <td>${nomeCompleto || '—'}${c.noleggioCellulare ? `<br><span style="font-size:11px;color:var(--text-secondary)">📞 ${c.noleggioCellulare}</span>` : ''}</td>
+                <td>${tipoLabel(c.noleggioTipo)}</td>
+                <td>${nomeCompleto || '—'}${cellulare ? `<br><span style="font-size:11px;color:var(--text-secondary)">📞 ${cellulare}</span>` : ''}</td>
                 <td>${c.marca ? c.marca + (c.modello ? ' ' + c.modello : '') : '—'}</td>
                 <td>${c.noleggioLink ? `<a href="${c.noleggioLink}" target="_blank" rel="noopener">🔗 Lead</a>` : (c.linkAuto ? `<a href="${c.linkAuto}" target="_blank" rel="noopener">🔗 Lead</a>` : '—')}</td>
                 <td>${c.user?.fullName || '—'}</td>
@@ -626,9 +764,9 @@ function generateTrattativaFromContatto(id) {
 
     showNewRentForm();
 
-    document.getElementById('rentNome').value = c.noleggioNomeCliente || '';
-    document.getElementById('rentCognome').value = c.noleggioCognomeCliente || '';
-    document.getElementById('rentCellulare').value = c.noleggioCellulare || '';
+    document.getElementById('rentNome').value = c.noleggioNomeCliente || c.clienteNome || '';
+    document.getElementById('rentCognome').value = c.noleggioCognomeCliente || c.clienteCognome || '';
+    document.getElementById('rentCellulare').value = c.noleggioCellulare || c.clienteNumero || '';
     if (c.marca) selectRentMarca(c.marca);
     document.getElementById('rentModello').value = c.modello || '';
     document.getElementById('rentLinkAutoRichiesta').value = c.noleggioLink || c.linkAuto || '';
@@ -636,7 +774,55 @@ function generateTrattativaFromContatto(id) {
     document.getElementById('rentStato').value = 'TRATTATIVA_IN_CORSO';
     onRentStatoChange();
 
-    if (!c.cellulare && !c.noleggioCellulare) {
+    if (c.noleggioTipo) selectRentTipoCliente(c.noleggioTipo);
+
+    if (!c.noleggioCellulare && !c.clienteNumero) {
         setTimeout(() => alert('Ricordati di inserire il cellulare: è obbligatorio per salvare la trattativa.'), 300);
     }
+}
+// ===== RICERCA CLIENTE RENT (nome, cognome, cellulare) =====
+
+function searchRentTrattative(query) {
+    const resultsWrapper = document.getElementById('rentSearchResults');
+    const resultsList = document.getElementById('rentSearchResultsList');
+    if (!resultsWrapper || !resultsList) return;
+    const q = query.trim();
+    if (!q) { resultsWrapper.style.display = 'none'; return; }
+
+    const qLower = q.toLowerCase();
+    const matches = rentTrattative.filter(t => {
+        const nome = (t.nome || '').toLowerCase();
+        const cognome = (t.cognome || '').toLowerCase();
+        const cellulare = (t.cellulare || '').toLowerCase();
+        return nome.includes(qLower) || cognome.includes(qLower) || cellulare.includes(qLower);
+    }).slice(0, 50);
+
+    if (matches.length === 0) {
+        resultsList.innerHTML = `<div class="empty-state" style="padding:20px"><p>Nessuna trattativa trovata</p></div>`;
+    } else {
+        resultsList.innerHTML = matches.map(t => {
+            const color = RENT_STATO_COLORS[t.stato] || '#8a8faa';
+            return `<div class="followup-card" style="margin-bottom:8px">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <div>
+                        <div style="font-weight:800;color:var(--text-primary);font-size:14px">${t.nome} ${t.cognome}</div>
+                        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
+                            📞 ${t.cellulare || '—'} · 🚗 ${t.marchio}${t.modello?' '+t.modello:''}
+                            · <span style="font-weight:700;color:${color}">${RENT_STATO_LABELS[t.stato] || t.stato}</span>
+                            · 👤 ${t.user?.fullName || '—'}
+                        </div>
+                    </div>
+                    <button class="btn-small btn-blue" onclick="closeRentSearch();editRentTrattativa(${t.id})">✏️ Apri</button>
+                </div>
+            </div>`;
+        }).join('');
+    }
+    resultsWrapper.style.display = 'block';
+}
+
+function closeRentSearch() {
+    const resultsWrapper = document.getElementById('rentSearchResults');
+    const input = document.getElementById('rentSearchInput');
+    if (resultsWrapper) resultsWrapper.style.display = 'none';
+    if (input) input.value = '';
 }

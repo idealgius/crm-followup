@@ -52,6 +52,9 @@ public class ContactLogController {
             Map<String, Object> m = new HashMap<>();
             m.put("id", log.getId());
             m.put("category", log.getCategory());
+            m.put("clienteNome", log.getClienteNome());
+            m.put("clienteCognome", log.getClienteCognome());
+            m.put("clienteNumero", log.getClienteNumero());
             m.put("otherNote", log.getOtherNote());
             m.put("nominativoAppuntamento", log.getNominativoAppuntamento());
             m.put("linkAppuntamento", log.getLinkAppuntamento());
@@ -130,6 +133,9 @@ public class ContactLogController {
         if (userOpt.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "Utente non trovato"));
 
         String category = (String) body.get("category");
+        String clienteNome = (String) body.get("clienteNome");
+        String clienteCognome = (String) body.get("clienteCognome");
+        String clienteNumero = (String) body.get("clienteNumero");
         String otherNote = (String) body.get("otherNote");
         String nominativoAppuntamento = (String) body.get("nominativoAppuntamento");
         String linkAppuntamento = (String) body.get("linkAppuntamento");
@@ -154,21 +160,15 @@ public class ContactLogController {
             ? LocalDateTime.parse((String) body.get("contactDate"))
             : LocalDateTime.now();
 
-        if ("Service".equals(category)) {
-            if (serviceTipoCliente == null || serviceTipoCliente.isBlank()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Seleziona Cliente o Non Cliente"));
-            }
-            if ("CLIENTE".equals(serviceTipoCliente)) {
-                if (serviceNomeCliente == null || serviceNomeCliente.isBlank()) {
-                    return ResponseEntity.badRequest().body(Map.of("error", "Nome cliente obbligatorio"));
-                }
-                if (serviceCognomeCliente == null || serviceCognomeCliente.isBlank()) {
-                    return ResponseEntity.badRequest().body(Map.of("error", "Cognome cliente obbligatorio"));
-                }
-                if (serviceTarga == null || serviceTarga.isBlank()) {
-                    return ResponseEntity.badRequest().body(Map.of("error", "Targa obbligatoria per Cliente"));
-                }
-            }
+        // Validazione universale: nome, cognome, numero obbligatori per QUALSIASI categoria
+        if (clienteNome == null || clienteNome.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Nome cliente obbligatorio"));
+        }
+        if (clienteCognome == null || clienteCognome.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Cognome cliente obbligatorio"));
+        }
+        if (clienteNumero == null || clienteNumero.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Numero cliente obbligatorio"));
         }
 
         if ("Info Noleggio".equals(category)) {
@@ -177,7 +177,9 @@ public class ContactLogController {
             }
         }
 
-        ContactLog log = contactLogService.create(userOpt.get(), category, otherNote,
+        ContactLog log = contactLogService.create(userOpt.get(), category,
+                clienteNome, clienteCognome, clienteNumero,
+                otherNote,
                 nominativoAppuntamento, linkAppuntamento,
                 marca, modello, linkAuto,
                 serviceTipo, serviceNote, acquistoNote,
@@ -190,6 +192,9 @@ public class ContactLogController {
         Map<String, Object> result = new HashMap<>();
         result.put("id", log.getId());
         result.put("category", log.getCategory());
+        result.put("clienteNome", log.getClienteNome());
+        result.put("clienteCognome", log.getClienteCognome());
+        result.put("clienteNumero", log.getClienteNumero());
         result.put("otherNote", log.getOtherNote());
         result.put("nominativoAppuntamento", log.getNominativoAppuntamento());
         result.put("linkAppuntamento", log.getLinkAppuntamento());
@@ -235,6 +240,9 @@ public class ContactLogController {
         }
 
         if (body.containsKey("category")) log.setCategory((String) body.get("category"));
+        if (body.containsKey("clienteNome")) log.setClienteNome((String) body.get("clienteNome"));
+        if (body.containsKey("clienteCognome")) log.setClienteCognome((String) body.get("clienteCognome"));
+        if (body.containsKey("clienteNumero")) log.setClienteNumero((String) body.get("clienteNumero"));
         if (body.containsKey("otherNote")) log.setOtherNote((String) body.get("otherNote"));
         if (body.containsKey("nominativoAppuntamento")) log.setNominativoAppuntamento((String) body.get("nominativoAppuntamento"));
         if (body.containsKey("linkAppuntamento")) log.setLinkAppuntamento((String) body.get("linkAppuntamento"));

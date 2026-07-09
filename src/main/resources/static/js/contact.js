@@ -26,7 +26,6 @@ const CATEGORY_COLORS = {
     'Altro': '#8a8faa'
 };
 
-// Lista completa categorie, usata per popolare il filtro categoria nella vista giornaliera
 const ALL_CATEGORIES = [
     'Info Vendita', 'Info Noleggio', 'Service', 'Info Acquisto effettuato',
     'Pratica Leasing', 'Pratica Finanziamento', 'Amministrazione',
@@ -41,12 +40,12 @@ const SERVICE_LIST = ['Tagliando', 'Dispositivo satellitare', 'Prenotazione', 'L
 const SERVICE_COLORS = ['#f0c040', '#4a90d9', '#00c853', '#7c4dff', '#ff9800', '#00bcd4'];
 const SEDI_LIST = ['Agnano', 'Casamarciano', 'Salerno'];
 const SEDE_COLORS = ['#e91e63', '#1a4080', '#00c853'];
-const NOLEGGIO_TIPO_LIST = ['Privato', 'Partita IVA'];
+const NOLEGGIO_TIPO_LIST = ['Privato', 'Partita IVA', 'Noleggio per aziende'];
 
 const MARCHE_LIST = [
     'ALFA ROMEO', 'AUDI', 'BMW', 'BYD', 'CITROEN', 'CUPRA', 'DACIA', 'DR', 'DS',
     'EVO', 'FIAT', 'FORD', 'FERRARI', 'HYUNDAI', 'ICH-X', 'ICKX', 'INFINITI',
-    'IVECO', 'JEEP', 'KIA', 'LAMBORGHINI', 'LANCIA', 'LAND ROVER', 'MAXUS',
+    'IVECO', 'JEEP', 'KIA', 'LAMBORGHINI', 'LANCIA', 'LAND ROVER', 'LEAPMOTOR', 'MAXUS',
     'MAZDA', 'MERCEDES-BENZ', 'MG', 'MINI', 'MASERATI', 'MITSUBISHI', 'NISSAN',
     'OPEL', 'PEUGEOT', 'PORSCHE', 'RENAULT', 'SAAB', 'SEAT', 'SKODA', 'SMART',
     'SPORTEQUIPE', 'SUZUKI', 'SWM', 'TIGER', 'TOYOTA', 'VOLKSWAGEN'
@@ -83,6 +82,10 @@ function normalizeText(str) {
         .replace(/ë/g,'e').replace(/é/g,'e').replace(/è/g,'e')
         .replace(/ä/g,'a').replace(/ü/g,'u').replace(/ö/g,'o')
         .replace(/š/g,'s').replace(/č/g,'c').replace(/ž/g,'z');
+}
+
+function clienteNomeCompleto(log) {
+    return [log.clienteNome, log.clienteCognome].filter(Boolean).join(' ') || 'Nominativo non specificato';
 }
 
 function showMarcheDropdown() { filterMarche('', true); }
@@ -199,6 +202,8 @@ async function loadContactLogs(from, to, restoreDayView) {
         const res = await fetch(url);
         if (!res.ok) return;
         contactLogs = await res.json();
+        // Ordina sempre dal più recente al meno recente
+        contactLogs.sort((a, b) => (b.contactDate || '').localeCompare(a.contactDate || ''));
         populateOperatorFilter();
         applyContactFilters(restoreDayView);
     } catch (err) { console.error('Errore caricamento contatti:', err); }
@@ -257,6 +262,58 @@ function resetContactFilters() {
     loadContactLogs(firstDay, today);
 }
 
+// ===== RICERCA CLIENTE (nome, cognome, numero) =====
+
+function searchContactLogs(query) {
+    const resultsWrapper = document.getElementById('contactSearchResults');
+    const resultsList = document.getElementById('contactSearchResultsList');
+    if (!resultsWrapper || !resultsList) return;
+    const q = query.trim();
+    if (!q) { resultsWrapper.style.display = 'none'; return; }
+
+    const qNorm = normalizeText(q);
+    const matches = contactLogs.filter(l => {
+        const nome = normalizeText(l.clienteNome || '');
+        const cognome = normalizeText(l.clienteCognome || '');
+        const numero = (l.clienteNumero || '').toLowerCase();
+        return nome.includes(qNorm) || cognome.includes(qNorm) || numero.includes(q.toLowerCase());
+    }).slice(0, 50);
+
+    if (matches.length === 0) {
+        resultsList.innerHTML = `<div class="empty-state" style="padding:20px"><p>Nessun cliente trovato</p></div>`;
+    } else {
+        resultsList.innerHTML = matches.map(l => {
+            const date = l.contactDate.split('T')[0];
+            const time = l.contactDate.split('T')[1]?.substring(0,5) || '';
+            return `<div class="followup-card" style="margin-bottom:8px;cursor:pointer" onclick="goToContactSearchResult('${date}')">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <div>
+                        <div style="font-weight:800;color:var(--text-primary);font-size:14px">${clienteNomeCompleto(l)}</div>
+                        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
+                            📞 ${l.clienteNumero || '—'} · <span class="contact-category-badge cat-${l.category.replace(/[\s+]/g,'_')}">${l.category}</span>
+                            · 📅 ${formatDateIT(date)} ${time} · 👤 ${l.user.fullName}
+                        </div>
+                    </div>
+                    <span style="color:#f0c040;font-size:16px">→</span>
+                </div>
+            </div>`;
+        }).join('');
+    }
+    resultsWrapper.style.display = 'block';
+}
+
+function goToContactSearchResult(date) {
+    closeContactSearch();
+    showDayView(date);
+}
+
+function closeContactSearch() {
+    const resultsWrapper = document.getElementById('contactSearchResults');
+    const input = document.getElementById('contactSearchInput');
+    if (resultsWrapper) resultsWrapper.style.display = 'none';
+    if (input) input.value = '';
+}
+
 function renderContactStatsFromLogs(logs) {
     const total = logs.length;
     const byCategory = {};
@@ -267,6 +324,36 @@ function renderContactStatsFromLogs(logs) {
     if (el('statInfoVendita')) el('statInfoVendita').textContent = (total > 0 ? Math.round(infoVendita*1000/total)/10 : 0)+'%';
     if (el('statInfoNoleggio')) el('statInfoNoleggio').textContent = (total > 0 ? Math.round((byCategory['Info Noleggio']||0)*1000/total)/10 : 0)+'%';
     if (el('statService')) el('statService').textContent = (total > 0 ? Math.round((byCategory['Service']||0)*1000/total)/10 : 0)+'%';
+}
+
+// ===== DETTAGLIO GENERICO PER GRAFICI (riusa il modal sedeDetailModal) =====
+
+function showGenericContactDetail(title, items) {
+    const modal = document.getElementById('sedeDetailModal');
+    const titleEl = document.getElementById('sedeDetailTitle');
+    const list = document.getElementById('sedeDetailList');
+    if (!modal || !titleEl || !list) return;
+    titleEl.textContent = `${title} (${items.length})`;
+    if (items.length === 0) {
+        list.innerHTML = '<div class="empty-state" style="padding:20px"><p>Nessun contatto per questo filtro</p></div>';
+    } else {
+        list.innerHTML = items.map(log => {
+            const date = log.contactDate.split('T')[0];
+            const time = log.contactDate.split('T')[1].substring(0,5);
+            return `<div class="followup-card" style="margin-bottom:10px">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                    <div>
+                        <div style="font-weight:800;color:var(--text-primary);font-size:14px">${clienteNomeCompleto(log)}</div>
+                        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">📅 ${formatDateIT(date)} · 🕐 ${time}</div>
+                        <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📞 ${log.clienteNumero || '—'}</div>
+                        <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">👤 ${log.user.fullName}</div>
+                        ${log.marca ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">🚗 ${log.marca}${log.modello?' · '+log.modello:''}</div>` : ''}
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+    modal.style.display = 'flex';
 }
 
 let contactChart = null;
@@ -291,6 +378,16 @@ function renderContactChartFromLogs(logs) {
         data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: isDark ? '#0d0f1a' : '#ffffff' }] },
         options: {
             responsive: true, maintainAspectRatio: true,
+            onClick: (evt, elements) => {
+                if (elements.length === 0) return;
+                const label = labels[elements[0].index];
+                const items = logs.filter(l => {
+                    const cat = (l.category === 'Info + Appuntamento' || l.category === 'Info Vendita in Promo') ? 'Info Vendita' : l.category;
+                    return cat === label;
+                });
+                showGenericContactDetail(`Categoria — ${label}`, items);
+            },
+            onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
             plugins: {
                 legend: { position: 'right', labels: { color: legendColor, font: { size: 12 }, padding: 14, boxWidth: 14,
                     generateLabels: chart => chart.data.labels.map((label, i) => {
@@ -333,31 +430,7 @@ function renderChartAppuntamentiSede(logs) {
 
 function showSedeDetail(sede) {
     const items = contactLogsFiltered.filter(log => log.category === 'Info + Appuntamento' && log.otherNote === sede);
-    const modal = document.getElementById('sedeDetailModal');
-    const title = document.getElementById('sedeDetailTitle');
-    const list = document.getElementById('sedeDetailList');
-    if (!modal || !title || !list) return;
-    title.textContent = `Appuntamenti — ${sede} (${items.length})`;
-    if (items.length === 0) {
-        list.innerHTML = '<div class="empty-state" style="padding:20px"><p>Nessun appuntamento per questa sede nel periodo filtrato</p></div>';
-    } else {
-        list.innerHTML = items.map(log => {
-            const date = log.contactDate.split('T')[0];
-            const time = log.contactDate.split('T')[1].substring(0,5);
-            return `<div class="followup-card" style="margin-bottom:10px">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start">
-                    <div>
-                        <div style="font-weight:800;color:var(--text-primary);font-size:14px">${log.nominativoAppuntamento || 'Nominativo non specificato'}</div>
-                        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">📅 ${formatDateIT(date)} · 🕐 ${time}</div>
-                        <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">👤 ${log.user.fullName}</div>
-                        ${log.marca ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">🚗 ${log.marca}${log.modello?' · '+log.modello:''}</div>` : ''}
-                    </div>
-                    ${log.linkAppuntamento ? `<a href="${log.linkAppuntamento}" target="_blank" rel="noopener" class="btn-small btn-blue" style="text-decoration:none">🔗 Link</a>` : ''}
-                </div>
-            </div>`;
-        }).join('');
-    }
-    modal.style.display = 'flex';
+    showGenericContactDetail(`Appuntamenti — ${sede}`, items);
 }
 
 function closeSedeDetail(event) {
@@ -381,6 +454,13 @@ function renderChartInfoAcquisto(logs) {
         options: {
             responsive: true, maintainAspectRatio: true,
             layout: { padding: { bottom: 10 } },
+            onClick: (evt, elements) => {
+                if (elements.length === 0) return;
+                const tipo = ACQUISTO_LIST[elements[0].index];
+                const items = logs.filter(l => l.category === 'Info Acquisto effettuato' && l.otherNote === tipo);
+                showGenericContactDetail(`Info Acquisto — ${tipo}`, items);
+            },
+            onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
             plugins: {
                 legend: { position: 'bottom', labels: { color: legendColor, font: { size: 10 }, padding: 8, boxWidth: 10,
                     generateLabels: chart => chart.data.labels.map((label, i) => {
@@ -414,6 +494,13 @@ function renderChartFonteVendita(logs) {
         data: { labels: FONTE_LIST, datasets: [{ data: FONTE_LIST.map(f => counts[f]), backgroundColor: FONTE_COLORS, borderWidth: 2, borderColor: isDark ? '#0d0f1a' : '#ffffff' }] },
         options: {
             responsive: true, maintainAspectRatio: true,
+            onClick: (evt, elements) => {
+                if (elements.length === 0) return;
+                const fonte = FONTE_LIST[elements[0].index];
+                const items = logs.filter(l => (l.category === 'Info Vendita' || l.category === 'Info + Appuntamento') && l.otherNote === fonte);
+                showGenericContactDetail(`Fonte Vendita — ${fonte}`, items);
+            },
+            onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
             plugins: {
                 legend: { position: 'bottom', labels: { color: legendColor, font: { size: 10 }, padding: 8, boxWidth: 10,
                     generateLabels: chart => chart.data.labels.map((label, i) => {
@@ -428,7 +515,6 @@ function renderChartFonteVendita(logs) {
     });
 }
 
-// ===== FIX: precision:0 senza stepSize per numeri interi corretti + CLICK per dettaglio =====
 function renderChartService(logs) {
     const ctx = document.getElementById('chartService');
     if (!ctx) return;
@@ -458,32 +544,7 @@ function renderChartService(logs) {
 
 function showServiceDetail(tipo) {
     const items = contactLogsFiltered.filter(log => log.category === 'Service' && log.serviceTipo === tipo);
-    const modal = document.getElementById('sedeDetailModal');
-    const title = document.getElementById('sedeDetailTitle');
-    const list = document.getElementById('sedeDetailList');
-    if (!modal || !title || !list) return;
-    title.textContent = `Service — ${tipo} (${items.length})`;
-    if (items.length === 0) {
-        list.innerHTML = '<div class="empty-state" style="padding:20px"><p>Nessun contatto per questa tipologia nel periodo filtrato</p></div>';
-    } else {
-        list.innerHTML = items.map(log => {
-            const date = log.contactDate.split('T')[0];
-            const time = log.contactDate.split('T')[1].substring(0,5);
-            const nomeCompleto = [log.serviceNomeCliente, log.serviceCognomeCliente].filter(Boolean).join(' ');
-            return `<div class="followup-card" style="margin-bottom:10px">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start">
-                    <div>
-                        <div style="font-weight:800;color:var(--text-primary);font-size:14px">${nomeCompleto || 'Nominativo non specificato'}</div>
-                        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">📅 ${formatDateIT(date)} · 🕐 ${time}</div>
-                        <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">👤 ${log.user.fullName}</div>
-                        ${log.marca ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">🚗 ${log.marca}${log.modello?' · '+log.modello:''}</div>` : ''}
-                        ${log.serviceTarga ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">🔖 ${log.serviceTarga}</div>` : ''}
-                    </div>
-                </div>
-            </div>`;
-        }).join('');
-    }
-    modal.style.display = 'flex';
+    showGenericContactDetail(`Service — ${tipo}`, items);
 }
 
 function renderChartMarcheCustom(logs) {
@@ -500,7 +561,7 @@ function renderChartMarcheCustom(logs) {
     container.innerHTML = sorted.map(([marca, val]) => {
         const pct = Math.round(val/maxVal*100);
         const pctTot = totalMarche > 0 ? Math.round(val*1000/totalMarche)/10 : 0;
-        return `<div style="display:flex;align-items:center;gap:12px;padding:4px 0" title="${marca}: ${val} (${pctTot}%)">
+        return `<div onclick="showMarcaContactDetail('${marca.replace(/'/g,"\\'")}')" style="display:flex;align-items:center;gap:12px;padding:4px 0;cursor:pointer" title="${marca}: ${val} (${pctTot}%)">
             <div style="width:120px;font-size:12px;font-weight:700;color:var(--text-primary);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0">${marca}</div>
             <div style="flex:1;background:var(--border);border-radius:4px;height:10px;overflow:hidden">
                 <div style="width:${pct}%;height:100%;background:${barColor};border-radius:4px;transition:width 0.4s ease"></div>
@@ -508,6 +569,11 @@ function renderChartMarcheCustom(logs) {
             <div style="width:32px;font-size:12px;font-weight:800;color:${barColor};text-align:right;flex-shrink:0">${val}</div>
         </div>`;
     }).join('');
+}
+
+function showMarcaContactDetail(marcaUpper) {
+    const items = contactLogsFiltered.filter(l => l.marca && l.marca.trim().toUpperCase() === marcaUpper);
+    showGenericContactDetail(`Marca — ${marcaUpper}`, items);
 }
 
 function renderChartNoleggio(logs) {
@@ -524,20 +590,29 @@ function renderChartNoleggio(logs) {
     if (contactChartNoleggioTipo) { contactChartNoleggioTipo.destroy(); contactChartNoleggioTipo = null; }
     const ctxTipo = document.getElementById('chartNoleggioTipo');
     if (ctxTipo) {
-        const privati = noleggioLogs.filter(l => l.noleggioTipo === 'Privato').length;
-        const piva = noleggioLogs.filter(l => l.noleggioTipo === 'Partita IVA').length;
-        const total = privati + piva;
+        const counts = {};
+        NOLEGGIO_TIPO_LIST.forEach(t => counts[t] = 0);
+        noleggioLogs.forEach(l => { if (l.noleggioTipo && counts[l.noleggioTipo] !== undefined) counts[l.noleggioTipo]++; });
+        const total = NOLEGGIO_TIPO_LIST.reduce((a,t) => a+counts[t], 0);
+        const tipoColors = ['#4a90d9','#e91e63','#ff9800'];
         contactChartNoleggioTipo = new Chart(ctxTipo.getContext('2d'), {
             type: 'doughnut',
-            data: { labels: ['Privato', 'Partita IVA'], datasets: [{ data: [privati, piva], backgroundColor: ['#4a90d999','#e91e6399'], borderColor: ['#4a90d9','#e91e63'], borderWidth: 2 }] },
+            data: { labels: NOLEGGIO_TIPO_LIST, datasets: [{ data: NOLEGGIO_TIPO_LIST.map(t => counts[t]), backgroundColor: tipoColors.map(c=>c+'99'), borderColor: tipoColors, borderWidth: 2 }] },
             options: {
                 responsive: true, maintainAspectRatio: true,
+                onClick: (evt, elements) => {
+                    if (elements.length === 0) return;
+                    const tipo = NOLEGGIO_TIPO_LIST[elements[0].index];
+                    const items = noleggioLogs.filter(l => l.noleggioTipo === tipo);
+                    showGenericContactDetail(`Tipologia Noleggio — ${tipo}`, items);
+                },
+                onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
                 plugins: {
                     legend: { position: 'bottom', labels: { color: legendColor, font: { size: 11 }, padding: 12, boxWidth: 12,
                         generateLabels: chart => chart.data.labels.map((label, i) => {
                             const val = chart.data.datasets[0].data[i];
                             const pct = total > 0 ? Math.round(val*1000/total)/10 : 0;
-                            return { text: `${label}: ${val} (${pct}%)`, fillStyle: ['#4a90d999','#e91e6399'][i], strokeStyle: ['#4a90d9','#e91e63'][i], fontColor: legendColor, lineWidth: 0, index: i };
+                            return { text: `${label}: ${val} (${pct}%)`, fillStyle: tipoColors[i]+'99', strokeStyle: tipoColors[i], fontColor: legendColor, lineWidth: 0, index: i };
                         })
                     } },
                     tooltip: { callbacks: { label: ctx => { const val = ctx.raw; const pct = total > 0 ? Math.round(val*1000/total)/10 : 0; return ` Valore: ${val} — ${pct}%`; } } }
@@ -552,11 +627,19 @@ function renderChartNoleggio(logs) {
         const soloInfo = noleggioLogs.filter(l => !l.noleggioLink).length;
         const leadGenerata = noleggioLogs.filter(l => l.noleggioLink).length;
         const total = soloInfo + leadGenerata;
+        const leadLabels = ['Solo info', 'Lead generata'];
         contactChartNoleggioLead = new Chart(ctxLead.getContext('2d'), {
             type: 'bar',
-            data: { labels: ['Solo info', 'Lead generata'], datasets: [{ data: [soloInfo, leadGenerata], backgroundColor: ['#8a8faa99','#00c85399'], borderColor: ['#8a8faa','#00c853'], borderWidth: 2, borderRadius: 8, borderSkipped: false }] },
+            data: { labels: leadLabels, datasets: [{ data: [soloInfo, leadGenerata], backgroundColor: ['#8a8faa99','#00c85399'], borderColor: ['#8a8faa','#00c853'], borderWidth: 2, borderRadius: 8, borderSkipped: false }] },
             options: {
                 responsive: true, maintainAspectRatio: true,
+                onClick: (evt, elements) => {
+                    if (elements.length === 0) return;
+                    const hasLink = elements[0].index === 1;
+                    const items = noleggioLogs.filter(l => Boolean(l.noleggioLink) === hasLink);
+                    showGenericContactDetail(`Noleggio — ${leadLabels[elements[0].index]}`, items);
+                },
+                onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
                 plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => { const val = ctx.raw; const pct = total > 0 ? Math.round(val*1000/total)/10 : 0; return ` Valore: ${val} — ${pct}%`; } } } },
                 scales: {
                     x: { ticks: { color: textColor, font: { size: 11, weight: '700' }, maxRotation: 0 }, grid: { display: false } },
@@ -621,7 +704,7 @@ function drawContactPromoCharts(logs) {
             const maxVal = sorted[0][1];
             modelliContainer.innerHTML = sorted.map(([modello, val]) => {
                 const pct = Math.round(val/maxVal*100);
-                return `<div style="display:flex;align-items:center;gap:12px;padding:5px 0">
+                return `<div onclick="showPromoModelloDetail('${modello.replace(/'/g,"\\'")}')" style="display:flex;align-items:center;gap:12px;padding:5px 0;cursor:pointer">
                     <div style="width:180px;font-size:12px;font-weight:700;color:var(--text-primary);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0" title="${modello}">${modello}</div>
                     <div style="flex:1;background:var(--border);border-radius:4px;height:10px;overflow:hidden">
                         <div style="width:${pct}%;height:100%;background:#f0c040;border-radius:4px;transition:width 0.4s ease"></div>
@@ -632,6 +715,11 @@ function drawContactPromoCharts(logs) {
         }
     }
     loadPromoStatsForContactCharts(total, textColor, gridColor, legendColor);
+}
+
+function showPromoModelloDetail(modello) {
+    const items = contactLogsFiltered.filter(l => l.category === 'Info Vendita in Promo' && l.modello === modello);
+    showGenericContactDetail(`Promo — ${modello}`, items);
 }
 
 async function loadPromoStatsForContactCharts(totalFromLogs, textColor, gridColor, legendColor) {
@@ -651,7 +739,6 @@ async function loadPromoStatsForContactCharts(totalFromLogs, textColor, gridColo
                 <div class="stat-card purple"><div class="stat-label">TEST DRIVE SÌ</div><div class="stat-value">${stats.testDriveSi}</div></div>
             `;
         }
-        const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
         if (contactPromoCharts.app) { contactPromoCharts.app.destroy(); contactPromoCharts.app = null; }
         const ctxApp = document.getElementById('chartPromoAppContact');
         if (ctxApp && realTotal > 0) {
@@ -716,10 +803,6 @@ let currentDayView = null;
 let dayViewCategoryFilter = '';
 let dayViewSubFilter = '';
 
-/**
- * Restituisce la lista di sottocategorie possibili per una data categoria,
- * oppure null se quella categoria non ha sottocategorie.
- */
 function getSubcategoryList(category) {
     switch (category) {
         case 'Info Vendita':
@@ -737,12 +820,6 @@ function getSubcategoryList(category) {
     }
 }
 
-/**
- * Estrae il valore di sottocategoria da un log, in base alla categoria.
- * NB: per "Info + Appuntamento" la fonte viene salvata nel campo serviceTipo
- * (vedi createContactLog), non in otherNote — mappatura invariata rispetto
- * al comportamento già esistente dell'app.
- */
 function getSubcategoryValue(log) {
     switch (log.category) {
         case 'Info Vendita':
@@ -771,7 +848,8 @@ function getDayViewFilteredItems(date) {
         items = items.filter(l => l.category === dayViewCategoryFilter);
         if (dayViewSubFilter) items = items.filter(l => getSubcategoryValue(l) === dayViewSubFilter);
     }
-    return items;
+    // Ordina sempre dal più recente al meno recente
+    return [...items].sort((a, b) => (b.contactDate || '').localeCompare(a.contactDate || ''));
 }
 
 function showDayView(date) {
@@ -799,10 +877,8 @@ function renderDayView() {
     renderChartMarcheCustom(items);
     renderChartNoleggio(items);
 
-    // Categorie effettivamente presenti in quel giorno (prima del filtro sottocategoria)
     const categoriesPresent = ALL_CATEGORIES.filter(c => baseItems.some(l => l.category === c));
 
-    // Sottocategorie effettivamente presenti per la categoria selezionata
     const subList = dayViewCategoryFilter ? getSubcategoryList(dayViewCategoryFilter) : null;
     const subPresent = subList
         ? subList.filter(s => baseItems.some(l => l.category === dayViewCategoryFilter && getSubcategoryValue(l) === s))
@@ -835,8 +911,8 @@ function renderDayView() {
         <div class="contact-day-section">
             <div class="contact-table-wrapper">
                 <table class="contact-table">
-                    <thead><tr><th>Orario</th><th>Categoria</th><th>Note</th><th>Operatore</th><th>Azioni</th></tr></thead>
-                    <tbody>${items.length > 0 ? items.map(log => renderContactRow(log)).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--text-secondary);padding:20px">Nessun contatto per i filtri selezionati</td></tr>'}</tbody>
+                    <thead><tr><th>Orario</th><th>Cliente</th><th>Categoria</th><th>Note</th><th>Operatore</th><th>Azioni</th></tr></thead>
+                    <tbody>${items.length > 0 ? items.map(log => renderContactRow(log)).join('') : '<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);padding:20px">Nessun contatto per i filtri selezionati</td></tr>'}</tbody>
                 </table>
             </div>
         </div>`;
@@ -996,45 +1072,39 @@ function renderContactRow(log) {
     const targetIsAdmin = log.user.role === 'ADMIN' || log.user.role === 'GESTORE';
     const canEdit = isAdmin || isOwner || (isMod && !targetIsAdmin);
     const catClass = log.category.replace(/[\s+]/g, '_');
-    const serviceNomeCompleto = [log.serviceNomeCliente, log.serviceCognomeCliente].filter(Boolean).join(' ');
-    const noleggioNomeCompleto = [log.noleggioNomeCliente, log.noleggioCognomeCliente].filter(Boolean).join(' ');
     return `<tr id="contact-row-${log.id}">
         <td style="font-weight:700;color:var(--text-primary);white-space:nowrap">${time}</td>
+        <td style="font-size:12px;color:var(--text-primary);font-weight:700">${clienteNomeCompleto(log)}<br><span style="font-weight:400;color:var(--text-secondary)">📞 ${log.clienteNumero || '—'}</span></td>
         <td>
             <span class="contact-category-badge cat-${catClass}">${log.category}</span>
             ${log.category === 'Info + Appuntamento' && log.otherNote ? `<span style="font-size:11px;background:rgba(233,30,99,0.1);color:#e91e63;padding:2px 8px;border-radius:8px;margin-left:6px">📍 ${log.otherNote}</span>` : ''}
-            ${log.category === 'Info + Appuntamento' && log.nominativoAppuntamento ? `<span style="font-size:11px;background:rgba(233,30,99,0.08);color:#e91e63;padding:2px 8px;border-radius:8px;margin-left:6px">👤 ${log.nominativoAppuntamento}</span>` : ''}
             ${log.category === 'Info + Appuntamento' && log.linkAppuntamento ? `<a href="${log.linkAppuntamento}" target="_blank" rel="noopener" style="font-size:11px;background:rgba(74,144,217,0.1);color:#4a90d9;padding:2px 8px;border-radius:8px;margin-left:6px;text-decoration:none">🔗 Link</a>` : ''}
             ${log.category === 'Info Acquisto effettuato' && log.otherNote ? `<span style="font-size:11px;background:rgba(74,144,217,0.1);color:#4a90d9;padding:2px 8px;border-radius:8px;margin-left:6px">📋 ${log.otherNote}</span>` : ''}
             ${(log.category === 'Info Vendita' || log.category === 'Info + Appuntamento') && log.otherNote && FONTE_LIST.includes(log.otherNote) ? `<span style="font-size:11px;background:rgba(26,64,128,0.1);color:#1a4080;padding:2px 8px;border-radius:8px;margin-left:6px">🌐 ${log.otherNote}</span>` : ''}
             ${log.category === 'Service' && log.serviceTipo ? `<span style="font-size:11px;background:rgba(240,192,64,0.1);color:#f0c040;padding:2px 8px;border-radius:8px;margin-left:6px">🔧 ${log.serviceTipo}</span>` : ''}
-            ${log.category === 'Service' && serviceNomeCompleto ? `<span style="font-size:11px;background:rgba(240,192,64,0.08);color:#f0c040;padding:2px 8px;border-radius:8px;margin-left:6px">👤 ${serviceNomeCompleto}</span>` : ''}
             ${log.category === 'Service' && log.serviceTarga ? `<span style="font-size:11px;background:rgba(240,192,64,0.08);color:#f0c040;padding:2px 8px;border-radius:8px;margin-left:6px">🔖 ${log.serviceTarga}</span>` : ''}
             ${log.category === 'Info Noleggio' && log.noleggioRichiesta ? `<span style="font-size:11px;background:rgba(0,200,83,0.1);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px">${log.noleggioRichiesta === 'RICHIESTA_CLIENTE' ? '📞 Richiesta cliente' : 'ℹ️ Solo Info'}</span>` : ''}
-            ${log.category === 'Info Noleggio' && log.noleggioTipo ? `<span style="font-size:11px;background:rgba(0,200,83,0.1);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px">${log.noleggioTipo === 'Privato' ? '👤' : '🏢'} ${log.noleggioTipo}</span>` : ''}
-            ${log.category === 'Info Noleggio' && noleggioNomeCompleto ? `<span style="font-size:11px;background:rgba(0,200,83,0.08);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px">👤 ${noleggioNomeCompleto}</span>` : ''}
-            ${log.category === 'Info Noleggio' && log.noleggioCellulare ? `<span style="font-size:11px;background:rgba(0,200,83,0.08);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px">📞 ${log.noleggioCellulare}</span>` : ''}
+            ${log.category === 'Info Noleggio' && log.noleggioTipo ? `<span style="font-size:11px;background:rgba(0,200,83,0.1);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px">🏷️ ${log.noleggioTipo}</span>` : ''}
             ${log.category === 'Info Noleggio' && log.noleggioLink ? `<a href="${log.noleggioLink}" target="_blank" rel="noopener" style="font-size:11px;background:rgba(0,200,83,0.1);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px;text-decoration:none">🔗 Lead</a>` : ''}
             ${log.category === 'Info Vendita in Promo' ? `<span style="font-size:11px;background:rgba(240,192,64,0.15);color:#f0c040;padding:2px 8px;border-radius:8px;margin-left:6px">🎯 PROMO</span>` : ''}
             ${log.marca ? `<span style="font-size:11px;background:rgba(0,200,83,0.1);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px">🚗 ${log.marca}${log.modello?' '+log.modello:''}</span>` : ''}
             ${log.linkAuto ? `<a href="${log.linkAuto}" target="_blank" rel="noopener" style="font-size:11px;background:rgba(124,77,255,0.1);color:#7c4dff;padding:2px 8px;border-radius:8px;margin-left:6px;text-decoration:none">🔗 Lead</a>` : ''}
         </td>
-        <td style="font-size:12px;color:var(--text-secondary)">${(log.category !== 'Info + Appuntamento' && log.category !== 'Info Acquisto effettuato' && log.category !== 'Info Vendita' && log.category !== 'Service' && log.category !== 'Info Vendita in Promo' && log.category !== 'Info Noleggio') ? (log.otherNote||'—') : (log.acquistoNote||log.serviceNote||'—')}</td>
+        <td style="font-size:12px;color:var(--text-secondary)">${(log.category !== 'Info Acquisto effettuato' && log.category !== 'Service') ? (log.otherNote||'—') : (log.acquistoNote||log.serviceNote||'—')}</td>
         <td style="font-size:12px;color:var(--text-secondary)">${log.user.fullName}</td>
         <td>${canEdit ? `<button class="btn-small btn-orange" onclick="editContactLog(${log.id})" style="margin-right:4px">✏️</button><button class="btn-small btn-red" onclick="deleteContactLog(${log.id})">🗑️</button>` : ''}</td>
     </tr>`;
 }
 
 function printDay(date) {
-    // Se la vista giornaliera per questa data è aperta, stampa rispettando i filtri attivi
     const dayLogs = (currentDayView === date)
         ? getDayViewFilteredItems(date)
         : contactLogsFiltered.filter(l => l.contactDate.split('T')[0] === date);
     const win = window.open('', '_blank');
     win.document.write(`<html><head><title>Registro ${date}</title><style>body{font-family:Arial,sans-serif;font-size:12px;padding:20px}h2{font-size:16px;margin-bottom:10px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:6px 10px;text-align:left}th{background:#f0f0f0;font-weight:700;font-size:10px;text-transform:uppercase}@page{margin:15mm}</style></head><body>
         <h2>Registro Contatti — ${formatDateIT(date)}</h2>
-        <table><thead><tr><th>Orario</th><th>Categoria</th><th>Dettaglio</th><th>Marca/Modello</th><th>Operatore</th></tr></thead><tbody>
-        ${dayLogs.map(log => `<tr><td>${log.contactDate.split('T')[1].substring(0,5)}</td><td>${log.category}</td><td>${log.noleggioTipo||log.serviceTipo||log.otherNote||'—'}</td><td>${log.marca?log.marca+(log.modello?' '+log.modello:''):'—'}</td><td>${log.user.fullName}</td></tr>`).join('')}
+        <table><thead><tr><th>Orario</th><th>Cliente</th><th>Categoria</th><th>Dettaglio</th><th>Marca/Modello</th><th>Operatore</th></tr></thead><tbody>
+        ${dayLogs.map(log => `<tr><td>${log.contactDate.split('T')[1].substring(0,5)}</td><td>${clienteNomeCompleto(log)}<br>${log.clienteNumero||''}</td><td>${log.category}</td><td>${log.noleggioTipo||log.serviceTipo||log.otherNote||'—'}</td><td>${log.marca?log.marca+(log.modello?' '+log.modello:''):'—'}</td><td>${log.user.fullName}</td></tr>`).join('')}
         </tbody></table></body></html>`);
     win.document.close(); win.print();
 }
@@ -1088,6 +1158,13 @@ function renderContactChartByOperator() {
         data: { labels, datasets: [{ data, backgroundColor: colors.map(c => c+'bb'), borderColor: colors, borderWidth: 2 }] },
         options: {
             responsive: true, maintainAspectRatio: true,
+            onClick: (evt, elements) => {
+                if (elements.length === 0) return;
+                const op = labels[elements[0].index];
+                const items = contactLogs.filter(l => l.user.fullName === op);
+                showGenericContactDetail(`Operatore — ${op}`, items);
+            },
+            onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
             plugins: { legend: { position: 'right', labels: { color: legendColor, font: { size: 12 }, padding: 14, boxWidth: 14,
                 generateLabels: chart => chart.data.labels.map((label,i) => { const val = chart.data.datasets[0].data[i]; const pct = total > 0 ? Math.round(val*1000/total)/10 : 0; return { text: `${label}: ${val} (${pct}%)`, fillStyle: colors[i]+'bb', strokeStyle: colors[i], fontColor: legendColor, lineWidth: 0, index: i }; })
             } }, tooltip: { callbacks: { label: ctx => { const val = ctx.raw; const pct = total > 0 ? Math.round(val*1000/total)/10 : 0; return ` Valore: ${val} — ${pct}%`; } } } }
@@ -1111,22 +1188,19 @@ function selectNoleggioRichiesta(richiesta) {
     const dettagli = document.getElementById('contactNoleggioRichiestaDettagli');
     if (dettagli) dettagli.style.display = richiesta === 'RICHIESTA_CLIENTE' ? 'block' : 'none';
 
-    // Se si torna a Solo Info, puliamo i campi condizionati per non salvare dati residui
     if (richiesta === 'SOLO_INFO') {
         selectedNoleggioTipo = '';
         const tipoEl = document.getElementById('contactNoleggioTipo'); if (tipoEl) tipoEl.value = '';
-        ['Privato','PIVA'].forEach(k => { const b = document.getElementById(`noleggio-${k}`); if (b) b.classList.remove('btn-sede-active'); });
-        ['contactNoleggioLink','contactNoleggioNomeCliente','contactNoleggioCognomeCliente','contactNoleggioCellulare'].forEach(id => {
-            const el = document.getElementById(id); if (el) el.value = '';
-        });
+        ['Privato','PIVA','Aziende'].forEach(k => { const b = document.getElementById(`noleggio-${k}`); if (b) b.classList.remove('btn-sede-active'); });
+        const linkEl = document.getElementById('contactNoleggioLink'); if (linkEl) linkEl.value = '';
     }
 }
 
 function selectNoleggioTipo(tipo) {
     selectedNoleggioTipo = tipo;
     document.getElementById('contactNoleggioTipo').value = tipo;
-    ['Privato','PIVA'].forEach(k => { const btn = document.getElementById(`noleggio-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
-    const keyMap = { 'Privato': 'Privato', 'Partita IVA': 'PIVA' };
+    const keyMap = { 'Privato': 'Privato', 'Partita IVA': 'PIVA', 'Noleggio per aziende': 'Aziende' };
+    Object.values(keyMap).forEach(k => { const btn = document.getElementById(`noleggio-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
     const btn = document.getElementById(`noleggio-${keyMap[tipo]}`);
     if (btn) btn.classList.add('btn-sede-active');
 }
@@ -1159,20 +1233,8 @@ function selectServiceTipoCliente(tipo) {
     if (btn) btn.classList.add('btn-sede-active');
 
     const isCliente = tipo === 'CLIENTE';
-    const nomeLabel = document.getElementById('serviceNomeClienteLabel');
-    const cognomeLabel = document.getElementById('serviceCognomeClienteLabel');
     const targaLabel = document.getElementById('serviceTargaLabel');
-    const numeroRow = document.getElementById('serviceNumeroTelefonoRow');
-
-    if (nomeLabel) nomeLabel.textContent = isCliente ? 'NOME CLIENTE *' : 'NOME CLIENTE (opzionale)';
-    if (cognomeLabel) cognomeLabel.textContent = isCliente ? 'COGNOME CLIENTE *' : 'COGNOME CLIENTE (opzionale)';
     if (targaLabel) targaLabel.textContent = isCliente ? 'TARGA *' : 'TARGA (opzionale)';
-    if (numeroRow) numeroRow.style.display = isCliente ? 'none' : 'block';
-
-    if (isCliente) {
-        const numEl = document.getElementById('serviceNumeroTelefono');
-        if (numEl) numEl.value = '';
-    }
 }
 
 function selectFonte(fonte) {
@@ -1184,11 +1246,13 @@ function selectFonte(fonte) {
 
 async function createContactLog() {
     const category = document.getElementById('contactCategory').value;
+    const clienteNome = document.getElementById('clienteNome')?.value.trim() || '';
+    const clienteCognome = document.getElementById('clienteCognome')?.value.trim() || '';
+    const clienteNumero = document.getElementById('clienteNumero')?.value.trim() || '';
     const otherNote = document.getElementById('contactOtherNote').value.trim();
     const dateVal = document.getElementById('contactDate').value;
     const timeVal = document.getElementById('contactTime').value;
     const sede = document.getElementById('contactAppuntamentoSede')?.value || '';
-    const nominativo = document.getElementById('contactAppuntamentoNominativo')?.value.trim() || '';
     const link = document.getElementById('contactAppuntamentoLink')?.value.trim() || '';
     const acquistoTipo = document.getElementById('contactAcquistoTipo')?.value || '';
     const acquistoNote = document.getElementById('contactAcquistoNote')?.value.trim() || '';
@@ -1196,31 +1260,27 @@ async function createContactLog() {
     const serviceTipo = document.getElementById('contactServiceTipo')?.value || '';
     const marca = document.getElementById('contactMarca')?.value.trim() || '';
     const modello = document.getElementById('contactModello')?.value.trim() || '';
+    const targaGenerale = document.getElementById('contactTargaGenerale')?.value.trim() || '';
     const linkAuto = document.getElementById('contactLinkAuto')?.value.trim() || '';
     const noleggioRichiesta = document.getElementById('contactNoleggioRichiesta')?.value || '';
     const noleggioTipo = document.getElementById('contactNoleggioTipo')?.value || '';
     const noleggioLink = document.getElementById('contactNoleggioLink')?.value.trim() || '';
-    const noleggioNomeCliente = document.getElementById('contactNoleggioNomeCliente')?.value.trim() || '';
-    const noleggioCognomeCliente = document.getElementById('contactNoleggioCognomeCliente')?.value.trim() || '';
-    const noleggioCellulare = document.getElementById('contactNoleggioCellulare')?.value.trim() || '';
-    const serviceNomeCliente = document.getElementById('serviceNomeCliente')?.value.trim() || '';
-    const serviceCognomeCliente = document.getElementById('serviceCognomeCliente')?.value.trim() || '';
     const serviceTarga = document.getElementById('serviceTarga')?.value.trim() || '';
     const serviceTipoCliente = document.getElementById('serviceTipoCliente')?.value || '';
     const serviceNumeroTelefono = document.getElementById('serviceNumeroTelefono')?.value.trim() || '';
 
     if (!category) { alert('Seleziona una categoria'); return; }
+    if (!clienteNome) { alert('Inserisci il nome del cliente'); return; }
+    if (!clienteCognome) { alert('Inserisci il cognome del cliente'); return; }
+    if (!clienteNumero) { alert('Inserisci il numero del cliente'); return; }
     if (!dateVal || !timeVal) { alert('Inserisci data e orario'); return; }
     if (category === 'Altro' && !otherNote) { alert('Inserisci la motivazione per "Altro"'); return; }
     if (category === 'Info + Appuntamento' && !sede) { alert('Seleziona la sede'); return; }
-    if (category === 'Info + Appuntamento' && !nominativo) { alert('Inserisci il nominativo'); return; }
     if (category === 'Info + Appuntamento' && !fonte) { alert('Seleziona la fonte'); return; }
     if (category === 'Info Acquisto effettuato' && !acquistoTipo) { alert('Seleziona la tipologia acquisto'); return; }
     if (category === 'Info Vendita' && !fonte) { alert('Seleziona la fonte'); return; }
     if (category === 'Service' && !serviceTipo) { alert('Seleziona la tipologia service'); return; }
     if (category === 'Service' && !serviceTipoCliente) { alert('Seleziona Cliente o Non Cliente'); return; }
-    if (category === 'Service' && serviceTipoCliente === 'CLIENTE' && !serviceNomeCliente) { alert('Inserisci il nome del cliente'); return; }
-    if (category === 'Service' && serviceTipoCliente === 'CLIENTE' && !serviceCognomeCliente) { alert('Inserisci il cognome del cliente'); return; }
     if (category === 'Service' && serviceTipoCliente === 'CLIENTE' && !serviceTarga) { alert('Inserisci la targa'); return; }
     if (category === 'Info Noleggio' && !noleggioRichiesta) { alert('Seleziona Solo Info o Richiesta cliente'); return; }
     if (category === 'Info Noleggio' && noleggioRichiesta === 'RICHIESTA_CLIENTE' && !noleggioTipo) { alert('Seleziona la tipologia cliente'); return; }
@@ -1247,24 +1307,24 @@ async function createContactLog() {
 
     const isNoleggio = category === 'Info Noleggio';
     const isRichiestaCliente = isNoleggio && noleggioRichiesta === 'RICHIESTA_CLIENTE';
+    const isService = category === 'Service';
+
+    // Targa generica per il veicolo: riusa la colonna serviceTarga per qualsiasi categoria
+    const targaFinale = isService ? (serviceTarga || null) : (targaGenerale || null);
 
     const payload = {
-        category, otherNote: finalNote, contactDate,
+        category, clienteNome, clienteCognome, clienteNumero,
+        otherNote: finalNote, contactDate,
         marca: marca||null, modello: modello||null, linkAuto: linkAuto||null,
         serviceTipo: serviceTipo||null, serviceNote: null, acquistoNote: acquistoNote||null,
         noleggioTipo: isRichiestaCliente ? (noleggioTipo||null) : null,
         noleggioLink: isRichiestaCliente ? (noleggioLink||null) : null,
-        serviceNomeCliente: category === 'Service' ? (serviceNomeCliente || null) : null,
-        serviceCognomeCliente: category === 'Service' ? (serviceCognomeCliente || null) : null,
-        serviceTarga: category === 'Service' ? (serviceTarga || null) : null,
-        serviceTipoCliente: category === 'Service' ? serviceTipoCliente : null,
-        serviceNumeroTelefono: category === 'Service' ? (serviceNumeroTelefono || null) : null,
-        noleggioRichiesta: isNoleggio ? noleggioRichiesta : null,
-        noleggioNomeCliente: isRichiestaCliente ? (noleggioNomeCliente || null) : null,
-        noleggioCognomeCliente: isRichiestaCliente ? (noleggioCognomeCliente || null) : null,
-        noleggioCellulare: isRichiestaCliente ? (noleggioCellulare || null) : null
+        serviceTarga: targaFinale,
+        serviceTipoCliente: isService ? serviceTipoCliente : null,
+        serviceNumeroTelefono: isService ? (serviceNumeroTelefono || null) : null,
+        noleggioRichiesta: isNoleggio ? noleggioRichiesta : null
     };
-    if (category === 'Info + Appuntamento') { payload.nominativoAppuntamento = nominativo; payload.linkAppuntamento = link||null; payload.serviceTipo = fonte||null; }
+    if (category === 'Info + Appuntamento') { payload.linkAppuntamento = link||null; payload.serviceTipo = fonte||null; }
 
     try {
         const res = await fetch('/api/contacts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -1327,25 +1387,23 @@ function hideNewContactForm() {
         .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
     const noleggioDettagli = document.getElementById('contactNoleggioRichiestaDettagli');
     if (noleggioDettagli) noleggioDettagli.style.display = 'none';
-    ['contactAppuntamentoSede','contactAppuntamentoNominativo','contactAppuntamentoLink',
+    ['clienteNome','clienteCognome','clienteNumero',
+     'contactAppuntamentoSede','contactAppuntamentoLink',
      'contactAcquistoTipo','contactFonte','contactServiceTipo','contactMarcaInput','contactMarca',
-     'contactModello','contactLinkAuto','contactAcquistoNote','contactNoleggioTipo','contactNoleggioLink',
-     'contactNoleggioRichiesta','contactNoleggioNomeCliente','contactNoleggioCognomeCliente','contactNoleggioCellulare',
-     'serviceNomeCliente','serviceCognomeCliente','serviceTarga','serviceTipoCliente','serviceNumeroTelefono']
+     'contactModello','contactTargaGenerale','contactLinkAuto','contactAcquistoNote','contactNoleggioTipo','contactNoleggioLink',
+     'contactNoleggioRichiesta',
+     'serviceTarga','serviceTipoCliente','serviceNumeroTelefono']
         .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     selectedSede = ''; selectedAcquisto = ''; selectedFonte = ''; selectedService = ''; selectedNoleggioTipo = ''; selectedNoleggioRichiesta = '';
     SEDI_LIST.forEach(s => { const btn = document.getElementById(`sede-${s}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche'].forEach(k => { const btn = document.getElementById(`acquisto-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['Sito','GoogleADS','Autoscout','Facebook','Instagram','TikTok','RichiestaCliente','NonRicorda'].forEach(k => { const btn = document.getElementById(`fonte-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['Tagliando','DispositivoSatellitare','Prenotazione','LavorazioneInCorso','DoctorGlass','CambioGomme'].forEach(k => { const btn = document.getElementById(`service-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
-    ['Privato','PIVA'].forEach(k => { const btn = document.getElementById(`noleggio-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
+    ['Privato','PIVA','Aziende'].forEach(k => { const btn = document.getElementById(`noleggio-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['SOLO_INFO','RICHIESTA_CLIENTE'].forEach(k => { const btn = document.getElementById(`noleggioRichiesta-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['CLIENTE','NON_CLIENTE'].forEach(k => { const btn = document.getElementById(`serviceCliente-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
     selectedServiceTipoCliente = '';
-    const svcNumRow = document.getElementById('serviceNumeroTelefonoRow'); if (svcNumRow) svcNumRow.style.display = 'none';
-    const nomeLabelReset = document.getElementById('serviceNomeClienteLabel'); if (nomeLabelReset) nomeLabelReset.textContent = 'NOME CLIENTE';
-    const cognomeLabelReset = document.getElementById('serviceCognomeClienteLabel'); if (cognomeLabelReset) cognomeLabelReset.textContent = 'COGNOME CLIENTE';
-    const targaLabelReset = document.getElementById('serviceTargaLabel'); if (targaLabelReset) targaLabelReset.textContent = 'TARGA';
+    const targaLabelReset = document.getElementById('serviceTargaLabel'); if (targaLabelReset) targaLabelReset.textContent = 'TARGA (opzionale)';
     if (typeof resetPromoForm === 'function') resetPromoForm();
 }
 
@@ -1357,31 +1415,29 @@ function onCategoryChange() {
     document.getElementById('contactServiceRow').style.display = cat === 'Service' ? 'block' : 'none';
     document.getElementById('contactNoleggioRow').style.display = cat === 'Info Noleggio' ? 'block' : 'none';
     document.getElementById('contactFonteRow').style.display = (cat === 'Info Vendita' || cat === 'Info + Appuntamento' || cat === 'Info Vendita in Promo') ? 'block' : 'none';
-    document.getElementById('contactMarcaModelloRow').style.display = (cat === 'Info Vendita' || cat === 'Info + Appuntamento') ? 'block' : 'none';
+    // Blocco veicolo (marca/modello/targa/lead) visibile per tutte le categorie tranne "Altro"
+    document.getElementById('contactMarcaModelloRow').style.display = (cat && cat !== 'Altro' && cat !== 'Service') ? 'block' : 'none';
     document.getElementById('contactPromoRow').style.display = cat === 'Info Vendita in Promo' ? 'block' : 'none';
     if (cat === 'Info Vendita in Promo') updatePromoModelloField();
     if (cat !== 'Info Noleggio') {
         selectedNoleggioTipo = ''; selectedNoleggioRichiesta = '';
-        ['contactNoleggioTipo','contactNoleggioLink','contactNoleggioRichiesta','contactNoleggioNomeCliente','contactNoleggioCognomeCliente','contactNoleggioCellulare'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-        ['Privato','PIVA'].forEach(k=>{const b=document.getElementById(`noleggio-${k}`);if(b)b.classList.remove('btn-sede-active');});
+        ['contactNoleggioTipo','contactNoleggioLink','contactNoleggioRichiesta'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        ['Privato','PIVA','Aziende'].forEach(k=>{const b=document.getElementById(`noleggio-${k}`);if(b)b.classList.remove('btn-sede-active');});
         ['SOLO_INFO','RICHIESTA_CLIENTE'].forEach(k=>{const b=document.getElementById(`noleggioRichiesta-${k}`);if(b)b.classList.remove('btn-sede-active');});
         const dettagli = document.getElementById('contactNoleggioRichiestaDettagli'); if (dettagli) dettagli.style.display = 'none';
     }
-    if (cat !== 'Info + Appuntamento') { selectedSede=''; const el=document.getElementById('contactAppuntamentoSede'); if(el) el.value=''; const n=document.getElementById('contactAppuntamentoNominativo'); if(n) n.value=''; const l=document.getElementById('contactAppuntamentoLink'); if(l) l.value=''; SEDI_LIST.forEach(s=>{const b=document.getElementById(`sede-${s}`);if(b)b.classList.remove('btn-sede-active');}); }
+    if (cat !== 'Info + Appuntamento') { selectedSede=''; const el=document.getElementById('contactAppuntamentoSede'); if(el) el.value=''; const l=document.getElementById('contactAppuntamentoLink'); if(l) l.value=''; SEDI_LIST.forEach(s=>{const b=document.getElementById(`sede-${s}`);if(b)b.classList.remove('btn-sede-active');}); }
     if (cat !== 'Info Acquisto effettuato') { selectedAcquisto=''; const el=document.getElementById('contactAcquistoTipo'); if(el) el.value=''; const nr=document.getElementById('contactAcquistoNoteRow'); if(nr) nr.style.display='none'; ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche'].forEach(k=>{const b=document.getElementById(`acquisto-${k}`);if(b)b.classList.remove('btn-sede-active');}); }
     if (cat !== 'Service') {
         selectedService=''; selectedServiceTipoCliente='';
         const el=document.getElementById('contactServiceTipo'); if(el) el.value='';
         ['Tagliando','DispositivoSatellitare','Prenotazione','LavorazioneInCorso','DoctorGlass','CambioGomme'].forEach(k=>{const b=document.getElementById(`service-${k}`);if(b)b.classList.remove('btn-sede-active');});
         ['CLIENTE','NON_CLIENTE'].forEach(k=>{const b=document.getElementById(`serviceCliente-${k}`);if(b)b.classList.remove('btn-sede-active');});
-        ['serviceNomeCliente','serviceCognomeCliente','serviceTarga','serviceTipoCliente','serviceNumeroTelefono'].forEach(id=>{const e=document.getElementById(id);if(e) e.value='';});
-        const svcNumRow2 = document.getElementById('serviceNumeroTelefonoRow'); if (svcNumRow2) svcNumRow2.style.display = 'none';
-        const nl = document.getElementById('serviceNomeClienteLabel'); if (nl) nl.textContent = 'NOME CLIENTE';
-        const cl = document.getElementById('serviceCognomeClienteLabel'); if (cl) cl.textContent = 'COGNOME CLIENTE';
-        const tl = document.getElementById('serviceTargaLabel'); if (tl) tl.textContent = 'TARGA';
+        ['serviceTarga','serviceTipoCliente','serviceNumeroTelefono'].forEach(id=>{const e=document.getElementById(id);if(e) e.value='';});
+        const tl = document.getElementById('serviceTargaLabel'); if (tl) tl.textContent = 'TARGA (opzionale)';
     }
     if (cat !== 'Info Vendita' && cat !== 'Info + Appuntamento' && cat !== 'Info Vendita in Promo') { selectedFonte=''; const el=document.getElementById('contactFonte'); if(el) el.value=''; ['Sito','GoogleADS','Autoscout','Facebook','Instagram','TikTok','RichiestaCliente','NonRicorda'].forEach(k=>{const b=document.getElementById(`fonte-${k}`);if(b)b.classList.remove('btn-sede-active');}); }
-    if (cat !== 'Info Vendita' && cat !== 'Info + Appuntamento') { ['contactMarcaInput','contactMarca','contactModello','contactLinkAuto'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';}); }
+    if (cat === 'Altro' || cat === 'Service') { ['contactMarcaInput','contactMarca','contactModello','contactTargaGenerale','contactLinkAuto'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';}); }
     if (cat !== 'Info Vendita in Promo' && typeof resetPromoForm === 'function') resetPromoForm();
 }
 

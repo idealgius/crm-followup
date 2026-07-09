@@ -10,7 +10,16 @@ let recallEntries = [];
 const STAT_DETAIL_TITLES = {
     all: 'Follow-up totali',
     responded: 'Risposte ricevute',
-    appointments: 'Appuntamenti'
+    appointments: 'Appuntamenti',
+    abandoned: 'Abbandonati'
+};
+
+const WAITING_STATUS_TITLES = {
+    WAITING: 'In Attesa',
+    CALLED: 'Richiamati',
+    APPOINTMENT: 'Appuntamento',
+    INTERESTED: 'Interessati',
+    CLOSED: 'Chiusi'
 };
 
 const MONTH_NAMES = [
@@ -306,6 +315,43 @@ function closeStatDetail(event) {
     document.getElementById('statDetailModal').style.display = 'none';
 }
 
+// ===== DETTAGLIO RECALL (doughnut cliccabile) =====
+
+function showWaitingDetail(status) {
+    const items = recallEntries.filter(e => e.status === status);
+    const modal = document.getElementById('statDetailModal');
+    const list = document.getElementById('statDetailList');
+    const title = document.getElementById('statDetailTitle');
+    if (!modal || !list || !title) return;
+
+    title.textContent = WAITING_STATUS_TITLES[status] || 'Dettaglio';
+    if (items.length === 0) {
+        list.innerHTML = `<div class="empty-state" style="padding:30px"><p>Nessun cliente in questo stato</p></div>`;
+    } else {
+        list.innerHTML = `
+            <div class="stat-detail-meta">${items.length} risultati</div>
+            ${items.map(e => `
+                <div class="followup-card stat-detail-card" style="cursor:default">
+                    <div class="followup-header" style="margin-bottom:0">
+                        <div>
+                            <div class="followup-name">${e.fullName}</div>
+                            <div class="followup-meta">
+                                📞 ${e.contact} · 🚗 ${e.brand} ${e.model}
+                                ${e.price ? ' · 💰 €' + Number(e.price).toLocaleString('it-IT') : ''}
+                                ${e.recallDate ? ' · 📅 ' + e.recallDate : ''}
+                            </div>
+                        </div>
+                        <div>
+                            <span class="status-badge status-${e.status}">${formatWaitingStatus ? formatWaitingStatus(e.status) : e.status}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('')}
+        `;
+    }
+    modal.style.display = 'flex';
+}
+
 function renderFollowUpChart(stats) {
     const ctx = document.getElementById('chartFollowUp').getContext('2d');
     if (chartFollowUp) chartFollowUp.destroy();
@@ -314,13 +360,18 @@ function renderFollowUpChart(stats) {
     const gridColor = isDark ? '#2a2d3e' : '#e0e0e0';
     const tickColor = isDark ? '#8a8faa' : '#555';
 
+    const labels = ['Totali', 'Risposte', 'Appuntamenti', 'Abbandonati'];
+    const types = ['all', 'responded', 'appointments', 'abandoned'];
+    const dataValues = [stats.total, stats.responded, stats.appointments, stats.abandoned];
+    const total = stats.total || 0;
+
     chartFollowUp = new Chart(ctx, {
         type: 'bar',
         data: {
-            labels: ['Totali', 'Risposte', 'Appuntamenti', 'Abbandonati'],
+            labels,
             datasets: [{
                 label: 'Follow-Up',
-                data: [stats.total, stats.responded, stats.appointments, stats.abandoned],
+                data: dataValues,
                 backgroundColor: [
                     'rgba(33,150,243,0.7)',
                     'rgba(0,200,83,0.7)',
@@ -335,10 +386,19 @@ function renderFollowUpChart(stats) {
         options: {
             responsive: true,
             animation: { duration: 300 },
-            plugins: { legend: { display: false } },
+            onClick: (evt, elements) => { if (elements.length > 0) showStatDetail(types[elements[0].index]); },
+            onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: ctx => {
+                    const val = ctx.raw;
+                    const pct = total > 0 ? Math.round(val*1000/total)/10 : 0;
+                    return ` Valore: ${val} — ${pct}%`;
+                } } }
+            },
             scales: {
                 x: { ticks: { color: tickColor }, grid: { color: gridColor } },
-                y: { ticks: { color: tickColor }, grid: { color: gridColor }, beginAtZero: true }
+                y: { ticks: { color: tickColor, precision: 0 }, grid: { color: gridColor }, beginAtZero: true }
             }
         }
     });
@@ -351,31 +411,44 @@ function renderWaitingChart(stats) {
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
     const legendColor = isDark ? '#8a8faa' : '#555';
 
+    const labels = ['In Attesa', 'Richiamati', 'Appuntamento', 'Interessati', 'Chiusi'];
+    const statuses = ['WAITING', 'CALLED', 'APPOINTMENT', 'INTERESTED', 'CLOSED'];
+    const dataValues = [stats.waiting, stats.called, stats.appointments, stats.interested, stats.closed];
+    const colors = ['#2196f3','#ff9800','#f0c040','#00c853','#9c27b0'];
+    const total = dataValues.reduce((a,b) => a+b, 0);
+
     chartWaiting = new Chart(ctx, {
         type: 'doughnut',
         data: {
-            labels: ['In Attesa', 'Richiamati', 'Appuntamento', 'Interessati', 'Chiusi'],
+            labels,
             datasets: [{
-                data: [stats.waiting, stats.called, stats.appointments, stats.interested, stats.closed],
-                backgroundColor: [
-                    'rgba(33,150,243,0.7)',
-                    'rgba(255,152,0,0.7)',
-                    'rgba(240,192,64,0.7)',
-                    'rgba(0,200,83,0.7)',
-                    'rgba(156,39,176,0.7)'
-                ],
-                borderColor: ['#2196f3','#ff9800','#f0c040','#00c853','#9c27b0'],
+                data: dataValues,
+                backgroundColor: colors.map(c => c + 'b3'),
+                borderColor: colors,
                 borderWidth: 2
             }]
         },
         options: {
             responsive: true,
             animation: { duration: 300 },
+            onClick: (evt, elements) => { if (elements.length > 0) showWaitingDetail(statuses[elements[0].index]); },
+            onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
             plugins: {
                 legend: {
                     position: 'bottom',
-                    labels: { color: legendColor, font: { size: 11 } }
-                }
+                    labels: { color: legendColor, font: { size: 11 }, padding: 10, boxWidth: 12,
+                        generateLabels: chart => chart.data.labels.map((label, i) => {
+                            const val = chart.data.datasets[0].data[i];
+                            const pct = total > 0 ? Math.round(val*1000/total)/10 : 0;
+                            return { text: `${label}: ${val} (${pct}%)`, fillStyle: colors[i]+'b3', strokeStyle: colors[i], fontColor: legendColor, lineWidth: 0, index: i };
+                        })
+                    }
+                },
+                tooltip: { callbacks: { label: ctx => {
+                    const val = ctx.raw;
+                    const pct = total > 0 ? Math.round(val*1000/total)/10 : 0;
+                    return ` Valore: ${val} — ${pct}%`;
+                } } }
             }
         }
     });

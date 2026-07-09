@@ -20,6 +20,16 @@ public class ContactLog {
     @Column(nullable = false, length = 50)
     private String category;
 
+    // ===== CAMPI UNIVERSALI CLIENTE — obbligatori per ogni categoria =====
+    @Column(name = "cliente_nome", length = 100)
+    private String clienteNome;
+
+    @Column(name = "cliente_cognome", length = 100)
+    private String clienteCognome;
+
+    @Column(name = "cliente_numero", length = 50)
+    private String clienteNumero;
+
     @Column(name = "other_note", length = 500)
     private String otherNote;
 
