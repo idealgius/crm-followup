@@ -150,8 +150,10 @@ function openEditContactModal(id) {
     // Fonte (Info Vendita / Appuntamento / Promo)
     setVal('editContactFonte', log.otherNote && FONTE_LIST.includes(log.otherNote) ? log.otherNote : '');
 
-    // Marca/Modello generico + Lead
+    // Marca/Modello generico + Lead — ora tendina: popolo sia l'hidden che l'input visibile
     setVal('editContactMarca', log.marca);
+    const marcaInputEl = document.getElementById('editContactMarcaInput');
+    if (marcaInputEl) marcaInputEl.value = log.marca || '';
     setVal('editContactModello', log.modello);
     setVal('editContactLinkAuto', log.linkAuto);
 
@@ -159,6 +161,8 @@ function openEditContactModal(id) {
     setVal('editContactNoleggioRichiesta', log.noleggioRichiesta);
     setVal('editContactNoleggioTipo', log.noleggioTipo);
     setVal('editContactNoleggioMarca', log.marca);
+    const noleggioMarcaInputEl = document.getElementById('editContactNoleggioMarcaInput');
+    if (noleggioMarcaInputEl) noleggioMarcaInputEl.value = log.marca || '';
     setVal('editContactNoleggioModello', log.modello);
     setVal('editContactNoleggioLink', log.noleggioLink);
 
@@ -285,3 +289,83 @@ async function saveEditContactLog() {
         console.error('Errore modifica:', err);
     }
 }
+
+// ============================================================
+// TENDINA MARCA — MODAL MODIFICA (generica: Info Vendita/Appuntamento/Promo)
+// Stessa logica di filterMarche/selectMarca in contact.js, ma puntata sugli
+// id del modal di modifica invece che sul form di creazione.
+// ============================================================
+
+function showEditMarcheDropdown() { filterEditMarche('', true); }
+
+function filterEditMarche(query, showAll) {
+    const dropdown = document.getElementById('editMarcaDropdown');
+    if (!dropdown) return;
+    const matches = (!query || query.trim() === '' || showAll)
+        ? MARCHE_NORMALIZED
+        : MARCHE_NORMALIZED.filter(m => m.normalized.includes(normalizeText(query.trim())));
+    if (matches.length === 0) { dropdown.style.display = 'none'; return; }
+    dropdown.innerHTML = matches.map(m => `
+        <div onclick="selectEditMarca('${m.original}')"
+             style="padding:10px 14px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary);border-bottom:1px solid var(--border)"
+             onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''">
+            ${m.original}
+        </div>`).join('');
+    dropdown.style.display = 'block';
+}
+
+function selectEditMarca(marca) {
+    const input = document.getElementById('editContactMarcaInput');
+    const hidden = document.getElementById('editContactMarca');
+    if (input) input.value = marca;
+    if (hidden) hidden.value = marca;
+    const dropdown = document.getElementById('editMarcaDropdown');
+    if (dropdown) dropdown.style.display = 'none';
+}
+
+// ============================================================
+// TENDINA MARCA — MODAL MODIFICA (dedicata Info Noleggio)
+// ============================================================
+
+function showEditNoleggioMarcheDropdown() { filterEditNoleggioMarche('', true); }
+
+function filterEditNoleggioMarche(query, showAll) {
+    const dropdown = document.getElementById('editNoleggioMarcaDropdown');
+    if (!dropdown) return;
+    const matches = (!query || query.trim() === '' || showAll)
+        ? MARCHE_NORMALIZED
+        : MARCHE_NORMALIZED.filter(m => m.normalized.includes(normalizeText(query.trim())));
+    if (matches.length === 0) { dropdown.style.display = 'none'; return; }
+    dropdown.innerHTML = matches.map(m => `
+        <div onclick="selectEditNoleggioMarca('${m.original}')"
+             style="padding:10px 14px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary);border-bottom:1px solid var(--border)"
+             onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''">
+            ${m.original}
+        </div>`).join('');
+    dropdown.style.display = 'block';
+}
+
+function selectEditNoleggioMarca(marca) {
+    const input = document.getElementById('editContactNoleggioMarcaInput');
+    const hidden = document.getElementById('editContactNoleggioMarca');
+    if (input) input.value = marca;
+    if (hidden) hidden.value = marca;
+    const dropdown = document.getElementById('editNoleggioMarcaDropdown');
+    if (dropdown) dropdown.style.display = 'none';
+}
+
+// Chiude i due dropdown marca del modal di modifica quando si clicca fuori,
+// stessa logica già presente in contact.js per il form di creazione.
+document.addEventListener('click', function(e) {
+    const editMarcaDropdown = document.getElementById('editMarcaDropdown');
+    const editMarcaInput = document.getElementById('editContactMarcaInput');
+    if (editMarcaDropdown && editMarcaInput && !editMarcaInput.contains(e.target) && !editMarcaDropdown.contains(e.target)) {
+        editMarcaDropdown.style.display = 'none';
+    }
+
+    const editNoleggioMarcaDropdown = document.getElementById('editNoleggioMarcaDropdown');
+    const editNoleggioMarcaInput = document.getElementById('editContactNoleggioMarcaInput');
+    if (editNoleggioMarcaDropdown && editNoleggioMarcaInput && !editNoleggioMarcaInput.contains(e.target) && !editNoleggioMarcaDropdown.contains(e.target)) {
+        editNoleggioMarcaDropdown.style.display = 'none';
+    }
+});

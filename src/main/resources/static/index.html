@@ -247,7 +247,7 @@
     </div>
 
     <!-- REGISTRO CONTATTI PAGE -->
-    <div id="contactsPage" class="page" style="display:none">
+    <div id="contactsPage" class="page page-wide" style="display:none">
         <div class="page-header">
             <h2>REGISTRO CONTATTI</h2>
             <div class="filter-bar">
@@ -325,19 +325,22 @@
             <div class="stat-card purple"><div class="stat-label">SERVICE</div><div class="stat-value" id="statService">0%</div></div>
         </div>
 
-        <!-- GRAFICI PRINCIPALI -->
-        <div id="contactChartPrint" style="margin-bottom:20px;display:flex;gap:20px;flex-wrap:wrap;align-items:stretch">
-            <div class="chart-card" style="width:520px;min-width:520px;max-width:520px;display:flex;flex-direction:column;gap:24px">
+        <!-- GRAFICI PRINCIPALI — larghezze fisse rimosse: distribuite via CSS (.contact-charts-row) 
+             con proporzioni bilanciate, così stanno su un'unica riga senza scroll e senza numeri tagliati -->
+        <div id="contactChartPrint" class="contact-charts-row">
+
+            <div class="chart-card contact-chart-categorie">
                 <div>
                     <h3>DISTRIBUZIONE CATEGORIE</h3>
-                    <canvas id="chartContacts" style="max-height:240px"></canvas>
+                    <canvas id="chartContacts" style="max-height:270px"></canvas>
                 </div>
                 <div id="chartOperatoreWrapper" style="display:none">
                     <h3 style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);margin-bottom:12px;text-transform:uppercase">CHIAMATE PER OPERATORE</h3>
-                    <canvas id="chartContactsByOperator" style="max-height:240px"></canvas>
+                    <canvas id="chartContactsByOperator" style="max-height:220px"></canvas>
                 </div>
             </div>
-            <div class="chart-card" style="width:380px;min-width:380px;max-width:380px;min-height:560px;display:flex;flex-direction:column;gap:24px;justify-content:space-between">
+
+            <div class="chart-card contact-chart-calendario">
                 <div>
                     <div class="calendar-header" style="margin-bottom:8px">
                         <button type="button" class="cal-nav-btn" onclick="changeContactCalendarMonth(-1)">‹</button>
@@ -348,49 +351,56 @@
                 </div>
                 <div>
                     <h3>APPUNTAMENTI PER SEDE</h3>
-                    <canvas id="chartAppuntamentiSede" style="max-height:200px"></canvas>
+                    <canvas id="chartAppuntamentiSede" style="max-height:190px"></canvas>
                 </div>
             </div>
-            <div class="chart-card" style="width:340px;min-width:340px;max-width:340px;display:flex;flex-direction:column;gap:24px">
+
+            <div class="chart-card contact-chart-acquisto">
                 <div>
                     <h3>INFO ACQUISTO EFFETTUATO</h3>
-                    <canvas id="chartInfoAcquisto" style="max-height:260px"></canvas>
+                    <canvas id="chartInfoAcquisto" style="max-height:230px"></canvas>
                 </div>
                 <div id="chartFonteWrapper">
                     <h3 style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);margin-bottom:12px;text-transform:uppercase">FONTE INFO VENDITA</h3>
-                    <canvas id="chartFonteVendita" style="max-height:280px"></canvas>
+                    <canvas id="chartFonteVendita" style="max-height:250px"></canvas>
                 </div>
             </div>
 
             <!-- SERVICE — grafici Agnano e Salerno affiancati nella stessa card -->
-            <div class="chart-card" style="width:640px;min-width:640px;max-width:640px;display:flex;flex-direction:column;gap:12px">
+            <div class="chart-card contact-chart-service">
                 <h3>SERVICE PER SEDE</h3>
-                <div style="display:flex;gap:16px">
-                    <div style="flex:1;min-width:0">
+                <div class="contact-chart-service-inner">
+                    <div class="contact-chart-service-col">
                         <h4 style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);margin-bottom:8px;text-transform:uppercase">📍 Agnano</h4>
-                        <canvas id="chartServiceAgnano" style="max-height:240px"></canvas>
+                        <canvas id="chartServiceAgnano"></canvas>
                     </div>
-                    <div style="flex:1;min-width:0">
+                    <div class="contact-chart-service-col">
                         <h4 style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);margin-bottom:8px;text-transform:uppercase">📍 Salerno</h4>
-                        <canvas id="chartServiceSalerno" style="max-height:240px"></canvas>
+                        <canvas id="chartServiceSalerno"></canvas>
                     </div>
                 </div>
             </div>
 
-            <div class="chart-card" style="width:420px;min-width:420px;max-width:420px;display:flex;flex-direction:column;gap:16px">
+            <div class="chart-card contact-chart-marche">
                 <h3>PERFORMANCE MARCHE</h3>
-                <div id="chartMarcheCustom" style="display:flex;flex-direction:column;gap:10px"></div>
+                <div id="chartMarcheCustom"></div>
             </div>
-            <div class="chart-card" style="width:380px;min-width:380px;max-width:380px;display:flex;flex-direction:column;gap:24px" id="chartNoleggioWrapper" style="display:none">
+
+            <!-- Un solo attributo style: prima c'erano due style= duplicati sullo stesso div
+                 (bug: il browser onorava solo il primo, "display:flex", quindi il grafico
+                 restava visibile anche senza dati noleggio). Ora lo stato iniziale nascosto
+                 è corretto e coerente con quanto imposta poi renderChartNoleggio() in contact.js -->
+            <div class="chart-card contact-chart-noleggio" id="chartNoleggioWrapper" style="display:none">
                 <div>
                     <h3>TIPOLOGIA NOLEGGIO</h3>
-                    <canvas id="chartNoleggioTipo" style="max-height:220px"></canvas>
+                    <canvas id="chartNoleggioTipo" style="max-height:190px"></canvas>
                 </div>
                 <div>
                     <h3 style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);margin-bottom:12px;text-transform:uppercase">SOLO INFO vs LEAD GENERATA</h3>
-                    <canvas id="chartNoleggioLead" style="max-height:220px"></canvas>
+                    <canvas id="chartNoleggioLead" style="max-height:190px"></canvas>
                 </div>
             </div>
+
         </div>
 
         <!-- GRAFICI PROMO -->
@@ -459,10 +469,15 @@
                         </select>
                     </div>
 
-                    <!-- MARCA/MODELLO generico -->
+                    <!-- MARCA/MODELLO generico — ORA TENDINA, come nel form di creazione -->
                     <div id="editContactMarcaModelloRow" style="display:none">
                         <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MARCA VEICOLO</label>
-                        <input type="text" id="editContactMarca" placeholder="Es. Peugeot" class="input-field">
+                        <div style="position:relative;margin-bottom:14px">
+                            <input type="text" id="editContactMarcaInput" placeholder="Clicca o cerca marca..." class="input-field" style="margin-bottom:0;cursor:pointer"
+                                   oninput="filterEditMarche(this.value)" onfocus="showEditMarcheDropdown()" autocomplete="off">
+                            <div id="editMarcaDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1.5px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;box-shadow:var(--shadow)"></div>
+                            <input type="hidden" id="editContactMarca" value="">
+                        </div>
                         <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLO VEICOLO</label>
                         <input type="text" id="editContactModello" placeholder="Es. 208 1.2 PureTech 100cv" class="input-field">
                     </div>
@@ -486,10 +501,18 @@
                             <option value="">—</option>
                             <option>Privato</option><option>Partita IVA</option><option>Noleggio per aziende</option>
                         </select>
+
+                        <!-- MARCA/MODELLO NOLEGGIO — ORA TENDINA -->
                         <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MARCA VEICOLO NOLEGGIO</label>
-                        <input type="text" id="editContactNoleggioMarca" placeholder="Es. Peugeot" class="input-field">
+                        <div style="position:relative;margin-bottom:14px">
+                            <input type="text" id="editContactNoleggioMarcaInput" placeholder="Clicca o cerca marca..." class="input-field" style="margin-bottom:0;cursor:pointer"
+                                   oninput="filterEditNoleggioMarche(this.value)" onfocus="showEditNoleggioMarcheDropdown()" autocomplete="off">
+                            <div id="editNoleggioMarcaDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1.5px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;box-shadow:var(--shadow)"></div>
+                            <input type="hidden" id="editContactNoleggioMarca" value="">
+                        </div>
                         <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLO VEICOLO NOLEGGIO</label>
                         <input type="text" id="editContactNoleggioModello" placeholder="Es. 208" class="input-field">
+
                         <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">LEAD NOLEGGIO</label>
                         <input type="url" id="editContactNoleggioLink" placeholder="https://..." class="input-field">
                     </div>

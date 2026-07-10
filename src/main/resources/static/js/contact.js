@@ -423,6 +423,10 @@ function renderGenericContactDetail() {
         html += items.map(log => {
             const date = log.contactDate.split('T')[0];
             const time = log.contactDate.split('T')[1].substring(0,5);
+            const catClass = log.category.replace(/[\s+]/g, '_');
+            const noteText = (log.category !== 'Info Acquisto effettuato' && log.category !== 'Service')
+                ? (log.otherNote || '')
+                : (log.acquistoNote || log.serviceNote || '');
             const links = [];
             if (log.linkAuto) links.push(`<a href="${log.linkAuto}" target="_blank" rel="noopener" title="Lead veicolo" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(124,77,255,0.15);color:#7c4dff;text-decoration:none;font-size:13px">🔗</a>`);
             if (log.linkAppuntamento) links.push(`<a href="${log.linkAppuntamento}" target="_blank" rel="noopener" title="Link appuntamento" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(74,144,217,0.15);color:#4a90d9;text-decoration:none;font-size:13px">🔗</a>`);
@@ -431,12 +435,14 @@ function renderGenericContactDetail() {
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
                     <div>
                         <div style="font-weight:800;color:var(--text-primary);font-size:14px">${clienteNomeCompleto(log)}</div>
+                        <div style="margin-top:5px"><span class="contact-category-badge cat-${catClass}">${log.category}</span></div>
                         <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">📅 ${formatDateIT(date)} · 🕐 ${time}</div>
                         <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📞 ${clienteNumeroDisplay(log)}</div>
                         <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">👤 ${log.user.fullName}</div>
                         ${log.marca ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">🚗 ${log.marca}${log.modello?' · '+log.modello:''}</div>` : ''}
                         ${log.serviceSede ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📍 Service ${log.serviceSede}</div>` : ''}
                         ${log.serviceTarga ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">🔖 ${log.serviceTarga}</div>` : ''}
+                        ${noteText ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📝 ${noteText}</div>` : ''}
                     </div>
                     ${links.length > 0 ? `<div style="display:flex;gap:6px;flex-shrink:0">${links.join('')}</div>` : ''}
                 </div>
@@ -485,7 +491,7 @@ function renderContactChartFromLogs(logs) {
             },
             onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
             plugins: {
-                legend: { position: 'right', labels: { color: legendColor, font: { size: 12 }, padding: 14, boxWidth: 14,
+                legend: { position: 'right', labels: { color: legendColor, font: { size: 11 }, padding: 8, boxWidth: 12,
                     generateLabels: chart => chart.data.labels.map((label, i) => {
                         const val = chart.data.datasets[0].data[i];
                         const pct = total > 0 ? Math.round(val*1000/total)/10 : 0;
@@ -1233,7 +1239,7 @@ function renderContactRow(log) {
     const marca = log.marca || log.noleggioMarca;
     const modello = log.modello || log.noleggioModello;
     return `<tr id="contact-row-${log.id}">
-        <td style="font-weight:700;color:var(--text-primary);white-space:nowrap">${time}</td>
+        <td style="font-weight:700;color:var(--text-primary)">${time}</td>
         <td style="font-size:12px;color:var(--text-primary);font-weight:700">${clienteNomeCompleto(log)}<br><span style="font-weight:400;color:var(--text-secondary)">📞 ${clienteNumeroDisplay(log)}</span></td>
         <td>
             <span class="contact-category-badge cat-${catClass}">${log.category}</span>
@@ -1352,7 +1358,6 @@ function selectNoleggioRichiesta(richiesta) {
     const btn = document.getElementById(`noleggioRichiesta-${richiesta}`);
     if (btn) btn.classList.add('btn-sede-active');
 
-    // Il Lead è visibile SOLO per "Richiesta cliente" — un prospect che chiede solo info non lascia lead
     const dettagli = document.getElementById('contactNoleggioRichiestaDettagli');
     if (dettagli) dettagli.style.display = richiesta === 'RICHIESTA_CLIENTE' ? 'block' : 'none';
 
@@ -1458,12 +1463,10 @@ async function createContactLog() {
     const serviceSede = document.getElementById('contactServiceSede')?.value || '';
     const serviceNote = document.getElementById('contactServiceNote')?.value.trim() || '';
 
-    // Blocco veicolo generico (Info Vendita / Appuntamento / Promo)
     const marca = document.getElementById('contactMarca')?.value.trim() || '';
     const modello = document.getElementById('contactModello')?.value.trim() || '';
     const linkAuto = document.getElementById('contactLinkAuto')?.value.trim() || '';
 
-    // Blocco veicolo dedicato Info Noleggio
     const noleggioMarca = document.getElementById('contactNoleggioMarca')?.value.trim() || '';
     const noleggioModello = document.getElementById('contactNoleggioModello')?.value.trim() || '';
 
@@ -1524,10 +1527,8 @@ async function createContactLog() {
         clienteNumero,
         nonComunicaNominativo,
         otherNote: finalNote, contactDate,
-        // Marca/Modello: per Info Noleggio uso il blocco dedicato, per le altre categorie il blocco generico
         marca: isNoleggio ? (noleggioMarca || null) : (marca || null),
         modello: isNoleggio ? (noleggioModello || null) : (modello || null),
-        // Lead: per Info Vendita/Appuntamento/Promo sempre da linkAuto; per Info Noleggio solo se richiesta cliente, da noleggioLink
         linkAuto: isNoleggio ? null : (linkAuto || null),
         serviceTipo: serviceTipo||null,
         serviceNote: isService ? (serviceNote || null) : null,
@@ -1567,8 +1568,6 @@ async function deleteContactLog(id) {
         await loadContactLogs(from, to, savedDayView);
     } catch (err) { console.error('Errore eliminazione:', err); }
 }
-
-// ===== MODIFICA CONTATTO — modal esteso: categoria a tendina + nome/cognome/numero/targa =====
 
 function openEditContactModal(id) {
     const log = contactLogs.find(l => l.id === id);
@@ -1688,7 +1687,6 @@ function onCategoryChange() {
     document.getElementById('contactNoleggioRow').style.display = cat === 'Info Noleggio' ? 'block' : 'none';
     document.getElementById('contactFonteRow').style.display = (cat === 'Info Vendita' || cat === 'Info + Appuntamento' || cat === 'Info Vendita in Promo') ? 'block' : 'none';
 
-    // Blocco Marca/Modello generico + Lead: solo per Info Vendita/Appuntamento/Promo (NON per Info Noleggio, che ha il suo blocco dedicato)
     const isVenditaLike = cat === 'Info Vendita' || cat === 'Info + Appuntamento' || cat === 'Info Vendita in Promo';
     document.getElementById('contactMarcaModelloRow').style.display = isVenditaLike ? 'block' : 'none';
     document.getElementById('contactLinkAutoRow').style.display = isVenditaLike ? 'block' : 'none';

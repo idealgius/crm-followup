@@ -371,9 +371,6 @@ select.input-dark {
     filter: brightness(0) invert(1);
 }
 
-/* .nav-links — UNICA definizione (deduplicata). flex-wrap: nowrap così
-   le etichette non vanno mai a capo; scroll orizzontale invisibile
-   se lo spazio non basta (vedi media query sotto). */
 .nav-links {
     display: flex;
     gap: 4px;
@@ -429,6 +426,12 @@ select.input-dark {
     padding: 28px 30px;
     max-width: 1440px;
     margin: 0 auto;
+}
+
+/* Registro Contatti ha bisogno di più respiro orizzontale per far stare
+   tutti i grafici comodamente. Allargata solo questa pagina, non l'intero sito. */
+.page.page-wide {
+    max-width: 1680px;
 }
 
 .page-header {
@@ -515,45 +518,16 @@ select.input-dark {
     transform: translate(15px, -15px);
 }
 
-.stat-card.green {
-    border-color: #00e676;
-}
-
-.stat-card.green::after {
-    background: #00e676;
-}
-
-.stat-card.blue {
-    border-color: #1a4080;
-}
-
-.stat-card.blue::after {
-    background: #1a4080;
-}
-
-.stat-card.gold {
-    border-color: #f0c040;
-}
-
-.stat-card.gold::after {
-    background: #f0c040;
-}
-
-.stat-card.pink {
-    border-color: #ff4081;
-}
-
-.stat-card.pink::after {
-    background: #ff4081;
-}
-
-.stat-card.purple {
-    border-color: #7c4dff;
-}
-
-.stat-card.purple::after {
-    background: #7c4dff;
-}
+.stat-card.green { border-color: #00e676; }
+.stat-card.green::after { background: #00e676; }
+.stat-card.blue { border-color: #1a4080; }
+.stat-card.blue::after { background: #1a4080; }
+.stat-card.gold { border-color: #f0c040; }
+.stat-card.gold::after { background: #f0c040; }
+.stat-card.pink { border-color: #ff4081; }
+.stat-card.pink::after { background: #ff4081; }
+.stat-card.purple { border-color: #7c4dff; }
+.stat-card.purple::after { background: #7c4dff; }
 
 .stat-card:hover {
     transform: translateY(-3px);
@@ -642,13 +616,8 @@ select.input-dark {
     display: inline-block;
 }
 
-.cal-dot-pending {
-    background: #f0c040;
-}
-
-.cal-dot-complete {
-    background: #00c853;
-}
+.cal-dot-pending { background: #f0c040; }
+.cal-dot-complete { background: #00c853; }
 
 .fu-calendar {
     display: grid;
@@ -676,29 +645,11 @@ select.input-dark {
     transition: all 0.15s;
 }
 
-.cal-day:hover {
-    border-color: #1a4080;
-}
-
-.cal-day-empty {
-    border: none;
-    background: transparent;
-    cursor: default;
-}
-
-.cal-day-pending {
-    background: rgba(240,192,64,0.35);
-    border-color: #f0c040;
-}
-
-.cal-day-complete {
-    background: rgba(0,200,83,0.28);
-    border-color: #00c853;
-}
-
-.cal-day-today {
-    box-shadow: 0 0 0 2px #1a4080;
-}
+.cal-day:hover { border-color: #1a4080; }
+.cal-day-empty { border: none; background: transparent; cursor: default; }
+.cal-day-pending { background: rgba(240,192,64,0.35); border-color: #f0c040; }
+.cal-day-complete { background: rgba(0,200,83,0.28); border-color: #00c853; }
+.cal-day-today { box-shadow: 0 0 0 2px #1a4080; }
 
 .modal-overlay {
     position: fixed;
@@ -942,29 +893,11 @@ select.input-dark {
     border-radius: 10px;
 }
 
-.stat-total {
-    background: rgba(26,64,128,0.1);
-    color: #1a4080;
-}
-
-[data-theme="light"] .stat-total {
-    background: rgba(26,64,128,0.08);
-}
-
-.stat-responded {
-    background: rgba(0,200,83,0.12);
-    color: #00c853;
-}
-
-.stat-abandoned {
-    background: rgba(255,61,61,0.12);
-    color: #ff3d3d;
-}
-
-.stat-appointment {
-    background: rgba(240,192,64,0.15);
-    color: #d4a820;
-}
+.stat-total { background: rgba(26,64,128,0.1); color: #1a4080; }
+[data-theme="light"] .stat-total { background: rgba(26,64,128,0.08); }
+.stat-responded { background: rgba(0,200,83,0.12); color: #00c853; }
+.stat-abandoned { background: rgba(255,61,61,0.12); color: #ff3d3d; }
+.stat-appointment { background: rgba(240,192,64,0.15); color: #d4a820; }
 
 .folder-tab-right {
     display: flex;
@@ -1053,43 +986,15 @@ select.input-dark {
     white-space: nowrap;
 }
 
-.status-IN_PROGRESS {
-    background: var(--badge-in-progress-bg);
-    color: var(--badge-in-progress-color);
-}
+.status-IN_PROGRESS { background: var(--badge-in-progress-bg); color: var(--badge-in-progress-color); }
+.status-RESPONDED { background: rgba(0,200,83,0.12); color: #00c853; }
+.status-APPOINTMENT { background: rgba(240,192,64,0.15); color: #d4a820; }
+.status-ABANDONED { background: rgba(255,61,61,0.12); color: #ff3d3d; }
+.status-ADMIN { background: rgba(240,192,64,0.15); color: #d4a820; }
+.status-CONSULTANT { background: rgba(26,64,128,0.12); color: #4a90d9; }
 
-.status-RESPONDED {
-    background: rgba(0,200,83,0.12);
-    color: #00c853;
-}
-
-.status-APPOINTMENT {
-    background: rgba(240,192,64,0.15);
-    color: #d4a820;
-}
-
-.status-ABANDONED {
-    background: rgba(255,61,61,0.12);
-    color: #ff3d3d;
-}
-
-.status-ADMIN {
-    background: rgba(240,192,64,0.15);
-    color: #d4a820;
-}
-
-.status-CONSULTANT {
-    background: rgba(26,64,128,0.12);
-    color: #4a90d9;
-}
-
-[data-theme="light"] .status-RESPONDED {
-    color: #007a30;
-}
-
-[data-theme="light"] .status-ABANDONED {
-    color: #cc0000;
-}
+[data-theme="light"] .status-RESPONDED { color: #007a30; }
+[data-theme="light"] .status-ABANDONED { color: #cc0000; }
 
 /* ===== STEPS ===== */
 .steps-grid {
@@ -1126,33 +1031,14 @@ select.input-dark {
     margin-bottom: 6px;
 }
 
-.outcome-PENDING {
-    color: var(--text-secondary);
-}
+.outcome-PENDING { color: var(--text-secondary); }
+.outcome-ANSWERED { color: #00c853; }
+.outcome-SENT { color: #42a5f5; }
+.outcome-NO_ANSWER { color: #ff3d3d; }
 
-.outcome-ANSWERED {
-    color: #00c853;
-}
-
-.outcome-SENT {
-    color: #42a5f5;
-}
-
-.outcome-NO_ANSWER {
-    color: #ff3d3d;
-}
-
-[data-theme="light"] .outcome-ANSWERED {
-    color: #007a30;
-}
-
-[data-theme="light"] .outcome-SENT {
-    color: #1565c0;
-}
-
-[data-theme="light"] .outcome-NO_ANSWER {
-    color: #cc0000;
-}
+[data-theme="light"] .outcome-ANSWERED { color: #007a30; }
+[data-theme="light"] .outcome-SENT { color: #1565c0; }
+[data-theme="light"] .outcome-NO_ANSWER { color: #cc0000; }
 
 .step-timestamp {
     font-size: 10px;
@@ -1209,33 +1095,13 @@ select.input-dark {
     justify-content: flex-end;
 }
 
-.status-WAITING {
-    background: rgba(26,64,128,0.1);
-    color: #4a90d9;
-}
+.status-WAITING { background: rgba(26,64,128,0.1); color: #4a90d9; }
+.status-CALLED { background: rgba(255,152,0,0.12); color: #ff9800; }
+.status-INTERESTED { background: rgba(0,200,83,0.12); color: #00c853; }
+.status-CLOSED { background: rgba(124,77,255,0.12); color: #7c4dff; }
 
-.status-CALLED {
-    background: rgba(255,152,0,0.12);
-    color: #ff9800;
-}
-
-.status-INTERESTED {
-    background: rgba(0,200,83,0.12);
-    color: #00c853;
-}
-
-.status-CLOSED {
-    background: rgba(124,77,255,0.12);
-    color: #7c4dff;
-}
-
-[data-theme="light"] .status-WAITING {
-    color: #1a4080;
-}
-
-[data-theme="light"] .status-INTERESTED {
-    color: #007a30;
-}
+[data-theme="light"] .status-WAITING { color: #1a4080; }
+[data-theme="light"] .status-INTERESTED { color: #007a30; }
 
 /* ===== ERROR ===== */
 .error-msg {
@@ -1324,12 +1190,18 @@ select.input-field {
     text-transform: capitalize;
 }
 
-/* .contact-table-wrapper — UNICA definizione (deduplicata) */
+/* ===== TABELLA REGISTRO CONTATTI — FIX SCROLL ORIZZONTALE =====
+   Non usare overflow-x:auto né white-space:nowrap su tutte le celle:
+   con 6 colonne e badge/link lunghi supera sempre la larghezza del
+   contenitore. Soluzione: table-layout fixed, colonne larghe fisse
+   solo dove serve (Orario/Operatore/Azioni), wrap libero altrove. */
 .contact-table-wrapper {
-    overflow-x: auto;
+    overflow-x: visible;
+    width: 100%;
 }
 
 .contact-table {
+    table-layout: fixed;
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
@@ -1348,16 +1220,40 @@ select.input-field {
     color: var(--text-secondary);
     text-transform: uppercase;
     border-bottom: 1px solid var(--border);
-    white-space: nowrap;
 }
 
 .contact-table td {
     padding: 10px 14px;
     border-bottom: 1px solid var(--border);
     color: var(--text-primary);
-    vertical-align: middle;
-    white-space: nowrap;
+    vertical-align: top;
 }
+
+.contact-table th,
+.contact-table td {
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+/* Orario */
+.contact-table th:nth-child(1),
+.contact-table td:nth-child(1) { white-space: nowrap; width: 70px; }
+/* Cliente */
+.contact-table th:nth-child(2),
+.contact-table td:nth-child(2) { width: 16%; }
+/* Categoria (badge + tag possono essere lunghi) */
+.contact-table th:nth-child(3),
+.contact-table td:nth-child(3) { width: 34%; }
+/* Note */
+.contact-table th:nth-child(4),
+.contact-table td:nth-child(4) { width: 20%; }
+/* Operatore */
+.contact-table th:nth-child(5),
+.contact-table td:nth-child(5) { white-space: nowrap; width: 120px; }
+/* Azioni */
+.contact-table th:nth-child(6),
+.contact-table td:nth-child(6) { white-space: nowrap; width: 90px; }
 
 .contact-table tbody tr:last-child td {
     border-bottom: none;
@@ -1384,67 +1280,20 @@ select.input-field {
     letter-spacing: 0.5px;
 }
 
-.cat-Info_Vendita {
-    background: rgba(26,64,128,0.12);
-    color: #1a4080;
-}
+.cat-Info_Vendita { background: rgba(26,64,128,0.12); color: #1a4080; }
+.cat-Info_Noleggio { background: rgba(0,200,83,0.12); color: #00c853; }
+.cat-Service { background: rgba(240,192,64,0.15); color: #d4a820; }
+.cat-Info_Acquisto_effettuato { background: rgba(74,144,217,0.15); color: #4a90d9; }
+.cat-Ritardo_Consegna { background: rgba(255,61,61,0.12); color: #ff3d3d; }
+.cat-Pratica_Leasing { background: rgba(124,77,255,0.12); color: #7c4dff; }
+.cat-Pratica_Finanziamento { background: rgba(255,152,0,0.12); color: #ff9800; }
+.cat-Amministrazione { background: rgba(0,188,212,0.12); color: #00bcd4; }
+.cat-Info___Appuntamento { background: rgba(233,30,99,0.12); color: #e91e63; }
+.cat-Altro { background: rgba(138,143,170,0.12); color: #8a8faa; }
 
-.cat-Info_Noleggio {
-    background: rgba(0,200,83,0.12);
-    color: #00c853;
-}
-
-.cat-Service {
-    background: rgba(240,192,64,0.15);
-    color: #d4a820;
-}
-
-.cat-Info_Acquisto_effettuato {
-    background: rgba(74,144,217,0.15);
-    color: #4a90d9;
-}
-
-.cat-Ritardo_Consegna {
-    background: rgba(255,61,61,0.12);
-    color: #ff3d3d;
-}
-
-.cat-Pratica_Leasing {
-    background: rgba(124,77,255,0.12);
-    color: #7c4dff;
-}
-
-.cat-Pratica_Finanziamento {
-    background: rgba(255,152,0,0.12);
-    color: #ff9800;
-}
-
-.cat-Amministrazione {
-    background: rgba(0,188,212,0.12);
-    color: #00bcd4;
-}
-
-.cat-Info___Appuntamento {
-    background: rgba(233,30,99,0.12);
-    color: #e91e63;
-}
-
-.cat-Altro {
-    background: rgba(138,143,170,0.12);
-    color: #8a8faa;
-}
-
-[data-theme="light"] .cat-Info_Vendita {
-    color: #0d2a5e;
-}
-
-[data-theme="light"] .cat-Info_Noleggio {
-    color: #007a30;
-}
-
-[data-theme="light"] .cat-Service {
-    color: #8a6000;
-}
+[data-theme="light"] .cat-Info_Vendita { color: #0d2a5e; }
+[data-theme="light"] .cat-Info_Noleggio { color: #007a30; }
+[data-theme="light"] .cat-Service { color: #8a6000; }
 
 /* ===== RECALL BADGES ===== */
 .recall-badge {
@@ -1488,12 +1337,8 @@ select.input-field {
 }
 
 @keyframes pulse-recall {
-    0%, 100% {
-        box-shadow: 0 0 0 0 rgba(240,192,64,0.4);
-    }
-    50% {
-        box-shadow: 0 0 0 6px rgba(240,192,64,0);
-    }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(240,192,64,0.4); }
+    50% { box-shadow: 0 0 0 6px rgba(240,192,64,0); }
 }
 
 /* ===== CONTACT TREE ===== */
@@ -1678,6 +1523,109 @@ select.input-field {
     }
 }
 
+/* ===== REGISTRO CONTATTI — RIGA GRAFICI =====
+   UNICO blocco per questo layout (rimossi i due blocchi duplicati/in
+   conflitto che c'erano prima: uno flex-nowrap e uno grid, uno sopra
+   l'altro nello stesso file). Schema a larghezze fisse come la versione
+   che funzionava bene: 3 card per riga, flex-wrap naturale, tutto
+   leggibile e ben distanziato, niente scroll, niente schiacciamenti.
+
+   Riga 1: Distribuzione Categorie (520px) — Calendario+Appuntamenti Sede (380px) — Info Acquisto+Fonte (340px)
+   Riga 2: Service per Sede (680px, due colonne interne) — Performance Marche (420px) — Tipologia Noleggio (380px) */
+.contact-charts-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-bottom: 20px;
+    align-items: stretch;
+}
+
+.contact-charts-row > .chart-card {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding: 20px;
+}
+
+.contact-charts-row > .chart-card canvas {
+    max-width: 100%;
+}
+
+.contact-chart-categorie {
+    width: 520px;
+    min-width: 520px;
+    max-width: 520px;
+}
+
+.contact-chart-calendario {
+    width: 380px;
+    min-width: 380px;
+    max-width: 380px;
+    justify-content: space-between;
+}
+
+.contact-chart-acquisto {
+    width: 340px;
+    min-width: 340px;
+    max-width: 340px;
+}
+
+/* Service per sede: larga quanto basta per ospitare due colonne leggibili
+   con etichette lunghe ("Dispositivo satellitare") senza schiacciarle */
+.contact-chart-service {
+    width: 680px;
+    min-width: 680px;
+    max-width: 680px;
+}
+
+.contact-chart-service-inner {
+    display: flex;
+    gap: 24px;
+    flex: 1;
+}
+
+.contact-chart-service-col {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.contact-chart-service-col canvas {
+    max-height: 260px;
+}
+
+.contact-chart-marche {
+    width: 420px;
+    min-width: 420px;
+    max-width: 420px;
+}
+
+.contact-chart-marche #chartMarcheCustom {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Tipologia Noleggio affiancata a Performance Marche nella seconda riga */
+.contact-chart-noleggio {
+    width: 380px;
+    min-width: 380px;
+    max-width: 380px;
+}
+
+/* Solo su schermi davvero stretti le card vanno a capo singolarmente */
+@media (max-width: 1500px) {
+    .contact-chart-categorie,
+    .contact-chart-calendario,
+    .contact-chart-acquisto,
+    .contact-chart-service,
+    .contact-chart-marche,
+    .contact-chart-noleggio {
+        width: 100%;
+        min-width: 280px;
+        max-width: 100%;
+    }
+}
+
 /* ===== PRINT ===== */
 @media print {
     .navbar,
@@ -1712,6 +1660,7 @@ select.input-field {
 
     #contactChartPrint {
         display: flex !important;
+        flex-wrap: wrap !important;
         margin-bottom: 16px !important;
     }
 
@@ -1911,8 +1860,7 @@ select.input-field {
     box-shadow: 0 3px 10px rgba(255,77,77,0.2);
 }
 
-/* ===== Multi-select filtri — pronto per il prossimo step (selezione multipla
-   di categorie, operatori, ecc. in Follow-up, Recall, Registro Contatti, Rent) ===== */
+/* ===== Multi-select filtri ===== */
 .multi-select-wrapper {
     position: relative;
     display: inline-block;
