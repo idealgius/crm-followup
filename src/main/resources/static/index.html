@@ -88,7 +88,7 @@
     <!-- DASHBOARD -->
     <div id="dashboardPage" class="page">
         <div class="page-header">
-            <h2>DASHBOARD</h2>
+            <h2>DASHBOARD FOLLOW UP</h2>
             <div class="filter-bar">
                 <input type="date" id="statsFrom" class="input-dark">
                 <input type="date" id="statsTo" class="input-dark">
@@ -114,7 +114,7 @@
             <div class="dashboard-cell" style="background:var(--bg-card);border:1.5px solid var(--border);border-radius:14px;padding:20px;box-shadow:var(--shadow);max-width:420px">
                 <div class="calendar-header">
                     <button type="button" class="cal-nav-btn" onclick="changeCalendarMonth(-1)">‹</button>
-                    <h3 id="calendarTitle">Calendario Follow-up</h3>
+                    <h3 id="calendarTitle">Calendario Follow Up</h3>
                     <button type="button" class="cal-nav-btn" onclick="changeCalendarMonth(1)">›</button>
                 </div>
                 <div class="calendar-legend">
@@ -155,14 +155,23 @@
             <h2>GESTIONE FOLLOW-UP</h2>
             <div class="filter-bar">
                 <input type="date" id="workDateFilter" class="input-dark">
-                <select id="consultantFilter" class="input-dark" onchange="loadFollowUps()">
-                    <option value="">Tutti i consulenti</option>
-                    <option>Ambrosino Luca</option><option>Capitelli Silvio</option><option>Castaldo Marco</option>
-                    <option>Castaldo Roberto</option><option>Filosa Claudio</option><option>Fiore Guido</option>
-                    <option>Gerardi Claudio</option><option>Giordano Luca</option><option>Montuori Francesco</option>
-                    <option>Palumbo Enrico</option><option>Scala Rosario</option><option>Zaritto Davide</option>
-                    <option>Zuppa Mattia</option>
-                </select>
+
+                <!-- FILTRO CONSULENTE — multi-select -->
+                <div class="multi-select-wrapper">
+                    <div class="multi-select-trigger" onclick="toggleMultiDropdown('consultantFilterMulti')">
+                        <span id="consultantFilterMulti-label">Tutti i consulenti</span>
+                        <span class="multi-select-count" id="consultantFilterMulti-count">0</span>
+                        <span>▾</span>
+                    </div>
+                    <div class="multi-select-dropdown" id="consultantFilterMulti-dropdown">
+                        <div id="consultantFilterMulti-options"></div>
+                        <div class="multi-select-actions">
+                            <button type="button" onclick="multiSelectClear('consultantFilterMulti');loadFollowUps()">Pulisci</button>
+                            <button type="button" onclick="closeAllMultiDropdowns();loadFollowUps()">Applica</button>
+                        </div>
+                    </div>
+                </div>
+
                 <button onclick="loadFollowUps()" class="btn-gold">CARICA</button>
                 <button onclick="showNewFollowUp()" class="btn-primary" style="width:auto;padding:10px 20px">+ NUOVO</button>
             </div>
@@ -244,24 +253,52 @@
             <div class="filter-bar">
                 <input type="date" id="contactFrom" class="input-dark" onchange="showContactResetBtn()">
                 <input type="date" id="contactTo" class="input-dark" onchange="showContactResetBtn()">
+
+                <!-- FILTRO OPERATORE — multi-select -->
                 <span id="contactOperatorFilterWrapper">
-                    <select id="contactOperatorFilter" class="input-dark" onchange="applyContactFilters();showContactResetBtn()">
-                        <option value="">Tutti gli operatori</option>
-                    </select>
+                    <div class="multi-select-wrapper">
+                        <div class="multi-select-trigger" onclick="toggleMultiDropdown('contactOperatorFilterMulti')">
+                            <span id="contactOperatorFilterMulti-label">Tutti gli operatori</span>
+                            <span class="multi-select-count" id="contactOperatorFilterMulti-count">0</span>
+                            <span>▾</span>
+                        </div>
+                        <div class="multi-select-dropdown" id="contactOperatorFilterMulti-dropdown">
+                            <div id="contactOperatorFilterMulti-options"></div>
+                            <div class="multi-select-actions">
+                                <button type="button" onclick="multiSelectClear('contactOperatorFilterMulti');applyContactFilters();showContactResetBtn()">Pulisci</button>
+                                <button type="button" onclick="closeAllMultiDropdowns();applyContactFilters();showContactResetBtn()">Applica</button>
+                            </div>
+                        </div>
+                    </div>
                 </span>
-                <select id="contactCategoryFilter" class="input-dark" onchange="applyContactFilters();showContactResetBtn()">
-                    <option value="">Tutte le categorie</option>
-                    <option>Info Vendita</option>
-                    <option>Info Noleggio</option>
-                    <option>Service</option>
-                    <option>Info Acquisto effettuato</option>
-                    <option>Pratica Leasing</option>
-                    <option>Pratica Finanziamento</option>
-                    <option>Amministrazione</option>
-                    <option>Info + Appuntamento</option>
-                    <option>Info Vendita in Promo</option>
-                    <option>Altro</option>
-                </select>
+
+                <!-- FILTRO CATEGORIA — multi-select -->
+                <div class="multi-select-wrapper">
+                    <div class="multi-select-trigger" onclick="toggleMultiDropdown('contactCategoryFilterMulti')">
+                        <span id="contactCategoryFilterMulti-label">Tutte le categorie</span>
+                        <span class="multi-select-count" id="contactCategoryFilterMulti-count">0</span>
+                        <span>▾</span>
+                    </div>
+                    <div class="multi-select-dropdown" id="contactCategoryFilterMulti-dropdown">
+                        <div id="contactCategoryFilterMulti-options">
+                            <label class="multi-select-option"><input type="checkbox" value="Info Vendita" onchange="onMultiSelectChange('contactCategoryFilterMulti')"> Info Vendita</label>
+                            <label class="multi-select-option"><input type="checkbox" value="Info Noleggio" onchange="onMultiSelectChange('contactCategoryFilterMulti')"> Info Noleggio</label>
+                            <label class="multi-select-option"><input type="checkbox" value="Service" onchange="onMultiSelectChange('contactCategoryFilterMulti')"> Service</label>
+                            <label class="multi-select-option"><input type="checkbox" value="Info Acquisto effettuato" onchange="onMultiSelectChange('contactCategoryFilterMulti')"> Info Acquisto effettuato</label>
+                            <label class="multi-select-option"><input type="checkbox" value="Pratica Leasing" onchange="onMultiSelectChange('contactCategoryFilterMulti')"> Pratica Leasing</label>
+                            <label class="multi-select-option"><input type="checkbox" value="Pratica Finanziamento" onchange="onMultiSelectChange('contactCategoryFilterMulti')"> Pratica Finanziamento</label>
+                            <label class="multi-select-option"><input type="checkbox" value="Amministrazione" onchange="onMultiSelectChange('contactCategoryFilterMulti')"> Amministrazione</label>
+                            <label class="multi-select-option"><input type="checkbox" value="Info + Appuntamento" onchange="onMultiSelectChange('contactCategoryFilterMulti')"> Info + Appuntamento</label>
+                            <label class="multi-select-option"><input type="checkbox" value="Info Vendita in Promo" onchange="onMultiSelectChange('contactCategoryFilterMulti')"> Info Vendita in Promo</label>
+                            <label class="multi-select-option"><input type="checkbox" value="Altro" onchange="onMultiSelectChange('contactCategoryFilterMulti')"> Altro</label>
+                        </div>
+                        <div class="multi-select-actions">
+                            <button type="button" onclick="multiSelectClear('contactCategoryFilterMulti');applyContactFilters();showContactResetBtn()">Pulisci</button>
+                            <button type="button" onclick="closeAllMultiDropdowns();applyContactFilters();showContactResetBtn()">Applica</button>
+                        </div>
+                    </div>
+                </div>
+
                 <button onclick="loadContactLogs(document.getElementById('contactFrom').value, document.getElementById('contactTo').value)" class="btn-gold">FILTRA</button>
                 <button id="contactResetBtn" onclick="resetContactFilters()" class="btn-secondary" style="display:none;padding:10px 16px">↺ RESET</button>
                 <button onclick="showNewContactForm()" class="btn-primary" style="width:auto;padding:10px 20px">+ NUOVO</button>
@@ -324,12 +361,22 @@
                     <canvas id="chartFonteVendita" style="max-height:280px"></canvas>
                 </div>
             </div>
-            <div class="chart-card" style="width:340px;min-width:340px;max-width:340px;display:flex;flex-direction:column;gap:24px">
-                <div>
-                    <h3>TIPOLOGIE SERVICE</h3>
-                    <canvas id="chartService" style="max-height:260px"></canvas>
+
+            <!-- SERVICE — grafici Agnano e Salerno affiancati nella stessa card -->
+            <div class="chart-card" style="width:640px;min-width:640px;max-width:640px;display:flex;flex-direction:column;gap:12px">
+                <h3>SERVICE PER SEDE</h3>
+                <div style="display:flex;gap:16px">
+                    <div style="flex:1;min-width:0">
+                        <h4 style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);margin-bottom:8px;text-transform:uppercase">📍 Agnano</h4>
+                        <canvas id="chartServiceAgnano" style="max-height:240px"></canvas>
+                    </div>
+                    <div style="flex:1;min-width:0">
+                        <h4 style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);margin-bottom:8px;text-transform:uppercase">📍 Salerno</h4>
+                        <canvas id="chartServiceSalerno" style="max-height:240px"></canvas>
+                    </div>
                 </div>
             </div>
+
             <div class="chart-card" style="width:420px;min-width:420px;max-width:420px;display:flex;flex-direction:column;gap:16px">
                 <h3>PERFORMANCE MARCHE</h3>
                 <div id="chartMarcheCustom" style="display:flex;flex-direction:column;gap:10px"></div>
@@ -379,6 +426,142 @@
             </div>
         </div>
 
+        <!-- MODAL MODIFICA CONTATTO — ESTESO: tutti i campi editabili -->
+        <div id="editContactModal" class="modal-overlay" style="display:none" onclick="closeEditContactModal(event)">
+            <div class="modal-box" onclick="event.stopPropagation()" style="max-width:560px">
+                <div class="modal-header">
+                    <h3>Modifica Contatto</h3>
+                    <button type="button" class="modal-close" onclick="closeEditContactModal()">✕</button>
+                </div>
+                <div class="modal-body">
+
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">CATEGORIA *</label>
+                    <select id="editContactCategory" class="input-field" onchange="onEditCategoryChange()"></select>
+
+                    <!-- DATI CLIENTE -->
+                    <div style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px">
+                        <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#1a4080;margin-bottom:10px;text-transform:uppercase">👤 Dati Cliente</div>
+                        <div class="form-grid" style="margin-bottom:0">
+                            <input type="text" id="editContactNome" placeholder="Nome Cliente" class="input-field">
+                            <input type="text" id="editContactCognome" placeholder="Cognome Cliente" class="input-field">
+                            <input type="text" id="editContactNumero" placeholder="Numero Cliente *" class="input-field">
+                        </div>
+                    </div>
+
+                    <!-- FONTE (Info Vendita / Info + Appuntamento / Promo) -->
+                    <div id="editContactFonteRow" style="display:none">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">FONTE</label>
+                        <select id="editContactFonte" class="input-field">
+                            <option value="">—</option>
+                            <option>Sito</option><option>Google ADS</option><option>Autoscout</option>
+                            <option>Facebook</option><option>Instagram</option><option>TikTok</option>
+                            <option>Richiesta cliente</option><option>Non ricorda</option>
+                        </select>
+                    </div>
+
+                    <!-- MARCA/MODELLO generico -->
+                    <div id="editContactMarcaModelloRow" style="display:none">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MARCA VEICOLO</label>
+                        <input type="text" id="editContactMarca" placeholder="Es. Peugeot" class="input-field">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLO VEICOLO</label>
+                        <input type="text" id="editContactModello" placeholder="Es. 208 1.2 PureTech 100cv" class="input-field">
+                    </div>
+
+                    <!-- LEAD (Info Vendita/Appuntamento/Promo) -->
+                    <div id="editContactLinkAutoRow" style="display:none">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">LEAD</label>
+                        <input type="url" id="editContactLinkAuto" placeholder="https://..." class="input-field">
+                    </div>
+
+                    <!-- INFO NOLEGGIO -->
+                    <div id="editContactNoleggioRow" style="display:none">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">RICHIESTA NOLEGGIO</label>
+                        <select id="editContactNoleggioRichiesta" class="input-field">
+                            <option value="">—</option>
+                            <option value="SOLO_INFO">Solo Info</option>
+                            <option value="RICHIESTA_CLIENTE">Richiesta cliente</option>
+                        </select>
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TIPOLOGIA CLIENTE NOLEGGIO</label>
+                        <select id="editContactNoleggioTipo" class="input-field">
+                            <option value="">—</option>
+                            <option>Privato</option><option>Partita IVA</option><option>Noleggio per aziende</option>
+                        </select>
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MARCA VEICOLO NOLEGGIO</label>
+                        <input type="text" id="editContactNoleggioMarca" placeholder="Es. Peugeot" class="input-field">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLO VEICOLO NOLEGGIO</label>
+                        <input type="text" id="editContactNoleggioModello" placeholder="Es. 208" class="input-field">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">LEAD NOLEGGIO</label>
+                        <input type="url" id="editContactNoleggioLink" placeholder="https://..." class="input-field">
+                    </div>
+
+                    <!-- SERVICE -->
+                    <div id="editContactServiceRow" style="display:none">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">SEDE SERVICE</label>
+                        <select id="editContactServiceSede" class="input-field">
+                            <option value="">—</option>
+                            <option>Agnano</option><option>Salerno</option>
+                        </select>
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TIPOLOGIA SERVICE</label>
+                        <select id="editContactServiceTipo" class="input-field">
+                            <option value="">—</option>
+                            <option>Tagliando</option><option>Dispositivo satellitare</option><option>Prenotazione</option>
+                            <option>Lavorazione in corso</option><option>Doctor Glass</option><option>Cambio Gomme</option><option>Altro</option>
+                        </select>
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA SERVICE</label>
+                        <textarea id="editContactServiceNote" placeholder="Nota / motivazione" class="input-field"></textarea>
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TIPOLOGIA CLIENTE SERVICE</label>
+                        <select id="editContactServiceTipoCliente" class="input-field">
+                            <option value="">—</option>
+                            <option value="CLIENTE">Cliente</option>
+                            <option value="NON_CLIENTE">Non Cliente</option>
+                        </select>
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TARGA VEICOLO</label>
+                        <input type="text" id="editContactTarga" placeholder="Es. AB123CD" class="input-field" style="text-transform:uppercase">
+                    </div>
+
+                    <!-- APPUNTAMENTO -->
+                    <div id="editContactAppuntamentoRow" style="display:none">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">SEDE APPUNTAMENTO</label>
+                        <select id="editContactAppuntamentoSede" class="input-field">
+                            <option value="">—</option>
+                            <option>Agnano</option><option>Casamarciano</option><option>Salerno</option>
+                        </select>
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">LINK APPUNTAMENTO</label>
+                        <input type="url" id="editContactAppuntamentoLink" placeholder="https://..." class="input-field">
+                    </div>
+
+                    <!-- ACQUISTO -->
+                    <div id="editContactAcquistoRow" style="display:none">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TIPOLOGIA ACQUISTO</label>
+                        <select id="editContactAcquistoTipo" class="input-field">
+                            <option value="">—</option>
+                            <option>Info Consegna</option><option>Ritardo Consegna</option><option>Info Documentazione</option>
+                            <option>Seconda chiave</option><option>Info generiche</option>
+                        </select>
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA ACQUISTO</label>
+                        <input type="text" id="editContactAcquistoNote" placeholder="Inserisci nota..." class="input-field">
+                    </div>
+
+                    <!-- PROMO -->
+                    <div id="editContactPromoRow" style="display:none">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLO RICHIESTO PROMO</label>
+                        <input type="text" id="editContactPromoModello" placeholder="Modello richiesto" class="input-field">
+                    </div>
+
+                    <!-- ALTRO -->
+                    <div id="editContactOtherRow" style="display:none">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MOTIVAZIONE</label>
+                        <input type="text" id="editContactOtherNote" placeholder="Descrivi il motivo..." class="input-field">
+                    </div>
+
+                    <div class="form-actions" style="margin-top:10px">
+                        <button onclick="saveEditContactLog()" class="btn-gold">SALVA MODIFICHE</button>
+                        <button onclick="closeEditContactModal()" class="btn-secondary">ANNULLA</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- FORM NUOVO CONTATTO -->
         <div id="newContactForm" class="form-card" style="display:none">
             <h3>NUOVO CONTATTO</h3>
@@ -412,15 +595,18 @@
             <!-- BLOCCO CLIENTE UNIVERSALE — sempre visibile e obbligatorio per QUALSIASI categoria -->
             <div style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px">
                 <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#1a4080;margin-bottom:12px;text-transform:uppercase">👤 DATI CLIENTE (obbligatori — tracciabilità)</div>
-                <div class="form-grid" style="margin-bottom:0">
+                <div class="form-grid" style="margin-bottom:10px">
                     <input type="text" id="clienteNome" placeholder="Nome Cliente *" class="input-field">
                     <input type="text" id="clienteCognome" placeholder="Cognome Cliente *" class="input-field">
                     <input type="text" id="clienteNumero" placeholder="Numero Cliente *" class="input-field">
                 </div>
+                <label class="checkbox-label" style="margin-bottom:0">
+                    <input type="checkbox" id="nonComunicaNominativo" onchange="toggleNonComunicaNominativo()"> Non comunica nominativo (nome e cognome diventano opzionali, il numero resta obbligatorio)
+                </label>
             </div>
 
             <div class="form-grid">
-                <!-- FONTE -->
+                <!-- FONTE (Info Vendita / Info + Appuntamento / Promo) -->
                 <div id="contactFonteRow" style="display:none">
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">FONTE *</label>
                     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -436,7 +622,26 @@
                     <input type="hidden" id="contactFonte" value="">
                 </div>
 
-                <!-- INFO NOLEGGIO -->
+                <!-- VEICOLO — Marca/Modello (Info Vendita / Info + Appuntamento / Promo) — NIENTE targa, non ha senso per un prospect -->
+                <div id="contactMarcaModelloRow" style="display:none">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MARCA VEICOLO (opzionale)</label>
+                    <div style="position:relative;margin-bottom:14px">
+                        <input type="text" id="contactMarcaInput" placeholder="Clicca o cerca marca..." class="input-field" style="margin-bottom:0;cursor:pointer"
+                               oninput="filterMarche(this.value)" onfocus="showMarcheDropdown()" autocomplete="off">
+                        <div id="marcaDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1.5px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;box-shadow:var(--shadow)"></div>
+                        <input type="hidden" id="contactMarca" value="">
+                    </div>
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLO VEICOLO (opzionale)</label>
+                    <input type="text" id="contactModello" placeholder="Es. 208 1.2 PureTech 100cv..." class="input-field">
+                </div>
+
+                <!-- LEAD — solo per Info Vendita / Info + Appuntamento / Promo -->
+                <div id="contactLinkAutoRow" style="display:none">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">LEAD (opzionale)</label>
+                    <input type="url" id="contactLinkAuto" placeholder="https://..." class="input-field">
+                </div>
+
+                <!-- INFO NOLEGGIO — Marca/Modello sempre visibili, Lead SOLO se Richiesta cliente, NIENTE targa -->
                 <div id="contactNoleggioRow" style="display:none">
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">RICHIESTA *</label>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
@@ -445,7 +650,7 @@
                     </div>
                     <input type="hidden" id="contactNoleggioRichiesta" value="">
 
-                    <div id="contactNoleggioRichiestaDettagli" style="display:none">
+                    <div id="contactNoleggioRichiestaDettagli" style="display:none;margin-bottom:14px">
                         <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TIPOLOGIA CLIENTE *</label>
                         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
                             <button type="button" class="btn-sede" id="noleggio-Privato" onclick="selectNoleggioTipo('Privato')">👤 Privato</button>
@@ -457,23 +662,16 @@
                         <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">LEAD (opzionale)</label>
                         <input type="url" id="contactNoleggioLink" placeholder="https://..." class="input-field">
                     </div>
-                </div>
 
-                <!-- VEICOLO (opzionale) — Marca, Modello, Targa — visibile per tutte le categorie -->
-                <div id="contactMarcaModelloRow" style="display:none">
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MARCA VEICOLO (opzionale)</label>
                     <div style="position:relative;margin-bottom:14px">
-                        <input type="text" id="contactMarcaInput" placeholder="Clicca o cerca marca..." class="input-field" style="margin-bottom:0;cursor:pointer"
-                               oninput="filterMarche(this.value)" onfocus="showMarcheDropdown()" autocomplete="off">
-                        <div id="marcaDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1.5px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;box-shadow:var(--shadow)"></div>
-                        <input type="hidden" id="contactMarca" value="">
+                        <input type="text" id="contactNoleggioMarcaInput" placeholder="Clicca o cerca marca..." class="input-field" style="margin-bottom:0;cursor:pointer"
+                               oninput="filterNoleggioMarche(this.value)" onfocus="showNoleggioMarcheDropdown()" autocomplete="off">
+                        <div id="noleggioMarcaDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1.5px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;box-shadow:var(--shadow)"></div>
+                        <input type="hidden" id="contactNoleggioMarca" value="">
                     </div>
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLO VEICOLO (opzionale)</label>
-                    <input type="text" id="contactModello" placeholder="Es. 208 1.2 PureTech 100cv..." class="input-field" style="margin-bottom:14px">
-                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TARGA VEICOLO (opzionale)</label>
-                    <input type="text" id="contactTargaGenerale" placeholder="Es. AB123CD" class="input-field" style="text-transform:uppercase;margin-bottom:14px">
-                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">LEAD (opzionale)</label>
-                    <input type="url" id="contactLinkAuto" placeholder="https://..." class="input-field">
+                    <input type="text" id="contactNoleggioModello" placeholder="Es. 208 1.2 PureTech 100cv..." class="input-field">
                 </div>
 
                 <!-- INFO VENDITA IN PROMO -->
@@ -540,8 +738,15 @@
                     </div>
                 </div>
 
-                <!-- SERVICE -->
+                <!-- SERVICE (unica categoria con Targa: veicolo già di proprietà) -->
                 <div id="contactServiceRow" style="display:none">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">SEDE SERVICE *</label>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+                        <button type="button" class="btn-sede" id="serviceSede-Agnano" onclick="selectServiceSede('Agnano')">📍 Agnano</button>
+                        <button type="button" class="btn-sede" id="serviceSede-Salerno" onclick="selectServiceSede('Salerno')">📍 Salerno</button>
+                    </div>
+                    <input type="hidden" id="contactServiceSede" value="">
+
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TIPOLOGIA SERVICE *</label>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
                         <button type="button" class="btn-sede" id="service-Tagliando" onclick="selectService('Tagliando')">🔧 Tagliando</button>
@@ -550,8 +755,14 @@
                         <button type="button" class="btn-sede" id="service-LavorazioneInCorso" onclick="selectService('Lavorazione in corso')">⚙️ Lavorazione in corso</button>
                         <button type="button" class="btn-sede" id="service-DoctorGlass" onclick="selectService('Doctor Glass')">🔍 Doctor Glass</button>
                         <button type="button" class="btn-sede" id="service-CambioGomme" onclick="selectService('Cambio Gomme')">🔄 Cambio Gomme</button>
+                        <button type="button" class="btn-sede" id="service-Altro" onclick="selectService('Altro')">❓ Altro</button>
                     </div>
                     <input type="hidden" id="contactServiceTipo" value="">
+
+                    <div id="contactServiceNoteRow" style="display:none;margin-bottom:14px">
+                        <label id="contactServiceNoteLabel" style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA (opzionale)</label>
+                        <textarea id="contactServiceNote" placeholder="Scrivi qui il dettaglio..." class="input-field"></textarea>
+                    </div>
 
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TIPOLOGIA CLIENTE *</label>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
@@ -561,10 +772,7 @@
                     <input type="hidden" id="serviceTipoCliente" value="">
 
                     <label id="serviceTargaLabel" style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TARGA (opzionale)</label>
-                    <input type="text" id="serviceTarga" placeholder="Es. AB123CD" class="input-field" style="text-transform:uppercase;margin-bottom:14px">
-
-                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NUMERO DI TELEFONO (opzionale)</label>
-                    <input type="text" id="serviceNumeroTelefono" placeholder="Numero di telefono" class="input-field">
+                    <input type="text" id="serviceTarga" placeholder="Es. AB123CD" class="input-field" style="text-transform:uppercase">
                 </div>
 
                 <!-- SEDE APPUNTAMENTO -->
@@ -661,7 +869,7 @@
                 <input type="email" id="newUserEmail" placeholder="Email" class="input-field">
                 <input type="password" id="newUserPassword" placeholder="Password temporanea" class="input-field">
                 <select id="newUserRole" class="input-field">
-                    <option value="UTENTE">Utente</option>
+                    <option value="UTENTE">Operatore BDC</option>
                     <option value="MODERATORE">Moderatore</option>
                     <option value="GESTORE">Gestore</option>
                     <option value="ADMIN">Admin</option>
@@ -681,28 +889,83 @@
         <div class="page-header">
             <h2>🚗 RENT — GESTIONE NOLEGGIO</h2>
             <div class="filter-bar">
-                <select id="rentStatoFilter" class="input-dark" onchange="applyRentFilters()">
-                    <option value="">Tutti gli stati</option>
-                    <option value="SOLO_INFO">Solo Info</option>
-                    <option value="TRATTATIVA_IN_CORSO">Trattativa in corso</option>
-                    <option value="DA_RICHIAMARE">Da richiamare</option>
-                    <option value="CONCLUSA">Conclusa</option>
-                    <option value="FALLITO">Fallito</option>
-                </select>
-                <select id="rentMarchioFilter" class="input-dark" onchange="applyRentFilters()">
-                    <option value="">Tutti i marchi</option>
-                </select>
-                <select id="rentFonteFilter" class="input-dark" onchange="applyRentFilters()">
-                    <option value="">Tutte le fonti</option>
-                </select>
+
+                <!-- FILTRO STATO — multi-select -->
+                <div class="multi-select-wrapper">
+                    <div class="multi-select-trigger" onclick="toggleMultiDropdown('rentStatoFilterMulti')">
+                        <span id="rentStatoFilterMulti-label">Tutti gli stati</span>
+                        <span class="multi-select-count" id="rentStatoFilterMulti-count">0</span>
+                        <span>▾</span>
+                    </div>
+                    <div class="multi-select-dropdown" id="rentStatoFilterMulti-dropdown">
+                        <div id="rentStatoFilterMulti-options">
+                            <label class="multi-select-option"><input type="checkbox" value="SOLO_INFO" onchange="onMultiSelectChange('rentStatoFilterMulti')"> Solo Info</label>
+                            <label class="multi-select-option"><input type="checkbox" value="TRATTATIVA_IN_CORSO" onchange="onMultiSelectChange('rentStatoFilterMulti')"> Trattativa in corso</label>
+                            <label class="multi-select-option"><input type="checkbox" value="DA_RICHIAMARE" onchange="onMultiSelectChange('rentStatoFilterMulti')"> Da richiamare</label>
+                            <label class="multi-select-option"><input type="checkbox" value="CONCLUSA" onchange="onMultiSelectChange('rentStatoFilterMulti')"> Conclusa</label>
+                            <label class="multi-select-option"><input type="checkbox" value="FALLITO" onchange="onMultiSelectChange('rentStatoFilterMulti')"> Fallito</label>
+                        </div>
+                        <div class="multi-select-actions">
+                            <button type="button" onclick="multiSelectClear('rentStatoFilterMulti');applyRentFilters()">Pulisci</button>
+                            <button type="button" onclick="closeAllMultiDropdowns();applyRentFilters()">Applica</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FILTRO MARCHIO — multi-select (opzioni popolate da rent.js) -->
+                <div class="multi-select-wrapper">
+                    <div class="multi-select-trigger" onclick="toggleMultiDropdown('rentMarchioFilterMulti')">
+                        <span id="rentMarchioFilterMulti-label">Tutti i marchi</span>
+                        <span class="multi-select-count" id="rentMarchioFilterMulti-count">0</span>
+                        <span>▾</span>
+                    </div>
+                    <div class="multi-select-dropdown" id="rentMarchioFilterMulti-dropdown">
+                        <div id="rentMarchioFilterMulti-options"></div>
+                        <div class="multi-select-actions">
+                            <button type="button" onclick="multiSelectClear('rentMarchioFilterMulti');applyRentFilters()">Pulisci</button>
+                            <button type="button" onclick="closeAllMultiDropdowns();applyRentFilters()">Applica</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FILTRO FONTE — multi-select (opzioni popolate da rent.js) -->
+                <div class="multi-select-wrapper">
+                    <div class="multi-select-trigger" onclick="toggleMultiDropdown('rentFonteFilterMulti')">
+                        <span id="rentFonteFilterMulti-label">Tutte le fonti</span>
+                        <span class="multi-select-count" id="rentFonteFilterMulti-count">0</span>
+                        <span>▾</span>
+                    </div>
+                    <div class="multi-select-dropdown" id="rentFonteFilterMulti-dropdown">
+                        <div id="rentFonteFilterMulti-options"></div>
+                        <div class="multi-select-actions">
+                            <button type="button" onclick="multiSelectClear('rentFonteFilterMulti');applyRentFilters()">Pulisci</button>
+                            <button type="button" onclick="closeAllMultiDropdowns();applyRentFilters()">Applica</button>
+                        </div>
+                    </div>
+                </div>
+
                 <select id="rentRuoloFilter" class="input-dark" onchange="applyRentFilters()">
                     <option value="">Tutti gli operatori (ruolo)</option>
                     <option value="NOLEGGIO">Solo Noleggio</option>
                     <option value="BDC">Solo BDC</option>
                 </select>
-                <select id="rentOperatoreFilter" class="input-dark" onchange="applyRentFilters()">
-                    <option value="">Tutti gli operatori</option>
-                </select>
+
+                <!-- FILTRO OPERATORE — multi-select (opzioni popolate da rent.js) -->
+                <div class="multi-select-wrapper">
+                    <div class="multi-select-trigger" onclick="toggleMultiDropdown('rentOperatoreFilterMulti')">
+                        <span id="rentOperatoreFilterMulti-label">Tutti gli operatori</span>
+                        <span class="multi-select-count" id="rentOperatoreFilterMulti-count">0</span>
+                        <span>▾</span>
+                    </div>
+                    <div class="multi-select-dropdown" id="rentOperatoreFilterMulti-dropdown">
+                        <div id="rentOperatoreFilterMulti-options"></div>
+                        <div class="multi-select-actions">
+                            <button type="button" onclick="multiSelectClear('rentOperatoreFilterMulti');applyRentFilters()">Pulisci</button>
+                            <button type="button" onclick="closeAllMultiDropdowns();applyRentFilters()">Applica</button>
+                        </div>
+                    </div>
+                </div>
+
                 <button onclick="showNewRentForm()" class="btn-primary" style="width:auto;padding:10px 20px">+ NUOVA TRATTATIVA</button>
                 <button onclick="exportRentExcel()" class="btn-secondary" style="padding:10px 16px">📥 EXCEL</button>
             </div>
@@ -834,11 +1097,17 @@
         </div>
 
         <!-- LISTA TRATTATIVE (TABELLA 1) -->
-        <h3 style="font-size:13px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);margin-bottom:16px;text-transform:uppercase">GESTIONE TRATTATIVE</h3>
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap">
+            <h3 style="font-size:13px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);text-transform:uppercase;margin:0">GESTIONE TRATTATIVE</h3>
+            <button class="btn-sort-toggle" onclick="toggleRentTrattativeSortDir()" id="rentTrattativeSortBtn">⬇️ Più recenti prima</button>
+        </div>
         <div id="rentTrattativeList" style="margin-bottom:32px"></div>
 
         <!-- INFO NOLEGGIO DA REGISTRO CONTATTI (TABELLA 2, sola lettura) -->
-        <h3 style="font-size:13px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);margin-bottom:16px;text-transform:uppercase">📋 INFO NOLEGGIO DA REGISTRO CONTATTI (TUTTI GLI OPERATORI)</h3>
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap">
+            <h3 style="font-size:13px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);text-transform:uppercase;margin:0">📋 INFO NOLEGGIO DA REGISTRO CONTATTI (TUTTI GLI OPERATORI)</h3>
+            <button class="btn-sort-toggle" onclick="toggleRentContattiSortDir()" id="rentContattiSortBtn">⬇️ Più recenti prima</button>
+        </div>
         <div class="filter-bar" style="margin-bottom:16px">
             <input type="date" id="rentContattiFrom" class="input-dark" onchange="loadRentContattiNoleggio()">
             <input type="date" id="rentContattiTo" class="input-dark" onchange="loadRentContattiNoleggio()">
@@ -858,5 +1127,6 @@
 <script src="/js/admin.js"></script>
 <script src="/js/rent.js"></script>
 <script src="/js/app.js"></script>
+<script src="/js/multiselect.js"></script>
 </body>
 </html>

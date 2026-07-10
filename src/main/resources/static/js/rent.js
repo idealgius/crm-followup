@@ -6,6 +6,8 @@ let chartRentFonte = null;
 let chartRentInfoVsRichiesta = null;
 let selectedRentMarchio = '';
 let selectedRentTipoCliente = '';
+let rentTrattativeSortDir = 'desc';
+let rentContattiSortDir = 'desc';
 
 const RENT_STATO_LIST = ['SOLO_INFO', 'TRATTATIVA_IN_CORSO', 'DA_RICHIAMARE', 'CONCLUSA', 'FALLITO'];
 const RENT_STATO_LABELS = {
@@ -23,13 +25,10 @@ const RENT_STATO_COLORS = {
     'FALLITO': '#ff3d3d'
 };
 
-// Fonti dedicate a Rent — separate da FONTE_LIST usata in Info Vendita
 const RENT_FONTE_LIST = ['Sito', 'Google ADS', 'Autoscout', 'Facebook', 'Instagram', 'TikTok', 'Richiesta cliente', 'Non ricorda', 'Ingresso', 'Cliente Personale'];
 const RENT_FONTE_COLORS = ['#1a4080', '#f0c040', '#e91e63', '#4a90d9', '#7c4dff', '#ff3d3d', '#00c853', '#8a8faa', '#ff6b35', '#26a69a'];
 
 const RENT_TIPO_CLIENTE_LIST = ['Privato', 'Partita IVA', 'Noleggio per aziende'];
-
-// ===== INGRESSO NELLA DASHBOARD RENT =====
 
 function loadRentDashboard() {
     const today = todayStr();
@@ -39,20 +38,28 @@ function loadRentDashboard() {
     if (fromEl && !fromEl.value) fromEl.value = firstDay;
     if (toEl && !toEl.value) toEl.value = today;
 
+    // Popola il multi-select STATO (lista statica) una sola volta
+    if (typeof populateMultiSelectOptions === 'function' && document.getElementById('rentStatoFilterMulti-options')) {
+        const optionsContainer = document.getElementById('rentStatoFilterMulti-options');
+        if (optionsContainer && !optionsContainer.dataset.populated) {
+            optionsContainer.dataset.populated = '1';
+            if (typeof updateMultiSelectLabel === 'function') updateMultiSelectLabel('rentStatoFilterMulti');
+        }
+    }
+
     loadRentTrattative();
     loadRentContattiNoleggio();
     checkRentRecallOggi();
 }
-
-// ===== TRATTATIVE: CARICAMENTO E RENDER =====
 
 async function loadRentTrattative() {
     try {
         const res = await fetch('/api/noleggio/trattative');
         if (!res.ok) return;
         rentTrattative = await res.json();
-        // Ordina sempre dal più recente al meno recente
-        rentTrattative.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        rentTrattative.sort((a, b) => rentTrattativeSortDir === 'desc'
+            ? (b.createdAt || '').localeCompare(a.createdAt || '')
+            : (a.createdAt || '').localeCompare(b.createdAt || ''));
         populateRentFilters();
         applyRentFilters();
     } catch (err) {
@@ -60,44 +67,34 @@ async function loadRentTrattative() {
     }
 }
 
+// Popola i multi-select MARCHIO / FONTE / OPERATORE (opzioni dinamiche, dipendono dai dati caricati)
 function populateRentFilters() {
-    const marchioSelect = document.getElementById('rentMarchioFilter');
-    const fonteSelect = document.getElementById('rentFonteFilter');
-    const operatoreSelect = document.getElementById('rentOperatoreFilter');
-    if (marchioSelect) {
-        const current = marchioSelect.value;
-        const marchi = [...new Set(rentTrattative.map(t => t.marchio).filter(Boolean))].sort();
-        marchioSelect.innerHTML = '<option value="">Tutti i marchi</option>' +
-            marchi.map(m => `<option value="${m}" ${m===current?'selected':''}>${m}</option>`).join('');
-    }
-    if (fonteSelect) {
-        const current = fonteSelect.value;
-        const fonti = [...new Set(rentTrattative.map(t => t.fonte).filter(Boolean))].sort();
-        fonteSelect.innerHTML = '<option value="">Tutte le fonti</option>' +
-            fonti.map(f => `<option value="${f}" ${f===current?'selected':''}>${f}</option>`).join('');
-    }
-    if (operatoreSelect) {
-        const current = operatoreSelect.value;
-        const operatori = [...new Set(rentTrattative.map(t => t.user?.fullName).filter(Boolean))].sort();
-        operatoreSelect.innerHTML = '<option value="">Tutti gli operatori</option>' +
-            operatori.map(op => `<option value="${op}" ${op===current?'selected':''}>${op}</option>`).join('');
-    }
+    if (typeof populateMultiSelectOptions !== 'function') return;
+
+    const marchi = [...new Set(rentTrattative.map(t => t.marchio).filter(Boolean))].sort();
+    populateMultiSelectOptions('rentMarchioFilterMulti', marchi);
+
+    const fonti = [...new Set(rentTrattative.map(t => t.fonte).filter(Boolean))].sort();
+    populateMultiSelectOptions('rentFonteFilterMulti', fonti);
+
+    const operatori = [...new Set(rentTrattative.map(t => t.user?.fullName).filter(Boolean))].sort();
+    populateMultiSelectOptions('rentOperatoreFilterMulti', operatori);
 }
 
 function applyRentFilters() {
-    const stato = document.getElementById('rentStatoFilter')?.value || '';
-    const marchio = document.getElementById('rentMarchioFilter')?.value || '';
-    const fonte = document.getElementById('rentFonteFilter')?.value || '';
+    const statoSelezionati = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('rentStatoFilterMulti') : [];
+    const marchiSelezionati = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('rentMarchioFilterMulti') : [];
+    const fontiSelezionate = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('rentFonteFilterMulti') : [];
+    const operatoriSelezionati = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('rentOperatoreFilterMulti') : [];
     const ruolo = document.getElementById('rentRuoloFilter')?.value || '';
-    const operatore = document.getElementById('rentOperatoreFilter')?.value || '';
 
     rentTrattativeFiltered = rentTrattative.filter(t => {
-        if (stato && t.stato !== stato) return false;
-        if (marchio && t.marchio !== marchio) return false;
-        if (fonte && t.fonte !== fonte) return false;
+        if (statoSelezionati.length > 0 && !statoSelezionati.includes(t.stato)) return false;
+        if (marchiSelezionati.length > 0 && !marchiSelezionati.includes(t.marchio)) return false;
+        if (fontiSelezionate.length > 0 && !fontiSelezionate.includes(t.fonte)) return false;
         if (ruolo === 'NOLEGGIO' && t.user?.role !== 'NOLEGGIO') return false;
         if (ruolo === 'BDC' && t.user?.role === 'NOLEGGIO') return false;
-        if (operatore && t.user?.fullName !== operatore) return false;
+        if (operatoriSelezionati.length > 0 && !operatoriSelezionati.includes(t.user?.fullName)) return false;
         return true;
     });
 
@@ -117,10 +114,19 @@ function renderRentStats(list) {
     if (el('rentStatConcluse')) el('rentStatConcluse').textContent = list.filter(t => t.stato === 'CONCLUSA').length;
 }
 
-// ============================================================
-// TIMELINE TRATTATIVE — design a linea temporale verticale,
-// distinto dal sistema a cartelle del Registro Contatti
-// ============================================================
+function toggleRentTrattativeSortDir() {
+    rentTrattativeSortDir = rentTrattativeSortDir === 'desc' ? 'asc' : 'desc';
+    const btn = document.getElementById('rentTrattativeSortBtn');
+    if (btn) btn.textContent = rentTrattativeSortDir === 'desc' ? '⬇️ Più recenti prima' : '⬆️ Meno recenti prima';
+    loadRentTrattative();
+}
+
+function toggleRentContattiSortDir() {
+    rentContattiSortDir = rentContattiSortDir === 'desc' ? 'asc' : 'desc';
+    const btn = document.getElementById('rentContattiSortBtn');
+    if (btn) btn.textContent = rentContattiSortDir === 'desc' ? '⬇️ Più recenti prima' : '⬆️ Meno recenti prima';
+    loadRentContattiNoleggio();
+}
 
 function renderRentTrattative(list) {
     const container = document.getElementById('rentTrattativeList');
@@ -195,8 +201,9 @@ function renderRentTrattative(list) {
                                         </div>
                                         <div id="body-${weekKey}" style="display:${isCurrentWeek?'block':'none'}">
                                             ${Object.entries(weekData.days).sort((a,b) => b[0].localeCompare(a[0])).map(([date, items]) => {
-                                                // Ordina le trattative del giorno dalla più recente alla meno recente
-                                                const itemsSorted = [...items].sort((a,b) => (b.createdAt||'').localeCompare(a.createdAt||''));
+                                                const itemsSorted = [...items].sort((a,b) => rentTrattativeSortDir === 'desc'
+                                                    ? (b.createdAt||'').localeCompare(a.createdAt||'')
+                                                    : (a.createdAt||'').localeCompare(b.createdAt||''));
                                                 return `
                                                 <div style="margin-bottom:10px;padding-left:14px">
                                                     <div style="font-size:10px;font-weight:800;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">${formatDateIT(date)}</div>
@@ -243,8 +250,6 @@ function renderRentTrattativaCard(t) {
         </div>
     </div>`;
 }
-
-// ===== FORM NUOVA / MODIFICA TRATTATIVA =====
 
 function showNewRentForm() {
     document.getElementById('rentFormTitle').textContent = 'NUOVA TRATTATIVA';
@@ -304,8 +309,6 @@ function selectRentTipoCliente(tipo) {
         if (btn) btn.classList.toggle('btn-sede-active', t === tipo);
     });
 }
-
-// ===== AUTOCOMPLETE MARCHIO (stesso motore di Info Vendita) =====
 
 function showRentMarcheDropdown() { filterRentMarche('', true); }
 
@@ -443,13 +446,20 @@ async function deleteRentTrattativa(id) {
     }
 }
 
-// ===== EXCEL EXPORT =====
-
 function exportRentExcel() {
-    window.open('/api/noleggio/trattative/export-excel', '_blank');
+    const statoSelezionati = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('rentStatoFilterMulti') : [];
+    const marchiSelezionati = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('rentMarchioFilterMulti') : [];
+    const fontiSelezionate = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('rentFonteFilterMulti') : [];
+    const operatoriSelezionati = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('rentOperatoreFilterMulti') : [];
+    const ruolo = document.getElementById('rentRuoloFilter')?.value || '';
+    let url = '/api/noleggio/trattative/export-excel?';
+    if (statoSelezionati.length > 0) url += `stato=${encodeURIComponent(statoSelezionati.join(','))}&`;
+    if (marchiSelezionati.length > 0) url += `marchio=${encodeURIComponent(marchiSelezionati.join(','))}&`;
+    if (fontiSelezionate.length > 0) url += `fonte=${encodeURIComponent(fontiSelezionate.join(','))}&`;
+    if (ruolo) url += `ruolo=${encodeURIComponent(ruolo)}&`;
+    if (operatoriSelezionati.length > 0) url += `operatore=${encodeURIComponent(operatoriSelezionati.join(','))}&`;
+    downloadFile(url);
 }
-
-// ===== GRAFICI (tutti cliccabili) =====
 
 function renderChartRentStato(list) {
     const ctx = document.getElementById('chartRentStato');
@@ -550,7 +560,6 @@ function renderChartRentInfoVsRichiesta(list) {
     const ctx = document.getElementById('chartRentInfoVsRichiesta');
     if (!ctx) return;
     if (chartRentInfoVsRichiesta) chartRentInfoVsRichiesta.destroy();
-    const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
     const soloInfo = list.filter(c => c.noleggioRichiesta === 'SOLO_INFO').length;
     const richiesta = list.filter(c => c.noleggioRichiesta === 'RICHIESTA_CLIENTE').length;
     const total = soloInfo + richiesta;
@@ -589,8 +598,6 @@ function refreshRentChartsOnThemeChange() {
     renderChartRentInfoVsRichiesta(rentContattiNoleggio);
 }
 
-// ===== DETTAGLIO GRAFICI (nuovo modal: rentDetailModal — da aggiungere in index.html) =====
-
 function showRentTrattativeDetail(filterField, filterValue) {
     let items;
     if (filterField === 'marchioUpper') {
@@ -610,17 +617,22 @@ function showRentTrattativeDetail(filterField, filterValue) {
     if (items.length === 0) {
         list.innerHTML = '<div class="empty-state" style="padding:20px"><p>Nessuna trattativa per questo filtro</p></div>';
     } else {
-        list.innerHTML = items.map(t => `
-            <div class="followup-card" style="margin-bottom:10px">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        list.innerHTML = items.map(t => {
+            const links = [];
+            if (t.linkLeadspark) links.push(`<a href="${t.linkLeadspark}" target="_blank" rel="noopener" title="Leadspark" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(0,200,83,0.15);color:#00c853;text-decoration:none;font-size:13px">🔗</a>`);
+            if (t.linkAutoRichiesta) links.push(`<a href="${t.linkAutoRichiesta}" target="_blank" rel="noopener" title="Auto richiesta" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(74,144,217,0.15);color:#4a90d9;text-decoration:none;font-size:13px">🔗</a>`);
+            return `<div class="followup-card" style="margin-bottom:10px">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
                     <div>
                         <div style="font-weight:800;color:var(--text-primary);font-size:14px">${t.nome} ${t.cognome}</div>
                         <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">🚗 ${t.marchio}${t.modello?' '+t.modello:''}</div>
                         ${t.cellulare ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📞 ${t.cellulare}</div>` : ''}
                         <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">👤 ${t.user?.fullName || '—'}</div>
                     </div>
+                    ${links.length > 0 ? `<div style="display:flex;gap:6px;flex-shrink:0">${links.join('')}</div>` : ''}
                 </div>
-            </div>`).join('');
+            </div>`;
+        }).join('');
     }
     modal.style.display = 'flex';
 }
@@ -642,12 +654,18 @@ function showRentContattiRichiestaDetail(richiestaValue) {
             const nomeCompleto = [c.noleggioNomeCliente, c.noleggioCognomeCliente].filter(Boolean).join(' ') || [c.clienteNome, c.clienteCognome].filter(Boolean).join(' ');
             const date = c.contactDate.split('T')[0];
             const time = c.contactDate.split('T')[1]?.substring(0,5) || '';
+            const links = [];
+            if (c.noleggioLink) links.push(`<a href="${c.noleggioLink}" target="_blank" rel="noopener" title="Lead" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(0,200,83,0.15);color:#00c853;text-decoration:none;font-size:13px">🔗</a>`);
+            if (c.linkAuto) links.push(`<a href="${c.linkAuto}" target="_blank" rel="noopener" title="Lead veicolo" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(124,77,255,0.15);color:#7c4dff;text-decoration:none;font-size:13px">🔗</a>`);
             return `<div class="followup-card" style="margin-bottom:10px">
-                <div>
-                    <div style="font-weight:800;color:var(--text-primary);font-size:14px">${nomeCompleto || 'Nominativo non specificato'}</div>
-                    <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">📅 ${formatDateIT(date)} · 🕐 ${time}</div>
-                    ${c.marca ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">🚗 ${c.marca}${c.modello?' · '+c.modello:''}</div>` : ''}
-                    <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">👤 ${c.user?.fullName || '—'}</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+                    <div>
+                        <div style="font-weight:800;color:var(--text-primary);font-size:14px">${nomeCompleto || 'Nominativo non specificato'}</div>
+                        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">📅 ${formatDateIT(date)} · 🕐 ${time}</div>
+                        ${c.marca ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">🚗 ${c.marca}${c.modello?' · '+c.modello:''}</div>` : ''}
+                        <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">👤 ${c.user?.fullName || '—'}</div>
+                    </div>
+                    ${links.length > 0 ? `<div style="display:flex;gap:6px;flex-shrink:0">${links.join('')}</div>` : ''}
                 </div>
             </div>`;
         }).join('');
@@ -660,8 +678,6 @@ function closeRentDetailModal(event) {
     const modal = document.getElementById('rentDetailModal');
     if (modal) modal.style.display = 'none';
 }
-
-// ===== POPUP RECALL DI OGGI/SCADUTI =====
 
 async function checkRentRecallOggi() {
     try {
@@ -699,8 +715,6 @@ function closeRentRecallModal(event) {
     document.getElementById('rentRecallModal').style.display = 'none';
 }
 
-// ===== INFO NOLEGGIO DA REGISTRO CONTATTI (sola lettura, tutti gli operatori) =====
-
 async function loadRentContattiNoleggio() {
     try {
         const from = document.getElementById('rentContattiFrom')?.value;
@@ -710,8 +724,9 @@ async function loadRentContattiNoleggio() {
         const res = await fetch(url);
         if (!res.ok) return;
         rentContattiNoleggio = await res.json();
-        // Ordina sempre dal più recente al meno recente
-        rentContattiNoleggio.sort((a, b) => (b.contactDate || '').localeCompare(a.contactDate || ''));
+        rentContattiNoleggio.sort((a, b) => rentContattiSortDir === 'desc'
+            ? (b.contactDate || '').localeCompare(a.contactDate || '')
+            : (a.contactDate || '').localeCompare(b.contactDate || ''));
         renderRentContattiNoleggio(rentContattiNoleggio);
         renderChartRentInfoVsRichiesta(rentContattiNoleggio);
     } catch (err) {
@@ -742,21 +757,22 @@ function renderRentContattiNoleggio(list) {
             const nomeCompleto = [c.noleggioNomeCliente, c.noleggioCognomeCliente].filter(Boolean).join(' ') || [c.clienteNome, c.clienteCognome].filter(Boolean).join(' ');
             const cellulare = c.noleggioCellulare || c.clienteNumero;
             const isRichiesta = c.noleggioRichiesta === 'RICHIESTA_CLIENTE';
+            const links = [];
+            if (c.noleggioLink) links.push(`<a href="${c.noleggioLink}" target="_blank" rel="noopener" title="Lead" style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;background:rgba(0,200,83,0.15);color:#00c853;text-decoration:none;font-size:12px">🔗</a>`);
+            else if (c.linkAuto) links.push(`<a href="${c.linkAuto}" target="_blank" rel="noopener" title="Lead veicolo" style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;background:rgba(124,77,255,0.15);color:#7c4dff;text-decoration:none;font-size:12px">🔗</a>`);
             return `<tr>
                 <td>${formatDateIT(date)} · ${time}</td>
                 <td>${isRichiesta ? '<span style="color:#00c853;font-weight:700">📞 Richiesta cliente</span>' : '<span style="color:var(--text-secondary)">ℹ️ Solo Info</span>'}</td>
                 <td>${tipoLabel(c.noleggioTipo)}</td>
                 <td>${nomeCompleto || '—'}${cellulare ? `<br><span style="font-size:11px;color:var(--text-secondary)">📞 ${cellulare}</span>` : ''}</td>
                 <td>${c.marca ? c.marca + (c.modello ? ' ' + c.modello : '') : '—'}</td>
-                <td>${c.noleggioLink ? `<a href="${c.noleggioLink}" target="_blank" rel="noopener">🔗 Lead</a>` : (c.linkAuto ? `<a href="${c.linkAuto}" target="_blank" rel="noopener">🔗 Lead</a>` : '—')}</td>
+                <td>${links.length > 0 ? links.join('') : '—'}</td>
                 <td>${c.user?.fullName || '—'}</td>
                 <td><button class="btn-small btn-gold" onclick="generateTrattativaFromContatto(${c.id})" style="white-space:nowrap">➡️ Genera trattativa</button></td>
             </tr>`;
         }).join('')}</tbody>
     </table></div>`;
 }
-
-// ===== GENERA TRATTATIVA DA CONTATTO INFO NOLEGGIO =====
 
 function generateTrattativaFromContatto(id) {
     const c = rentContattiNoleggio.find(x => x.id === id);
@@ -780,6 +796,7 @@ function generateTrattativaFromContatto(id) {
         setTimeout(() => alert('Ricordati di inserire il cellulare: è obbligatorio per salvare la trattativa.'), 300);
     }
 }
+
 // ===== RICERCA CLIENTE RENT (nome, cognome, cellulare) =====
 
 function searchRentTrattative(query) {

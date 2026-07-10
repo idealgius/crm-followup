@@ -19,10 +19,11 @@ public class ContactLogService {
 
     public ContactLog create(User user, String category,
                               String clienteNome, String clienteCognome, String clienteNumero,
+                              Boolean nonComunicaNominativo,
                               String otherNote,
                               String nominativoAppuntamento, String linkAppuntamento,
                               String marca, String modello, String linkAuto,
-                              String serviceTipo, String serviceNote,
+                              String serviceTipo, String serviceNote, String serviceSede,
                               String acquistoNote,
                               String noleggioTipo, String noleggioLink,
                               String serviceNomeCliente, String serviceCognomeCliente, String serviceTarga,
@@ -36,6 +37,7 @@ public class ContactLogService {
         log.setClienteNome(clienteNome);
         log.setClienteCognome(clienteCognome);
         log.setClienteNumero(clienteNumero);
+        log.setNonComunicaNominativo(nonComunicaNominativo != null ? nonComunicaNominativo : false);
         log.setOtherNote(otherNote);
         log.setNominativoAppuntamento(nominativoAppuntamento);
         log.setLinkAppuntamento(linkAppuntamento);
@@ -44,6 +46,7 @@ public class ContactLogService {
         log.setLinkAuto(linkAuto);
         log.setServiceTipo(serviceTipo);
         log.setServiceNote(serviceNote);
+        log.setServiceSede(serviceSede);
         log.setAcquistoNote(acquistoNote);
         log.setNoleggioTipo(noleggioTipo);
         log.setNoleggioLink(noleggioLink);

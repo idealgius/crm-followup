@@ -1,6 +1,20 @@
 let searchTimeout = null;
 const collapsedSections = new Set();
 
+const CONSULTANTI_LIST = [
+    'Ambrosino Luca','Capitelli Silvio','Castaldo Marco','Castaldo Roberto',
+    'Filosa Claudio','Fiore Guido','Gerardi Claudio','Giordano Luca',
+    'Montuori Francesco','Palumbo Enrico','Scala Rosario',
+    'Zaritto Davide','Zuppa Mattia'
+];
+
+// Popola il dropdown multi-select del filtro consulenti in Follow-up (lista statica)
+document.addEventListener('DOMContentLoaded', function() {
+    if (typeof populateMultiSelectOptions === 'function' && document.getElementById('consultantFilterMulti-options')) {
+        populateMultiSelectOptions('consultantFilterMulti', CONSULTANTI_LIST);
+    }
+});
+
 function isModerator() {
     return currentUser?.role === 'MODERATORE';
 }
@@ -9,16 +23,16 @@ async function loadFollowUps() {
     const date = document.getElementById('workDateFilter').value;
     if (!date) return;
 
-    const consultantFilter = document.getElementById('consultantFilter')?.value || '';
+    const consultantFilters = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('consultantFilterMulti') : [];
 
     try {
         const res = await fetch(`/api/followups?date=${date}`);
         if (!res.ok) return;
         let followUps = await res.json();
 
-        if (consultantFilter) {
+        if (consultantFilters.length > 0) {
             followUps = followUps.filter(fu =>
-                (fu.consultantName || '').toLowerCase() === consultantFilter.toLowerCase()
+                consultantFilters.some(c => c.toLowerCase() === (fu.consultantName || '').toLowerCase())
             );
         }
 
@@ -149,10 +163,7 @@ function renderFollowUpCard(fu, steps) {
                             : `<select class="input-dark" style="font-size:12px;padding:4px 10px;border-radius:6px"
                                 onchange="updateConsultant(${fu.id}, this.value)">
                                 <option value="">-- consulente --</option>
-                                ${['Ambrosino Luca','Capitelli Silvio','Castaldo Marco','Castaldo Roberto',
-                                   'Filosa Claudio','Fiore Guido','Gerardi Claudio','Giordano Luca',
-                                   'Montuori Francesco','Palumbo Enrico','Scala Rosario',
-                                   'Zaritto Davide','Zuppa Mattia'].map(c =>
+                                ${CONSULTANTI_LIST.map(c =>
                                     `<option ${fu.consultantName === c ? 'selected' : ''}>${c}</option>`
                                 ).join('')}
                               </select>`

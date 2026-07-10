@@ -37,14 +37,11 @@ public class NoleggioTrattativaController {
 
     private final NoleggioExcelExportService excelExportService = new NoleggioExcelExportService();
 
-    // Ruoli che possono vedere/gestire la dashboard Rent
     private static final List<String> RENT_ROLES = List.of("NOLEGGIO", "MODERATORE", "GESTORE", "ADMIN");
 
     private boolean canAccessRent(String role) {
         return role != null && RENT_ROLES.contains(role);
     }
-
-    // ===== TRATTATIVE (nuova entità) =====
 
     @GetMapping("/trattative")
     public ResponseEntity<?> getAll(HttpSession session) {
@@ -58,13 +55,38 @@ public class NoleggioTrattativaController {
     }
 
     @GetMapping("/trattative/export-excel")
-    public ResponseEntity<?> exportExcel(HttpSession session) {
+    public ResponseEntity<?> exportExcel(
+            @RequestParam(required = false) String stato,
+            @RequestParam(required = false) String marchio,
+            @RequestParam(required = false) String fonte,
+            @RequestParam(required = false) String ruolo,
+            @RequestParam(required = false) String operatore,
+            HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");
         String role = (String) session.getAttribute("userRole");
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
         if (!canAccessRent(role)) return ResponseEntity.status(403).body(Map.of("error", "Non autorizzato"));
 
         List<NoleggioTrattativa> list = noleggioService.getAll();
+
+        if (stato != null && !stato.isBlank()) {
+            list = list.stream().filter(t -> stato.equals(t.getStato())).collect(Collectors.toList());
+        }
+        if (marchio != null && !marchio.isBlank()) {
+            list = list.stream().filter(t -> marchio.equals(t.getMarchio())).collect(Collectors.toList());
+        }
+        if (fonte != null && !fonte.isBlank()) {
+            list = list.stream().filter(t -> fonte.equals(t.getFonte())).collect(Collectors.toList());
+        }
+        if ("NOLEGGIO".equals(ruolo)) {
+            list = list.stream().filter(t -> t.getUser() != null && "NOLEGGIO".equals(t.getUser().getRole())).collect(Collectors.toList());
+        } else if ("BDC".equals(ruolo)) {
+            list = list.stream().filter(t -> t.getUser() == null || !"NOLEGGIO".equals(t.getUser().getRole())).collect(Collectors.toList());
+        }
+        if (operatore != null && !operatore.isBlank()) {
+            list = list.stream().filter(t -> t.getUser() != null && operatore.equals(t.getUser().getFullName())).collect(Collectors.toList());
+        }
+
         try {
             byte[] excelBytes = excelExportService.export(list);
             return ResponseEntity.ok()
@@ -111,21 +133,11 @@ public class NoleggioTrattativaController {
         }
 
         NoleggioTrattativa t = noleggioService.create(
-            userOpt.get(),
-            nome,
-            cognome,
-            cellulare,
-            (String) body.get("email"),
-            marchio,
-            (String) body.get("modello"),
-            (String) body.get("note"),
-            (String) body.get("fonte"),
-            stato,
-            dataRichiamo,
-            "FALLITO".equals(stato) ? noteFallimento : null,
-            tipoCliente,
-            (String) body.get("linkLeadspark"),
-            (String) body.get("linkAutoRichiesta")
+            userOpt.get(), nome, cognome, cellulare,
+            (String) body.get("email"), marchio, (String) body.get("modello"),
+            (String) body.get("note"), (String) body.get("fonte"), stato, dataRichiamo,
+            "FALLITO".equals(stato) ? noteFallimento : null, tipoCliente,
+            (String) body.get("linkLeadspark"), (String) body.get("linkAutoRichiesta")
         );
         return ResponseEntity.ok(toMap(t));
     }
@@ -175,7 +187,7 @@ public class NoleggioTrattativaController {
             if ("FALLITO".equals(nuovoStato)) {
                 Object nf = body.get("noteFallimento");
                 t.setNoteFallimento(nf != null ? nf.toString() : null);
-            } else if (!"FALLITO".equals(nuovoStato) && body.containsKey("stato")) {
+            } else {
                 t.setNoteFallimento(null);
             }
         } else if (body.containsKey("noteFallimento") && "FALLITO".equals(t.getStato())) {
@@ -187,7 +199,6 @@ public class NoleggioTrattativaController {
             Object dr = body.get("dataRichiamo");
             t.setDataRichiamo(dr != null && !dr.toString().isBlank() ? LocalDate.parse(dr.toString()) : null);
         } else if (body.containsKey("dataRichiamo") && "DA_RICHIAMARE".equals(t.getStato()) && !body.containsKey("stato")) {
-            // aggiornamento diretto della data mentre resta in stato DA_RICHIAMARE
             Object dr = body.get("dataRichiamo");
             if (dr != null && !dr.toString().isBlank()) t.setDataRichiamo(LocalDate.parse(dr.toString()));
         }
@@ -207,7 +218,6 @@ public class NoleggioTrattativaController {
         return ResponseEntity.ok(Map.of("message", "Eliminato"));
     }
 
-    // Recall di oggi/scaduti per il popup all'apertura della dashboard Rent
     @GetMapping("/trattative/recall-oggi")
     public ResponseEntity<?> recallOggi(HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");
@@ -221,8 +231,6 @@ public class NoleggioTrattativaController {
             .collect(Collectors.toList());
         return ResponseEntity.ok(list.stream().map(this::toMap).collect(Collectors.toList()));
     }
-
-    // ===== INFO NOLEGGIO da Registro Contatti (sola lettura, di tutti gli operatori) =====
 
     @GetMapping("/contatti")
     public ResponseEntity<?> getContattiNoleggio(

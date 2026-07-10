@@ -45,7 +45,6 @@ async function loadStats() {
     if (consultant) calQs += `&consultant=${encodeURIComponent(consultant)}`;
 
     try {
-        // Tutte e 4 le chiamate in parallelo, nessuna sequenziale
         const [fuRes, wRes, calRes, recallRes] = await Promise.all([
             fetch(`/api/stats/followups?${qs}`),
             fetch('/api/stats/waiting'),
@@ -130,7 +129,7 @@ function renderCalendar() {
     const title = document.getElementById('calendarTitle');
     if (!container || !title) return;
 
-    title.textContent = `${MONTH_NAMES[calendarMonth - 1]} ${calendarYear}`;
+    title.textContent = `Calendario Follow Up — ${MONTH_NAMES[calendarMonth - 1]} ${calendarYear}`;
 
     const firstDay = new Date(calendarYear, calendarMonth - 1, 1);
     const daysInMonth = new Date(calendarYear, calendarMonth, 0).getDate();
@@ -165,7 +164,7 @@ function renderRecallCalendar() {
     const title = document.getElementById('recallCalendarTitle');
     if (!container || !title) return;
 
-    title.textContent = `${MONTH_NAMES[recallCalendarMonth - 1]} ${recallCalendarYear}`;
+    title.textContent = `Calendario Recall — ${MONTH_NAMES[recallCalendarMonth - 1]} ${recallCalendarYear}`;
 
     const firstDay = new Date(recallCalendarYear, recallCalendarMonth - 1, 1);
     const daysInMonth = new Date(recallCalendarYear, recallCalendarMonth, 0).getDate();
@@ -314,8 +313,6 @@ function closeStatDetail(event) {
     if (event && event.target !== event.currentTarget) return;
     document.getElementById('statDetailModal').style.display = 'none';
 }
-
-// ===== DETTAGLIO RECALL (doughnut cliccabile) =====
 
 function showWaitingDetail(status) {
     const items = recallEntries.filter(e => e.status === status);

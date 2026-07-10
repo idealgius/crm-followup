@@ -31,6 +31,13 @@ public class ContactLogController {
 
     private final ExcelExportService excelExportService = new ExcelExportService();
 
+    // Whitelist categorie valide — impedisce categorie "fantasma" scritte a mano
+    private static final List<String> VALID_CATEGORIES = List.of(
+        "Info Vendita", "Info Noleggio", "Service", "Info Acquisto effettuato",
+        "Pratica Leasing", "Pratica Finanziamento", "Amministrazione",
+        "Info + Appuntamento", "Info Vendita in Promo", "Altro"
+    );
+
     @GetMapping
     public ResponseEntity<?> getAll(
             @RequestParam(required = false) String from,
@@ -48,43 +55,7 @@ public class ContactLogController {
             logs = contactLogService.getAll();
         }
 
-        List<Map<String, Object>> result = logs.stream().map(log -> {
-            Map<String, Object> m = new HashMap<>();
-            m.put("id", log.getId());
-            m.put("category", log.getCategory());
-            m.put("clienteNome", log.getClienteNome());
-            m.put("clienteCognome", log.getClienteCognome());
-            m.put("clienteNumero", log.getClienteNumero());
-            m.put("otherNote", log.getOtherNote());
-            m.put("nominativoAppuntamento", log.getNominativoAppuntamento());
-            m.put("linkAppuntamento", log.getLinkAppuntamento());
-            m.put("marca", log.getMarca());
-            m.put("modello", log.getModello());
-            m.put("linkAuto", log.getLinkAuto());
-            m.put("serviceTipo", log.getServiceTipo());
-            m.put("serviceNote", log.getServiceNote());
-            m.put("acquistoNote", log.getAcquistoNote());
-            m.put("noleggioTipo", log.getNoleggioTipo());
-            m.put("noleggioLink", log.getNoleggioLink());
-            m.put("serviceNomeCliente", log.getServiceNomeCliente());
-            m.put("serviceCognomeCliente", log.getServiceCognomeCliente());
-            m.put("serviceTarga", log.getServiceTarga());
-            m.put("serviceTipoCliente", log.getServiceTipoCliente());
-            m.put("serviceNumeroTelefono", log.getServiceNumeroTelefono());
-            m.put("noleggioRichiesta", log.getNoleggioRichiesta());
-            m.put("noleggioNomeCliente", log.getNoleggioNomeCliente());
-            m.put("noleggioCognomeCliente", log.getNoleggioCognomeCliente());
-            m.put("noleggioCellulare", log.getNoleggioCellulare());
-            m.put("contactDate", log.getContactDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
-            m.put("createdAt", log.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
-            Map<String, Object> userMap = new HashMap<>();
-            userMap.put("id", log.getUser().getId());
-            userMap.put("fullName", log.getUser().getFullName());
-            userMap.put("role", log.getUser().getRole());
-            m.put("user", userMap);
-            return m;
-        }).collect(Collectors.toList());
-
+        List<Map<String, Object>> result = logs.stream().map(this::toMap).collect(Collectors.toList());
         return ResponseEntity.ok(result);
     }
 
@@ -93,6 +64,7 @@ public class ContactLogController {
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to,
             @RequestParam(required = false) String operator,
+            @RequestParam(required = false) String category,
             HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
@@ -109,6 +81,12 @@ public class ContactLogController {
         if (operator != null && !operator.isBlank()) {
             logs = logs.stream()
                 .filter(l -> operator.equalsIgnoreCase(l.getUser().getFullName()))
+                .collect(Collectors.toList());
+        }
+
+        if (category != null && !category.isBlank()) {
+            logs = logs.stream()
+                .filter(l -> category.equals(l.getCategory()))
                 .collect(Collectors.toList());
         }
 
@@ -133,9 +111,14 @@ public class ContactLogController {
         if (userOpt.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "Utente non trovato"));
 
         String category = (String) body.get("category");
+        if (category == null || !VALID_CATEGORIES.contains(category)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Categoria non valida"));
+        }
+
         String clienteNome = (String) body.get("clienteNome");
         String clienteCognome = (String) body.get("clienteCognome");
         String clienteNumero = (String) body.get("clienteNumero");
+        Boolean nonComunicaNominativo = (Boolean) body.get("nonComunicaNominativo");
         String otherNote = (String) body.get("otherNote");
         String nominativoAppuntamento = (String) body.get("nominativoAppuntamento");
         String linkAppuntamento = (String) body.get("linkAppuntamento");
@@ -144,6 +127,7 @@ public class ContactLogController {
         String linkAuto = (String) body.get("linkAuto");
         String serviceTipo = (String) body.get("serviceTipo");
         String serviceNote = (String) body.get("serviceNote");
+        String serviceSede = (String) body.get("serviceSede");
         String acquistoNote = (String) body.get("acquistoNote");
         String noleggioTipo = (String) body.get("noleggioTipo");
         String noleggioLink = (String) body.get("noleggioLink");
@@ -160,12 +144,15 @@ public class ContactLogController {
             ? LocalDateTime.parse((String) body.get("contactDate"))
             : LocalDateTime.now();
 
-        // Validazione universale: nome, cognome, numero obbligatori per QUALSIASI categoria
-        if (clienteNome == null || clienteNome.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Nome cliente obbligatorio"));
-        }
-        if (clienteCognome == null || clienteCognome.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Cognome cliente obbligatorio"));
+        boolean skipNominativo = Boolean.TRUE.equals(nonComunicaNominativo);
+
+        if (!skipNominativo) {
+            if (clienteNome == null || clienteNome.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Nome cliente obbligatorio"));
+            }
+            if (clienteCognome == null || clienteCognome.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Cognome cliente obbligatorio"));
+            }
         }
         if (clienteNumero == null || clienteNumero.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Numero cliente obbligatorio"));
@@ -177,50 +164,29 @@ public class ContactLogController {
             }
         }
 
+        if ("Service".equals(category)) {
+            if (serviceSede == null || serviceSede.isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Seleziona la sede Service"));
+            }
+            if ("Altro".equals(serviceTipo) && (serviceNote == null || serviceNote.isBlank())) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Inserisci la nota per Service Altro"));
+            }
+        }
+
         ContactLog log = contactLogService.create(userOpt.get(), category,
-                clienteNome, clienteCognome, clienteNumero,
+                clienteNome, clienteCognome, clienteNumero, nonComunicaNominativo,
                 otherNote,
                 nominativoAppuntamento, linkAppuntamento,
                 marca, modello, linkAuto,
-                serviceTipo, serviceNote, acquistoNote,
+                serviceTipo, serviceNote, serviceSede,
+                acquistoNote,
                 noleggioTipo, noleggioLink,
                 serviceNomeCliente, serviceCognomeCliente, serviceTarga,
                 serviceTipoCliente, serviceNumeroTelefono,
                 noleggioRichiesta, noleggioNomeCliente, noleggioCognomeCliente, noleggioCellulare,
                 contactDate);
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("id", log.getId());
-        result.put("category", log.getCategory());
-        result.put("clienteNome", log.getClienteNome());
-        result.put("clienteCognome", log.getClienteCognome());
-        result.put("clienteNumero", log.getClienteNumero());
-        result.put("otherNote", log.getOtherNote());
-        result.put("nominativoAppuntamento", log.getNominativoAppuntamento());
-        result.put("linkAppuntamento", log.getLinkAppuntamento());
-        result.put("marca", log.getMarca());
-        result.put("modello", log.getModello());
-        result.put("linkAuto", log.getLinkAuto());
-        result.put("serviceTipo", log.getServiceTipo());
-        result.put("serviceNote", log.getServiceNote());
-        result.put("acquistoNote", log.getAcquistoNote());
-        result.put("noleggioTipo", log.getNoleggioTipo());
-        result.put("noleggioLink", log.getNoleggioLink());
-        result.put("serviceNomeCliente", log.getServiceNomeCliente());
-        result.put("serviceCognomeCliente", log.getServiceCognomeCliente());
-        result.put("serviceTarga", log.getServiceTarga());
-        result.put("serviceTipoCliente", log.getServiceTipoCliente());
-        result.put("serviceNumeroTelefono", log.getServiceNumeroTelefono());
-        result.put("noleggioRichiesta", log.getNoleggioRichiesta());
-        result.put("noleggioNomeCliente", log.getNoleggioNomeCliente());
-        result.put("noleggioCognomeCliente", log.getNoleggioCognomeCliente());
-        result.put("noleggioCellulare", log.getNoleggioCellulare());
-        result.put("contactDate", log.getContactDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
-        Map<String, Object> userMap = new HashMap<>();
-        userMap.put("id", log.getUser().getId());
-        userMap.put("fullName", log.getUser().getFullName());
-        result.put("user", userMap);
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(toMap(log));
     }
 
     @PatchMapping("/{id}")
@@ -239,10 +205,17 @@ public class ContactLogController {
             return ResponseEntity.status(403).body(Map.of("error", "Non autorizzato"));
         }
 
-        if (body.containsKey("category")) log.setCategory((String) body.get("category"));
+        if (body.containsKey("category")) {
+            String newCategory = (String) body.get("category");
+            if (newCategory == null || !VALID_CATEGORIES.contains(newCategory)) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Categoria non valida"));
+            }
+            log.setCategory(newCategory);
+        }
         if (body.containsKey("clienteNome")) log.setClienteNome((String) body.get("clienteNome"));
         if (body.containsKey("clienteCognome")) log.setClienteCognome((String) body.get("clienteCognome"));
         if (body.containsKey("clienteNumero")) log.setClienteNumero((String) body.get("clienteNumero"));
+        if (body.containsKey("nonComunicaNominativo")) log.setNonComunicaNominativo((Boolean) body.get("nonComunicaNominativo"));
         if (body.containsKey("otherNote")) log.setOtherNote((String) body.get("otherNote"));
         if (body.containsKey("nominativoAppuntamento")) log.setNominativoAppuntamento((String) body.get("nominativoAppuntamento"));
         if (body.containsKey("linkAppuntamento")) log.setLinkAppuntamento((String) body.get("linkAppuntamento"));
@@ -251,6 +224,7 @@ public class ContactLogController {
         if (body.containsKey("linkAuto")) log.setLinkAuto((String) body.get("linkAuto"));
         if (body.containsKey("serviceTipo")) log.setServiceTipo((String) body.get("serviceTipo"));
         if (body.containsKey("serviceNote")) log.setServiceNote((String) body.get("serviceNote"));
+        if (body.containsKey("serviceSede")) log.setServiceSede((String) body.get("serviceSede"));
         if (body.containsKey("acquistoNote")) log.setAcquistoNote((String) body.get("acquistoNote"));
         if (body.containsKey("noleggioTipo")) log.setNoleggioTipo((String) body.get("noleggioTipo"));
         if (body.containsKey("noleggioLink")) log.setNoleggioLink((String) body.get("noleggioLink"));
@@ -267,7 +241,7 @@ public class ContactLogController {
             log.setContactDate(LocalDateTime.parse((String) body.get("contactDate")));
         }
 
-        return ResponseEntity.ok(contactLogService.update(log));
+        return ResponseEntity.ok(toMap(contactLogService.update(log)));
     }
 
     @DeleteMapping("/{id}")
@@ -300,5 +274,44 @@ public class ContactLogController {
         LocalDateTime toDt = to != null ? LocalDateTime.parse(to + "T23:59:59") : null;
 
         return ResponseEntity.ok(contactLogService.getStats(fromDt, toDt));
+    }
+
+    private Map<String, Object> toMap(ContactLog log) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("id", log.getId());
+        m.put("category", log.getCategory());
+        m.put("clienteNome", log.getClienteNome());
+        m.put("clienteCognome", log.getClienteCognome());
+        m.put("clienteNumero", log.getClienteNumero());
+        m.put("nonComunicaNominativo", log.getNonComunicaNominativo());
+        m.put("otherNote", log.getOtherNote());
+        m.put("nominativoAppuntamento", log.getNominativoAppuntamento());
+        m.put("linkAppuntamento", log.getLinkAppuntamento());
+        m.put("marca", log.getMarca());
+        m.put("modello", log.getModello());
+        m.put("linkAuto", log.getLinkAuto());
+        m.put("serviceTipo", log.getServiceTipo());
+        m.put("serviceNote", log.getServiceNote());
+        m.put("serviceSede", log.getServiceSede());
+        m.put("acquistoNote", log.getAcquistoNote());
+        m.put("noleggioTipo", log.getNoleggioTipo());
+        m.put("noleggioLink", log.getNoleggioLink());
+        m.put("serviceNomeCliente", log.getServiceNomeCliente());
+        m.put("serviceCognomeCliente", log.getServiceCognomeCliente());
+        m.put("serviceTarga", log.getServiceTarga());
+        m.put("serviceTipoCliente", log.getServiceTipoCliente());
+        m.put("serviceNumeroTelefono", log.getServiceNumeroTelefono());
+        m.put("noleggioRichiesta", log.getNoleggioRichiesta());
+        m.put("noleggioNomeCliente", log.getNoleggioNomeCliente());
+        m.put("noleggioCognomeCliente", log.getNoleggioCognomeCliente());
+        m.put("noleggioCellulare", log.getNoleggioCellulare());
+        m.put("contactDate", log.getContactDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
+        m.put("createdAt", log.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
+        Map<String, Object> userMap = new HashMap<>();
+        userMap.put("id", log.getUser().getId());
+        userMap.put("fullName", log.getUser().getFullName());
+        userMap.put("role", log.getUser().getRole());
+        m.put("user", userMap);
+        return m;
     }
 }

@@ -20,7 +20,6 @@ public class ContactLog {
     @Column(nullable = false, length = 50)
     private String category;
 
-    // ===== CAMPI UNIVERSALI CLIENTE — obbligatori per ogni categoria =====
     @Column(name = "cliente_nome", length = 100)
     private String clienteNome;
 
@@ -29,6 +28,9 @@ public class ContactLog {
 
     @Column(name = "cliente_numero", length = 50)
     private String clienteNumero;
+
+    @Column(name = "non_comunica_nominativo")
+    private Boolean nonComunicaNominativo = false;
 
     @Column(name = "other_note", length = 500)
     private String otherNote;
@@ -54,6 +56,9 @@ public class ContactLog {
     @Column(name = "service_note", length = 500)
     private String serviceNote;
 
+    @Column(name = "service_sede", length = 50)
+    private String serviceSede;
+
     @Column(name = "acquisto_note", length = 500)
     private String acquistoNote;
 
@@ -72,14 +77,12 @@ public class ContactLog {
     @Column(name = "service_targa", length = 20)
     private String serviceTarga;
 
-    // CLIENTE | NON_CLIENTE
     @Column(name = "service_tipo_cliente", length = 20)
     private String serviceTipoCliente;
 
     @Column(name = "service_numero_telefono", length = 50)
     private String serviceNumeroTelefono;
 
-    // SOLO_INFO | RICHIESTA_CLIENTE — sottostato di "Info Noleggio"
     @Column(name = "noleggio_richiesta", length = 30)
     private String noleggioRichiesta;
 

@@ -20,7 +20,8 @@ public class ExcelExportService {
     private static final String[] SEDI = {"Agnano", "Casamarciano", "Salerno"};
     private static final String[] ACQUISTO_TIPI = {"Info Consegna", "Ritardo Consegna", "Info Documentazione", "Seconda chiave", "Info generiche"};
     private static final String[] FONTE_LIST = {"Sito", "Google ADS", "Autoscout", "Facebook", "Instagram", "TikTok", "Richiesta cliente", "Non ricorda"};
-    private static final String[] SERVICE_LIST = {"Tagliando", "Dispositivo satellitare", "Prenotazione", "Lavorazione in corso", "Doctor Glass", "Cambio Gomme"};
+    private static final String[] SERVICE_LIST = {"Tagliando", "Dispositivo satellitare", "Prenotazione", "Lavorazione in corso", "Doctor Glass", "Cambio Gomme", "Altro"};
+    private static final String[] SERVICE_SEDI = {"Agnano", "Salerno"};
 
     public byte[] export(List<ContactLog> logs) throws Exception {
         XSSFWorkbook wb = new XSSFWorkbook();
@@ -33,15 +34,20 @@ public class ExcelExportService {
         Map<String, Integer> byAcquisto = new LinkedHashMap<>();
         Map<String, Integer> byFonte = new LinkedHashMap<>();
         Map<String, Integer> byService = new LinkedHashMap<>();
+        Map<String, Integer> byServiceAgnano = new LinkedHashMap<>();
+        Map<String, Integer> byServiceSalerno = new LinkedHashMap<>();
         Map<String, Integer> byMarca = new LinkedHashMap<>();
         Map<String, Integer> byNoleggioTipo = new LinkedHashMap<>();
         byNoleggioTipo.put("Privato", 0);
         byNoleggioTipo.put("Partita IVA", 0);
+        byNoleggioTipo.put("Noleggio per aziende", 0);
 
         for (String s : SEDI) bySede.put(s, 0);
         for (String a : ACQUISTO_TIPI) byAcquisto.put(a, 0);
         for (String f : FONTE_LIST) byFonte.put(f, 0);
         for (String s : SERVICE_LIST) byService.put(s, 0);
+        for (String s : SERVICE_LIST) byServiceAgnano.put(s, 0);
+        for (String s : SERVICE_LIST) byServiceSalerno.put(s, 0);
 
         int noleggioSoloInfo = 0;
         int noleggioLeadGenerata = 0;
@@ -70,6 +76,11 @@ public class ExcelExportService {
             if ("Service".equals(log.getCategory()) && log.getServiceTipo() != null) {
                 String st = log.getServiceTipo().trim();
                 if (byService.containsKey(st)) byService.merge(st, 1, Integer::sum);
+                if ("Agnano".equals(log.getServiceSede()) && byServiceAgnano.containsKey(st)) {
+                    byServiceAgnano.merge(st, 1, Integer::sum);
+                } else if ("Salerno".equals(log.getServiceSede()) && byServiceSalerno.containsKey(st)) {
+                    byServiceSalerno.merge(st, 1, Integer::sum);
+                }
             }
             if (log.getMarca() != null && !log.getMarca().isBlank()) {
                 byMarca.merge(log.getMarca().trim().toUpperCase(), 1, Integer::sum);
@@ -98,9 +109,13 @@ public class ExcelExportService {
 
         // ===== FOGLIO 1: DATI — senza Ruolo, con AutoFilter =====
         XSSFSheet sheet1 = wb.createSheet("Dati Registro");
-        String[] headers1 = {"Data", "Orario", "Categoria", "Dettaglio", "Nominativo Appuntamento",
-                "Link Appuntamento", "Operatore", "% Categoria", "N. per Categoria", "% Operatore", "N. per Operatore"};
-        int[] widths1 = {3000, 2200, 6500, 7000, 6500, 9000, 6000, 3200, 4200, 3200, 4200};
+        String[] headers1 = {
+            "Data", "Orario", "Categoria",
+            "Nome Cliente", "Cognome Cliente", "Numero Cliente",
+            "Dettaglio", "Service Sede", "Nominativo Appuntamento", "Link Appuntamento",
+            "Operatore", "% Categoria", "N. per Categoria", "% Operatore", "N. per Operatore"
+        };
+        int[] widths1 = {3000, 2200, 6500, 4000, 4000, 3800, 7000, 3500, 6500, 9000, 6000, 3200, 4200, 3200, 4200};
 
         Row headerRow1 = sheet1.createRow(0);
         headerRow1.setHeightInPoints(20);
@@ -113,15 +128,15 @@ public class ExcelExportService {
         sheet1.setAutoFilter(new CellRangeAddress(0, 0, 0, headers1.length - 1));
         sheet1.createFreezePane(0, 1);
 
-        DateTimeFormatter dateFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        DateTimeFormatter dateFmt = DateTimeFormatter.ofPattern("dd/MM/yyyy");
         DateTimeFormatter timeFmt = DateTimeFormatter.ofPattern("HH:mm");
 
         int rowIdx = 1;
         for (ContactLog log : logs) {
             Row row = sheet1.createRow(rowIdx++);
             String catForPct = "Info + Appuntamento".equals(log.getCategory()) ? "Info Vendita" :
-                               "Info Vendita in Promo".equals(log.getCategory()) ? "Info Vendita" :
-                               log.getCategory();
+                                "Info Vendita in Promo".equals(log.getCategory()) ? "Info Vendita" :
+                                log.getCategory();
             int catCount = byCategory.getOrDefault(catForPct, 0);
             double catPct = total > 0 ? Math.round(catCount * 1000.0 / total) / 10.0 : 0;
             int opCount = byOperator.getOrDefault(log.getUser().getFullName(), 0);
@@ -130,14 +145,18 @@ public class ExcelExportService {
             row.createCell(0).setCellValue(log.getContactDate().format(dateFmt));
             row.createCell(1).setCellValue(log.getContactDate().format(timeFmt));
             row.createCell(2).setCellValue(log.getCategory());
-            row.createCell(3).setCellValue(log.getOtherNote() != null ? log.getOtherNote() : "");
-            row.createCell(4).setCellValue(log.getNominativoAppuntamento() != null ? log.getNominativoAppuntamento() : "");
-            row.createCell(5).setCellValue(log.getLinkAppuntamento() != null ? log.getLinkAppuntamento() : "");
-            row.createCell(6).setCellValue(log.getUser().getFullName());
-            row.createCell(7).setCellValue(catPct + "%");
-            row.createCell(8).setCellValue(catCount);
-            row.createCell(9).setCellValue(opPct + "%");
-            row.createCell(10).setCellValue(opCount);
+            row.createCell(3).setCellValue(log.getClienteNome() != null ? log.getClienteNome() : "");
+            row.createCell(4).setCellValue(log.getClienteCognome() != null ? log.getClienteCognome() : "");
+            row.createCell(5).setCellValue(log.getClienteNumero() != null ? log.getClienteNumero() : "");
+            row.createCell(6).setCellValue(log.getOtherNote() != null ? log.getOtherNote() : "");
+            row.createCell(7).setCellValue(log.getServiceSede() != null ? log.getServiceSede() : "");
+            row.createCell(8).setCellValue(log.getNominativoAppuntamento() != null ? log.getNominativoAppuntamento() : "");
+            row.createCell(9).setCellValue(log.getLinkAppuntamento() != null ? log.getLinkAppuntamento() : "");
+            row.createCell(10).setCellValue(log.getUser().getFullName());
+            row.createCell(11).setCellValue(catPct + "%");
+            row.createCell(12).setCellValue(catCount);
+            row.createCell(13).setCellValue(opPct + "%");
+            row.createCell(14).setCellValue(opCount);
         }
 
         // ===== FOGLIO 2: RIEPILOGO =====
@@ -162,7 +181,13 @@ public class ExcelExportService {
         r2 = writeSection(sheet2, titleStyle, headerStyle, r2, "FONTE INFO VENDITA", byFonte, totalFonte);
         r2++;
         int totalService = byService.values().stream().mapToInt(Integer::intValue).sum();
-        r2 = writeSection(sheet2, titleStyle, headerStyle, r2, "TIPOLOGIE SERVICE", byService, totalService);
+        r2 = writeSection(sheet2, titleStyle, headerStyle, r2, "TIPOLOGIE SERVICE (TUTTE LE SEDI)", byService, totalService);
+        r2++;
+        int totalServiceAgnano = byServiceAgnano.values().stream().mapToInt(Integer::intValue).sum();
+        r2 = writeSection(sheet2, titleStyle, headerStyle, r2, "SERVICE AGNANO — TIPOLOGIE", byServiceAgnano, totalServiceAgnano);
+        r2++;
+        int totalServiceSalerno = byServiceSalerno.values().stream().mapToInt(Integer::intValue).sum();
+        r2 = writeSection(sheet2, titleStyle, headerStyle, r2, "SERVICE SALERNO — TIPOLOGIE", byServiceSalerno, totalServiceSalerno);
         r2++;
         if (!byMarca.isEmpty()) {
             Map<String, Integer> byMarcaSorted = new LinkedHashMap<>();
@@ -199,7 +224,10 @@ public class ExcelExportService {
         buildDataAndChart(wb, sheet3, chartTitleStyle, "Info Acquisto Effettuato", byAcquisto, chartRow, 16);
         chartRow += 20;
         buildDataAndChart(wb, sheet3, chartTitleStyle, "Fonte Info Vendita", byFonte, chartRow, 0);
-        buildDataAndChart(wb, sheet3, chartTitleStyle, "Tipologie Service", byService, chartRow, 16);
+        buildDataAndChart(wb, sheet3, chartTitleStyle, "Tipologie Service (Tutte le sedi)", byService, chartRow, 16);
+        chartRow += 20;
+        buildDataAndChart(wb, sheet3, chartTitleStyle, "Service Agnano", byServiceAgnano, chartRow, 0);
+        buildDataAndChart(wb, sheet3, chartTitleStyle, "Service Salerno", byServiceSalerno, chartRow, 16);
         chartRow += 20;
         if (!byMarca.isEmpty()) {
             Map<String, Integer> top10 = new LinkedHashMap<>();
@@ -280,6 +308,7 @@ public class ExcelExportService {
             row.createCell(startCol + 1).setCellValue(e.getValue());
             i++;
         }
+        if (data.isEmpty()) return;
         int dataEndRow = dataStartRow + data.size() - 1;
 
         XSSFDrawing drawing = sheet.createDrawingPatriarch();

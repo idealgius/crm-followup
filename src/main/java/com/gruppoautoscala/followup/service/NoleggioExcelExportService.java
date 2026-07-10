@@ -23,9 +23,10 @@ public class NoleggioExcelExportService {
         STATO_LABELS.put("TRATTATIVA_IN_CORSO", "Trattativa in corso");
         STATO_LABELS.put("DA_RICHIAMARE", "Da richiamare");
         STATO_LABELS.put("CONCLUSA", "Conclusa");
+        STATO_LABELS.put("FALLITO", "Fallito");
     }
 
-    private static final String[] FONTE_LIST = {"Sito", "Google ADS", "Autoscout", "Facebook", "Instagram", "TikTok", "Richiesta cliente", "Non ricorda"};
+    private static final String[] FONTE_LIST = {"Sito", "Google ADS", "Autoscout", "Facebook", "Instagram", "TikTok", "Richiesta cliente", "Non ricorda", "Ingresso", "Cliente Personale"};
 
     public byte[] export(List<NoleggioTrattativa> list) throws Exception {
         XSSFWorkbook wb = new XSSFWorkbook();
@@ -38,6 +39,10 @@ public class NoleggioExcelExportService {
         for (String f : FONTE_LIST) byFonte.put(f, 0);
         Map<String, Integer> byMarchio = new LinkedHashMap<>();
         Map<String, Integer> byOperatore = new LinkedHashMap<>();
+        Map<String, Integer> byTipoCliente = new LinkedHashMap<>();
+        byTipoCliente.put("Privato", 0);
+        byTipoCliente.put("Partita IVA", 0);
+        byTipoCliente.put("Noleggio per aziende", 0);
 
         for (NoleggioTrattativa t : list) {
             String statoLabel = STATO_LABELS.getOrDefault(t.getStato(), t.getStato());
@@ -51,6 +56,9 @@ public class NoleggioExcelExportService {
             if (t.getUser() != null && t.getUser().getFullName() != null) {
                 byOperatore.merge(t.getUser().getFullName(), 1, Integer::sum);
             }
+            if (t.getTipoCliente() != null && byTipoCliente.containsKey(t.getTipoCliente())) {
+                byTipoCliente.merge(t.getTipoCliente(), 1, Integer::sum);
+            }
         }
 
         CellStyle headerStyle = createHeaderStyle(wb);
@@ -61,10 +69,11 @@ public class NoleggioExcelExportService {
         XSSFSheet sheet1 = wb.createSheet("Registro Trattative");
         String[] headers1 = {
             "Data Creazione", "Nome", "Cognome", "Cellulare", "Email", "Marchio", "Modello",
-            "Fonte", "Stato", "Data Richiamo", "Note", "Link Leadspark", "Link Auto Richiesta",
+            "Fonte", "Tipologia Cliente", "Stato", "Data Richiamo", "Nota Fallimento",
+            "Note", "Link Leadspark", "Link Auto Richiesta",
             "Operatore", "Ruolo Operatore"
         };
-        int[] widths1 = {3200, 4500, 4500, 3800, 6000, 4500, 5500, 4500, 5500, 3500, 8000, 8000, 8000, 5500, 3800};
+        int[] widths1 = {3200, 4500, 4500, 3800, 6000, 4500, 5500, 4500, 4500, 5500, 3500, 6500, 8000, 8000, 8000, 5500, 3800};
 
         Row headerRow1 = sheet1.createRow(0);
         headerRow1.setHeightInPoints(20);
@@ -77,8 +86,8 @@ public class NoleggioExcelExportService {
         sheet1.setAutoFilter(new CellRangeAddress(0, 0, 0, headers1.length - 1));
         sheet1.createFreezePane(0, 1);
 
-        DateTimeFormatter dateFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
-        DateTimeFormatter dateOnlyFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        DateTimeFormatter dateFmt = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+        DateTimeFormatter dateOnlyFmt = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
         int rowIdx = 1;
         for (NoleggioTrattativa t : list) {
@@ -91,13 +100,15 @@ public class NoleggioExcelExportService {
             row.createCell(5).setCellValue(t.getMarchio() != null ? t.getMarchio() : "");
             row.createCell(6).setCellValue(t.getModello() != null ? t.getModello() : "");
             row.createCell(7).setCellValue(t.getFonte() != null ? t.getFonte() : "");
-            row.createCell(8).setCellValue(STATO_LABELS.getOrDefault(t.getStato(), t.getStato()));
-            row.createCell(9).setCellValue(t.getDataRichiamo() != null ? t.getDataRichiamo().format(dateOnlyFmt) : "");
-            row.createCell(10).setCellValue(t.getNote() != null ? t.getNote() : "");
-            row.createCell(11).setCellValue(t.getLinkLeadspark() != null ? t.getLinkLeadspark() : "");
-            row.createCell(12).setCellValue(t.getLinkAutoRichiesta() != null ? t.getLinkAutoRichiesta() : "");
-            row.createCell(13).setCellValue(t.getUser() != null ? t.getUser().getFullName() : "");
-            row.createCell(14).setCellValue(t.getUser() != null ? t.getUser().getRole() : "");
+            row.createCell(8).setCellValue(t.getTipoCliente() != null ? t.getTipoCliente() : "");
+            row.createCell(9).setCellValue(STATO_LABELS.getOrDefault(t.getStato(), t.getStato()));
+            row.createCell(10).setCellValue(t.getDataRichiamo() != null ? t.getDataRichiamo().format(dateOnlyFmt) : "");
+            row.createCell(11).setCellValue(t.getNoteFallimento() != null ? t.getNoteFallimento() : "");
+            row.createCell(12).setCellValue(t.getNote() != null ? t.getNote() : "");
+            row.createCell(13).setCellValue(t.getLinkLeadspark() != null ? t.getLinkLeadspark() : "");
+            row.createCell(14).setCellValue(t.getLinkAutoRichiesta() != null ? t.getLinkAutoRichiesta() : "");
+            row.createCell(15).setCellValue(t.getUser() != null ? t.getUser().getFullName() : "");
+            row.createCell(16).setCellValue(t.getUser() != null ? t.getUser().getRole() : "");
         }
 
         // ===== FOGLIO 2: RIEPILOGO =====
@@ -112,6 +123,11 @@ public class NoleggioExcelExportService {
         int totalFonte = byFonte.values().stream().mapToInt(Integer::intValue).sum();
         r2 = writeSection(sheet2, titleStyle, headerStyle, r2, "FONTE TRATTATIVE", byFonte, totalFonte);
         r2++;
+        int totalTipoCliente = byTipoCliente.values().stream().mapToInt(Integer::intValue).sum();
+        if (totalTipoCliente > 0) {
+            r2 = writeSection(sheet2, titleStyle, headerStyle, r2, "TIPOLOGIA CLIENTE", byTipoCliente, totalTipoCliente);
+            r2++;
+        }
         if (!byMarchio.isEmpty()) {
             Map<String, Integer> byMarchioSorted = new LinkedHashMap<>();
             byMarchio.entrySet().stream()
@@ -134,6 +150,10 @@ public class NoleggioExcelExportService {
         buildDataAndChart(wb, sheet3, chartTitleStyle, "Distribuzione Stato Trattative", byStato, chartRow, 0);
         buildDataAndChart(wb, sheet3, chartTitleStyle, "Fonte Trattative", byFonte, chartRow, 16);
         chartRow += 20;
+        if (totalTipoCliente > 0) {
+            buildDataAndChart(wb, sheet3, chartTitleStyle, "Tipologia Cliente", byTipoCliente, chartRow, 0);
+            chartRow += 20;
+        }
         if (!byMarchio.isEmpty()) {
             Map<String, Integer> top10 = new LinkedHashMap<>();
             byMarchio.entrySet().stream()
@@ -204,6 +224,7 @@ public class NoleggioExcelExportService {
             row.createCell(startCol + 1).setCellValue(e.getValue());
             i++;
         }
+        if (data.isEmpty()) return;
         int dataEndRow = dataStartRow + data.size() - 1;
 
         XSSFDrawing drawing = sheet.createDrawingPatriarch();
