@@ -40,8 +40,9 @@ const ALL_CATEGORIES = [
     'Info + Appuntamento', 'Info Vendita in Promo', 'Altro'
 ];
 
-const ACQUISTO_LIST = ['Info Consegna', 'Ritardo Consegna', 'Info Documentazione', 'Seconda chiave', 'Info generiche'];
-const ACQUISTO_COLORS = ['#4a90d9', '#ff3d3d', '#00bcd4', '#f0c040', '#7c4dff'];
+// ===== "Furto" aggiunto in fondo alla lista =====
+const ACQUISTO_LIST = ['Info Consegna', 'Ritardo Consegna', 'Info Documentazione', 'Seconda chiave', 'Info generiche', 'Furto'];
+const ACQUISTO_COLORS = ['#4a90d9', '#ff3d3d', '#00bcd4', '#f0c040', '#7c4dff', '#8a2be2'];
 const FONTE_LIST = ['Sito', 'Google ADS', 'Autoscout', 'Facebook', 'Instagram', 'TikTok', 'Richiesta cliente', 'Non ricorda'];
 const FONTE_COLORS = ['#1a4080', '#f0c040', '#e91e63', '#4a90d9', '#7c4dff', '#ff3d3d', '#00c853', '#8a8faa'];
 const SERVICE_LIST = ['Tagliando', 'Dispositivo satellitare', 'Prenotazione', 'Lavorazione in corso', 'Doctor Glass', 'Cambio Gomme', 'Altro'];
@@ -118,6 +119,43 @@ function clienteNumeroDisplay(log) {
 
 function downloadFile(url) {
     window.location.href = url;
+}
+
+// ============================================================
+// BADGE CONTATORE GENERALE PER GRAFICO — indipendente dai filtri
+// (operatore/categoria/vista giornaliera). Calcolato sempre su
+// contactLogs (l'intero set caricato per il range di date corrente).
+// ============================================================
+
+function findChartTitleElement(canvas) {
+    if (!canvas) return null;
+    const parent = canvas.parentElement;
+    let h3 = parent ? parent.querySelector(':scope > h3') : null;
+    if (!h3) {
+        const card = canvas.closest('.chart-card');
+        h3 = card ? card.querySelector('h3') : null;
+    }
+    return h3;
+}
+
+function setChartCounterBadge(afterElement, count, label) {
+    if (!afterElement) return;
+    let badge = afterElement.nextElementSibling;
+    if (!badge || !badge.classList || !badge.classList.contains('chart-counter-badge')) {
+        badge = document.createElement('div');
+        badge.className = 'chart-counter-badge';
+        badge.style.cssText = 'font-size:11px;font-weight:800;color:#f0c040;background:rgba(240,192,64,0.12);display:inline-block;padding:3px 10px;border-radius:10px;margin-bottom:10px';
+        afterElement.insertAdjacentElement('afterend', badge);
+    }
+    badge.textContent = `${label}: ${count}`;
+}
+
+function updateServiceCounterBadge() {
+    const canvas = document.getElementById('chartServiceAgnano');
+    const h3 = findChartTitleElement(canvas);
+    if (!h3) return;
+    const total = contactLogs.filter(l => l.category === 'Service').length;
+    setChartCounterBadge(h3, total, 'Totale storico');
 }
 
 // ===== AUTOCOMPLETE MARCA — Blocco generico (Info Vendita/Appuntamento/Promo) =====
@@ -290,12 +328,13 @@ function populateOperatorFilter() {
     }
 }
 
+// ===== FIX BUG FILTRO CATEGORIA — ora legge il multi-select reale =====
 function applyContactFilters(restoreDayView) {
     const operatorsSelected = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('contactOperatorFilterMulti') : [];
-    const category = document.getElementById('contactCategoryFilter')?.value || '';
+    const categoriesSelected = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('contactCategoryFilterMulti') : [];
     contactLogsFiltered = contactLogs.filter(l => {
         if (operatorsSelected.length > 0 && !operatorsSelected.includes(l.user.fullName)) return false;
-        if (category && l.category !== category) return false;
+        if (categoriesSelected.length > 0 && !categoriesSelected.includes(l.category)) return false;
         return true;
     });
     if (restoreDayView) { showDayView(restoreDayView); } else { renderContactLogs(contactLogsFiltered); }
@@ -323,10 +362,10 @@ function resetContactFilters() {
     const firstDay = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`; })();
     document.getElementById('contactFrom').value = firstDay;
     document.getElementById('contactTo').value = today;
-    const op = document.getElementById('contactOperatorFilter');
-    if (op) op.value = '';
-    const cat = document.getElementById('contactCategoryFilter');
-    if (cat) cat.value = '';
+    if (typeof multiSelectClear === 'function') {
+        multiSelectClear('contactOperatorFilterMulti');
+        multiSelectClear('contactCategoryFilterMulti');
+    }
     currentDayView = null;
     dayViewCategoryFilter = '';
     dayViewSubFilter = '';
@@ -387,6 +426,8 @@ function closeContactSearch() {
     if (input) input.value = '';
 }
 
+// ===== STAT-CARD IN EVIDENZA — ora include Info Acquisto e sono tutte cliccabili =====
+
 function renderContactStatsFromLogs(logs) {
     const total = logs.length;
     const byCategory = {};
@@ -397,6 +438,58 @@ function renderContactStatsFromLogs(logs) {
     if (el('statInfoVendita')) el('statInfoVendita').textContent = (total > 0 ? Math.round(infoVendita*1000/total)/10 : 0)+'%';
     if (el('statInfoNoleggio')) el('statInfoNoleggio').textContent = (total > 0 ? Math.round((byCategory['Info Noleggio']||0)*1000/total)/10 : 0)+'%';
     if (el('statService')) el('statService').textContent = (total > 0 ? Math.round((byCategory['Service']||0)*1000/total)/10 : 0)+'%';
+    if (el('statInfoAcquisto')) el('statInfoAcquisto').textContent = (total > 0 ? Math.round((byCategory['Info Acquisto effettuato']||0)*1000/total)/10 : 0)+'%';
+    attachContactStatClickHandlers();
+}
+
+function showContactStatDetail(type) {
+    let items = [];
+    let title = '';
+    switch (type) {
+        case 'total':
+            items = contactLogsFiltered;
+            title = 'Totale Contatti';
+            break;
+        case 'vendita':
+            items = contactLogsFiltered.filter(l => l.category === 'Info Vendita' || l.category === 'Info + Appuntamento' || l.category === 'Info Vendita in Promo');
+            title = 'Info Vendita';
+            break;
+        case 'noleggio':
+            items = contactLogsFiltered.filter(l => l.category === 'Info Noleggio');
+            title = 'Info Noleggio';
+            break;
+        case 'service':
+            items = contactLogsFiltered.filter(l => l.category === 'Service');
+            title = 'Service';
+            break;
+        case 'acquisto':
+            items = contactLogsFiltered.filter(l => l.category === 'Info Acquisto effettuato');
+            title = 'Info Acquisto Effettuato';
+            break;
+    }
+    showGenericContactDetail(title, items);
+}
+
+// Aggancia il click a ogni stat-card in evidenza trovando il div .stat-card
+// che contiene il valore (funziona anche senza dover toccare l'HTML esistente:
+// se un id non esiste ancora nel markup, viene semplicemente ignorato).
+function attachContactStatClickHandlers() {
+    const map = {
+        statContactTotal: 'total',
+        statInfoVendita: 'vendita',
+        statInfoNoleggio: 'noleggio',
+        statService: 'service',
+        statInfoAcquisto: 'acquisto'
+    };
+    Object.entries(map).forEach(([elId, type]) => {
+        const valueEl = document.getElementById(elId);
+        if (!valueEl) return;
+        const card = valueEl.closest('.stat-card');
+        if (!card) return;
+        card.style.cursor = 'pointer';
+        card.classList.add('stat-card-clickable');
+        card.onclick = () => showContactStatDetail(type);
+    });
 }
 
 // ===== DETTAGLIO GENERICO PER GRAFICI =====
@@ -548,6 +641,7 @@ function closeSedeDetail(event) {
     document.getElementById('sedeDetailModal').style.display = 'none';
 }
 
+// ===== INFO ACQUISTO — badge totale storico aggiunto =====
 function renderChartInfoAcquisto(logs) {
     const ctx = document.getElementById('chartInfoAcquisto');
     if (!ctx) return;
@@ -583,8 +677,11 @@ function renderChartInfoAcquisto(logs) {
             }
         }
     });
+    const totalAll = contactLogs.filter(l => l.category === 'Info Acquisto effettuato').length;
+    setChartCounterBadge(findChartTitleElement(ctx), totalAll, 'Totale storico');
 }
 
+// ===== FONTE VENDITA — badge totale storico Info Vendita aggiunto =====
 function renderChartFonteVendita(logs) {
     const ctx = document.getElementById('chartFonteVendita');
     if (!ctx) return;
@@ -623,9 +720,11 @@ function renderChartFonteVendita(logs) {
             }
         }
     });
+    const totalVenditaAll = contactLogs.filter(l => l.category === 'Info Vendita' || l.category === 'Info + Appuntamento' || l.category === 'Info Vendita in Promo').length;
+    setChartCounterBadge(findChartTitleElement(ctx), totalVenditaAll, 'Totale storico Info Vendita');
 }
 
-// ===== SERVICE — DUE GRAFICI SEPARATI PER SEDE (compatti, per stare in linea) =====
+// ===== SERVICE — ORA TORTE (doughnut) con numero+percentuale, come tutti gli altri =====
 
 function buildServiceSedeChart(canvasId, existingChart, logs, sede) {
     const ctx = document.getElementById(canvasId);
@@ -636,22 +735,28 @@ function buildServiceSedeChart(canvasId, existingChart, logs, sede) {
     SERVICE_LIST.forEach(s => counts[s] = 0);
     logs.forEach(log => { if (log.category === 'Service' && log.serviceSede === sede && log.serviceTipo && counts[log.serviceTipo.trim()] !== undefined) counts[log.serviceTipo.trim()]++; });
     const total = SERVICE_LIST.reduce((a,s) => a+counts[s], 0);
-    const textColor = isDark ? '#8a8faa' : '#555555';
-    const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
-    return new Chart(ctx.getContext('2d'), {
-        type: 'bar',
-        data: { labels: SERVICE_LIST, datasets: [{ data: SERVICE_LIST.map(s => counts[s]), backgroundColor: SERVICE_COLORS.map(c => c+'99'), borderColor: SERVICE_COLORS, borderWidth: 2, borderRadius: 5, borderSkipped: false }] },
+    const legendColor = getLegendColor();
+    const chart = new Chart(ctx.getContext('2d'), {
+        type: 'doughnut',
+        data: { labels: SERVICE_LIST, datasets: [{ data: SERVICE_LIST.map(s => counts[s]), backgroundColor: SERVICE_COLORS, borderWidth: 2, borderColor: isDark ? '#0d0f1a' : '#ffffff' }] },
         options: {
-            indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+            responsive: true, maintainAspectRatio: true,
             onClick: (evt, elements) => { if (elements.length > 0) showServiceDetail(SERVICE_LIST[elements[0].index], sede); },
             onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
-            plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => { const val = ctx.raw; const pct = total > 0 ? Math.round(val*1000/total)/10 : 0; return ` Valore: ${val} — ${pct}%`; } } } },
-            scales: {
-                x: { beginAtZero: true, ticks: { color: textColor, precision: 0, font: { size: 10 } }, grid: { color: gridColor } },
-                y: { ticks: { color: textColor, font: { size: 10, weight: '600' } }, grid: { display: false } }
+            plugins: {
+                legend: { position: 'bottom', labels: { color: legendColor, font: { size: 10 }, padding: 6, boxWidth: 10,
+                    generateLabels: chart => chart.data.labels.map((label, i) => {
+                        const val = chart.data.datasets[0].data[i];
+                        const pct = total > 0 ? Math.round(val*1000/total)/10 : 0;
+                        return { text: `${label}: ${val} (${pct}%)`, fillStyle: SERVICE_COLORS[i], strokeStyle: SERVICE_COLORS[i], fontColor: legendColor, lineWidth: 0, index: i };
+                    })
+                } },
+                tooltip: { callbacks: { label: ctx => { const val = ctx.raw; const pct = total > 0 ? Math.round(val*1000/total)/10 : 0; return ` Valore: ${val} — ${pct}%`; } } }
             }
         }
     });
+    updateServiceCounterBadge();
+    return chart;
 }
 
 function renderChartServiceAgnano(logs) {
@@ -703,6 +808,7 @@ function showMarcaContactDetail(marcaUpper) {
     showGenericContactDetail(`Marca — ${marcaUpper}`, items);
 }
 
+// ===== NOLEGGIO — badge totale storico aggiunto sul primo grafico =====
 function renderChartNoleggio(logs) {
     const wrapper = document.getElementById('chartNoleggioWrapper');
     const noleggioLogs = logs.filter(l => l.category === 'Info Noleggio');
@@ -746,6 +852,8 @@ function renderChartNoleggio(logs) {
                 }
             }
         });
+        const totalNoleggioAll = contactLogs.filter(l => l.category === 'Info Noleggio').length;
+        setChartCounterBadge(findChartTitleElement(ctxTipo), totalNoleggioAll, 'Totale storico');
     }
 
     if (contactChartNoleggioLead) { contactChartNoleggioLead.destroy(); contactChartNoleggioLead = null; }
@@ -910,17 +1018,18 @@ async function loadPromoStatsForContactCharts(totalFromLogs, textColor, gridColo
     } catch (err) { console.error('Errore stats promo grafici:', err); }
 }
 
+// ===== EXPORT EXCEL — ora legge i multi-select =====
 function exportContactsExcel() {
     if (!contactLogsFiltered || contactLogsFiltered.length === 0) { alert('Nessun dato da esportare'); return; }
     const from = document.getElementById('contactFrom')?.value || '';
     const to = document.getElementById('contactTo')?.value || '';
-    const operator = document.getElementById('contactOperatorFilter')?.value || '';
-    const category = document.getElementById('contactCategoryFilter')?.value || '';
+    const operatorsSelected = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('contactOperatorFilterMulti') : [];
+    const categoriesSelected = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('contactCategoryFilterMulti') : [];
     let url = '/api/contacts/export-excel?';
     if (from) url += `from=${from}&`;
     if (to) url += `to=${to}&`;
-    if (operator) url += `operator=${encodeURIComponent(operator)}&`;
-    if (category) url += `category=${encodeURIComponent(category)}&`;
+    if (operatorsSelected.length > 0) url += `operator=${encodeURIComponent(operatorsSelected.join(','))}&`;
+    if (categoriesSelected.length > 0) url += `category=${encodeURIComponent(categoriesSelected.join(','))}&`;
     downloadFile(url);
 }
 
@@ -1386,11 +1495,12 @@ function selectNoleggioTipo(tipo) {
     if (btn) btn.classList.add('btn-sede-active');
 }
 
+// ===== "Furto" aggiunto al mapping =====
 function selectAcquisto(tipo) {
     selectedAcquisto = tipo;
     document.getElementById('contactAcquistoTipo').value = tipo;
-    ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche'].forEach(k => { const btn = document.getElementById(`acquisto-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
-    const keyMap = { 'Info Consegna':'InfoConsegna','Ritardo Consegna':'RitardoConsegna','Info Documentazione':'InfoDocumentazione','Seconda chiave':'SecondaChiave','Info generiche':'InfoGeneriche' };
+    ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche','Furto'].forEach(k => { const btn = document.getElementById(`acquisto-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
+    const keyMap = { 'Info Consegna':'InfoConsegna','Ritardo Consegna':'RitardoConsegna','Info Documentazione':'InfoDocumentazione','Seconda chiave':'SecondaChiave','Info generiche':'InfoGeneriche','Furto':'Furto' };
     const btn = document.getElementById(`acquisto-${keyMap[tipo]}`);
     if (btn) btn.classList.add('btn-sede-active');
     const noteRow = document.getElementById('contactAcquistoNoteRow');
@@ -1674,7 +1784,7 @@ function hideNewContactForm() {
     selectedSede = ''; selectedAcquisto = ''; selectedFonte = ''; selectedService = ''; selectedServiceSede = ''; selectedNoleggioTipo = ''; selectedNoleggioRichiesta = '';
     SEDI_LIST.forEach(s => { const btn = document.getElementById(`sede-${s}`); if (btn) btn.classList.remove('btn-sede-active'); });
     SERVICE_SEDI_LIST.forEach(s => { const btn = document.getElementById(`serviceSede-${s}`); if (btn) btn.classList.remove('btn-sede-active'); });
-    ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche'].forEach(k => { const btn = document.getElementById(`acquisto-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
+    ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche','Furto'].forEach(k => { const btn = document.getElementById(`acquisto-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['Sito','GoogleADS','Autoscout','Facebook','Instagram','TikTok','RichiestaCliente','NonRicorda'].forEach(k => { const btn = document.getElementById(`fonte-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['Tagliando','DispositivoSatellitare','Prenotazione','LavorazioneInCorso','DoctorGlass','CambioGomme','Altro'].forEach(k => { const btn = document.getElementById(`service-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['Privato','PIVA','Aziende'].forEach(k => { const btn = document.getElementById(`noleggio-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
@@ -1710,7 +1820,7 @@ function onCategoryChange() {
         const dettagli = document.getElementById('contactNoleggioRichiestaDettagli'); if (dettagli) dettagli.style.display = 'none';
     }
     if (cat !== 'Info + Appuntamento') { selectedSede=''; const el=document.getElementById('contactAppuntamentoSede'); if(el) el.value=''; const l=document.getElementById('contactAppuntamentoLink'); if(l) l.value=''; SEDI_LIST.forEach(s=>{const b=document.getElementById(`sede-${s}`);if(b)b.classList.remove('btn-sede-active');}); }
-    if (cat !== 'Info Acquisto effettuato') { selectedAcquisto=''; const el=document.getElementById('contactAcquistoTipo'); if(el) el.value=''; const nr=document.getElementById('contactAcquistoNoteRow'); if(nr) nr.style.display='none'; ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche'].forEach(k=>{const b=document.getElementById(`acquisto-${k}`);if(b)b.classList.remove('btn-sede-active');}); }
+    if (cat !== 'Info Acquisto effettuato') { selectedAcquisto=''; const el=document.getElementById('contactAcquistoTipo'); if(el) el.value=''; const nr=document.getElementById('contactAcquistoNoteRow'); if(nr) nr.style.display='none'; ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche','Furto'].forEach(k=>{const b=document.getElementById(`acquisto-${k}`);if(b)b.classList.remove('btn-sede-active');}); }
     if (cat !== 'Service') {
         selectedService=''; selectedServiceSede=''; selectedServiceTipoCliente='';
         const el=document.getElementById('contactServiceTipo'); if(el) el.value='';

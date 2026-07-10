@@ -8,6 +8,8 @@ let selectedRentMarchio = '';
 let selectedRentTipoCliente = '';
 let rentTrattativeSortDir = 'desc';
 let rentContattiSortDir = 'desc';
+let rentDayView = null;
+let rtdEditId = null;
 
 const RENT_STATO_LIST = ['SOLO_INFO', 'TRATTATIVA_IN_CORSO', 'DA_RICHIAMARE', 'CONCLUSA', 'FALLITO'];
 const RENT_STATO_LABELS = {
@@ -38,7 +40,6 @@ function loadRentDashboard() {
     if (fromEl && !fromEl.value) fromEl.value = firstDay;
     if (toEl && !toEl.value) toEl.value = today;
 
-    // Popola il multi-select STATO (lista statica) una sola volta
     if (typeof populateMultiSelectOptions === 'function' && document.getElementById('rentStatoFilterMulti-options')) {
         const optionsContainer = document.getElementById('rentStatoFilterMulti-options');
         if (optionsContainer && !optionsContainer.dataset.populated) {
@@ -67,7 +68,6 @@ async function loadRentTrattative() {
     }
 }
 
-// Popola i multi-select MARCHIO / FONTE / OPERATORE (opzioni dinamiche, dipendono dai dati caricati)
 function populateRentFilters() {
     if (typeof populateMultiSelectOptions !== 'function') return;
 
@@ -98,7 +98,11 @@ function applyRentFilters() {
         return true;
     });
 
-    renderRentTrattative(rentTrattativeFiltered);
+    if (rentDayView) {
+        renderRentDayView(rentDayView);
+    } else {
+        renderRentTrattative(rentTrattativeFiltered);
+    }
     renderRentStats(rentTrattativeFiltered);
     renderChartRentStato(rentTrattativeFiltered);
     renderChartRentFonte(rentTrattativeFiltered);
@@ -126,6 +130,40 @@ function toggleRentContattiSortDir() {
     const btn = document.getElementById('rentContattiSortBtn');
     if (btn) btn.textContent = rentContattiSortDir === 'desc' ? '⬇️ Più recenti prima' : '⬆️ Meno recenti prima';
     loadRentContattiNoleggio();
+}
+
+// ============================================================
+// VISTA GIORNALIERA
+// ============================================================
+
+function showRentDayView(date) {
+    rentDayView = date;
+    renderRentDayView(date);
+}
+
+function closeRentDayView() {
+    rentDayView = null;
+    renderRentTrattative(rentTrattativeFiltered);
+}
+
+function renderRentDayView(date) {
+    const container = document.getElementById('rentTrattativeList');
+    if (!container) return;
+    const items = rentTrattativeFiltered
+        .filter(t => (t.createdAt || '').split('T')[0] === date)
+        .sort((a, b) => rentTrattativeSortDir === 'desc'
+            ? (b.createdAt || '').localeCompare(a.createdAt || '')
+            : (a.createdAt || '').localeCompare(b.createdAt || ''));
+
+    container.innerHTML = `
+        <div style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <button class="btn-secondary" onclick="closeRentDayView()" style="padding:8px 16px;font-size:12px">← INDIETRO</button>
+            <span style="font-size:16px;font-weight:800;color:var(--text-primary)">${formatDateIT(date)}</span>
+            <span style="font-size:12px;color:var(--text-secondary);font-weight:700">${items.length} trattativ${items.length===1?'a':'e'}</span>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+            ${items.length > 0 ? items.map(t => renderRentTrattativaCard(t)).join('') : '<div class="empty-state" style="padding:20px;width:100%"><p>Nessuna trattativa per questo giorno</p></div>'}
+        </div>`;
 }
 
 function renderRentTrattative(list) {
@@ -206,7 +244,10 @@ function renderRentTrattative(list) {
                                                     : (a.createdAt||'').localeCompare(b.createdAt||''));
                                                 return `
                                                 <div style="margin-bottom:10px;padding-left:14px">
-                                                    <div style="font-size:10px;font-weight:800;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">${formatDateIT(date)}</div>
+                                                    <div onclick="showRentDayView('${date}')" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;font-size:10px;font-weight:800;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;padding:4px 10px;border-radius:8px;transition:background 0.15s" onmouseover="this.style.background='rgba(46,204,113,0.10)'" onmouseout="this.style.background='transparent'">
+                                                        📅 ${formatDateIT(date)}
+                                                        <span style="color:#2ecc71;font-weight:900">👁 vedi solo questo giorno</span>
+                                                    </div>
                                                     <div style="display:flex;gap:10px;flex-wrap:wrap">
                                                         ${itemsSorted.map(t => renderRentTrattativaCard(t)).join('')}
                                                     </div>
@@ -224,13 +265,20 @@ function renderRentTrattative(list) {
     </div>`;
 }
 
+// Card cliccabile ovunque -> apre il modal di dettaglio/gestione completo.
+// I pulsanti interni (modifica rapida, elimina, link) fermano la propagazione
+// del click con event.stopPropagation() per non aprire il modal per errore.
 function renderRentTrattativaCard(t) {
     const today = todayStr();
     const isRecallToday = t.stato === 'DA_RICHIAMARE' && t.dataRichiamo === today;
     const isRecallPast = t.stato === 'DA_RICHIAMARE' && t.dataRichiamo && t.dataRichiamo < today;
     const color = RENT_STATO_COLORS[t.stato] || '#8a8faa';
 
-    return `<div style="width:260px;background:var(--bg-card);border:1.5px solid ${isRecallToday||isRecallPast?color:'var(--border)'};border-left:4px solid ${color};border-radius:10px;padding:12px;box-shadow:var(--shadow);${isRecallToday?'box-shadow:0 0 12px rgba(233,30,99,0.25)':''}">
+    const links = [];
+    if (t.linkLeadspark) links.push(`<a href="${t.linkLeadspark}" target="_blank" rel="noopener" title="Leadspark" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(0,200,83,0.15);color:#00c853;text-decoration:none;font-size:13px">🔗</a>`);
+    if (t.linkAutoRichiesta) links.push(`<a href="${t.linkAutoRichiesta}" target="_blank" rel="noopener" title="Auto richiesta" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(74,144,217,0.15);color:#4a90d9;text-decoration:none;font-size:13px">🔗</a>`);
+
+    return `<div onclick="openRentTrattativaModal(${t.id})" style="width:260px;cursor:pointer;background:var(--bg-card);border:1.5px solid ${isRecallToday||isRecallPast?color:'var(--border)'};border-left:4px solid ${color};border-radius:10px;padding:12px;box-shadow:var(--shadow);transition:transform 0.15s;${isRecallToday?'box-shadow:0 0 12px rgba(233,30,99,0.25)':''}" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
         <div style="font-weight:800;color:var(--text-primary);font-size:13px">${t.nome} ${t.cognome}</div>
         <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;line-height:1.6">
             🚗 ${t.marchio}${t.modello?' '+t.modello:''}<br>
@@ -244,12 +292,144 @@ function renderRentTrattativaCard(t) {
             ${t.dataRichiamo ? `<span style="font-size:10px;font-weight:700;color:${isRecallPast?'#e91e63':isRecallToday?'#f0c040':'var(--text-secondary)'}">📅 ${formatDateIT(t.dataRichiamo)}</span>` : ''}
         </div>
         ${t.stato === 'FALLITO' && t.noteFallimento ? `<div style="margin-top:8px;font-size:10px;color:#ff3d3d;background:rgba(255,61,61,0.08);padding:6px 8px;border-radius:6px">❌ ${t.noteFallimento}</div>` : ''}
-        <div style="margin-top:8px;display:flex;gap:6px">
-            <button class="btn-small btn-blue" onclick="editRentTrattativa(${t.id})">✏️</button>
-            <button class="btn-small btn-red" onclick="deleteRentTrattativa(${t.id})">🗑️</button>
+        <div style="margin-top:8px;display:flex;gap:6px;align-items:center">
+            <button class="btn-small btn-blue" onclick="event.stopPropagation();editRentTrattativa(${t.id})" title="Modifica rapida">✏️</button>
+            <button class="btn-small btn-red" onclick="event.stopPropagation();deleteRentTrattativa(${t.id})" title="Elimina">🗑️</button>
+            ${links.length > 0 ? `<span style="margin-left:auto;display:flex;gap:6px">${links.join('')}</span>` : ''}
         </div>
     </div>`;
 }
+
+// ============================================================
+// MODAL DETTAGLIO/GESTIONE TRATTATIVA — click sulla card
+// ============================================================
+
+function openRentTrattativaModal(id) {
+    const t = rentTrattative.find(x => x.id === id);
+    if (!t) return;
+    rtdEditId = id;
+
+    document.getElementById('rtdNome').value = t.nome || '';
+    document.getElementById('rtdCognome').value = t.cognome || '';
+    document.getElementById('rtdCellulare').value = t.cellulare || '';
+    document.getElementById('rtdEmail').value = t.email || '';
+    document.getElementById('rtdMarca').value = t.marchio || '';
+    document.getElementById('rtdModello').value = t.modello || '';
+    document.getElementById('rtdFonte').value = t.fonte || '';
+    document.getElementById('rtdTipoCliente').value = t.tipoCliente || '';
+    document.getElementById('rtdNote').value = t.note || '';
+    document.getElementById('rtdLinkLeadspark').value = t.linkLeadspark || '';
+    document.getElementById('rtdLinkAutoRichiesta').value = t.linkAutoRichiesta || '';
+    document.getElementById('rtdStato').value = t.stato || 'SOLO_INFO';
+    document.getElementById('rtdDataRichiamo').value = t.dataRichiamo || '';
+    document.getElementById('rtdNoteFallimento').value = t.noteFallimento || '';
+
+    const opInfo = document.getElementById('rtdOperatoreInfo');
+    if (opInfo) opInfo.textContent = `${t.user?.fullName || '—'}${t.user?.role === 'NOLEGGIO' ? ' (Noleggio)' : ''}`;
+
+    const createdInfo = document.getElementById('rtdCreatedInfo');
+    if (createdInfo) {
+        if (t.createdAt) {
+            const date = t.createdAt.split('T')[0];
+            const time = (t.createdAt.split('T')[1] || '').substring(0,5);
+            createdInfo.textContent = `${formatDateIT(date)} · ${time}`;
+        } else {
+            createdInfo.textContent = '—';
+        }
+    }
+
+    onRtdStatoChange();
+
+    const modal = document.getElementById('rentTrattativaModal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeRentTrattativaModal(event) {
+    if (event && event.target.id !== 'rentTrattativaModal') return;
+    const modal = document.getElementById('rentTrattativaModal');
+    if (modal) modal.style.display = 'none';
+    rtdEditId = null;
+}
+
+function onRtdStatoChange() {
+    const stato = document.getElementById('rtdStato').value;
+    const row = document.getElementById('rtdDataRichiamoRow');
+    if (row) row.style.display = stato === 'DA_RICHIAMARE' ? 'block' : 'none';
+    const noteFallimentoRow = document.getElementById('rtdNoteFallimentoRow');
+    if (noteFallimentoRow) noteFallimentoRow.style.display = stato === 'FALLITO' ? 'block' : 'none';
+}
+
+async function saveRentTrattativaDetail() {
+    if (!rtdEditId) return;
+    const nome = document.getElementById('rtdNome').value.trim();
+    const cognome = document.getElementById('rtdCognome').value.trim();
+    const cellulare = document.getElementById('rtdCellulare').value.trim();
+    const email = document.getElementById('rtdEmail').value.trim();
+    const marchio = document.getElementById('rtdMarca').value.trim();
+    const modello = document.getElementById('rtdModello').value.trim();
+    const fonte = document.getElementById('rtdFonte').value;
+    const tipoCliente = document.getElementById('rtdTipoCliente').value;
+    const note = document.getElementById('rtdNote').value.trim();
+    const linkLeadspark = document.getElementById('rtdLinkLeadspark').value.trim();
+    const linkAutoRichiesta = document.getElementById('rtdLinkAutoRichiesta').value.trim();
+    const stato = document.getElementById('rtdStato').value;
+    const dataRichiamo = document.getElementById('rtdDataRichiamo').value;
+    const noteFallimento = document.getElementById('rtdNoteFallimento').value.trim();
+
+    if (!nome) { alert('Il nome è obbligatorio'); return; }
+    if (!cognome) { alert('Il cognome è obbligatorio'); return; }
+    if (!cellulare) { alert('Il cellulare è obbligatorio'); return; }
+    if (!marchio) { alert('Il marchio è obbligatorio'); return; }
+    if (stato === 'DA_RICHIAMARE' && !dataRichiamo) { alert('Inserisci la data di richiamo'); return; }
+
+    const payload = {
+        nome, cognome, cellulare,
+        email: email || null,
+        marchio,
+        modello: modello || null,
+        note: note || null,
+        fonte: fonte || null,
+        stato,
+        dataRichiamo: stato === 'DA_RICHIAMARE' ? dataRichiamo : null,
+        noteFallimento: stato === 'FALLITO' ? (noteFallimento || null) : null,
+        tipoCliente: tipoCliente || null,
+        linkLeadspark: linkLeadspark || null,
+        linkAutoRichiesta: linkAutoRichiesta || null
+    };
+
+    try {
+        const res = await fetch(`/api/noleggio/trattative/${rtdEditId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            alert(data.error || 'Errore nel salvataggio');
+            return;
+        }
+        closeRentTrattativaModal();
+        loadRentTrattative();
+    } catch (err) {
+        console.error('Errore salvataggio dettaglio trattativa:', err);
+    }
+}
+
+async function deleteRentTrattativaFromModal() {
+    if (!rtdEditId) return;
+    if (!confirm('Eliminare questa trattativa?')) return;
+    try {
+        await fetch(`/api/noleggio/trattative/${rtdEditId}`, { method: 'DELETE' });
+        closeRentTrattativaModal();
+        loadRentTrattative();
+    } catch (err) {
+        console.error('Errore eliminazione trattativa:', err);
+    }
+}
+
+// ============================================================
+// FORM NUOVA / MODIFICA RAPIDA (invariati)
+// ============================================================
 
 function showNewRentForm() {
     document.getElementById('rentFormTitle').textContent = 'NUOVA TRATTATIVA';
@@ -621,7 +801,7 @@ function showRentTrattativeDetail(filterField, filterValue) {
             const links = [];
             if (t.linkLeadspark) links.push(`<a href="${t.linkLeadspark}" target="_blank" rel="noopener" title="Leadspark" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(0,200,83,0.15);color:#00c853;text-decoration:none;font-size:13px">🔗</a>`);
             if (t.linkAutoRichiesta) links.push(`<a href="${t.linkAutoRichiesta}" target="_blank" rel="noopener" title="Auto richiesta" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(74,144,217,0.15);color:#4a90d9;text-decoration:none;font-size:13px">🔗</a>`);
-            return `<div class="followup-card" style="margin-bottom:10px">
+            return `<div class="followup-card" style="margin-bottom:10px;cursor:pointer" onclick="closeRentDetailModal();openRentTrattativaModal(${t.id})">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
                     <div>
                         <div style="font-weight:800;color:var(--text-primary);font-size:14px">${t.nome} ${t.cognome}</div>
@@ -629,7 +809,7 @@ function showRentTrattativeDetail(filterField, filterValue) {
                         ${t.cellulare ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📞 ${t.cellulare}</div>` : ''}
                         <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">👤 ${t.user?.fullName || '—'}</div>
                     </div>
-                    ${links.length > 0 ? `<div style="display:flex;gap:6px;flex-shrink:0">${links.join('')}</div>` : ''}
+                    ${links.length > 0 ? `<div style="display:flex;gap:6px;flex-shrink:0" onclick="event.stopPropagation()">${links.join('')}</div>` : ''}
                 </div>
             </div>`;
         }).join('');
@@ -749,7 +929,9 @@ function renderRentContattiNoleggio(list) {
         return '—';
     };
 
-    container.innerHTML = `<div class="contact-table-wrapper"><table class="contact-table">
+    // classe "rent-contatti-table" aggiunta: attiva le regole CSS dedicate
+    // per questa tabella a 8 colonne (vedi fix in style.css)
+    container.innerHTML = `<div class="contact-table-wrapper"><table class="contact-table rent-contatti-table">
         <thead><tr><th>Data</th><th>Richiesta</th><th>Tipologia</th><th>Cliente</th><th>Marca/Modello</th><th>Lead</th><th>Operatore</th><th>Azioni</th></tr></thead>
         <tbody>${list.map(c => {
             const date = c.contactDate.split('T')[0];
@@ -819,7 +1001,7 @@ function searchRentTrattative(query) {
     } else {
         resultsList.innerHTML = matches.map(t => {
             const color = RENT_STATO_COLORS[t.stato] || '#8a8faa';
-            return `<div class="followup-card" style="margin-bottom:8px">
+            return `<div class="followup-card" style="margin-bottom:8px;cursor:pointer" onclick="closeRentSearch();openRentTrattativaModal(${t.id})">
                 <div style="display:flex;justify-content:space-between;align-items:center">
                     <div>
                         <div style="font-weight:800;color:var(--text-primary);font-size:14px">${t.nome} ${t.cognome}</div>
@@ -829,7 +1011,7 @@ function searchRentTrattative(query) {
                             · 👤 ${t.user?.fullName || '—'}
                         </div>
                     </div>
-                    <button class="btn-small btn-blue" onclick="closeRentSearch();editRentTrattativa(${t.id})">✏️ Apri</button>
+                    <span style="color:#f0c040;font-size:16px">→</span>
                 </div>
             </div>`;
         }).join('');

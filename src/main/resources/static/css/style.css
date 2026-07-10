@@ -350,7 +350,17 @@ select.input-dark {
     transform: translateX(19px);
 }
 
-/* ===== NAVBAR ===== */
+/* ===== NAVBAR =====
+   FIX ROTTURA GRAFICA: .nav-links aveva overflow-x:auto sotto i 1400px
+   ma, essendo un figlio flex senza min-width:0, il browser non lo lasciava
+   mai restringersi sotto la larghezza del suo contenuto (comportamento
+   di default dei flex item). Risultato: lo scroll interno non scattava
+   MAI, e l'intera navbar (logo + link + area utente) andava in overflow
+   orizzontale, rompendo il layout — più visibile in Rent perché il ruolo
+   Noleggio cambia le voci di menu visibili (RENT compare/scompare) e
+   sposta il punto in cui la larghezza totale supera lo spazio disponibile.
+   Fix: min-width:0 su .nav-links (attiva davvero lo scroll interno) +
+   flex-shrink:0 su logo e area utente (non vengono mai schiacciati). */
 .navbar {
     background: var(--navbar-bg);
     border-bottom: 3px solid var(--navbar-border);
@@ -363,6 +373,11 @@ select.input-dark {
     top: 0;
     z-index: 100;
     box-shadow: 0 2px 20px rgba(0,0,0,0.25);
+    gap: 16px;
+}
+
+.nav-logo {
+    flex-shrink: 0;
 }
 
 .nav-logo img {
@@ -375,6 +390,13 @@ select.input-dark {
     display: flex;
     gap: 4px;
     flex-wrap: nowrap;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+
+.nav-links::-webkit-scrollbar {
+    display: none;
 }
 
 .nav-link {
@@ -403,16 +425,7 @@ select.input-dark {
     font-size: 12px;
     color: #aaa;
     font-weight: 500;
-}
-
-@media (max-width: 1400px) {
-    .nav-links {
-        overflow-x: auto;
-        scrollbar-width: none;
-    }
-    .nav-links::-webkit-scrollbar {
-        display: none;
-    }
+    flex-shrink: 0;
 }
 
 /* ===== PAGES ===== */
@@ -1964,4 +1977,42 @@ select.input-field {
 
 .multi-select-actions button:hover {
     text-decoration: underline;
+}
+/* ===== (... tutto il resto del file style.css invariato ...) ===== */
+
+/* ===== RENT — Tabella "Info Noleggio da Registro Contatti" (8 colonne) =====
+   Riusa lo stile base di .contact-table ma NON le sue larghezze nth-child,
+   pensate per la tabella a 6 colonne del Registro Contatti. Con 8 colonne
+   quelle regole schiacciavano Data/Marca/Lead forzando il testo a
+   sovrapporsi visivamente alle celle vicine (colonna troppo stretta +
+   nowrap + niente overflow:hidden = il testo "sborda" sopra la cella
+   accanto — esattamente l'effetto nello screenshot).
+   Il selettore composto .contact-table.rent-contatti-table ha specificità
+   maggiore delle regole nth-child di .contact-table da sola, quindi vince
+   automaticamente senza bisogno di !important. */
+.contact-table.rent-contatti-table {
+    table-layout: auto;
+}
+.contact-table.rent-contatti-table th,
+.contact-table.rent-contatti-table td {
+    white-space: normal;
+    overflow-wrap: break-word;
+    width: auto;
+}
+.contact-table.rent-contatti-table th:nth-child(1),
+.contact-table.rent-contatti-table td:nth-child(1) {
+    white-space: nowrap;
+}
+.contact-table.rent-contatti-table th:nth-child(6),
+.contact-table.rent-contatti-table td:nth-child(6) {
+    text-align: center;
+}
+.contact-table.rent-contatti-table th:nth-child(7),
+.contact-table.rent-contatti-table td:nth-child(7) {
+    white-space: nowrap;
+}
+.contact-table.rent-contatti-table th:nth-child(8),
+.contact-table.rent-contatti-table td:nth-child(8) {
+    white-space: nowrap;
+    text-align: right;
 }
