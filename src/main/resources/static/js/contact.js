@@ -274,19 +274,27 @@ async function loadContactLogs(from, to, restoreDayView) {
 }
 
 function populateOperatorFilter() {
-    const select = document.getElementById('contactOperatorFilter');
-    if (!select) return;
-    const current = select.value;
     const operators = [...new Set(contactLogs.map(l => l.user.fullName))].sort();
-    select.innerHTML = '<option value="">Tutti gli operatori</option>' +
-        operators.map(op => `<option value="${op}" ${op===current?'selected':''}>${op}</option>`).join('');
+
+    // Multi-select (quello attualmente in uso nell'interfaccia)
+    if (typeof populateMultiSelectOptions === 'function' && document.getElementById('contactOperatorFilterMulti-options')) {
+        populateMultiSelectOptions('contactOperatorFilterMulti', operators);
+    }
+
+    // Vecchia select, mantenuta per compatibilità in caso venga ancora referenziata altrove
+    const select = document.getElementById('contactOperatorFilter');
+    if (select) {
+        const current = select.value;
+        select.innerHTML = '<option value="">Tutti gli operatori</option>' +
+            operators.map(op => `<option value="${op}" ${op===current?'selected':''}>${op}</option>`).join('');
+    }
 }
 
 function applyContactFilters(restoreDayView) {
-    const operator = document.getElementById('contactOperatorFilter')?.value || '';
+    const operatorsSelected = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('contactOperatorFilterMulti') : [];
     const category = document.getElementById('contactCategoryFilter')?.value || '';
     contactLogsFiltered = contactLogs.filter(l => {
-        if (operator && l.user.fullName !== operator) return false;
+        if (operatorsSelected.length > 0 && !operatorsSelected.includes(l.user.fullName)) return false;
         if (category && l.category !== category) return false;
         return true;
     });
