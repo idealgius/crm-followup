@@ -4,11 +4,16 @@ import jakarta.persistence.*;
 import lombok.Data;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Data
 @Entity
 @Table(name = "noleggio_trattative")
 public class NoleggioTrattativa {
+
+    // Fuso orario fisso per garantire l'orario locale italiano indipendentemente
+    // da dove è ospitato il server (es. server in UTC su cloud estero).
+    private static final ZoneId ZONA_ITALIA = ZoneId.of("Europe/Rome");
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -17,6 +22,18 @@ public class NoleggioTrattativa {
     @ManyToOne
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
+
+    // ===== GESTIONE ALLERT "DA GESTIRE" =====
+    // Popolato SOLO quando qualcuno (ruolo NOLEGGIO, o MODERATORE/GESTORE/ADMIN)
+    // clicca "Gestisci" su una trattativa creata da un operatore che NON ha
+    // ruolo NOLEGGIO. Finché è null e il creatore (user) non ha ruolo NOLEGGIO,
+    // la trattativa mostra l'allert "Da Gestire" in lista. Una volta valorizzato,
+    // l'allert sparisce e la trattativa risulta filtrabile anche per questo
+    // operatore. Non serve un campo di stato separato: la condizione si calcola
+    // sempre a partire da user.getRole() e gestitoDa.
+    @ManyToOne
+    @JoinColumn(name = "gestito_da_id")
+    private User gestitoDa;
 
     @Column(nullable = false, length = 100)
     private String nome;
@@ -64,8 +81,8 @@ public class NoleggioTrattativa {
     private String linkAutoRichiesta;
 
     @Column(name = "created_at", nullable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime createdAt = LocalDateTime.now(ZONA_ITALIA);
 
     @Column(name = "updated_at", nullable = false)
-    private LocalDateTime updatedAt = LocalDateTime.now();
+    private LocalDateTime updatedAt = LocalDateTime.now(ZONA_ITALIA);
 }

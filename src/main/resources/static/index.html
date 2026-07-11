@@ -326,8 +326,7 @@
             <div class="stat-card pink"><div class="stat-label">INFO ACQUISTO</div><div class="stat-value" id="statInfoAcquisto">0%</div></div>
         </div>
 
-        <!-- GRAFICI PRINCIPALI — larghezze fisse rimosse: distribuite via CSS (.contact-charts-row) 
-             con proporzioni bilanciate, così stanno su un'unica riga senza scroll e senza numeri tagliati -->
+        <!-- GRAFICI PRINCIPALI -->
         <div id="contactChartPrint" class="contact-charts-row">
 
             <div class="chart-card contact-chart-categorie">
@@ -387,10 +386,6 @@
                 <div id="chartMarcheCustom"></div>
             </div>
 
-            <!-- Un solo attributo style: prima c'erano due style= duplicati sullo stesso div
-                 (bug: il browser onorava solo il primo, "display:flex", quindi il grafico
-                 restava visibile anche senza dati noleggio). Ora lo stato iniziale nascosto
-                 è corretto e coerente con quanto imposta poi renderChartNoleggio() in contact.js -->
             <div class="chart-card contact-chart-noleggio" id="chartNoleggioWrapper" style="display:none">
                 <div>
                     <h3>TIPOLOGIA NOLEGGIO</h3>
@@ -586,6 +581,46 @@
             </div>
         </div>
 
+        <!-- MODAL GESTIONE ALLERT — Info Acquisto effettuato -->
+        <div id="acquistoAlertModal" class="modal-overlay" style="display:none" onclick="closeAcquistoAlertModal(event)">
+            <div class="modal-box" onclick="event.stopPropagation()" style="max-width:480px">
+                <div class="modal-header">
+                    <h3 id="acquistoAlertModalTitle">Gestione Allert</h3>
+                    <button type="button" class="modal-close" onclick="closeAcquistoAlertModal()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div style="margin-bottom:14px">
+                        <span style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px">STATO ATTUALE:</span>
+                        <span id="acquistoAlertModalStatus" style="font-weight:800;margin-left:6px">—</span>
+                    </div>
+                    <div id="acquistoAlertModalInfo" style="font-size:12px;color:var(--text-secondary);margin-bottom:16px"></div>
+
+                    <div id="acquistoAlertReadOnlyNote" style="display:none;background:rgba(255,152,0,0.08);border:1px solid rgba(255,152,0,0.3);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text-secondary);margin-bottom:14px">
+                        Solo Moderatore, Gestore e Admin possono gestire questo allert.
+                    </div>
+
+                    <button type="button" id="acquistoAlertBtnInGestione" class="btn-gold" onclick="setAcquistoAlertStatus('IN_GESTIONE')" style="background:linear-gradient(135deg,#f0c040,#d4a820);width:100%;margin-bottom:10px">🟡 IN GESTIONE</button>
+
+                    <div id="acquistoAlertNoteGestioneRow" style="display:none;margin-bottom:16px">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA IN GESTIONE</label>
+                        <textarea id="acquistoAlertNoteGestione" placeholder="Note sulla presa in carico..." class="input-field" onblur="saveAcquistoAlertNote('acquistoAlertNoteGestione')"></textarea>
+                    </div>
+
+                    <button type="button" id="acquistoAlertBtnGestita" class="btn-gold" onclick="setAcquistoAlertStatus('GESTITA')" style="background:linear-gradient(135deg,#00c853,#00913c);color:#fff;width:100%;margin-bottom:10px">🟢 GESTITA</button>
+
+                    <div id="acquistoAlertNoteGestitaRow" style="display:none;margin-bottom:16px">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA GESTITA</label>
+                        <textarea id="acquistoAlertNoteGestita" placeholder="Note sulla risoluzione..." class="input-field" onblur="saveAcquistoAlertNote('acquistoAlertNoteGestita')"></textarea>
+                    </div>
+
+                    <div class="form-actions" style="margin-top:6px;flex-wrap:wrap">
+                        <button id="acquistoAlertBtnRimuovi" class="btn-secondary" onclick="setAcquistoAlertStatus(null)">↺ Rimuovi Gestione</button>
+                        <button class="btn-secondary" onclick="closeAcquistoAlertModal()">CHIUDI</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- FORM NUOVO CONTATTO -->
         <div id="newContactForm" class="form-card" style="display:none">
             <h3>NUOVO CONTATTO</h3>
@@ -616,7 +651,7 @@
                 </div>
             </div>
 
-            <!-- BLOCCO CLIENTE UNIVERSALE — sempre visibile e obbligatorio per QUALSIASI categoria -->
+            <!-- BLOCCO CLIENTE UNIVERSALE -->
             <div style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px">
                 <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#1a4080;margin-bottom:12px;text-transform:uppercase">👤 DATI CLIENTE (obbligatori — tracciabilità)</div>
                 <div class="form-grid" style="margin-bottom:10px">
@@ -646,7 +681,7 @@
                     <input type="hidden" id="contactFonte" value="">
                 </div>
 
-                <!-- VEICOLO — Marca/Modello (Info Vendita / Info + Appuntamento / Promo) — NIENTE targa, non ha senso per un prospect -->
+                <!-- VEICOLO — Marca/Modello -->
                 <div id="contactMarcaModelloRow" style="display:none">
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MARCA VEICOLO (opzionale)</label>
                     <div style="position:relative;margin-bottom:14px">
@@ -659,13 +694,13 @@
                     <input type="text" id="contactModello" placeholder="Es. 208 1.2 PureTech 100cv..." class="input-field">
                 </div>
 
-                <!-- LEAD — solo per Info Vendita / Info + Appuntamento / Promo -->
+                <!-- LEAD -->
                 <div id="contactLinkAutoRow" style="display:none">
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">LEAD (opzionale)</label>
                     <input type="url" id="contactLinkAuto" placeholder="https://..." class="input-field">
                 </div>
 
-                <!-- INFO NOLEGGIO — Marca/Modello sempre visibili, Lead SOLO se Richiesta cliente, NIENTE targa -->
+                <!-- INFO NOLEGGIO -->
                 <div id="contactNoleggioRow" style="display:none">
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">RICHIESTA *</label>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
@@ -757,13 +792,18 @@
                         <button type="button" class="btn-sede" id="acquisto-Furto" onclick="selectAcquisto('Furto')">🚨 Furto</button>
                     </div>
                     <input type="hidden" id="contactAcquistoTipo" value="">
+                    <div style="margin-bottom:14px">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">SEGNALAZIONE</label>
+                        <button type="button" class="btn-sede" id="contactAcquistoAlertBtn" onclick="toggleAcquistoAlert()">🔔 Segnala problematica (Allert)</button>
+                        <input type="hidden" id="contactAcquistoAlert" value="false">
+                    </div>
                     <div id="contactAcquistoNoteRow" style="display:none">
                         <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA (opzionale)</label>
                         <input type="text" id="contactAcquistoNote" placeholder="Inserisci nota..." class="input-field">
                     </div>
                 </div>
 
-                <!-- SERVICE (unica categoria con Targa: veicolo già di proprietà) -->
+                <!-- SERVICE -->
                 <div id="contactServiceRow" style="display:none">
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">SEDE SERVICE *</label>
                     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
@@ -937,7 +977,7 @@
                     </div>
                 </div>
 
-                <!-- FILTRO MARCHIO — multi-select (opzioni popolate da rent.js) -->
+                <!-- FILTRO MARCHIO — multi-select -->
                 <div class="multi-select-wrapper">
                     <div class="multi-select-trigger" onclick="toggleMultiDropdown('rentMarchioFilterMulti')">
                         <span id="rentMarchioFilterMulti-label">Tutti i marchi</span>
@@ -953,7 +993,7 @@
                     </div>
                 </div>
 
-                <!-- FILTRO FONTE — multi-select (opzioni popolate da rent.js) -->
+                <!-- FILTRO FONTE — multi-select -->
                 <div class="multi-select-wrapper">
                     <div class="multi-select-trigger" onclick="toggleMultiDropdown('rentFonteFilterMulti')">
                         <span id="rentFonteFilterMulti-label">Tutte le fonti</span>
@@ -975,7 +1015,7 @@
                     <option value="BDC">Solo BDC</option>
                 </select>
 
-                <!-- FILTRO OPERATORE — multi-select (opzioni popolate da rent.js) -->
+                <!-- FILTRO OPERATORE — multi-select -->
                 <div class="multi-select-wrapper">
                     <div class="multi-select-trigger" onclick="toggleMultiDropdown('rentOperatoreFilterMulti')">
                         <span id="rentOperatoreFilterMulti-label">Tutti gli operatori</span>
@@ -986,6 +1026,38 @@
                         <div id="rentOperatoreFilterMulti-options"></div>
                         <div class="multi-select-actions">
                             <button type="button" onclick="multiSelectClear('rentOperatoreFilterMulti');applyRentFilters()">Pulisci</button>
+                            <button type="button" onclick="closeAllMultiDropdowns();applyRentFilters()">Applica</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FILTRO GESTIONE — Da Gestire / Gestita / Nessuna -->
+                <div class="multi-select-wrapper">
+                    <div class="multi-select-trigger" onclick="toggleMultiDropdown('rentGestioneFilterMulti')">
+                        <span id="rentGestioneFilterMulti-label">Tutte (Gestione)</span>
+                        <span class="multi-select-count" id="rentGestioneFilterMulti-count">0</span>
+                        <span>▾</span>
+                    </div>
+                    <div class="multi-select-dropdown" id="rentGestioneFilterMulti-dropdown">
+                        <div id="rentGestioneFilterMulti-options"></div>
+                        <div class="multi-select-actions">
+                            <button type="button" onclick="multiSelectClear('rentGestioneFilterMulti');applyRentFilters()">Pulisci</button>
+                            <button type="button" onclick="closeAllMultiDropdowns();applyRentFilters()">Applica</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FILTRO GESTITO DA -->
+                <div class="multi-select-wrapper">
+                    <div class="multi-select-trigger" onclick="toggleMultiDropdown('rentGestitoDaFilterMulti')">
+                        <span id="rentGestitoDaFilterMulti-label">Gestito da (tutti)</span>
+                        <span class="multi-select-count" id="rentGestitoDaFilterMulti-count">0</span>
+                        <span>▾</span>
+                    </div>
+                    <div class="multi-select-dropdown" id="rentGestitoDaFilterMulti-dropdown">
+                        <div id="rentGestitoDaFilterMulti-options"></div>
+                        <div class="multi-select-actions">
+                            <button type="button" onclick="multiSelectClear('rentGestitoDaFilterMulti');applyRentFilters()">Pulisci</button>
                             <button type="button" onclick="closeAllMultiDropdowns();applyRentFilters()">Applica</button>
                         </div>
                     </div>
@@ -1014,6 +1086,7 @@
             <div class="stat-card purple"><div class="stat-label">IN CORSO</div><div class="stat-value" id="rentStatInCorso">0</div></div>
             <div class="stat-card pink"><div class="stat-label">DA RICHIAMARE</div><div class="stat-value" id="rentStatDaRichiamare">0</div></div>
             <div class="stat-card green"><div class="stat-label">CONCLUSE</div><div class="stat-value" id="rentStatConcluse">0</div></div>
+            <div class="stat-card" style="border-color:#ff9800"><div class="stat-label">🔔 DA GESTIRE</div><div class="stat-value" id="rentStatDaGestire" style="color:#ff9800">0</div></div>
         </div>
 
         <!-- GRAFICI -->
@@ -1045,76 +1118,93 @@
         </div>
 
         <!-- MODAL DETTAGLIO/GESTIONE TRATTATIVA — si apre cliccando una card -->
-<div id="rentTrattativaModal" class="modal-overlay" style="display:none" onclick="closeRentTrattativaModal(event)">
-    <div class="modal-box" onclick="event.stopPropagation()" style="max-width:560px">
-        <div class="modal-header">
-            <h3>Dettaglio Trattativa</h3>
-            <button type="button" class="modal-close" onclick="closeRentTrattativaModal()">✕</button>
+        <div id="rentTrattativaModal" class="modal-overlay" style="display:none" onclick="closeRentTrattativaModal(event)">
+            <div class="modal-box" onclick="event.stopPropagation()" style="max-width:560px">
+                <div class="modal-header">
+                    <h3>Dettaglio Trattativa</h3>
+                    <button type="button" class="modal-close" onclick="closeRentTrattativaModal()">✕</button>
+                </div>
+                <div class="modal-body">
+
+                    <div style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px;font-size:12px;color:var(--text-secondary)">
+                        👤 Operatore: <strong id="rtdOperatoreInfo" style="color:var(--text-primary)">—</strong>
+                        &nbsp;·&nbsp; 📅 Creata: <strong id="rtdCreatedInfo" style="color:var(--text-primary)">—</strong>
+                    </div>
+
+                    <!-- SEZIONE GESTIONE — visibile solo per ruoli abilitati (Noleggio/Moderatore/Gestore/Admin).
+                         Il backend non prevede una nota testuale: è un'azione secca (prendi in
+                         carico / rimuovi presa in carico), gestitoDa registra automaticamente
+                         chi ha cliccato "Gestisci". -->
+                    <div id="rtdGestioneSection" style="background:rgba(255,152,0,0.06);border:1.5px solid rgba(255,152,0,0.3);border-radius:10px;padding:14px;margin-bottom:16px">
+                        <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#ff9800;margin-bottom:8px;text-transform:uppercase">🔔 Gestione</div>
+                        <div style="margin-bottom:10px">
+                            <span style="font-size:11px;font-weight:700;color:var(--text-secondary)">STATO:</span>
+                            <span id="rtdGestioneStatus" style="font-weight:800;margin-left:6px">—</span>
+                        </div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap">
+                            <button type="button" id="rtdGestioneBtn" class="btn-gold" onclick="gestisciRentTrattativa()" style="background:linear-gradient(135deg,#ff9800,#e08600)">🔔 Gestisci</button>
+                            <button type="button" id="rtdAnnullaGestioneBtn" class="btn-secondary" onclick="annullaGestioneRentTrattativa()">↺ Annulla Gestione</button>
+                        </div>
+                    </div>
+
+                    <div class="form-grid">
+                        <input type="text" id="rtdNome" placeholder="Nome *" class="input-field">
+                        <input type="text" id="rtdCognome" placeholder="Cognome *" class="input-field">
+                        <input type="text" id="rtdCellulare" placeholder="Cellulare *" class="input-field">
+                        <input type="email" id="rtdEmail" placeholder="Email (opzionale)" class="input-field">
+                        <input type="text" id="rtdMarca" placeholder="Marchio *" class="input-field">
+                        <input type="text" id="rtdModello" placeholder="Modello (opzionale)" class="input-field">
+                    </div>
+
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">FONTE</label>
+                    <select id="rtdFonte" class="input-field">
+                        <option value="">—</option>
+                        <option>Sito</option><option>Google ADS</option><option>Autoscout</option>
+                        <option>Facebook</option><option>Instagram</option><option>TikTok</option>
+                        <option>Richiesta cliente</option><option>Non ricorda</option>
+                        <option>Ingresso</option><option>Cliente Personale</option>
+                    </select>
+
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TIPOLOGIA CLIENTE</label>
+                    <select id="rtdTipoCliente" class="input-field">
+                        <option value="">—</option>
+                        <option>Privato</option><option>Partita IVA</option><option>Noleggio per aziende</option>
+                    </select>
+
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTE</label>
+                    <textarea id="rtdNote" placeholder="Note aggiuntive..." class="input-field"></textarea>
+
+                    <input type="url" id="rtdLinkLeadspark" placeholder="Link Leadspark (opzionale)" class="input-field">
+                    <input type="url" id="rtdLinkAutoRichiesta" placeholder="Link auto richiesta (opzionale)" class="input-field">
+
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">STATO *</label>
+                    <select id="rtdStato" class="input-field" onchange="onRtdStatoChange()">
+                        <option value="SOLO_INFO">Solo Info</option>
+                        <option value="TRATTATIVA_IN_CORSO">Trattativa in corso</option>
+                        <option value="DA_RICHIAMARE">Da richiamare</option>
+                        <option value="CONCLUSA">Conclusa</option>
+                        <option value="FALLITO">Fallito</option>
+                    </select>
+
+                    <div id="rtdDataRichiamoRow" style="display:none;margin-top:10px">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">DATA RICHIAMO *</label>
+                        <input type="date" id="rtdDataRichiamo" class="input-field">
+                    </div>
+
+                    <div id="rtdNoteFallimentoRow" style="display:none;margin-top:10px">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MOTIVAZIONE FALLIMENTO</label>
+                        <textarea id="rtdNoteFallimento" placeholder="Descrivi il motivo..." class="input-field"></textarea>
+                    </div>
+
+                    <div class="form-actions" style="margin-top:16px;flex-wrap:wrap">
+                        <button onclick="saveRentTrattativaDetail()" class="btn-gold">SALVA MODIFICHE</button>
+                        <button onclick="deleteRentTrattativaFromModal()" class="btn-secondary" style="color:#ff3d3d;border-color:#ff3d3d">🗑️ ELIMINA</button>
+                        <button onclick="closeRentTrattativaModal()" class="btn-secondary">CHIUDI</button>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="modal-body">
 
-            <div style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px;font-size:12px;color:var(--text-secondary)">
-                👤 Operatore: <strong id="rtdOperatoreInfo" style="color:var(--text-primary)">—</strong>
-                &nbsp;·&nbsp; 📅 Creata: <strong id="rtdCreatedInfo" style="color:var(--text-primary)">—</strong>
-            </div>
-
-            <div class="form-grid">
-                <input type="text" id="rtdNome" placeholder="Nome *" class="input-field">
-                <input type="text" id="rtdCognome" placeholder="Cognome *" class="input-field">
-                <input type="text" id="rtdCellulare" placeholder="Cellulare *" class="input-field">
-                <input type="email" id="rtdEmail" placeholder="Email (opzionale)" class="input-field">
-                <input type="text" id="rtdMarca" placeholder="Marchio *" class="input-field">
-                <input type="text" id="rtdModello" placeholder="Modello (opzionale)" class="input-field">
-            </div>
-
-            <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">FONTE</label>
-            <select id="rtdFonte" class="input-field">
-                <option value="">—</option>
-                <option>Sito</option><option>Google ADS</option><option>Autoscout</option>
-                <option>Facebook</option><option>Instagram</option><option>TikTok</option>
-                <option>Richiesta cliente</option><option>Non ricorda</option>
-                <option>Ingresso</option><option>Cliente Personale</option>
-            </select>
-
-            <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TIPOLOGIA CLIENTE</label>
-            <select id="rtdTipoCliente" class="input-field">
-                <option value="">—</option>
-                <option>Privato</option><option>Partita IVA</option><option>Noleggio per aziende</option>
-            </select>
-
-            <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTE</label>
-            <textarea id="rtdNote" placeholder="Note aggiuntive..." class="input-field"></textarea>
-
-            <input type="url" id="rtdLinkLeadspark" placeholder="Link Leadspark (opzionale)" class="input-field">
-            <input type="url" id="rtdLinkAutoRichiesta" placeholder="Link auto richiesta (opzionale)" class="input-field">
-
-            <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">STATO *</label>
-            <select id="rtdStato" class="input-field" onchange="onRtdStatoChange()">
-                <option value="SOLO_INFO">Solo Info</option>
-                <option value="TRATTATIVA_IN_CORSO">Trattativa in corso</option>
-                <option value="DA_RICHIAMARE">Da richiamare</option>
-                <option value="CONCLUSA">Conclusa</option>
-                <option value="FALLITO">Fallito</option>
-            </select>
-
-            <div id="rtdDataRichiamoRow" style="display:none;margin-top:10px">
-                <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">DATA RICHIAMO *</label>
-                <input type="date" id="rtdDataRichiamo" class="input-field">
-            </div>
-
-            <div id="rtdNoteFallimentoRow" style="display:none;margin-top:10px">
-                <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MOTIVAZIONE FALLIMENTO</label>
-                <textarea id="rtdNoteFallimento" placeholder="Descrivi il motivo..." class="input-field"></textarea>
-            </div>
-
-            <div class="form-actions" style="margin-top:16px;flex-wrap:wrap">
-                <button onclick="saveRentTrattativaDetail()" class="btn-gold">SALVA MODIFICHE</button>
-                <button onclick="deleteRentTrattativaFromModal()" class="btn-secondary" style="color:#ff3d3d;border-color:#ff3d3d">🗑️ ELIMINA</button>
-                <button onclick="closeRentTrattativaModal()" class="btn-secondary">CHIUDI</button>
-            </div>
-        </div>
-    </div>
-</div>
         <!-- MODAL DETTAGLIO GRAFICI RENT -->
         <div id="rentDetailModal" class="modal-overlay" style="display:none" onclick="closeRentDetailModal(event)">
             <div class="modal-box" onclick="event.stopPropagation()">

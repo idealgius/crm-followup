@@ -62,6 +62,21 @@ public class ContactLog {
     @Column(name = "acquisto_note", length = 500)
     private String acquistoNote;
 
+    // ===== ALLERT — Info Acquisto effettuato =====
+    // acquistoAlert: true se l'operatore ha segnalato una problematica in fase di inserimento
+    @Column(name = "acquisto_alert")
+    private Boolean acquistoAlert = false;
+
+    // acquistoAlertStatus: null (non gestita) | "IN_GESTIONE" | "GESTITA"
+    @Column(name = "acquisto_alert_status", length = 20)
+    private String acquistoAlertStatus;
+
+    @Column(name = "acquisto_alert_note_gestione", length = 1000)
+    private String acquistoAlertNoteGestione;
+
+    @Column(name = "acquisto_alert_note_gestita", length = 1000)
+    private String acquistoAlertNoteGestita;
+
     @Column(name = "noleggio_tipo", length = 50)
     private String noleggioTipo;
 

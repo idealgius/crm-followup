@@ -38,6 +38,9 @@ public class ContactLogController {
         "Info + Appuntamento", "Info Vendita in Promo", "Altro"
     );
 
+    // Stati validi per la gestione dell'Allert (Info Acquisto effettuato)
+    private static final List<String> VALID_ALERT_STATUSES = List.of("IN_GESTIONE", "GESTITA");
+
     @GetMapping
     public ResponseEntity<?> getAll(
             @RequestParam(required = false) String from,
@@ -129,6 +132,7 @@ public class ContactLogController {
         String serviceNote = (String) body.get("serviceNote");
         String serviceSede = (String) body.get("serviceSede");
         String acquistoNote = (String) body.get("acquistoNote");
+        Boolean acquistoAlert = (Boolean) body.get("acquistoAlert");
         String noleggioTipo = (String) body.get("noleggioTipo");
         String noleggioLink = (String) body.get("noleggioLink");
         String serviceNomeCliente = (String) body.get("serviceNomeCliente");
@@ -186,6 +190,17 @@ public class ContactLogController {
                 noleggioRichiesta, noleggioNomeCliente, noleggioCognomeCliente, noleggioCellulare,
                 contactDate);
 
+        // ===== ALLERT — Info Acquisto effettuato =====
+        // Il metodo create() del service non conosce ancora questo campo (per non
+        // dover modificare la sua firma / il file ContactLogService.java), quindi
+        // lo impostiamo qui sull'oggetto appena salvato e lo persistiamo di nuovo
+        // con update(), che già esiste e gestisce il salvataggio.
+        if ("Info Acquisto effettuato".equals(category) && Boolean.TRUE.equals(acquistoAlert)) {
+            log.setAcquistoAlert(true);
+            log.setAcquistoAlertStatus(null);
+            log = contactLogService.update(log);
+        }
+
         return ResponseEntity.ok(toMap(log));
     }
 
@@ -201,8 +216,22 @@ public class ContactLogController {
         if (logOpt.isEmpty()) return ResponseEntity.notFound().build();
 
         ContactLog log = logOpt.get();
-        if (!"ADMIN".equals(role) && !"GESTORE".equals(role) && !log.getUser().getId().equals(userId)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Non autorizzato"));
+
+        // ===== ALLERT — permessi dedicati =====
+        // La gestione dell'Allert (stato + note) è riservata a MODERATORE, GESTORE, ADMIN,
+        // separatamente dal normale controllo di modifica/proprietà del contatto qui sotto.
+        boolean isTouchingAlertManagement = body.containsKey("acquistoAlertStatus")
+                || body.containsKey("acquistoAlertNoteGestione")
+                || body.containsKey("acquistoAlertNoteGestita");
+        if (isTouchingAlertManagement) {
+            boolean canManageAlert = "ADMIN".equals(role) || "GESTORE".equals(role) || "MODERATORE".equals(role);
+            if (!canManageAlert) {
+                return ResponseEntity.status(403).body(Map.of("error", "Solo Moderatore, Gestore o Admin possono gestire l'Allert"));
+            }
+        } else {
+            if (!"ADMIN".equals(role) && !"GESTORE".equals(role) && !log.getUser().getId().equals(userId)) {
+                return ResponseEntity.status(403).body(Map.of("error", "Non autorizzato"));
+            }
         }
 
         if (body.containsKey("category")) {
@@ -226,6 +255,17 @@ public class ContactLogController {
         if (body.containsKey("serviceNote")) log.setServiceNote((String) body.get("serviceNote"));
         if (body.containsKey("serviceSede")) log.setServiceSede((String) body.get("serviceSede"));
         if (body.containsKey("acquistoNote")) log.setAcquistoNote((String) body.get("acquistoNote"));
+        if (body.containsKey("acquistoAlert")) log.setAcquistoAlert((Boolean) body.get("acquistoAlert"));
+        if (body.containsKey("acquistoAlertStatus")) {
+            Object statusVal = body.get("acquistoAlertStatus");
+            String status = statusVal == null ? null : (String) statusVal;
+            if (status != null && !VALID_ALERT_STATUSES.contains(status)) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Stato allert non valido"));
+            }
+            log.setAcquistoAlertStatus(status);
+        }
+        if (body.containsKey("acquistoAlertNoteGestione")) log.setAcquistoAlertNoteGestione((String) body.get("acquistoAlertNoteGestione"));
+        if (body.containsKey("acquistoAlertNoteGestita")) log.setAcquistoAlertNoteGestita((String) body.get("acquistoAlertNoteGestita"));
         if (body.containsKey("noleggioTipo")) log.setNoleggioTipo((String) body.get("noleggioTipo"));
         if (body.containsKey("noleggioLink")) log.setNoleggioLink((String) body.get("noleggioLink"));
         if (body.containsKey("serviceNomeCliente")) log.setServiceNomeCliente((String) body.get("serviceNomeCliente"));
@@ -294,6 +334,10 @@ public class ContactLogController {
         m.put("serviceNote", log.getServiceNote());
         m.put("serviceSede", log.getServiceSede());
         m.put("acquistoNote", log.getAcquistoNote());
+        m.put("acquistoAlert", log.getAcquistoAlert());
+        m.put("acquistoAlertStatus", log.getAcquistoAlertStatus());
+        m.put("acquistoAlertNoteGestione", log.getAcquistoAlertNoteGestione());
+        m.put("acquistoAlertNoteGestita", log.getAcquistoAlertNoteGestita());
         m.put("noleggioTipo", log.getNoleggioTipo());
         m.put("noleggioLink", log.getNoleggioLink());
         m.put("serviceNomeCliente", log.getServiceNomeCliente());

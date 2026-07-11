@@ -4,6 +4,7 @@ let contactCalendarYear = new Date().getFullYear();
 let contactCalendarMonth = new Date().getMonth() + 1;
 let selectedSede = '';
 let selectedAcquisto = '';
+let selectedAcquistoAlert = false;
 let selectedFonte = '';
 let selectedService = '';
 let selectedServiceSede = '';
@@ -24,7 +25,11 @@ let lastDetailItems = [];
 let lastDetailTitle = '';
 let detailOnlyNominativo = false;
 let dayViewSecondaryFilter = '';
+let dayViewTertiaryFilter = '';
 let editingContactId = null;
+let acquistoAlertModalId = null;
+let acquistoAlertNoteGestioneVisible = false;
+let acquistoAlertNoteGestitaVisible = false;
 
 const CATEGORY_COLORS = {
     'Info Vendita': '#1a4080', 'Info Noleggio': '#00c853', 'Service': '#f0c040',
@@ -52,6 +57,8 @@ const SEDI_LIST = ['Agnano', 'Casamarciano', 'Salerno'];
 const SEDE_COLORS = ['#e91e63', '#1a4080', '#00c853'];
 const NOLEGGIO_TIPO_LIST = ['Privato', 'Partita IVA', 'Noleggio per aziende'];
 const NOLEGGIO_RICHIESTA_LABELS = { 'SOLO_INFO': 'Solo Info', 'RICHIESTA_CLIENTE': 'Richiesta Cliente' };
+const ACQUISTO_ALERT_LABELS = { 'SI': '🔔 Con Allert', 'NO': 'Senza Allert' };
+const ACQUISTO_ALERT_STATUS_LABELS = { 'DA_GESTIRE': '⚪ Da gestire', 'IN_GESTIONE': '🟡 In gestione', 'GESTITA': '🟢 Gestita' };
 
 const MARCHE_LIST = [
     'ALFA ROMEO', 'AUDI', 'BMW', 'BYD', 'CITROEN', 'CUPRA', 'DACIA', 'DR', 'DS',
@@ -59,7 +66,7 @@ const MARCHE_LIST = [
     'IVECO', 'JEEP', 'KIA', 'LAMBORGHINI', 'LANCIA', 'LAND ROVER', 'LEAPMOTOR', 'MAXUS',
     'MAZDA', 'MERCEDES-BENZ', 'MG', 'MINI', 'MASERATI', 'MITSUBISHI', 'NISSAN',
     'OPEL', 'PEUGEOT', 'PORSCHE', 'RENAULT', 'SAAB', 'SEAT', 'SKODA', 'SMART',
-    'SPORTEQUIPE', 'SUZUKI', 'SWM', 'TIGER', 'TOYOTA', 'VOLKSWAGEN'
+    'SPORTEQUIPE', 'SUZUKI', 'SWM', 'TIGER', 'TOYOTA', 'TESLA', 'VOLKSWAGEN'
 ];
 
 const MARCHE_NORMALIZED = MARCHE_LIST.map(m => ({
@@ -119,6 +126,22 @@ function clienteNumeroDisplay(log) {
 
 function downloadFile(url) {
     window.location.href = url;
+}
+
+// ============================================================
+// PERMESSI ALLERT — chiunque può segnalare in fase di inserimento,
+// solo MODERATORE, GESTORE, ADMIN possono gestire (aprire lo stato
+// "In gestione" / "Gestita" e scrivere note di gestione).
+// ============================================================
+function canManageAlerts() {
+    return currentUser && (currentUser.role === 'MODERATORE' || currentUser.role === 'GESTORE' || currentUser.role === 'ADMIN');
+}
+
+// Un allert è VISIBILE (campanella + badge) solo se attivo e NON ancora "Gestita".
+// Una volta risolto (Gestita), la campanella sparisce dall'interfaccia — resta
+// comunque nei dati e nei filtri come storico.
+function isAcquistoAlertVisible(log) {
+    return log.category === 'Info Acquisto effettuato' && !!log.acquistoAlert && log.acquistoAlertStatus !== 'GESTITA';
 }
 
 // ============================================================
@@ -370,6 +393,7 @@ function resetContactFilters() {
     dayViewCategoryFilter = '';
     dayViewSubFilter = '';
     dayViewSecondaryFilter = '';
+    dayViewTertiaryFilter = '';
     const btn = document.getElementById('contactResetBtn');
     if (btn) btn.style.display = 'none';
     loadContactLogs(firstDay, today);
@@ -528,14 +552,16 @@ function renderGenericContactDetail() {
             const noteText = (log.category !== 'Info Acquisto effettuato' && log.category !== 'Service')
                 ? (log.otherNote || '')
                 : (log.acquistoNote || log.serviceNote || '');
+            const isAcquistoAlert = isAcquistoAlertVisible(log);
             const links = [];
             if (log.linkAuto) links.push(`<a href="${log.linkAuto}" target="_blank" rel="noopener" title="Lead veicolo" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(124,77,255,0.15);color:#7c4dff;text-decoration:none;font-size:13px">🔗</a>`);
             if (log.linkAppuntamento) links.push(`<a href="${log.linkAppuntamento}" target="_blank" rel="noopener" title="Link appuntamento" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(74,144,217,0.15);color:#4a90d9;text-decoration:none;font-size:13px">🔗</a>`);
             if (log.noleggioLink) links.push(`<a href="${log.noleggioLink}" target="_blank" rel="noopener" title="Lead noleggio" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(0,200,83,0.15);color:#00c853;text-decoration:none;font-size:13px">🔗</a>`);
+            if (isAcquistoAlert) links.push(`<button onclick="openAcquistoAlertModal(${log.id})" title="Gestisci Allert" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(255,152,0,0.15);color:#ff9800;border:none;cursor:pointer;font-size:13px">🔔</button>`);
             return `<div class="followup-card" style="margin-bottom:10px">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
                     <div>
-                        <div style="font-weight:800;color:var(--text-primary);font-size:14px">${clienteNomeCompleto(log)}</div>
+                        <div style="font-weight:800;color:${acquistoAlertNameColor(log) || 'var(--text-primary)'};font-size:14px">${isAcquistoAlert ? '🔔 ' : ''}${clienteNomeCompleto(log)}</div>
                         <div style="margin-top:5px"><span class="contact-category-badge cat-${catClass}">${log.category}</span></div>
                         <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">📅 ${formatDateIT(date)} · 🕐 ${time}</div>
                         <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📞 ${clienteNumeroDisplay(log)}</div>
@@ -678,7 +704,8 @@ function renderChartInfoAcquisto(logs) {
         }
     });
     const totalAll = contactLogs.filter(l => l.category === 'Info Acquisto effettuato').length;
-    setChartCounterBadge(findChartTitleElement(ctx), totalAll, 'Totale storico');
+    const totalAlert = contactLogs.filter(l => l.category === 'Info Acquisto effettuato' && l.acquistoAlert).length;
+    setChartCounterBadge(findChartTitleElement(ctx), totalAll, `Totale storico${totalAlert > 0 ? ` · 🔔 ${totalAlert} con allert` : ''}`);
 }
 
 // ===== FONTE VENDITA — badge totale storico Info Vendita aggiunto =====
@@ -1034,6 +1061,164 @@ function exportContactsExcel() {
 }
 
 // ============================================================
+// GESTIONE ALLERT — solo per "Info Acquisto effettuato"
+// ============================================================
+
+function acquistoAlertNameColor(log) {
+    if (log.category !== 'Info Acquisto effettuato' || !log.acquistoAlert) return null;
+    if (log.acquistoAlertStatus === 'IN_GESTIONE') return '#f0c040';
+    return null;
+}
+
+function toggleAcquistoAlert() {
+    selectedAcquistoAlert = !selectedAcquistoAlert;
+    const btn = document.getElementById('contactAcquistoAlertBtn');
+    if (btn) btn.classList.toggle('btn-sede-active', selectedAcquistoAlert);
+    const hidden = document.getElementById('contactAcquistoAlert');
+    if (hidden) hidden.value = selectedAcquistoAlert ? 'true' : 'false';
+}
+
+// Apre il modal e decide quali caselle nota mostrare già aperte:
+// se lo stato corrente è già IN_GESTIONE/GESTITA, o se esiste già un testo
+// scritto in precedenza, la relativa casella nota parte visibile. Altrimenti
+// resta chiusa finché non si clicca il bottone corrispondente.
+function openAcquistoAlertModal(id) {
+    const log = contactLogs.find(l => l.id === id);
+    if (!log || !log.acquistoAlert) return;
+    acquistoAlertModalId = id;
+
+    acquistoAlertNoteGestioneVisible = log.acquistoAlertStatus === 'IN_GESTIONE' || !!log.acquistoAlertNoteGestione;
+    acquistoAlertNoteGestitaVisible = log.acquistoAlertStatus === 'GESTITA' || !!log.acquistoAlertNoteGestita;
+
+    refreshAcquistoAlertModalDisplay(log);
+
+    const modal = document.getElementById('acquistoAlertModal');
+    if (modal) modal.style.display = 'flex';
+}
+
+// Ridisegna il contenuto del modal (stato, note, visibilità caselle) SENZA
+// chiuderlo — usata sia all'apertura sia dopo ogni salvataggio, così l'utente
+// può continuare a lavorare sullo stesso allert senza dover riaprire il modal.
+function refreshAcquistoAlertModalDisplay(log) {
+    const titleEl = document.getElementById('acquistoAlertModalTitle');
+    if (titleEl) titleEl.textContent = `🔔 Gestione Allert — ${clienteNomeCompleto(log)}`;
+
+    const statusEl = document.getElementById('acquistoAlertModalStatus');
+    if (statusEl) {
+        const statusLabel = log.acquistoAlertStatus === 'GESTITA' ? '🟢 Gestita'
+            : log.acquistoAlertStatus === 'IN_GESTIONE' ? '🟡 In gestione'
+            : '⚪ Non gestita';
+        statusEl.textContent = statusLabel;
+    }
+
+    const infoEl = document.getElementById('acquistoAlertModalInfo');
+    if (infoEl) infoEl.textContent = `${log.otherNote || ''}${log.acquistoNote ? ' · ' + log.acquistoNote : ''} · segnalato da ${log.user?.fullName || '—'}`;
+
+    const noteGestioneRow = document.getElementById('acquistoAlertNoteGestioneRow');
+    const noteGestitaRow = document.getElementById('acquistoAlertNoteGestitaRow');
+    if (noteGestioneRow) noteGestioneRow.style.display = acquistoAlertNoteGestioneVisible ? 'block' : 'none';
+    if (noteGestitaRow) noteGestitaRow.style.display = acquistoAlertNoteGestitaVisible ? 'block' : 'none';
+
+    const noteGestioneEl = document.getElementById('acquistoAlertNoteGestione');
+    const noteGestitaEl = document.getElementById('acquistoAlertNoteGestita');
+    if (noteGestioneEl && document.activeElement !== noteGestioneEl) noteGestioneEl.value = log.acquistoAlertNoteGestione || '';
+    if (noteGestitaEl && document.activeElement !== noteGestitaEl) noteGestitaEl.value = log.acquistoAlertNoteGestita || '';
+
+    const readOnly = !canManageAlerts();
+    if (noteGestioneEl) noteGestioneEl.disabled = readOnly;
+    if (noteGestitaEl) noteGestitaEl.disabled = readOnly;
+
+    ['acquistoAlertBtnInGestione','acquistoAlertBtnGestita','acquistoAlertBtnRimuovi'].forEach(elId => {
+        const el = document.getElementById(elId);
+        if (el) el.style.display = readOnly ? 'none' : 'inline-block';
+    });
+    const readOnlyNote = document.getElementById('acquistoAlertReadOnlyNote');
+    if (readOnlyNote) readOnlyNote.style.display = readOnly ? 'block' : 'none';
+}
+
+function closeAcquistoAlertModal(event) {
+    if (event && event.target.id !== 'acquistoAlertModal') return;
+    const modal = document.getElementById('acquistoAlertModal');
+    if (modal) modal.style.display = 'none';
+    acquistoAlertModalId = null;
+    acquistoAlertNoteGestioneVisible = false;
+    acquistoAlertNoteGestitaVisible = false;
+}
+
+// Cambia SOLO lo stato (In Gestione / Gestita / rimuovi). Essendo un unico
+// campo sul contatto, l'ultimo stato impostato sovrascrive sempre il
+// precedente: cliccando "Gestita" mentre è "In Gestione" lo stato diventa
+// "Gestita" (sovrascrive), cliccando "Rimuovi Gestione" torna a nessuno
+// stato (sovrascrive anche "Gestita" se presente). Il modal NON si chiude,
+// così si può continuare a scrivere le note.
+async function setAcquistoAlertStatus(status) {
+    if (!acquistoAlertModalId || !canManageAlerts()) return;
+
+    if (status === 'IN_GESTIONE') {
+        acquistoAlertNoteGestioneVisible = true;
+    } else if (status === 'GESTITA') {
+        acquistoAlertNoteGestitaVisible = true;
+    } else {
+        // Rimuovi Gestione: richiude entrambe le caselle nota
+        acquistoAlertNoteGestioneVisible = false;
+        acquistoAlertNoteGestitaVisible = false;
+    }
+
+    try {
+        const res = await fetch(`/api/contacts/${acquistoAlertModalId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ acquistoAlertStatus: status })
+        });
+        if (!res.ok) {
+            const data = await res.json().catch(() => null);
+            alert(data?.error || 'Errore nel salvataggio');
+            return;
+        }
+        const updatedLog = await res.json();
+        applyUpdatedLogEverywhere(updatedLog);
+        refreshAcquistoAlertModalDisplay(updatedLog);
+    } catch (err) { console.error('Errore gestione allert:', err); }
+}
+
+// Salva SOLO il testo di una delle due note, senza toccare lo stato — usata
+// al blur (quando si esce dal campo) delle textarea, così non serve un
+// bottone "Salva" extra e non si perde nulla se si cambia stato dopo.
+async function saveAcquistoAlertNote(field) {
+    if (!acquistoAlertModalId || !canManageAlerts()) return;
+    const el = document.getElementById(field);
+    const value = el ? el.value.trim() : '';
+
+    try {
+        const res = await fetch(`/api/contacts/${acquistoAlertModalId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [field]: value || null })
+        });
+        if (!res.ok) return;
+        const updatedLog = await res.json();
+        applyUpdatedLogEverywhere(updatedLog);
+    } catch (err) { console.error('Errore salvataggio nota allert:', err); }
+}
+
+// Aggiorna il contatto modificato dentro le liste già caricate in memoria
+// (contactLogs / contactLogsFiltered) e ridisegna la vista corrente, senza
+// dover ricaricare tutto dal server e senza chiudere il modal aperto.
+function applyUpdatedLogEverywhere(updatedLog) {
+    const idx = contactLogs.findIndex(l => l.id === updatedLog.id);
+    if (idx !== -1) contactLogs[idx] = updatedLog;
+    const filteredIdx = contactLogsFiltered.findIndex(l => l.id === updatedLog.id);
+    if (filteredIdx !== -1) contactLogsFiltered[filteredIdx] = updatedLog;
+
+    if (currentDayView) {
+        renderDayView();
+    } else {
+        renderContactLogs(contactLogsFiltered);
+    }
+    renderChartInfoAcquisto(contactLogsFiltered);
+}
+
+// ============================================================
 // VISTA GIORNALIERA
 // ============================================================
 
@@ -1076,12 +1261,43 @@ function getSubcategoryValue(log) {
     }
 }
 
+// ===== Filtro secondario Allert per Info Acquisto effettuato, in aggiunta
+// a Service (Sede) e Info Noleggio (Richiesta) già esistenti. Ordine valori
+// per Acquisto: NO prima di SI, così la tendina mostra "Tutti, Senza Allert,
+// Con Allert" nell'ordine richiesto.
+// alwaysShowAll: per filtri con poche opzioni fisse (Allert, Stato Gestione)
+// le opzioni vanno mostrate SEMPRE tutte, indipendentemente da cosa c'è nei
+// dati in quel momento — altrimenti un'opzione come "Senza Allert" può
+// sparire dalla tendina solo perché quel giorno non c'è ancora nessun
+// contatto senza allert, creando confusione. Per filtri con molte opzioni
+// (Sede, Richiesta) si continua invece a mostrare solo quelle presenti. =====
 function getSecondaryFilterConfig(category) {
     if (category === 'Service') {
-        return { values: SERVICE_SEDI_LIST, valueFn: log => log.serviceSede || '', labelFn: v => v, label: 'Sede' };
+        return { values: SERVICE_SEDI_LIST, valueFn: log => log.serviceSede || '', labelFn: v => v, label: 'Sede', allLabel: 'Tutte le sedi', alwaysShowAll: false };
     }
     if (category === 'Info Noleggio') {
-        return { values: ['SOLO_INFO','RICHIESTA_CLIENTE'], valueFn: log => log.noleggioRichiesta || '', labelFn: v => NOLEGGIO_RICHIESTA_LABELS[v] || v, label: 'Richiesta' };
+        return { values: ['SOLO_INFO','RICHIESTA_CLIENTE'], valueFn: log => log.noleggioRichiesta || '', labelFn: v => NOLEGGIO_RICHIESTA_LABELS[v] || v, label: 'Richiesta', allLabel: 'Tutte le richieste', alwaysShowAll: false };
+    }
+    if (category === 'Info Acquisto effettuato') {
+        return { values: ['NO','SI'], valueFn: log => log.acquistoAlert ? 'SI' : 'NO', labelFn: v => ACQUISTO_ALERT_LABELS[v] || v, label: 'Allert', allLabel: 'Tutti', alwaysShowAll: true };
+    }
+    return null;
+}
+
+// ===== Filtro terziario — compare SOLO quando categoria = Info Acquisto
+// effettuato E il filtro Allert è impostato su "Con Allert" (SI). Permette
+// di restringere ulteriormente a "Da gestire" (nessuno stato ancora),
+// "In gestione" o "Gestita". Mostra sempre tutte e tre le opzioni. =====
+function getTertiaryFilterConfig(category, secondaryValue) {
+    if (category === 'Info Acquisto effettuato' && secondaryValue === 'SI') {
+        return {
+            values: ['DA_GESTIRE', 'IN_GESTIONE', 'GESTITA'],
+            valueFn: log => log.acquistoAlertStatus || 'DA_GESTIRE',
+            labelFn: v => ACQUISTO_ALERT_STATUS_LABELS[v] || v,
+            label: 'Stato Gestione',
+            allLabel: 'Tutti gli stati',
+            alwaysShowAll: true
+        };
     }
     return null;
 }
@@ -1098,6 +1314,10 @@ function getDayViewFilteredItems(date) {
         const secConfig = getSecondaryFilterConfig(dayViewCategoryFilter);
         if (secConfig && dayViewSecondaryFilter) {
             items = items.filter(l => secConfig.valueFn(l) === dayViewSecondaryFilter);
+            const terConfig = getTertiaryFilterConfig(dayViewCategoryFilter, dayViewSecondaryFilter);
+            if (terConfig && dayViewTertiaryFilter) {
+                items = items.filter(l => terConfig.valueFn(l) === dayViewTertiaryFilter);
+            }
         }
     }
     const sorted = [...items].sort((a, b) => (b.contactDate || '').localeCompare(a.contactDate || ''));
@@ -1114,6 +1334,7 @@ function showDayView(date) {
     dayViewCategoryFilter = '';
     dayViewSubFilter = '';
     dayViewSecondaryFilter = '';
+    dayViewTertiaryFilter = '';
     renderDayView();
 }
 
@@ -1145,10 +1366,22 @@ function renderDayView() {
 
     const secConfig = dayViewCategoryFilter ? getSecondaryFilterConfig(dayViewCategoryFilter) : null;
     const secPresent = secConfig
-        ? secConfig.values.filter(v => baseItems.some(l => l.category === dayViewCategoryFilter && secConfig.valueFn(l) === v))
+        ? (secConfig.alwaysShowAll
+            ? secConfig.values
+            : secConfig.values.filter(v => baseItems.some(l => l.category === dayViewCategoryFilter && secConfig.valueFn(l) === v)))
         : [];
 
-    const filtersActive = !!(dayViewCategoryFilter || dayViewSubFilter || dayViewSecondaryFilter);
+    const terConfig = (dayViewCategoryFilter && dayViewSecondaryFilter) ? getTertiaryFilterConfig(dayViewCategoryFilter, dayViewSecondaryFilter) : null;
+    const terBaseItems = secConfig && dayViewSecondaryFilter
+        ? baseItems.filter(l => l.category === dayViewCategoryFilter && secConfig.valueFn(l) === dayViewSecondaryFilter)
+        : [];
+    const terPresent = terConfig
+        ? (terConfig.alwaysShowAll
+            ? terConfig.values
+            : terConfig.values.filter(v => terBaseItems.some(l => terConfig.valueFn(l) === v)))
+        : [];
+
+    const filtersActive = !!(dayViewCategoryFilter || dayViewSubFilter || dayViewSecondaryFilter || dayViewTertiaryFilter);
 
     container.innerHTML = `
         <div style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
@@ -1168,8 +1401,14 @@ function renderDayView() {
 
             ${secConfig ? `
             <select id="dayViewSecondaryFilter" class="input-dark" style="min-width:190px" onchange="onDayViewSecondaryFilterChange(this.value)">
-                <option value="">Tutte (${secConfig.label})</option>
+                <option value="">${secConfig.allLabel || `Tutte (${secConfig.label})`}</option>
                 ${secPresent.map(v => `<option value="${v}" ${v===dayViewSecondaryFilter?'selected':''}>${secConfig.labelFn(v)}</option>`).join('')}
+            </select>` : ''}
+
+            ${terConfig ? `
+            <select id="dayViewTertiaryFilter" class="input-dark" style="min-width:190px" onchange="onDayViewTertiaryFilterChange(this.value)">
+                <option value="">${terConfig.allLabel || `Tutti (${terConfig.label})`}</option>
+                ${terPresent.map(v => `<option value="${v}" ${v===dayViewTertiaryFilter?'selected':''}>${terConfig.labelFn(v)}</option>`).join('')}
             </select>` : ''}
 
             ${filtersActive ? `<button class="btn-secondary" onclick="resetDayViewFilters()" style="padding:8px 16px;font-size:12px">↺ RESET</button>` : ''}
@@ -1194,6 +1433,7 @@ function onDayViewCategoryChange(value) {
     dayViewCategoryFilter = value;
     dayViewSubFilter = '';
     dayViewSecondaryFilter = '';
+    dayViewTertiaryFilter = '';
     renderDayView();
 }
 
@@ -1204,6 +1444,12 @@ function onDayViewSubFilterChange(value) {
 
 function onDayViewSecondaryFilterChange(value) {
     dayViewSecondaryFilter = value;
+    dayViewTertiaryFilter = '';
+    renderDayView();
+}
+
+function onDayViewTertiaryFilterChange(value) {
+    dayViewTertiaryFilter = value;
     renderDayView();
 }
 
@@ -1211,6 +1457,7 @@ function resetDayViewFilters() {
     dayViewCategoryFilter = '';
     dayViewSubFilter = '';
     dayViewSecondaryFilter = '';
+    dayViewTertiaryFilter = '';
     renderDayView();
 }
 
@@ -1219,6 +1466,7 @@ function closeDayView() {
     dayViewCategoryFilter = '';
     dayViewSubFilter = '';
     dayViewSecondaryFilter = '';
+    dayViewTertiaryFilter = '';
     renderContactLogs(contactLogsFiltered);
     renderContactStatsFromLogs(contactLogsFiltered);
     renderContactChartFromLogs(contactLogsFiltered);
@@ -1355,14 +1603,22 @@ function renderContactRow(log) {
     const catClass = log.category.replace(/[\s+]/g, '_');
     const marca = log.marca || log.noleggioMarca;
     const modello = log.modello || log.noleggioModello;
+
+    const isAcquistoAlert = isAcquistoAlertVisible(log);
+    const alertColor = acquistoAlertNameColor(log);
+    const nomeHtml = isAcquistoAlert
+        ? `<span onclick="openAcquistoAlertModal(${log.id})" style="cursor:pointer;${alertColor ? `color:${alertColor};` : ''}" title="Gestisci Allert">🔔 ${clienteNomeCompleto(log)}</span>`
+        : clienteNomeCompleto(log);
+
     return `<tr id="contact-row-${log.id}">
         <td style="font-weight:700;color:var(--text-primary)">${time}</td>
-        <td style="font-size:12px;color:var(--text-primary);font-weight:700">${clienteNomeCompleto(log)}<br><span style="font-weight:400;color:var(--text-secondary)">📞 ${clienteNumeroDisplay(log)}</span></td>
+        <td style="font-size:12px;color:var(--text-primary);font-weight:700">${nomeHtml}<br><span style="font-weight:400;color:var(--text-secondary)">📞 ${clienteNumeroDisplay(log)}</span></td>
         <td>
             <span class="contact-category-badge cat-${catClass}">${log.category}</span>
             ${log.category === 'Info + Appuntamento' && log.otherNote ? `<span style="font-size:11px;background:rgba(233,30,99,0.1);color:#e91e63;padding:2px 8px;border-radius:8px;margin-left:6px">📍 ${log.otherNote}</span>` : ''}
             ${log.category === 'Info + Appuntamento' && log.linkAppuntamento ? `<a href="${log.linkAppuntamento}" target="_blank" rel="noopener" style="font-size:11px;background:rgba(74,144,217,0.1);color:#4a90d9;padding:2px 8px;border-radius:8px;margin-left:6px;text-decoration:none">🔗 Link</a>` : ''}
             ${log.category === 'Info Acquisto effettuato' && log.otherNote ? `<span style="font-size:11px;background:rgba(74,144,217,0.1);color:#4a90d9;padding:2px 8px;border-radius:8px;margin-left:6px">📋 ${log.otherNote}</span>` : ''}
+            ${isAcquistoAlert ? `<span style="font-size:11px;background:rgba(255,152,0,0.15);color:#ff9800;padding:2px 8px;border-radius:8px;margin-left:6px">🔔 ${log.acquistoAlertStatus === 'IN_GESTIONE' ? 'In gestione' : 'Da gestire'}</span>` : ''}
             ${(log.category === 'Info Vendita' || log.category === 'Info + Appuntamento') && log.otherNote && FONTE_LIST.includes(log.otherNote) ? `<span style="font-size:11px;background:rgba(26,64,128,0.1);color:#1a4080;padding:2px 8px;border-radius:8px;margin-left:6px">🌐 ${log.otherNote}</span>` : ''}
             ${log.category === 'Service' && log.serviceSede ? `<span style="font-size:11px;background:rgba(233,30,99,0.1);color:#e91e63;padding:2px 8px;border-radius:8px;margin-left:6px">📍 ${log.serviceSede}</span>` : ''}
             ${log.category === 'Service' && log.serviceTipo ? `<span style="font-size:11px;background:rgba(240,192,64,0.1);color:#f0c040;padding:2px 8px;border-radius:8px;margin-left:6px">🔧 ${log.serviceTipo}</span>` : ''}
@@ -1576,6 +1832,7 @@ async function createContactLog() {
     const link = document.getElementById('contactAppuntamentoLink')?.value.trim() || '';
     const acquistoTipo = document.getElementById('contactAcquistoTipo')?.value || '';
     const acquistoNote = document.getElementById('contactAcquistoNote')?.value.trim() || '';
+    const acquistoAlert = document.getElementById('contactAcquistoAlert')?.value === 'true';
     const fonte = document.getElementById('contactFonte')?.value || '';
     const serviceTipo = document.getElementById('contactServiceTipo')?.value || '';
     const serviceSede = document.getElementById('contactServiceSede')?.value || '';
@@ -1637,6 +1894,7 @@ async function createContactLog() {
     const isNoleggio = category === 'Info Noleggio';
     const isRichiestaCliente = isNoleggio && noleggioRichiesta === 'RICHIESTA_CLIENTE';
     const isService = category === 'Service';
+    const isAcquisto = category === 'Info Acquisto effettuato';
 
     const payload = {
         category,
@@ -1652,6 +1910,7 @@ async function createContactLog() {
         serviceNote: isService ? (serviceNote || null) : null,
         serviceSede: isService ? (serviceSede || null) : null,
         acquistoNote: acquistoNote||null,
+        acquistoAlert: isAcquisto ? acquistoAlert : false,
         noleggioTipo: isRichiestaCliente ? (noleggioTipo||null) : null,
         noleggioLink: isRichiestaCliente ? (noleggioLink||null) : null,
         serviceTarga: isService ? (serviceTarga || null) : null,
@@ -1782,6 +2041,11 @@ function hideNewContactForm() {
     document.getElementById('clienteNome').placeholder = 'Nome Cliente *';
     document.getElementById('clienteCognome').placeholder = 'Cognome Cliente *';
     selectedSede = ''; selectedAcquisto = ''; selectedFonte = ''; selectedService = ''; selectedServiceSede = ''; selectedNoleggioTipo = ''; selectedNoleggioRichiesta = '';
+    selectedAcquistoAlert = false;
+    const acquistoAlertBtn = document.getElementById('contactAcquistoAlertBtn');
+    if (acquistoAlertBtn) acquistoAlertBtn.classList.remove('btn-sede-active');
+    const acquistoAlertHidden = document.getElementById('contactAcquistoAlert');
+    if (acquistoAlertHidden) acquistoAlertHidden.value = 'false';
     SEDI_LIST.forEach(s => { const btn = document.getElementById(`sede-${s}`); if (btn) btn.classList.remove('btn-sede-active'); });
     SERVICE_SEDI_LIST.forEach(s => { const btn = document.getElementById(`serviceSede-${s}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche','Furto'].forEach(k => { const btn = document.getElementById(`acquisto-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
@@ -1820,7 +2084,15 @@ function onCategoryChange() {
         const dettagli = document.getElementById('contactNoleggioRichiestaDettagli'); if (dettagli) dettagli.style.display = 'none';
     }
     if (cat !== 'Info + Appuntamento') { selectedSede=''; const el=document.getElementById('contactAppuntamentoSede'); if(el) el.value=''; const l=document.getElementById('contactAppuntamentoLink'); if(l) l.value=''; SEDI_LIST.forEach(s=>{const b=document.getElementById(`sede-${s}`);if(b)b.classList.remove('btn-sede-active');}); }
-    if (cat !== 'Info Acquisto effettuato') { selectedAcquisto=''; const el=document.getElementById('contactAcquistoTipo'); if(el) el.value=''; const nr=document.getElementById('contactAcquistoNoteRow'); if(nr) nr.style.display='none'; ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche','Furto'].forEach(k=>{const b=document.getElementById(`acquisto-${k}`);if(b)b.classList.remove('btn-sede-active');}); }
+    if (cat !== 'Info Acquisto effettuato') {
+        selectedAcquisto='';
+        selectedAcquistoAlert = false;
+        const el=document.getElementById('contactAcquistoTipo'); if(el) el.value='';
+        const nr=document.getElementById('contactAcquistoNoteRow'); if(nr) nr.style.display='none';
+        const acquistoAlertBtn = document.getElementById('contactAcquistoAlertBtn'); if (acquistoAlertBtn) acquistoAlertBtn.classList.remove('btn-sede-active');
+        const acquistoAlertHidden = document.getElementById('contactAcquistoAlert'); if (acquistoAlertHidden) acquistoAlertHidden.value = 'false';
+        ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche','Furto'].forEach(k=>{const b=document.getElementById(`acquisto-${k}`);if(b)b.classList.remove('btn-sede-active');});
+    }
     if (cat !== 'Service') {
         selectedService=''; selectedServiceSede=''; selectedServiceTipoCliente='';
         const el=document.getElementById('contactServiceTipo'); if(el) el.value='';

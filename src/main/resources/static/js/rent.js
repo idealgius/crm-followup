@@ -32,6 +32,15 @@ const RENT_FONTE_COLORS = ['#1a4080', '#f0c040', '#e91e63', '#4a90d9', '#7c4dff'
 
 const RENT_TIPO_CLIENTE_LIST = ['Privato', 'Partita IVA', 'Noleggio per aziende'];
 
+// ============================================================
+// GESTIONE — permessi: chi può cliccare "Gestisci"/"Annulla Gestione"
+// (stessa whitelist del backend: canManageTrattativa == canAccessRent)
+// ============================================================
+const RENT_GESTIONE_ROLES = ['NOLEGGIO', 'MODERATORE', 'GESTORE', 'ADMIN'];
+function canManageRentGestione() {
+    return currentUser && RENT_GESTIONE_ROLES.includes(currentUser.role);
+}
+
 function loadRentDashboard() {
     const today = todayStr();
     const firstDay = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
@@ -45,6 +54,15 @@ function loadRentDashboard() {
         if (optionsContainer && !optionsContainer.dataset.populated) {
             optionsContainer.dataset.populated = '1';
             if (typeof updateMultiSelectLabel === 'function') updateMultiSelectLabel('rentStatoFilterMulti');
+        }
+    }
+
+    // Popola il filtro Gestione (opzioni fisse, non dipendono dai dati) una sola volta
+    if (typeof populateMultiSelectOptions === 'function' && document.getElementById('rentGestioneFilterMulti-options')) {
+        const gestioneOptions = document.getElementById('rentGestioneFilterMulti-options');
+        if (gestioneOptions && !gestioneOptions.dataset.populated) {
+            gestioneOptions.dataset.populated = '1';
+            populateMultiSelectOptions('rentGestioneFilterMulti', ['DA_GESTIRE', 'GESTITA', 'NESSUNA']);
         }
     }
 
@@ -79,6 +97,22 @@ function populateRentFilters() {
 
     const operatori = [...new Set(rentTrattative.map(t => t.user?.fullName).filter(Boolean))].sort();
     populateMultiSelectOptions('rentOperatoreFilterMulti', operatori);
+
+    // Filtro "gestito da" — solo operatori che hanno realmente preso in carico
+    // almeno una trattativa. gestitoDa è un OGGETTO {id, fullName, role} o null.
+    if (document.getElementById('rentGestitoDaFilterMulti-options')) {
+        const gestori = [...new Set(rentTrattative.map(t => t.gestitoDa?.fullName).filter(Boolean))].sort();
+        populateMultiSelectOptions('rentGestitoDaFilterMulti', gestori);
+    }
+}
+
+// t.daGestire (bool, calcolato dal server) + t.gestitoDa (oggetto o null).
+// "Gestita" = qualcuno l'ha presa in carico (gestitoDa non nullo).
+// "Da Gestire" = il flag daGestire è true (server: creata da non-Noleggio e non ancora presa in carico).
+function rentGestioneStatoOf(t) {
+    if (t.gestitoDa) return 'GESTITA';
+    if (t.daGestire) return 'DA_GESTIRE';
+    return 'NESSUNA';
 }
 
 function applyRentFilters() {
@@ -86,6 +120,8 @@ function applyRentFilters() {
     const marchiSelezionati = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('rentMarchioFilterMulti') : [];
     const fontiSelezionate = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('rentFonteFilterMulti') : [];
     const operatoriSelezionati = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('rentOperatoreFilterMulti') : [];
+    const gestioneSelezionata = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('rentGestioneFilterMulti') : [];
+    const gestitoDaSelezionati = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('rentGestitoDaFilterMulti') : [];
     const ruolo = document.getElementById('rentRuoloFilter')?.value || '';
 
     rentTrattativeFiltered = rentTrattative.filter(t => {
@@ -95,6 +131,8 @@ function applyRentFilters() {
         if (ruolo === 'NOLEGGIO' && t.user?.role !== 'NOLEGGIO') return false;
         if (ruolo === 'BDC' && t.user?.role === 'NOLEGGIO') return false;
         if (operatoriSelezionati.length > 0 && !operatoriSelezionati.includes(t.user?.fullName)) return false;
+        if (gestioneSelezionata.length > 0 && !gestioneSelezionata.includes(rentGestioneStatoOf(t))) return false;
+        if (gestitoDaSelezionati.length > 0 && !gestitoDaSelezionati.includes(t.gestitoDa?.fullName)) return false;
         return true;
     });
 
@@ -116,6 +154,7 @@ function renderRentStats(list) {
     if (el('rentStatInCorso')) el('rentStatInCorso').textContent = list.filter(t => t.stato === 'TRATTATIVA_IN_CORSO').length;
     if (el('rentStatDaRichiamare')) el('rentStatDaRichiamare').textContent = list.filter(t => t.stato === 'DA_RICHIAMARE').length;
     if (el('rentStatConcluse')) el('rentStatConcluse').textContent = list.filter(t => t.stato === 'CONCLUSA').length;
+    if (el('rentStatDaGestire')) el('rentStatDaGestire').textContent = list.filter(t => t.daGestire).length;
 }
 
 function toggleRentTrattativeSortDir() {
@@ -268,6 +307,7 @@ function renderRentTrattative(list) {
 // Card cliccabile ovunque -> apre il modal di dettaglio/gestione completo.
 // I pulsanti interni (modifica rapida, elimina, link) fermano la propagazione
 // del click con event.stopPropagation() per non aprire il modal per errore.
+// Badge "🔔 Da Gestire" / "✅ Gestita da X" basati su t.daGestire / t.gestitoDa (oggetto).
 function renderRentTrattativaCard(t) {
     const today = todayStr();
     const isRecallToday = t.stato === 'DA_RICHIAMARE' && t.dataRichiamo === today;
@@ -278,7 +318,16 @@ function renderRentTrattativaCard(t) {
     if (t.linkLeadspark) links.push(`<a href="${t.linkLeadspark}" target="_blank" rel="noopener" title="Leadspark" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(0,200,83,0.15);color:#00c853;text-decoration:none;font-size:13px">🔗</a>`);
     if (t.linkAutoRichiesta) links.push(`<a href="${t.linkAutoRichiesta}" target="_blank" rel="noopener" title="Auto richiesta" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(74,144,217,0.15);color:#4a90d9;text-decoration:none;font-size:13px">🔗</a>`);
 
-    return `<div onclick="openRentTrattativaModal(${t.id})" style="width:260px;cursor:pointer;background:var(--bg-card);border:1.5px solid ${isRecallToday||isRecallPast?color:'var(--border)'};border-left:4px solid ${color};border-radius:10px;padding:12px;box-shadow:var(--shadow);transition:transform 0.15s;${isRecallToday?'box-shadow:0 0 12px rgba(233,30,99,0.25)':''}" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+    let gestioneBadge = '';
+    if (t.gestitoDa) {
+        gestioneBadge = `<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:10px;background:rgba(0,200,83,0.15);color:#00c853">✅ Gestita · ${t.gestitoDa.fullName}</span>`;
+    } else if (t.daGestire) {
+        gestioneBadge = `<span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:10px;background:rgba(255,152,0,0.15);color:#ff9800">🔔 Da Gestire</span>`;
+    }
+
+    const highlightBorder = t.daGestire ? '#ff9800' : (isRecallToday || isRecallPast ? color : 'var(--border)');
+
+    return `<div onclick="openRentTrattativaModal(${t.id})" style="width:260px;cursor:pointer;background:var(--bg-card);border:1.5px solid ${highlightBorder};border-left:4px solid ${color};border-radius:10px;padding:12px;box-shadow:var(--shadow);transition:transform 0.15s;${(isRecallToday || t.daGestire)?'box-shadow:0 0 12px rgba(233,30,99,0.25)':''}" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
         <div style="font-weight:800;color:var(--text-primary);font-size:13px">${t.nome} ${t.cognome}</div>
         <div style="font-size:11px;color:var(--text-secondary);margin-top:4px;line-height:1.6">
             🚗 ${t.marchio}${t.modello?' '+t.modello:''}<br>
@@ -290,6 +339,7 @@ function renderRentTrattativaCard(t) {
         <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
             <span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:10px;background:${color}22;color:${color}">${RENT_STATO_LABELS[t.stato] || t.stato}</span>
             ${t.dataRichiamo ? `<span style="font-size:10px;font-weight:700;color:${isRecallPast?'#e91e63':isRecallToday?'#f0c040':'var(--text-secondary)'}">📅 ${formatDateIT(t.dataRichiamo)}</span>` : ''}
+            ${gestioneBadge}
         </div>
         ${t.stato === 'FALLITO' && t.noteFallimento ? `<div style="margin-top:8px;font-size:10px;color:#ff3d3d;background:rgba(255,61,61,0.08);padding:6px 8px;border-radius:6px">❌ ${t.noteFallimento}</div>` : ''}
         <div style="margin-top:8px;display:flex;gap:6px;align-items:center">
@@ -339,9 +389,90 @@ function openRentTrattativaModal(id) {
     }
 
     onRtdStatoChange();
+    populateRentGestioneSection(t);
 
     const modal = document.getElementById('rentTrattativaModal');
     if (modal) modal.style.display = 'flex';
+}
+
+// ============================================================
+// SEZIONE GESTIONE nel modal dettaglio — funziona SOLO se questi elementi
+// esistono in index.html (controllo difensivo: se mancano non fa nulla):
+//   rtdGestioneStatus       -> testo di stato ("Da gestire" / "Gestita da X")
+//   rtdGestioneBtn          -> bottone "🔔 Gestisci" (visibile solo se ruolo abilitato e non ancora gestita)
+//   rtdAnnullaGestioneBtn   -> bottone "↺ Annulla Gestione" (visibile solo se già gestita)
+// Il backend non prevede una nota testuale sulla gestione: è un'azione secca
+// (prendi in carico / rimuovi la presa in carico), quindi qui non c'è più
+// alcuna textarea da leggere o mostrare.
+// ============================================================
+function populateRentGestioneSection(t) {
+    const statusEl = document.getElementById('rtdGestioneStatus');
+    const btnGestisci = document.getElementById('rtdGestioneBtn');
+    const btnAnnulla = document.getElementById('rtdAnnullaGestioneBtn');
+    const sectionWrapper = document.getElementById('rtdGestioneSection');
+
+    if (!sectionWrapper && !statusEl && !btnGestisci) return; // HTML non presente, nulla da fare
+
+    if (statusEl) {
+        if (t.gestitoDa) {
+            statusEl.textContent = `✅ Gestita da ${t.gestitoDa.fullName}`;
+            statusEl.style.color = '#00c853';
+        } else if (t.daGestire) {
+            statusEl.textContent = '🔔 Da gestire';
+            statusEl.style.color = '#ff9800';
+        } else {
+            statusEl.textContent = '— Nessuna segnalazione';
+            statusEl.style.color = 'var(--text-secondary)';
+        }
+    }
+
+    const canManage = canManageRentGestione();
+    if (btnGestisci) btnGestisci.style.display = (canManage && !t.gestitoDa) ? 'inline-block' : 'none';
+    if (btnAnnulla) btnAnnulla.style.display = (canManage && t.gestitoDa) ? 'inline-block' : 'none';
+}
+
+// Endpoint reale: PATCH /api/noleggio/trattative/{id}/gestisci — nessun body.
+// Il server valorizza gestitoDa con l'utente in sessione.
+async function gestisciRentTrattativa(id) {
+    const targetId = id || rtdEditId;
+    if (!targetId || !canManageRentGestione()) return;
+    try {
+        const res = await fetch(`/api/noleggio/trattative/${targetId}/gestisci`, {
+            method: 'PATCH'
+        });
+        if (!res.ok) {
+            const data = await res.json().catch(() => null);
+            alert(data?.error || 'Errore nel salvataggio della gestione');
+            return;
+        }
+        await loadRentTrattative();
+        const t = rentTrattative.find(x => x.id === targetId);
+        if (t) populateRentGestioneSection(t);
+    } catch (err) {
+        console.error('Errore gestisci trattativa:', err);
+    }
+}
+
+// Endpoint reale: PATCH /api/noleggio/trattative/{id}/annulla-gestione — nessun body.
+async function annullaGestioneRentTrattativa(id) {
+    const targetId = id || rtdEditId;
+    if (!targetId || !canManageRentGestione()) return;
+    if (!confirm('Rimuovere la gestione da questa trattativa?')) return;
+    try {
+        const res = await fetch(`/api/noleggio/trattative/${targetId}/annulla-gestione`, {
+            method: 'PATCH'
+        });
+        if (!res.ok) {
+            const data = await res.json().catch(() => null);
+            alert(data?.error || 'Errore nella rimozione della gestione');
+            return;
+        }
+        await loadRentTrattative();
+        const t = rentTrattative.find(x => x.id === targetId);
+        if (t) populateRentGestioneSection(t);
+    } catch (err) {
+        console.error('Errore annulla gestione trattativa:', err);
+    }
 }
 
 function closeRentTrattativaModal(event) {
@@ -929,8 +1060,6 @@ function renderRentContattiNoleggio(list) {
         return '—';
     };
 
-    // classe "rent-contatti-table" aggiunta: attiva le regole CSS dedicate
-    // per questa tabella a 8 colonne (vedi fix in style.css)
     container.innerHTML = `<div class="contact-table-wrapper"><table class="contact-table rent-contatti-table">
         <thead><tr><th>Data</th><th>Richiesta</th><th>Tipologia</th><th>Cliente</th><th>Marca/Modello</th><th>Lead</th><th>Operatore</th><th>Azioni</th></tr></thead>
         <tbody>${list.map(c => {
@@ -1011,7 +1140,7 @@ function searchRentTrattative(query) {
                             · 👤 ${t.user?.fullName || '—'}
                         </div>
                     </div>
-                    <span style="color:#f0c040;font-size:16px">→</span>
+                    <button class="btn-small btn-blue" onclick="closeRentSearch();editRentTrattativa(${t.id})">✏️ Apri</button>
                 </div>
             </div>`;
         }).join('');

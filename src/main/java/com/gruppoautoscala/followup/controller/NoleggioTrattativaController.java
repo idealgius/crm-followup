@@ -15,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
@@ -25,6 +26,10 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/noleggio")
 public class NoleggioTrattativaController {
+
+    // Fuso orario fisso — garantisce l'orario locale italiano indipendentemente
+    // da dove è ospitato il server (es. server cloud in UTC).
+    private static final ZoneId ZONA_ITALIA = ZoneId.of("Europe/Rome");
 
     @Autowired
     private NoleggioTrattativaService noleggioService;
@@ -41,6 +46,13 @@ public class NoleggioTrattativaController {
 
     private boolean canAccessRent(String role) {
         return role != null && RENT_ROLES.contains(role);
+    }
+
+    // Chi può "prendere in carico" una trattativa (Gestisci): stessa whitelist
+    // di canAccessRent, ma tenuta separata perché in futuro potrebbero divergere
+    // (es. se un domani si volesse permettere a un ruolo di vedere ma non gestire).
+    private boolean canManageTrattativa(String role) {
+        return canAccessRent(role);
     }
 
     @GetMapping("/trattative")
@@ -84,7 +96,10 @@ public class NoleggioTrattativaController {
             list = list.stream().filter(t -> t.getUser() == null || !"NOLEGGIO".equals(t.getUser().getRole())).collect(Collectors.toList());
         }
         if (operatore != null && !operatore.isBlank()) {
-            list = list.stream().filter(t -> t.getUser() != null && operatore.equals(t.getUser().getFullName())).collect(Collectors.toList());
+            list = list.stream().filter(t ->
+                (t.getUser() != null && operatore.equals(t.getUser().getFullName()))
+                || (t.getGestitoDa() != null && operatore.equals(t.getGestitoDa().getFullName()))
+            ).collect(Collectors.toList());
         }
 
         try {
@@ -132,6 +147,10 @@ public class NoleggioTrattativaController {
             dataRichiamo = LocalDate.parse(body.get("dataRichiamo").toString());
         }
 
+        // NOTA: createdAt viene impostato automaticamente dal valore di default
+        // dell'entità NoleggioTrattativa (LocalDateTime.now(ZONA_ITALIA)), quindi
+        // qui non serve fare nulla in più per l'orario locale — è già corretto
+        // fin dal momento in cui l'oggetto viene istanziato dal service.
         NoleggioTrattativa t = noleggioService.create(
             userOpt.get(), nome, cognome, cellulare,
             (String) body.get("email"), marchio, (String) body.get("modello"),
@@ -203,7 +222,51 @@ public class NoleggioTrattativaController {
             if (dr != null && !dr.toString().isBlank()) t.setDataRichiamo(LocalDate.parse(dr.toString()));
         }
 
-        t.setUpdatedAt(LocalDateTime.now());
+        t.setUpdatedAt(LocalDateTime.now(ZONA_ITALIA));
+        return ResponseEntity.ok(toMap(noleggioService.update(t)));
+    }
+
+    // ===== GESTISCI — presa in carico dell'allert "Da Gestire" =====
+    // Solo utenti con ruolo NOLEGGIO, o MODERATORE/GESTORE/ADMIN, possono
+    // cliccare "Gestisci". Da quel momento gestitoDa viene valorizzato con
+    // l'utente corrente, l'allert "Da Gestire" sparisce (il calcolo è nel
+    // campo derivato "daGestire" dentro toMap), e la trattativa risulta
+    // filtrabile anche per l'operatore che l'ha presa in carico.
+    @PatchMapping("/trattative/{id}/gestisci")
+    public ResponseEntity<?> gestisci(@PathVariable Long id, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        String role = (String) session.getAttribute("userRole");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        if (!canManageTrattativa(role)) return ResponseEntity.status(403).body(Map.of("error", "Non autorizzato a gestire questa trattativa"));
+
+        Optional<NoleggioTrattativa> tOpt = noleggioService.getById(id);
+        if (tOpt.isEmpty()) return ResponseEntity.notFound().build();
+        NoleggioTrattativa t = tOpt.get();
+
+        Optional<User> userOpt = userRepository.findById(userId);
+        if (userOpt.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "Utente non trovato"));
+
+        t.setGestitoDa(userOpt.get());
+        t.setUpdatedAt(LocalDateTime.now(ZONA_ITALIA));
+        return ResponseEntity.ok(toMap(noleggioService.update(t)));
+    }
+
+    // ===== ANNULLA GESTIONE — rimuove la presa in carico, per correggere
+    // un errore (es. click sbagliato). Simmetrico a "Rimuovi Gestione" già
+    // usato per gli Allert di Info Acquisto effettuato. =====
+    @PatchMapping("/trattative/{id}/annulla-gestione")
+    public ResponseEntity<?> annullaGestione(@PathVariable Long id, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        String role = (String) session.getAttribute("userRole");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        if (!canManageTrattativa(role)) return ResponseEntity.status(403).body(Map.of("error", "Non autorizzato"));
+
+        Optional<NoleggioTrattativa> tOpt = noleggioService.getById(id);
+        if (tOpt.isEmpty()) return ResponseEntity.notFound().build();
+        NoleggioTrattativa t = tOpt.get();
+
+        t.setGestitoDa(null);
+        t.setUpdatedAt(LocalDateTime.now(ZONA_ITALIA));
         return ResponseEntity.ok(toMap(noleggioService.update(t)));
     }
 
@@ -225,7 +288,7 @@ public class NoleggioTrattativaController {
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
         if (!canAccessRent(role)) return ResponseEntity.status(403).body(Map.of("error", "Non autorizzato"));
 
-        LocalDate oggi = LocalDate.now();
+        LocalDate oggi = LocalDate.now(ZONA_ITALIA);
         List<NoleggioTrattativa> list = noleggioService.getAll().stream()
             .filter(t -> "DA_RICHIAMARE".equals(t.getStato()) && t.getDataRichiamo() != null && !t.getDataRichiamo().isAfter(oggi))
             .collect(Collectors.toList());
@@ -298,11 +361,30 @@ public class NoleggioTrattativaController {
         m.put("linkLeadspark", t.getLinkLeadspark());
         m.put("linkAutoRichiesta", t.getLinkAutoRichiesta());
         m.put("createdAt", t.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
+
         Map<String, Object> userMap = new HashMap<>();
         userMap.put("id", t.getUser().getId());
         userMap.put("fullName", t.getUser().getFullName());
         userMap.put("role", t.getUser().getRole());
         m.put("user", userMap);
+
+        // ===== ALLERT "DA GESTIRE" =====
+        // Vera SOLO se: chi ha creato la trattativa NON ha ruolo NOLEGGIO,
+        // e nessuno l'ha ancora presa in carico (gestitoDa è null).
+        boolean creatoDaNonNoleggio = t.getUser() == null || !"NOLEGGIO".equals(t.getUser().getRole());
+        boolean daGestire = creatoDaNonNoleggio && t.getGestitoDa() == null;
+        m.put("daGestire", daGestire);
+
+        if (t.getGestitoDa() != null) {
+            Map<String, Object> gestitoDaMap = new HashMap<>();
+            gestitoDaMap.put("id", t.getGestitoDa().getId());
+            gestitoDaMap.put("fullName", t.getGestitoDa().getFullName());
+            gestitoDaMap.put("role", t.getGestitoDa().getRole());
+            m.put("gestitoDa", gestitoDaMap);
+        } else {
+            m.put("gestitoDa", null);
+        }
+
         return m;
     }
 }
