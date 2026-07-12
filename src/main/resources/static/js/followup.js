@@ -144,7 +144,11 @@ function renderFollowUps(followUps, stepsMap) {
 
 function renderFollowUpCard(fu, steps) {
     const readOnly = isModerator();
-    const stepsHtml = steps.map(s => renderStepCard(s, fu.id)).join('');
+    // Passa il flag emailOnly del cliente a ogni step card: se true, TUTTI e
+    // 3 gli step devono mostrare INVIA (non solo il terzo), perché il cliente
+    // riceve sempre e solo email, mai chiamate.
+    const emailOnly = !!fu.customer.emailOnly;
+    const stepsHtml = steps.map(s => renderStepCard(s, fu.id, emailOnly)).join('');
 
     return `
         <div class="followup-card" id="fu-${fu.id}">
@@ -197,10 +201,15 @@ function renderFollowUpCard(fu, steps) {
     `;
 }
 
-function renderStepCard(step, followUpId) {
+function renderStepCard(step, followUpId, emailOnly) {
     const readOnly = isModerator();
+    // FIX: prima solo lo Step 3 (isContact3) mostrava il pulsante INVIA.
+    // Ora, se il cliente è "Solo Email" (emailOnly), TUTTI e 3 gli step
+    // devono comportarsi come lo Step 3 — un solo tasto INVIA/INVIATO,
+    // niente Risponde/Non Risponde (che avrebbe senso solo per le chiamate).
     const isContact3 = step.stepNumber === 3;
-    const isSent = step.outcome === 'SENT' || (isContact3 && step.outcome === 'ANSWERED');
+    const isSendOnly = isContact3 || emailOnly;
+    const isSent = step.outcome === 'SENT' || (isSendOnly && step.outcome === 'ANSWERED');
     const outcomeClass = isSent ? 'SENT' : step.outcome;
     const executedAt = formatDateTime(step.executedAt);
     const slotLabel = formatSlot(step.scheduledSlot);
@@ -212,12 +221,12 @@ function renderStepCard(step, followUpId) {
             ${slotLabel ? ' · ' + slotLabel : ''}
         </div>
         <div class="step-outcome outcome-${outcomeClass}">
-            ${formatOutcome(step.outcome, step.stepNumber)}
+            ${formatOutcome(step.outcome, step.stepNumber, isSendOnly)}
         </div>
         ${executedAt ? `<div class="step-timestamp">🕐 ${executedAt}</div>` : ''}
         ${readOnly ? '' : `
         <div style="display:flex;gap:5px;margin-bottom:8px">
-            ${isContact3 ? `
+            ${isSendOnly ? `
                 <button class="btn-small btn-sent ${isSent ? 'btn-sent-active' : ''}"
                     onclick="updateStep(${step.id}, '${isSent ? 'PENDING' : 'SENT'}', ${followUpId})">
                     ${isSent ? '✓ INVIATO' : '📤 INVIA'}
@@ -329,14 +338,14 @@ function goToFollowUp(date, followUpId) {
     }, 700);
 }
 
-async function loadSteps(followUpId) {
+async function loadSteps(followUpId, emailOnly) {
     try {
         const res = await fetch(`/api/followups/${followUpId}/steps`);
         if (!res.ok) return;
         const steps = await res.json();
         const container = document.getElementById(`steps-${followUpId}`);
         if (container) {
-            container.innerHTML = steps.map(s => renderStepCard(s, followUpId)).join('');
+            container.innerHTML = steps.map(s => renderStepCard(s, followUpId, emailOnly)).join('');
         }
     } catch (err) {
         console.error('Errore caricamento step:', err);
@@ -351,6 +360,10 @@ function formatDateTime(isoString) {
     return `${date} · ${time}`;
 }
 
+// updateStep ora recupera dal DOM se la card corrente è emailOnly, leggendo
+// il testo "SOLO EMAIL" già presente nella card padre, così loadSteps() sa
+// come ridisegnare correttamente dopo l'aggiornamento (senza dover rifare
+// una chiamata API solo per questo flag, che è già visibile nella pagina).
 async function updateStep(stepId, outcome, followUpId) {
     if (isModerator()) return;
     try {
@@ -359,10 +372,21 @@ async function updateStep(stepId, outcome, followUpId) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ outcome, executedAt: true })
         });
-        loadSteps(followUpId);
+        const emailOnly = isFollowUpEmailOnly(followUpId);
+        loadSteps(followUpId, emailOnly);
     } catch (err) {
         console.error('Errore aggiornamento step:', err);
     }
+}
+
+// Rileva se una card follow-up è "Solo Email" controllando la presenza del
+// badge "SOLO EMAIL" già renderizzato in followup-meta, senza bisogno di
+// tenere uno stato JS parallelo o richiamare l'API.
+function isFollowUpEmailOnly(followUpId) {
+    const card = document.getElementById(`fu-${followUpId}`);
+    if (!card) return false;
+    const meta = card.querySelector('.followup-meta');
+    return !!(meta && meta.textContent.includes('SOLO EMAIL'));
 }
 
 async function saveNote(stepId, notes) {
@@ -535,8 +559,13 @@ function formatSlot(slot) {
     return map[slot] || slot;
 }
 
-function formatOutcome(outcome, stepNumber) {
-    if (stepNumber === 3 && (outcome === 'SENT' || outcome === 'ANSWERED')) {
+// Aggiunto parametro isSendOnly: quando true (Step 3 oppure cliente Solo
+// Email), anche l'esito "ANSWERED" viene mostrato come "📤 Inviato" invece
+// di "✅ Risposto", coerente col fatto che qui non c'è una vera risposta
+// telefonica ma solo l'invio di un'email/messaggio.
+function formatOutcome(outcome, stepNumber, isSendOnly) {
+    const sendOnly = isSendOnly !== undefined ? isSendOnly : (stepNumber === 3);
+    if (sendOnly && (outcome === 'SENT' || outcome === 'ANSWERED')) {
         return '📤 Inviato';
     }
     const map = {
