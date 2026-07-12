@@ -10,6 +10,7 @@ let rentTrattativeSortDir = 'desc';
 let rentContattiSortDir = 'desc';
 let rentDayView = null;
 let rtdEditId = null;
+let rentDaGestireChecked = false;
 
 const RENT_STATO_LIST = ['SOLO_INFO', 'TRATTATIVA_IN_CORSO', 'DA_RICHIAMARE', 'CONCLUSA', 'FALLITO'];
 const RENT_STATO_LABELS = {
@@ -81,6 +82,13 @@ async function loadRentTrattative() {
             : (a.createdAt || '').localeCompare(b.createdAt || ''));
         populateRentFilters();
         applyRentFilters();
+
+        // Popup "Da Gestire" — mostrato una sola volta all'apertura della dashboard,
+        // solo a chi ha i permessi per gestire (Noleggio/Moderatore/Gestore/Admin)
+        if (!rentDaGestireChecked) {
+            rentDaGestireChecked = true;
+            checkRentDaGestire();
+        }
     } catch (err) {
         console.error('Errore caricamento trattative noleggio:', err);
     }
@@ -95,7 +103,13 @@ function populateRentFilters() {
     const fonti = [...new Set(rentTrattative.map(t => t.fonte).filter(Boolean))].sort();
     populateMultiSelectOptions('rentFonteFilterMulti', fonti);
 
-    const operatori = [...new Set(rentTrattative.map(t => t.user?.fullName).filter(Boolean))].sort();
+    // FIX: il filtro Operatore ora include sia chi ha CREATO sia chi ha GESTITO
+    // trattative, così un operatore che compare solo come "gestitoDa" (mai come
+    // creatore) è comunque selezionabile nel filtro.
+    const operatori = [...new Set([
+        ...rentTrattative.map(t => t.user?.fullName),
+        ...rentTrattative.map(t => t.gestitoDa?.fullName)
+    ].filter(Boolean))].sort();
     populateMultiSelectOptions('rentOperatoreFilterMulti', operatori);
 
     // Filtro "gestito da" — solo operatori che hanno realmente preso in carico
@@ -130,7 +144,12 @@ function applyRentFilters() {
         if (fontiSelezionate.length > 0 && !fontiSelezionate.includes(t.fonte)) return false;
         if (ruolo === 'NOLEGGIO' && t.user?.role !== 'NOLEGGIO') return false;
         if (ruolo === 'BDC' && t.user?.role === 'NOLEGGIO') return false;
-        if (operatoriSelezionati.length > 0 && !operatoriSelezionati.includes(t.user?.fullName)) return false;
+        // FIX: match sull'operatore selezionato sia come CREATORE (t.user) sia
+        // come GESTORE (t.gestitoDa) — se un operatore è scelto nel filtro,
+        // devono comparire sia le trattative da lui create sia quelle da lui gestite.
+        if (operatoriSelezionati.length > 0
+            && !operatoriSelezionati.includes(t.user?.fullName)
+            && !operatoriSelezionati.includes(t.gestitoDa?.fullName)) return false;
         if (gestioneSelezionata.length > 0 && !gestioneSelezionata.includes(rentGestioneStatoOf(t))) return false;
         if (gestitoDaSelezionati.length > 0 && !gestitoDaSelezionati.includes(t.gestitoDa?.fullName)) return false;
         return true;
@@ -155,6 +174,64 @@ function renderRentStats(list) {
     if (el('rentStatDaRichiamare')) el('rentStatDaRichiamare').textContent = list.filter(t => t.stato === 'DA_RICHIAMARE').length;
     if (el('rentStatConcluse')) el('rentStatConcluse').textContent = list.filter(t => t.stato === 'CONCLUSA').length;
     if (el('rentStatDaGestire')) el('rentStatDaGestire').textContent = list.filter(t => t.daGestire).length;
+    attachRentStatClickHandlers();
+}
+
+// ============================================================
+// STAT-CARD CLICCABILI — aprono l'elenco filtrato (stesso modal usato
+// dai grafici), da cui il click sul cliente apre già il modal dettaglio
+// trattativa (comportamento esistente in showRentTrattativeDetail).
+// ============================================================
+function attachRentStatClickHandlers() {
+    const map = {
+        rentStatTotal: 'total',
+        rentStatSoloInfo: 'soloInfo',
+        rentStatInCorso: 'inCorso',
+        rentStatDaRichiamare: 'daRichiamare',
+        rentStatConcluse: 'concluse',
+        rentStatDaGestire: 'daGestire'
+    };
+    Object.entries(map).forEach(([elId, type]) => {
+        const valueEl = document.getElementById(elId);
+        if (!valueEl) return;
+        const card = valueEl.closest('.stat-card');
+        if (!card) return;
+        card.style.cursor = 'pointer';
+        card.classList.add('stat-card-clickable');
+        card.onclick = () => showRentStatDetail(type);
+    });
+}
+
+function showRentStatDetail(type) {
+    let items = [];
+    let title = '';
+    switch (type) {
+        case 'total':
+            items = rentTrattativeFiltered;
+            title = 'Tutte le Trattative';
+            break;
+        case 'soloInfo':
+            items = rentTrattativeFiltered.filter(t => t.stato === 'SOLO_INFO');
+            title = 'Solo Info';
+            break;
+        case 'inCorso':
+            items = rentTrattativeFiltered.filter(t => t.stato === 'TRATTATIVA_IN_CORSO');
+            title = 'Trattativa in corso';
+            break;
+        case 'daRichiamare':
+            items = rentTrattativeFiltered.filter(t => t.stato === 'DA_RICHIAMARE');
+            title = 'Da richiamare';
+            break;
+        case 'concluse':
+            items = rentTrattativeFiltered.filter(t => t.stato === 'CONCLUSA');
+            title = 'Concluse';
+            break;
+        case 'daGestire':
+            items = rentTrattativeFiltered.filter(t => t.daGestire);
+            title = 'Da Gestire';
+            break;
+    }
+    showRentGenericDetail(title, items);
 }
 
 function toggleRentTrattativeSortDir() {
@@ -348,6 +425,45 @@ function renderRentTrattativaCard(t) {
             ${links.length > 0 ? `<span style="margin-left:auto;display:flex;gap:6px">${links.join('')}</span>` : ''}
         </div>
     </div>`;
+}
+
+// ============================================================
+// POPUP AUTOMATICO "DA GESTIRE" — mostrato una sola volta all'apertura
+// della dashboard, solo a chi ha permessi di gestione. Richiede in
+// index.html un modal #rentDaGestireModal con contenuto #rentDaGestireList
+// (vedi snippet fornito a parte).
+// ============================================================
+function checkRentDaGestire() {
+    if (!canManageRentGestione()) return;
+    const items = rentTrattative.filter(t => t.daGestire);
+    if (items.length === 0) return;
+
+    const list = document.getElementById('rentDaGestireList');
+    const modal = document.getElementById('rentDaGestireModal');
+    if (!list || !modal) return; // HTML non ancora presente, nessun errore
+
+    list.innerHTML = items.map(t => `
+        <div class="followup-card" style="margin-bottom:10px;cursor:pointer" onclick="closeRentDaGestireModal();openRentTrattativaModal(${t.id})">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                <div>
+                    <div style="font-weight:800;color:var(--text-primary);font-size:14px">${t.nome} ${t.cognome}</div>
+                    <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">🚗 ${t.marchio}${t.modello ? ' ' + t.modello : ''}</div>
+                    ${t.cellulare ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📞 ${t.cellulare}</div>` : ''}
+                    <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">👤 Creata da ${t.user?.fullName || '—'}</div>
+                    <div style="font-size:12px;margin-top:6px">
+                        <span class="recall-badge" style="background:rgba(255,152,0,0.25);color:#ff9800;border:1.5px solid #ff9800">🔔 DA GESTIRE</span>
+                    </div>
+                </div>
+            </div>
+        </div>`).join('');
+
+    modal.style.display = 'flex';
+}
+
+function closeRentDaGestireModal(event) {
+    if (event && event.target.id !== 'rentDaGestireModal') return;
+    const modal = document.getElementById('rentDaGestireModal');
+    if (modal) modal.style.display = 'none';
 }
 
 // ============================================================
@@ -909,21 +1025,18 @@ function refreshRentChartsOnThemeChange() {
     renderChartRentInfoVsRichiesta(rentContattiNoleggio);
 }
 
-function showRentTrattativeDetail(filterField, filterValue) {
-    let items;
-    if (filterField === 'marchioUpper') {
-        items = rentTrattativeFiltered.filter(t => (t.marchio || '').trim().toUpperCase() === filterValue);
-    } else {
-        items = rentTrattativeFiltered.filter(t => t[filterField] === filterValue);
-    }
+// ============================================================
+// DETTAGLIO GENERICO — usato sia dai grafici (showRentTrattativeDetail)
+// sia dalle stat-card (showRentStatDetail). Fattorizzato in un'unica
+// funzione di rendering per evitare duplicazione.
+// ============================================================
+function showRentGenericDetail(title, items) {
     const modal = document.getElementById('rentDetailModal');
-    const title = document.getElementById('rentDetailTitle');
+    const titleEl = document.getElementById('rentDetailTitle');
     const list = document.getElementById('rentDetailList');
-    if (!modal || !title || !list) return;
+    if (!modal || !titleEl || !list) return;
 
-    const labelMap = filterField === 'stato' ? RENT_STATO_LABELS : {};
-    const displayLabel = labelMap[filterValue] || filterValue;
-    title.textContent = `Trattative — ${displayLabel} (${items.length})`;
+    titleEl.textContent = `${title} (${items.length})`;
 
     if (items.length === 0) {
         list.innerHTML = '<div class="empty-state" style="padding:20px"><p>Nessuna trattativa per questo filtro</p></div>';
@@ -932,6 +1045,7 @@ function showRentTrattativeDetail(filterField, filterValue) {
             const links = [];
             if (t.linkLeadspark) links.push(`<a href="${t.linkLeadspark}" target="_blank" rel="noopener" title="Leadspark" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(0,200,83,0.15);color:#00c853;text-decoration:none;font-size:13px">🔗</a>`);
             if (t.linkAutoRichiesta) links.push(`<a href="${t.linkAutoRichiesta}" target="_blank" rel="noopener" title="Auto richiesta" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(74,144,217,0.15);color:#4a90d9;text-decoration:none;font-size:13px">🔗</a>`);
+            const color = RENT_STATO_COLORS[t.stato] || '#8a8faa';
             return `<div class="followup-card" style="margin-bottom:10px;cursor:pointer" onclick="closeRentDetailModal();openRentTrattativaModal(${t.id})">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
                     <div>
@@ -939,6 +1053,7 @@ function showRentTrattativeDetail(filterField, filterValue) {
                         <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">🚗 ${t.marchio}${t.modello?' '+t.modello:''}</div>
                         ${t.cellulare ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📞 ${t.cellulare}</div>` : ''}
                         <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">👤 ${t.user?.fullName || '—'}</div>
+                        <div style="margin-top:6px"><span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:10px;background:${color}22;color:${color}">${RENT_STATO_LABELS[t.stato] || t.stato}</span>${t.gestitoDa ? ` <span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:10px;background:rgba(0,200,83,0.15);color:#00c853;margin-left:4px">✅ ${t.gestitoDa.fullName}</span>` : (t.daGestire ? ` <span style="font-size:10px;font-weight:800;padding:3px 8px;border-radius:10px;background:rgba(255,152,0,0.15);color:#ff9800;margin-left:4px">🔔 Da Gestire</span>` : '')}</div>
                     </div>
                     ${links.length > 0 ? `<div style="display:flex;gap:6px;flex-shrink:0" onclick="event.stopPropagation()">${links.join('')}</div>` : ''}
                 </div>
@@ -946,6 +1061,18 @@ function showRentTrattativeDetail(filterField, filterValue) {
         }).join('');
     }
     modal.style.display = 'flex';
+}
+
+function showRentTrattativeDetail(filterField, filterValue) {
+    let items;
+    if (filterField === 'marchioUpper') {
+        items = rentTrattativeFiltered.filter(t => (t.marchio || '').trim().toUpperCase() === filterValue);
+    } else {
+        items = rentTrattativeFiltered.filter(t => t[filterField] === filterValue);
+    }
+    const labelMap = filterField === 'stato' ? RENT_STATO_LABELS : {};
+    const displayLabel = labelMap[filterValue] || filterValue;
+    showRentGenericDetail(`Trattative — ${displayLabel}`, items);
 }
 
 function showRentContattiRichiestaDetail(richiestaValue) {

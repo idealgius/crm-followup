@@ -29,6 +29,10 @@ function refreshChartsOnThemeChange() {
 // Ruoli che vedono la dashboard Rent (in aggiunta o in esclusiva)
 const RENT_ROLES = ['NOLEGGIO', 'MODERATORE', 'GESTORE', 'ADMIN'];
 
+// Pagine valide riconosciute dal router — usato per validare l'hash dell'URL
+// (evita che un hash sporco o obsoleto mandi l'app in uno stato indefinito)
+const VALID_PAGES = ['dashboard', 'followups', 'waiting', 'contacts', 'promo', 'admin', 'rent'];
+
 function applyRolePermissions(role) {
     const isAdmin = role === 'ADMIN';
     const isGestore = role === 'GESTORE';
@@ -82,16 +86,32 @@ function applyPageTheme(page, role) {
     }
 }
 
-function showPage(page) {
+// updateHash=true (default): scrive la pagina nell'hash dell'URL (#rent, #contacts...),
+// così il tasto destro "apri in nuova scheda" e il refresh (F5) portano davvero
+// alla pagina corretta invece di ripartire sempre dalla dashboard.
+// updateHash=false: usato dal listener hashchange per evitare un loop infinito
+// (altrimenti ogni cambio pagina riscriverebbe l'hash, che a sua volta rilancia
+// showPage all'infinito).
+function showPage(page, updateHash = true) {
     const role = currentUser?.role || 'UTENTE';
     const canSeeAll = role === 'ADMIN' || role === 'GESTORE' || role === 'MODERATORE';
     const isNoleggio = role === 'NOLEGGIO';
+
+    if (!VALID_PAGES.includes(page)) page = 'dashboard';
 
     // Il ruolo NOLEGGIO è forzato sempre sulla pagina Rent, come UTENTE è forzato su contacts
     if (isNoleggio && page !== 'rent') page = 'rent';
     else if (!canSeeAll && !isNoleggio && page !== 'contacts') page = 'contacts';
 
     sessionStorage.setItem('currentPage', page);
+
+    if (updateHash) {
+        // replaceState invece di location.hash diretto: evita di intasare la
+        // cronologia del browser con una entry per ogni cambio pagina (il
+        // tasto "indietro" del browser resterebbe altrimenti bloccato tra le
+        // varie sezioni dell'app invece di uscire dal sito)
+        history.replaceState(null, '', `#${page}`);
+    }
 
     document.getElementById('dashboardPage').style.display = 'none';
     document.getElementById('followupsPage').style.display = 'none';
@@ -155,6 +175,24 @@ function showPage(page) {
     applyPageTheme(page, role);
 }
 
+// Legge la pagina corrente dall'hash dell'URL (es. "#rent" -> "rent").
+// Usata sia all'avvio (per aprire subito la pagina giusta dopo login/refresh)
+// sia dal listener hashchange (per gestire il tasto indietro/avanti del browser).
+function getPageFromHash() {
+    const hash = window.location.hash.replace('#', '').trim();
+    return VALID_PAGES.includes(hash) ? hash : null;
+}
+
+// Reagisce ai cambi di hash che NON arrivano da showPage stesso (es. utente
+// preme il pulsante indietro/avanti del browser, o modifica l'URL a mano).
+// updateHash=false per non ri-scrivere l'hash che ha appena generato l'evento.
+window.addEventListener('hashchange', function() {
+    const page = getPageFromHash();
+    if (page && currentUser) {
+        showPage(page, false);
+    }
+});
+
 window.onload = function() {
     const savedTheme = localStorage.getItem('theme') || 'dark';
     document.documentElement.setAttribute('data-theme', savedTheme);
@@ -175,15 +213,18 @@ window.onload = function() {
         })
         .then(data => {
             currentUser = data;
-            sessionStorage.removeItem('currentPage');
             document.getElementById('navUserName').textContent = data.fullName || data.email;
             applyRolePermissions(data.role);
             document.getElementById('loginPage').style.display = 'none';
             document.getElementById('mainApp').style.display = 'block';
 
+            // Priorità alla pagina indicata nell'URL (hash) — così un refresh (F5)
+            // o un "apri in nuova scheda" riaprono esattamente dove si era, invece
+            // di tornare sempre alla pagina di default del ruolo.
             const isNoleggio = data.role === 'NOLEGGIO';
+            const hashPage = getPageFromHash();
             const defaultPage = isNoleggio ? 'rent' : (data.role === 'UTENTE' ? 'contacts' : 'dashboard');
-            showPage(defaultPage);
+            showPage(hashPage || defaultPage);
 
             if (data.role !== 'UTENTE' && !isNoleggio) {
                 loadStats();

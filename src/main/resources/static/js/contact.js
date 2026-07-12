@@ -137,11 +137,24 @@ function canManageAlerts() {
     return currentUser && (currentUser.role === 'MODERATORE' || currentUser.role === 'GESTORE' || currentUser.role === 'ADMIN');
 }
 
-// Un allert è VISIBILE (campanella + badge) solo se attivo e NON ancora "Gestita".
-// Una volta risolto (Gestita), la campanella sparisce dall'interfaccia — resta
-// comunque nei dati e nei filtri come storico.
-function isAcquistoAlertVisible(log) {
-    return log.category === 'Info Acquisto effettuato' && !!log.acquistoAlert && log.acquistoAlertStatus !== 'GESTITA';
+// FIX: l'allert ora resta SEMPRE visibile (con badge diverso in base allo
+// stato), anche dopo "Gestita" — prima spariva del tutto una volta risolto,
+// impedendo di vedere lo storico e di riaprire la scheda cliente.
+function hasAcquistoAlert(log) {
+    return log.category === 'Info Acquisto effettuato' && !!log.acquistoAlert;
+}
+
+// Colore/etichetta/icona coerenti per i 3 stati possibili dell'allert —
+// usati sia nella riga tabella sia nel dettaglio generico sia nel modal.
+function acquistoAlertVisual(log) {
+    if (log.acquistoAlertStatus === 'GESTITA') return { color: '#00c853', bg: 'rgba(0,200,83,0.15)', icon: '🟢', label: 'Gestita' };
+    if (log.acquistoAlertStatus === 'IN_GESTIONE') return { color: '#f0c040', bg: 'rgba(240,192,64,0.18)', icon: '🟡', label: 'In gestione' };
+    return { color: '#ff9800', bg: 'rgba(255,152,0,0.15)', icon: '🔔', label: 'Da gestire' };
+}
+
+function acquistoAlertNameColor(log) {
+    if (log.category !== 'Info Acquisto effettuato' || !log.acquistoAlert) return null;
+    return acquistoAlertVisual(log).color;
 }
 
 // ============================================================
@@ -233,6 +246,35 @@ function selectNoleggioMarca(marca) {
     document.getElementById('noleggioMarcaDropdown').style.display = 'none';
 }
 
+// ===== AUTOCOMPLETE MARCA — Blocco dedicato Info Acquisto effettuato (NUOVO)
+// Marca/Modello/Targa qui sono OPZIONALI: nessuna validazione richiesta.
+// Vengono scritti sui campi backend già esistenti marca/modello/serviceTarga
+// (stesso meccanismo usato per Service), quindi non serve toccare il server. =====
+
+function showAcquistoMarcheDropdown() { filterAcquistoMarche('', true); }
+
+function filterAcquistoMarche(query, showAll) {
+    const dropdown = document.getElementById('contactAcquistoMarcaDropdown');
+    if (!dropdown) return;
+    const matches = (!query || query.trim() === '' || showAll)
+        ? MARCHE_NORMALIZED
+        : MARCHE_NORMALIZED.filter(m => m.normalized.includes(normalizeText(query.trim())));
+    if (matches.length === 0) { dropdown.style.display = 'none'; return; }
+    dropdown.innerHTML = matches.map(m => `
+        <div onclick="selectAcquistoMarca('${m.original}')"
+             style="padding:10px 14px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary);border-bottom:1px solid var(--border)"
+             onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''">
+            ${m.original}
+        </div>`).join('');
+    dropdown.style.display = 'block';
+}
+
+function selectAcquistoMarca(marca) {
+    document.getElementById('contactAcquistoMarcaInput').value = marca;
+    document.getElementById('contactAcquistoMarca').value = marca;
+    document.getElementById('contactAcquistoMarcaDropdown').style.display = 'none';
+}
+
 function showPromoModelliDropdown() {
     const promoAttiva = typeof promoAttive !== 'undefined' && promoAttive.length > 0 ? promoAttive[0] : null;
     if (!promoAttiva) return;
@@ -315,6 +357,10 @@ document.addEventListener('click', function(e) {
     const noleggioMarcaDropdown = document.getElementById('noleggioMarcaDropdown');
     const noleggioMarcaInput = document.getElementById('contactNoleggioMarcaInput');
     if (noleggioMarcaDropdown && noleggioMarcaInput && !noleggioMarcaInput.contains(e.target) && !noleggioMarcaDropdown.contains(e.target)) noleggioMarcaDropdown.style.display = 'none';
+
+    const acquistoMarcaDropdown = document.getElementById('contactAcquistoMarcaDropdown');
+    const acquistoMarcaInput = document.getElementById('contactAcquistoMarcaInput');
+    if (acquistoMarcaDropdown && acquistoMarcaInput && !acquistoMarcaInput.contains(e.target) && !acquistoMarcaDropdown.contains(e.target)) acquistoMarcaDropdown.style.display = 'none';
 
     const promoDropdown = document.getElementById('promoModelloDropdown');
     const promoInput = document.getElementById('promoModelloInput');
@@ -552,17 +598,21 @@ function renderGenericContactDetail() {
             const noteText = (log.category !== 'Info Acquisto effettuato' && log.category !== 'Service')
                 ? (log.otherNote || '')
                 : (log.acquistoNote || log.serviceNote || '');
-            const isAcquistoAlert = isAcquistoAlertVisible(log);
+            const alert = hasAcquistoAlert(log);
+            const alertVisual = alert ? acquistoAlertVisual(log) : null;
             const links = [];
             if (log.linkAuto) links.push(`<a href="${log.linkAuto}" target="_blank" rel="noopener" title="Lead veicolo" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(124,77,255,0.15);color:#7c4dff;text-decoration:none;font-size:13px">🔗</a>`);
             if (log.linkAppuntamento) links.push(`<a href="${log.linkAppuntamento}" target="_blank" rel="noopener" title="Link appuntamento" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(74,144,217,0.15);color:#4a90d9;text-decoration:none;font-size:13px">🔗</a>`);
             if (log.noleggioLink) links.push(`<a href="${log.noleggioLink}" target="_blank" rel="noopener" title="Lead noleggio" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(0,200,83,0.15);color:#00c853;text-decoration:none;font-size:13px">🔗</a>`);
-            if (isAcquistoAlert) links.push(`<button onclick="openAcquistoAlertModal(${log.id})" title="Gestisci Allert" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(255,152,0,0.15);color:#ff9800;border:none;cursor:pointer;font-size:13px">🔔</button>`);
+            if (alert) links.push(`<button onclick="openAcquistoAlertModal(${log.id})" title="Gestisci Allert — ${alertVisual.label}" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:${alertVisual.bg};color:${alertVisual.color};border:none;cursor:pointer;font-size:13px">${alertVisual.icon}</button>`);
             return `<div class="followup-card" style="margin-bottom:10px">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
                     <div>
-                        <div style="font-weight:800;color:${acquistoAlertNameColor(log) || 'var(--text-primary)'};font-size:14px">${isAcquistoAlert ? '🔔 ' : ''}${clienteNomeCompleto(log)}</div>
-                        <div style="margin-top:5px"><span class="contact-category-badge cat-${catClass}">${log.category}</span></div>
+                        <div style="font-weight:800;color:${acquistoAlertNameColor(log) || 'var(--text-primary)'};font-size:14px">${alert ? alertVisual.icon + ' ' : ''}${clienteNomeCompleto(log)}</div>
+                        <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap">
+                            <span class="contact-category-badge cat-${catClass}">${log.category}</span>
+                            ${alert ? `<span onclick="openAcquistoAlertModal(${log.id})" style="cursor:pointer;font-size:11px;font-weight:700;background:${alertVisual.bg};color:${alertVisual.color};padding:2px 8px;border-radius:8px">${alertVisual.icon} ${alertVisual.label}</span>` : ''}
+                        </div>
                         <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">📅 ${formatDateIT(date)} · 🕐 ${time}</div>
                         <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📞 ${clienteNumeroDisplay(log)}</div>
                         <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">👤 ${log.user.fullName}</div>
@@ -704,8 +754,14 @@ function renderChartInfoAcquisto(logs) {
         }
     });
     const totalAll = contactLogs.filter(l => l.category === 'Info Acquisto effettuato').length;
-    const totalAlert = contactLogs.filter(l => l.category === 'Info Acquisto effettuato' && l.acquistoAlert).length;
-    setChartCounterBadge(findChartTitleElement(ctx), totalAll, `Totale storico${totalAlert > 0 ? ` · 🔔 ${totalAlert} con allert` : ''}`);
+    const totalDaGestire = contactLogs.filter(l => l.category === 'Info Acquisto effettuato' && l.acquistoAlert && (!l.acquistoAlertStatus || l.acquistoAlertStatus === 'DA_GESTIRE')).length;
+    const totalInGestione = contactLogs.filter(l => l.category === 'Info Acquisto effettuato' && l.acquistoAlertStatus === 'IN_GESTIONE').length;
+    const totalGestita = contactLogs.filter(l => l.category === 'Info Acquisto effettuato' && l.acquistoAlertStatus === 'GESTITA').length;
+    const alertBreakdown = [];
+    if (totalDaGestire > 0) alertBreakdown.push(`🔔 ${totalDaGestire} da gestire`);
+    if (totalInGestione > 0) alertBreakdown.push(`🟡 ${totalInGestione} in gestione`);
+    if (totalGestita > 0) alertBreakdown.push(`🟢 ${totalGestita} gestite`);
+    setChartCounterBadge(findChartTitleElement(ctx), totalAll, `Totale storico${alertBreakdown.length ? ' · ' + alertBreakdown.join(' · ') : ''}`);
 }
 
 // ===== FONTE VENDITA — badge totale storico Info Vendita aggiunto =====
@@ -1064,12 +1120,6 @@ function exportContactsExcel() {
 // GESTIONE ALLERT — solo per "Info Acquisto effettuato"
 // ============================================================
 
-function acquistoAlertNameColor(log) {
-    if (log.category !== 'Info Acquisto effettuato' || !log.acquistoAlert) return null;
-    if (log.acquistoAlertStatus === 'IN_GESTIONE') return '#f0c040';
-    return null;
-}
-
 function toggleAcquistoAlert() {
     selectedAcquistoAlert = !selectedAcquistoAlert;
     const btn = document.getElementById('contactAcquistoAlertBtn');
@@ -1096,23 +1146,47 @@ function openAcquistoAlertModal(id) {
     if (modal) modal.style.display = 'flex';
 }
 
-// Ridisegna il contenuto del modal (stato, note, visibilità caselle) SENZA
-// chiuderlo — usata sia all'apertura sia dopo ogni salvataggio, così l'utente
-// può continuare a lavorare sullo stesso allert senza dover riaprire il modal.
+// Ridisegna il contenuto del modal (stato, scheda cliente, note, visibilità
+// caselle) SENZA chiuderlo — usata sia all'apertura sia dopo ogni
+// salvataggio, così l'utente può continuare a lavorare sullo stesso allert
+// senza dover riaprire il modal. Ora include anche una scheda cliente
+// completa (data, telefono, operatore, tipologia, nota, veicolo, targa,
+// link) — "con info, situazione ecc." come richiesto, non solo lo stato.
 function refreshAcquistoAlertModalDisplay(log) {
     const titleEl = document.getElementById('acquistoAlertModalTitle');
     if (titleEl) titleEl.textContent = `🔔 Gestione Allert — ${clienteNomeCompleto(log)}`;
 
+    const visual = acquistoAlertVisual(log);
     const statusEl = document.getElementById('acquistoAlertModalStatus');
     if (statusEl) {
-        const statusLabel = log.acquistoAlertStatus === 'GESTITA' ? '🟢 Gestita'
-            : log.acquistoAlertStatus === 'IN_GESTIONE' ? '🟡 In gestione'
-            : '⚪ Non gestita';
-        statusEl.textContent = statusLabel;
+        statusEl.textContent = `${visual.icon} ${visual.label}`;
+        statusEl.style.color = visual.color;
     }
 
-    const infoEl = document.getElementById('acquistoAlertModalInfo');
-    if (infoEl) infoEl.textContent = `${log.otherNote || ''}${log.acquistoNote ? ' · ' + log.acquistoNote : ''} · segnalato da ${log.user?.fullName || '—'}`;
+    // Scheda cliente completa (nuovo blocco). Se l'elemento non esiste ancora
+    // in index.html, non fa nulla — nessun errore, solo funzione ridotta.
+    const clientInfoEl = document.getElementById('acquistoAlertModalClientInfo');
+    if (clientInfoEl) {
+        const date = log.contactDate.split('T')[0];
+        const time = log.contactDate.split('T')[1]?.substring(0,5) || '';
+        const linkParts = [];
+        if (log.linkAuto) linkParts.push(`<a href="${log.linkAuto}" target="_blank" rel="noopener" style="color:#7c4dff;font-weight:700;text-decoration:none">🔗 Lead</a>`);
+        clientInfoEl.innerHTML = `
+            <div style="font-size:12px;color:var(--text-secondary);line-height:1.9">
+                📅 ${formatDateIT(date)} · 🕐 ${time}<br>
+                📞 ${clienteNumeroDisplay(log)}<br>
+                👤 Operatore: ${log.user?.fullName || '—'}<br>
+                📋 Tipologia: ${log.otherNote || '—'}
+                ${log.acquistoNote ? `<br>📝 Nota: ${log.acquistoNote}` : ''}
+                ${log.marca ? `<br>🚗 Veicolo: ${log.marca}${log.modello ? ' ' + log.modello : ''}` : ''}
+                ${log.serviceTarga ? `<br>🔖 Targa: ${log.serviceTarga}` : ''}
+                ${linkParts.length ? `<br>${linkParts.join(' · ')}` : ''}
+            </div>`;
+    } else {
+        // Fallback compatibile con il vecchio markup a riga singola, se presente
+        const infoEl = document.getElementById('acquistoAlertModalInfo');
+        if (infoEl) infoEl.textContent = `${log.otherNote || ''}${log.acquistoNote ? ' · ' + log.acquistoNote : ''} · segnalato da ${log.user?.fullName || '—'}`;
+    }
 
     const noteGestioneRow = document.getElementById('acquistoAlertNoteGestioneRow');
     const noteGestitaRow = document.getElementById('acquistoAlertNoteGestitaRow');
@@ -1604,10 +1678,10 @@ function renderContactRow(log) {
     const marca = log.marca || log.noleggioMarca;
     const modello = log.modello || log.noleggioModello;
 
-    const isAcquistoAlert = isAcquistoAlertVisible(log);
-    const alertColor = acquistoAlertNameColor(log);
-    const nomeHtml = isAcquistoAlert
-        ? `<span onclick="openAcquistoAlertModal(${log.id})" style="cursor:pointer;${alertColor ? `color:${alertColor};` : ''}" title="Gestisci Allert">🔔 ${clienteNomeCompleto(log)}</span>`
+    const alert = hasAcquistoAlert(log);
+    const alertVisual = alert ? acquistoAlertVisual(log) : null;
+    const nomeHtml = alert
+        ? `<span onclick="openAcquistoAlertModal(${log.id})" style="cursor:pointer;color:${alertVisual.color}" title="Gestisci Allert — ${alertVisual.label}">${alertVisual.icon} ${clienteNomeCompleto(log)}</span>`
         : clienteNomeCompleto(log);
 
     return `<tr id="contact-row-${log.id}">
@@ -1618,16 +1692,16 @@ function renderContactRow(log) {
             ${log.category === 'Info + Appuntamento' && log.otherNote ? `<span style="font-size:11px;background:rgba(233,30,99,0.1);color:#e91e63;padding:2px 8px;border-radius:8px;margin-left:6px">📍 ${log.otherNote}</span>` : ''}
             ${log.category === 'Info + Appuntamento' && log.linkAppuntamento ? `<a href="${log.linkAppuntamento}" target="_blank" rel="noopener" style="font-size:11px;background:rgba(74,144,217,0.1);color:#4a90d9;padding:2px 8px;border-radius:8px;margin-left:6px;text-decoration:none">🔗 Link</a>` : ''}
             ${log.category === 'Info Acquisto effettuato' && log.otherNote ? `<span style="font-size:11px;background:rgba(74,144,217,0.1);color:#4a90d9;padding:2px 8px;border-radius:8px;margin-left:6px">📋 ${log.otherNote}</span>` : ''}
-            ${isAcquistoAlert ? `<span style="font-size:11px;background:rgba(255,152,0,0.15);color:#ff9800;padding:2px 8px;border-radius:8px;margin-left:6px">🔔 ${log.acquistoAlertStatus === 'IN_GESTIONE' ? 'In gestione' : 'Da gestire'}</span>` : ''}
+            ${alert ? `<span onclick="openAcquistoAlertModal(${log.id})" style="cursor:pointer;font-size:11px;font-weight:700;background:${alertVisual.bg};color:${alertVisual.color};padding:2px 8px;border-radius:8px;margin-left:6px" title="Gestisci Allert">${alertVisual.icon} ${alertVisual.label}</span>` : ''}
             ${(log.category === 'Info Vendita' || log.category === 'Info + Appuntamento') && log.otherNote && FONTE_LIST.includes(log.otherNote) ? `<span style="font-size:11px;background:rgba(26,64,128,0.1);color:#1a4080;padding:2px 8px;border-radius:8px;margin-left:6px">🌐 ${log.otherNote}</span>` : ''}
             ${log.category === 'Service' && log.serviceSede ? `<span style="font-size:11px;background:rgba(233,30,99,0.1);color:#e91e63;padding:2px 8px;border-radius:8px;margin-left:6px">📍 ${log.serviceSede}</span>` : ''}
             ${log.category === 'Service' && log.serviceTipo ? `<span style="font-size:11px;background:rgba(240,192,64,0.1);color:#f0c040;padding:2px 8px;border-radius:8px;margin-left:6px">🔧 ${log.serviceTipo}</span>` : ''}
-            ${log.category === 'Service' && log.serviceTarga ? `<span style="font-size:11px;background:rgba(240,192,64,0.08);color:#f0c040;padding:2px 8px;border-radius:8px;margin-left:6px">🔖 ${log.serviceTarga}</span>` : ''}
             ${log.category === 'Info Noleggio' && log.noleggioRichiesta ? `<span style="font-size:11px;background:rgba(0,200,83,0.1);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px">${log.noleggioRichiesta === 'RICHIESTA_CLIENTE' ? '📞 Richiesta cliente' : 'ℹ️ Solo Info'}</span>` : ''}
             ${log.category === 'Info Noleggio' && log.noleggioTipo ? `<span style="font-size:11px;background:rgba(0,200,83,0.1);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px">🏷️ ${log.noleggioTipo}</span>` : ''}
             ${log.category === 'Info Noleggio' && log.noleggioLink ? `<a href="${log.noleggioLink}" target="_blank" rel="noopener" style="font-size:11px;background:rgba(0,200,83,0.1);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px;text-decoration:none">🔗 Lead</a>` : ''}
             ${log.category === 'Info Vendita in Promo' ? `<span style="font-size:11px;background:rgba(240,192,64,0.15);color:#f0c040;padding:2px 8px;border-radius:8px;margin-left:6px">🎯 PROMO</span>` : ''}
             ${marca ? `<span style="font-size:11px;background:rgba(0,200,83,0.1);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px">🚗 ${marca}${modello?' '+modello:''}</span>` : ''}
+            ${log.serviceTarga ? `<span style="font-size:11px;background:rgba(240,192,64,0.08);color:#f0c040;padding:2px 8px;border-radius:8px;margin-left:6px">🔖 ${log.serviceTarga}</span>` : ''}
             ${log.linkAuto ? `<a href="${log.linkAuto}" target="_blank" rel="noopener" style="font-size:11px;background:rgba(124,77,255,0.1);color:#7c4dff;padding:2px 8px;border-radius:8px;margin-left:6px;text-decoration:none">🔗 Lead</a>` : ''}
         </td>
         <td style="font-size:12px;color:var(--text-secondary)">${(log.category !== 'Info Acquisto effettuato' && log.category !== 'Service') ? (log.otherNote||'—') : (log.acquistoNote||log.serviceNote||'—')}</td>
@@ -1833,6 +1907,9 @@ async function createContactLog() {
     const acquistoTipo = document.getElementById('contactAcquistoTipo')?.value || '';
     const acquistoNote = document.getElementById('contactAcquistoNote')?.value.trim() || '';
     const acquistoAlert = document.getElementById('contactAcquistoAlert')?.value === 'true';
+    const acquistoMarca = document.getElementById('contactAcquistoMarca')?.value.trim() || '';
+    const acquistoModello = document.getElementById('contactAcquistoModello')?.value.trim() || '';
+    const acquistoTarga = document.getElementById('contactAcquistoTarga')?.value.trim() || '';
     const fonte = document.getElementById('contactFonte')?.value || '';
     const serviceTipo = document.getElementById('contactServiceTipo')?.value || '';
     const serviceSede = document.getElementById('contactServiceSede')?.value || '';
@@ -1896,6 +1973,10 @@ async function createContactLog() {
     const isService = category === 'Service';
     const isAcquisto = category === 'Info Acquisto effettuato';
 
+    // Marca/Modello/Targa per Info Acquisto sono OPZIONALI e vengono scritti
+    // negli STESSI campi backend usati da Vendita/Noleggio/Service (marca,
+    // modello, serviceTarga), così nessuna modifica al server è necessaria:
+    // riusano meccanismi già esistenti e già visualizzati nella riga tabella.
     const payload = {
         category,
         clienteNome: nonComunicaNominativo ? (clienteNome || null) : clienteNome,
@@ -1903,9 +1984,9 @@ async function createContactLog() {
         clienteNumero,
         nonComunicaNominativo,
         otherNote: finalNote, contactDate,
-        marca: isNoleggio ? (noleggioMarca || null) : (marca || null),
-        modello: isNoleggio ? (noleggioModello || null) : (modello || null),
-        linkAuto: isNoleggio ? null : (linkAuto || null),
+        marca: isNoleggio ? (noleggioMarca || null) : (isAcquisto ? (acquistoMarca || null) : (marca || null)),
+        modello: isNoleggio ? (noleggioModello || null) : (isAcquisto ? (acquistoModello || null) : (modello || null)),
+        linkAuto: (isNoleggio || isAcquisto) ? null : (linkAuto || null),
         serviceTipo: serviceTipo||null,
         serviceNote: isService ? (serviceNote || null) : null,
         serviceSede: isService ? (serviceSede || null) : null,
@@ -1913,7 +1994,7 @@ async function createContactLog() {
         acquistoAlert: isAcquisto ? acquistoAlert : false,
         noleggioTipo: isRichiestaCliente ? (noleggioTipo||null) : null,
         noleggioLink: isRichiestaCliente ? (noleggioLink||null) : null,
-        serviceTarga: isService ? (serviceTarga || null) : null,
+        serviceTarga: isService ? (serviceTarga || null) : (isAcquisto ? (acquistoTarga || null) : null),
         serviceTipoCliente: isService ? serviceTipoCliente : null,
         noleggioRichiesta: isNoleggio ? noleggioRichiesta : null
     };
@@ -2032,6 +2113,7 @@ function hideNewContactForm() {
      'contactAppuntamentoSede','contactAppuntamentoLink',
      'contactAcquistoTipo','contactFonte','contactServiceTipo','contactServiceSede','contactServiceNote',
      'contactMarcaInput','contactMarca','contactModello','contactLinkAuto','contactAcquistoNote',
+     'contactAcquistoMarcaInput','contactAcquistoMarca','contactAcquistoModello','contactAcquistoTarga',
      'contactNoleggioMarcaInput','contactNoleggioMarca','contactNoleggioModello',
      'contactNoleggioTipo','contactNoleggioLink','contactNoleggioRichiesta',
      'serviceTarga','serviceTipoCliente']
@@ -2091,6 +2173,7 @@ function onCategoryChange() {
         const nr=document.getElementById('contactAcquistoNoteRow'); if(nr) nr.style.display='none';
         const acquistoAlertBtn = document.getElementById('contactAcquistoAlertBtn'); if (acquistoAlertBtn) acquistoAlertBtn.classList.remove('btn-sede-active');
         const acquistoAlertHidden = document.getElementById('contactAcquistoAlert'); if (acquistoAlertHidden) acquistoAlertHidden.value = 'false';
+        ['contactAcquistoMarcaInput','contactAcquistoMarca','contactAcquistoModello','contactAcquistoTarga'].forEach(id=>{const el2=document.getElementById(id);if(el2) el2.value='';});
         ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche','Furto'].forEach(k=>{const b=document.getElementById(`acquisto-${k}`);if(b)b.classList.remove('btn-sede-active');});
     }
     if (cat !== 'Service') {
