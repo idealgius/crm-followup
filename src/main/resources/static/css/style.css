@@ -2016,3 +2016,8 @@ select.input-field {
     white-space: nowrap;
     text-align: right;
 }
+.waiting-nav-active {
+    background: rgba(240,192,64,0.15) !important;
+    border-color: #f0c040 !important;
+    color: #f0c040 !important;
+}

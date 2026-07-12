@@ -30,6 +30,7 @@ let editingContactId = null;
 let acquistoAlertModalId = null;
 let acquistoAlertNoteGestioneVisible = false;
 let acquistoAlertNoteGestitaVisible = false;
+let acquistoAlertDaGestireShownThisSession = false;
 
 const CATEGORY_COLORS = {
     'Info Vendita': '#1a4080', 'Info Noleggio': '#00c853', 'Service': '#f0c040',
@@ -45,7 +46,6 @@ const ALL_CATEGORIES = [
     'Info + Appuntamento', 'Info Vendita in Promo', 'Altro'
 ];
 
-// ===== "Furto" aggiunto in fondo alla lista =====
 const ACQUISTO_LIST = ['Info Consegna', 'Ritardo Consegna', 'Info Documentazione', 'Seconda chiave', 'Info generiche', 'Furto'];
 const ACQUISTO_COLORS = ['#4a90d9', '#ff3d3d', '#00bcd4', '#f0c040', '#7c4dff', '#8a2be2'];
 const FONTE_LIST = ['Sito', 'Google ADS', 'Autoscout', 'Facebook', 'Instagram', 'TikTok', 'Richiesta cliente', 'Non ricorda'];
@@ -102,7 +102,6 @@ function normalizeText(str) {
         .replace(/š/g,'s').replace(/č/g,'c').replace(/ž/g,'z');
 }
 
-// ===== FALLBACK NOMINATIVO/NUMERO — recupera dati salvati con versioni precedenti del form =====
 function clienteNomeCompleto(log) {
     if (log.clienteNome || log.clienteCognome) {
         return [log.clienteNome, log.clienteCognome].filter(Boolean).join(' ');
@@ -128,24 +127,14 @@ function downloadFile(url) {
     window.location.href = url;
 }
 
-// ============================================================
-// PERMESSI ALLERT — chiunque può segnalare in fase di inserimento,
-// solo MODERATORE, GESTORE, ADMIN possono gestire (aprire lo stato
-// "In gestione" / "Gestita" e scrivere note di gestione).
-// ============================================================
 function canManageAlerts() {
     return currentUser && (currentUser.role === 'MODERATORE' || currentUser.role === 'GESTORE' || currentUser.role === 'ADMIN');
 }
 
-// FIX: l'allert ora resta SEMPRE visibile (con badge diverso in base allo
-// stato), anche dopo "Gestita" — prima spariva del tutto una volta risolto,
-// impedendo di vedere lo storico e di riaprire la scheda cliente.
 function hasAcquistoAlert(log) {
     return log.category === 'Info Acquisto effettuato' && !!log.acquistoAlert;
 }
 
-// Colore/etichetta/icona coerenti per i 3 stati possibili dell'allert —
-// usati sia nella riga tabella sia nel dettaglio generico sia nel modal.
 function acquistoAlertVisual(log) {
     if (log.acquistoAlertStatus === 'GESTITA') return { color: '#00c853', bg: 'rgba(0,200,83,0.15)', icon: '🟢', label: 'Gestita' };
     if (log.acquistoAlertStatus === 'IN_GESTIONE') return { color: '#f0c040', bg: 'rgba(240,192,64,0.18)', icon: '🟡', label: 'In gestione' };
@@ -156,12 +145,6 @@ function acquistoAlertNameColor(log) {
     if (log.category !== 'Info Acquisto effettuato' || !log.acquistoAlert) return null;
     return acquistoAlertVisual(log).color;
 }
-
-// ============================================================
-// BADGE CONTATORE GENERALE PER GRAFICO — indipendente dai filtri
-// (operatore/categoria/vista giornaliera). Calcolato sempre su
-// contactLogs (l'intero set caricato per il range di date corrente).
-// ============================================================
 
 function findChartTitleElement(canvas) {
     if (!canvas) return null;
@@ -194,8 +177,6 @@ function updateServiceCounterBadge() {
     setChartCounterBadge(h3, total, 'Totale storico');
 }
 
-// ===== AUTOCOMPLETE MARCA — Blocco generico (Info Vendita/Appuntamento/Promo) =====
-
 function showMarcheDropdown() { filterMarche('', true); }
 
 function filterMarche(query, showAll) {
@@ -220,8 +201,6 @@ function selectMarca(marca) {
     document.getElementById('marcaDropdown').style.display = 'none';
 }
 
-// ===== AUTOCOMPLETE MARCA — Blocco dedicato Info Noleggio =====
-
 function showNoleggioMarcheDropdown() { filterNoleggioMarche('', true); }
 
 function filterNoleggioMarche(query, showAll) {
@@ -245,11 +224,6 @@ function selectNoleggioMarca(marca) {
     document.getElementById('contactNoleggioMarca').value = marca;
     document.getElementById('noleggioMarcaDropdown').style.display = 'none';
 }
-
-// ===== AUTOCOMPLETE MARCA — Blocco dedicato Info Acquisto effettuato (NUOVO)
-// Marca/Modello/Targa qui sono OPZIONALI: nessuna validazione richiesta.
-// Vengono scritti sui campi backend già esistenti marca/modello/serviceTarga
-// (stesso meccanismo usato per Service), quindi non serve toccare il server. =====
 
 function showAcquistoMarcheDropdown() { filterAcquistoMarche('', true); }
 
@@ -367,6 +341,8 @@ document.addEventListener('click', function(e) {
     if (promoDropdown && promoInput && !promoInput.contains(e.target) && !promoDropdown.contains(e.target)) promoDropdown.style.display = 'none';
 });
 
+// ===== FIX: aggiunta chiamata a checkAcquistoAlertDaGestire() dopo il caricamento
+// dei contatti — questa era la riga mancante che impediva al popup di attivarsi =====
 async function loadContactLogs(from, to, restoreDayView) {
     try {
         let url = '/api/contacts';
@@ -377,18 +353,65 @@ async function loadContactLogs(from, to, restoreDayView) {
         contactLogs.sort((a, b) => (b.contactDate || '').localeCompare(a.contactDate || ''));
         populateOperatorFilter();
         applyContactFilters(restoreDayView);
+        checkAcquistoAlertDaGestire();
     } catch (err) { console.error('Errore caricamento contatti:', err); }
+}
+
+// ============================================================
+// POPUP AUTOMATICO "INFO ACQUISTO DA GESTIRE" — FUNZIONI MANCANTI (NUOVE)
+// Si apre una sola volta per sessione di navigazione (non ad ogni refresh
+// filtri), solo per chi ha i permessi di gestione (canManageAlerts()), e
+// solo se esiste almeno un contatto Info Acquisto con allert attivo e
+// stato ancora "da gestire" (nessuno stato o DA_GESTIRE esplicito).
+// ============================================================
+function checkAcquistoAlertDaGestire() {
+    const modal = document.getElementById('acquistoAlertDaGestireModal');
+    const list = document.getElementById('acquistoAlertDaGestireList');
+    if (!modal || !list) return;
+    if (!canManageAlerts()) return;
+    if (acquistoAlertDaGestireShownThisSession) return;
+
+    const daGestire = contactLogs.filter(l =>
+        hasAcquistoAlert(l) && (!l.acquistoAlertStatus || l.acquistoAlertStatus === 'DA_GESTIRE')
+    );
+
+    if (daGestire.length === 0) return;
+
+    acquistoAlertDaGestireShownThisSession = true;
+
+    list.innerHTML = daGestire.map(log => {
+        const date = log.contactDate.split('T')[0];
+        const time = log.contactDate.split('T')[1]?.substring(0,5) || '';
+        return `<div class="followup-card" style="margin-bottom:10px;cursor:pointer" onclick="closeAcquistoAlertDaGestireModal();openAcquistoAlertModal(${log.id})">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+                <div>
+                    <div style="font-weight:800;color:#ff9800;font-size:14px">🔔 ${clienteNomeCompleto(log)}</div>
+                    <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">📅 ${formatDateIT(date)} · 🕐 ${time}</div>
+                    <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📞 ${clienteNumeroDisplay(log)}</div>
+                    <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📋 ${log.otherNote || '—'}${log.acquistoNote ? ' · ' + log.acquistoNote : ''}</div>
+                    <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">👤 Segnalato da ${log.user?.fullName || '—'}</div>
+                </div>
+                <span style="color:#ff9800;font-size:18px">→</span>
+            </div>
+        </div>`;
+    }).join('');
+
+    modal.style.display = 'flex';
+}
+
+function closeAcquistoAlertDaGestireModal(event) {
+    if (event && event.target.id !== 'acquistoAlertDaGestireModal') return;
+    const modal = document.getElementById('acquistoAlertDaGestireModal');
+    if (modal) modal.style.display = 'none';
 }
 
 function populateOperatorFilter() {
     const operators = [...new Set(contactLogs.map(l => l.user.fullName))].sort();
 
-    // Multi-select (quello attualmente in uso nell'interfaccia)
     if (typeof populateMultiSelectOptions === 'function' && document.getElementById('contactOperatorFilterMulti-options')) {
         populateMultiSelectOptions('contactOperatorFilterMulti', operators);
     }
 
-    // Vecchia select, mantenuta per compatibilità in caso venga ancora referenziata altrove
     const select = document.getElementById('contactOperatorFilter');
     if (select) {
         const current = select.value;
@@ -397,7 +420,6 @@ function populateOperatorFilter() {
     }
 }
 
-// ===== FIX BUG FILTRO CATEGORIA — ora legge il multi-select reale =====
 function applyContactFilters(restoreDayView) {
     const operatorsSelected = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('contactOperatorFilterMulti') : [];
     const categoriesSelected = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('contactCategoryFilterMulti') : [];
@@ -444,8 +466,6 @@ function resetContactFilters() {
     if (btn) btn.style.display = 'none';
     loadContactLogs(firstDay, today);
 }
-
-// ===== RICERCA CLIENTE (nome, cognome, numero — con fallback su campi legacy) =====
 
 function searchContactLogs(query) {
     const resultsWrapper = document.getElementById('contactSearchResults');
@@ -496,8 +516,6 @@ function closeContactSearch() {
     if (input) input.value = '';
 }
 
-// ===== STAT-CARD IN EVIDENZA — ora include Info Acquisto e sono tutte cliccabili =====
-
 function renderContactStatsFromLogs(logs) {
     const total = logs.length;
     const byCategory = {};
@@ -540,9 +558,6 @@ function showContactStatDetail(type) {
     showGenericContactDetail(title, items);
 }
 
-// Aggancia il click a ogni stat-card in evidenza trovando il div .stat-card
-// che contiene il valore (funziona anche senza dover toccare l'HTML esistente:
-// se un id non esiste ancora nel markup, viene semplicemente ignorato).
 function attachContactStatClickHandlers() {
     const map = {
         statContactTotal: 'total',
@@ -561,8 +576,6 @@ function attachContactStatClickHandlers() {
         card.onclick = () => showContactStatDetail(type);
     });
 }
-
-// ===== DETTAGLIO GENERICO PER GRAFICI =====
 
 function showGenericContactDetail(title, items) {
     lastDetailTitle = title;
@@ -717,7 +730,6 @@ function closeSedeDetail(event) {
     document.getElementById('sedeDetailModal').style.display = 'none';
 }
 
-// ===== INFO ACQUISTO — badge totale storico aggiunto =====
 function renderChartInfoAcquisto(logs) {
     const ctx = document.getElementById('chartInfoAcquisto');
     if (!ctx) return;
@@ -764,7 +776,6 @@ function renderChartInfoAcquisto(logs) {
     setChartCounterBadge(findChartTitleElement(ctx), totalAll, `Totale storico${alertBreakdown.length ? ' · ' + alertBreakdown.join(' · ') : ''}`);
 }
 
-// ===== FONTE VENDITA — badge totale storico Info Vendita aggiunto =====
 function renderChartFonteVendita(logs) {
     const ctx = document.getElementById('chartFonteVendita');
     if (!ctx) return;
@@ -806,8 +817,6 @@ function renderChartFonteVendita(logs) {
     const totalVenditaAll = contactLogs.filter(l => l.category === 'Info Vendita' || l.category === 'Info + Appuntamento' || l.category === 'Info Vendita in Promo').length;
     setChartCounterBadge(findChartTitleElement(ctx), totalVenditaAll, 'Totale storico Info Vendita');
 }
-
-// ===== SERVICE — ORA TORTE (doughnut) con numero+percentuale, come tutti gli altri =====
 
 function buildServiceSedeChart(canvasId, existingChart, logs, sede) {
     const ctx = document.getElementById(canvasId);
@@ -855,9 +864,6 @@ function showServiceDetail(tipo, sede) {
     showGenericContactDetail(`Service${sede ? ' — ' + sede : ''} — ${tipo}`, items);
 }
 
-// ===== PERFORMANCE MARCHE — SOLO Info Vendita e Info + Appuntamento
-// (un veicolo già acquistato/service non è "performance" di potenziale acquisto) =====
-
 function renderChartMarcheCustom(logs) {
     const container = document.getElementById('chartMarcheCustom');
     if (!container) return;
@@ -891,7 +897,6 @@ function showMarcaContactDetail(marcaUpper) {
     showGenericContactDetail(`Marca — ${marcaUpper}`, items);
 }
 
-// ===== NOLEGGIO — badge totale storico aggiunto sul primo grafico =====
 function renderChartNoleggio(logs) {
     const wrapper = document.getElementById('chartNoleggioWrapper');
     const noleggioLogs = logs.filter(l => l.category === 'Info Noleggio');
@@ -1101,7 +1106,6 @@ async function loadPromoStatsForContactCharts(totalFromLogs, textColor, gridColo
     } catch (err) { console.error('Errore stats promo grafici:', err); }
 }
 
-// ===== EXPORT EXCEL — ora legge i multi-select =====
 function exportContactsExcel() {
     if (!contactLogsFiltered || contactLogsFiltered.length === 0) { alert('Nessun dato da esportare'); return; }
     const from = document.getElementById('contactFrom')?.value || '';
@@ -1116,10 +1120,6 @@ function exportContactsExcel() {
     downloadFile(url);
 }
 
-// ============================================================
-// GESTIONE ALLERT — solo per "Info Acquisto effettuato"
-// ============================================================
-
 function toggleAcquistoAlert() {
     selectedAcquistoAlert = !selectedAcquistoAlert;
     const btn = document.getElementById('contactAcquistoAlertBtn');
@@ -1128,10 +1128,6 @@ function toggleAcquistoAlert() {
     if (hidden) hidden.value = selectedAcquistoAlert ? 'true' : 'false';
 }
 
-// Apre il modal e decide quali caselle nota mostrare già aperte:
-// se lo stato corrente è già IN_GESTIONE/GESTITA, o se esiste già un testo
-// scritto in precedenza, la relativa casella nota parte visibile. Altrimenti
-// resta chiusa finché non si clicca il bottone corrispondente.
 function openAcquistoAlertModal(id) {
     const log = contactLogs.find(l => l.id === id);
     if (!log || !log.acquistoAlert) return;
@@ -1146,12 +1142,6 @@ function openAcquistoAlertModal(id) {
     if (modal) modal.style.display = 'flex';
 }
 
-// Ridisegna il contenuto del modal (stato, scheda cliente, note, visibilità
-// caselle) SENZA chiuderlo — usata sia all'apertura sia dopo ogni
-// salvataggio, così l'utente può continuare a lavorare sullo stesso allert
-// senza dover riaprire il modal. Ora include anche una scheda cliente
-// completa (data, telefono, operatore, tipologia, nota, veicolo, targa,
-// link) — "con info, situazione ecc." come richiesto, non solo lo stato.
 function refreshAcquistoAlertModalDisplay(log) {
     const titleEl = document.getElementById('acquistoAlertModalTitle');
     if (titleEl) titleEl.textContent = `🔔 Gestione Allert — ${clienteNomeCompleto(log)}`;
@@ -1163,8 +1153,6 @@ function refreshAcquistoAlertModalDisplay(log) {
         statusEl.style.color = visual.color;
     }
 
-    // Scheda cliente completa (nuovo blocco). Se l'elemento non esiste ancora
-    // in index.html, non fa nulla — nessun errore, solo funzione ridotta.
     const clientInfoEl = document.getElementById('acquistoAlertModalClientInfo');
     if (clientInfoEl) {
         const date = log.contactDate.split('T')[0];
@@ -1183,7 +1171,6 @@ function refreshAcquistoAlertModalDisplay(log) {
                 ${linkParts.length ? `<br>${linkParts.join(' · ')}` : ''}
             </div>`;
     } else {
-        // Fallback compatibile con il vecchio markup a riga singola, se presente
         const infoEl = document.getElementById('acquistoAlertModalInfo');
         if (infoEl) infoEl.textContent = `${log.otherNote || ''}${log.acquistoNote ? ' · ' + log.acquistoNote : ''} · segnalato da ${log.user?.fullName || '—'}`;
     }
@@ -1219,12 +1206,6 @@ function closeAcquistoAlertModal(event) {
     acquistoAlertNoteGestitaVisible = false;
 }
 
-// Cambia SOLO lo stato (In Gestione / Gestita / rimuovi). Essendo un unico
-// campo sul contatto, l'ultimo stato impostato sovrascrive sempre il
-// precedente: cliccando "Gestita" mentre è "In Gestione" lo stato diventa
-// "Gestita" (sovrascrive), cliccando "Rimuovi Gestione" torna a nessuno
-// stato (sovrascrive anche "Gestita" se presente). Il modal NON si chiude,
-// così si può continuare a scrivere le note.
 async function setAcquistoAlertStatus(status) {
     if (!acquistoAlertModalId || !canManageAlerts()) return;
 
@@ -1233,7 +1214,6 @@ async function setAcquistoAlertStatus(status) {
     } else if (status === 'GESTITA') {
         acquistoAlertNoteGestitaVisible = true;
     } else {
-        // Rimuovi Gestione: richiude entrambe le caselle nota
         acquistoAlertNoteGestioneVisible = false;
         acquistoAlertNoteGestitaVisible = false;
     }
@@ -1255,9 +1235,6 @@ async function setAcquistoAlertStatus(status) {
     } catch (err) { console.error('Errore gestione allert:', err); }
 }
 
-// Salva SOLO il testo di una delle due note, senza toccare lo stato — usata
-// al blur (quando si esce dal campo) delle textarea, così non serve un
-// bottone "Salva" extra e non si perde nulla se si cambia stato dopo.
 async function saveAcquistoAlertNote(field) {
     if (!acquistoAlertModalId || !canManageAlerts()) return;
     const el = document.getElementById(field);
@@ -1275,9 +1252,6 @@ async function saveAcquistoAlertNote(field) {
     } catch (err) { console.error('Errore salvataggio nota allert:', err); }
 }
 
-// Aggiorna il contatto modificato dentro le liste già caricate in memoria
-// (contactLogs / contactLogsFiltered) e ridisegna la vista corrente, senza
-// dover ricaricare tutto dal server e senza chiudere il modal aperto.
 function applyUpdatedLogEverywhere(updatedLog) {
     const idx = contactLogs.findIndex(l => l.id === updatedLog.id);
     if (idx !== -1) contactLogs[idx] = updatedLog;
@@ -1291,10 +1265,6 @@ function applyUpdatedLogEverywhere(updatedLog) {
     }
     renderChartInfoAcquisto(contactLogsFiltered);
 }
-
-// ============================================================
-// VISTA GIORNALIERA
-// ============================================================
 
 let currentDayView = null;
 let dayViewCategoryFilter = '';
@@ -1335,16 +1305,6 @@ function getSubcategoryValue(log) {
     }
 }
 
-// ===== Filtro secondario Allert per Info Acquisto effettuato, in aggiunta
-// a Service (Sede) e Info Noleggio (Richiesta) già esistenti. Ordine valori
-// per Acquisto: NO prima di SI, così la tendina mostra "Tutti, Senza Allert,
-// Con Allert" nell'ordine richiesto.
-// alwaysShowAll: per filtri con poche opzioni fisse (Allert, Stato Gestione)
-// le opzioni vanno mostrate SEMPRE tutte, indipendentemente da cosa c'è nei
-// dati in quel momento — altrimenti un'opzione come "Senza Allert" può
-// sparire dalla tendina solo perché quel giorno non c'è ancora nessun
-// contatto senza allert, creando confusione. Per filtri con molte opzioni
-// (Sede, Richiesta) si continua invece a mostrare solo quelle presenti. =====
 function getSecondaryFilterConfig(category) {
     if (category === 'Service') {
         return { values: SERVICE_SEDI_LIST, valueFn: log => log.serviceSede || '', labelFn: v => v, label: 'Sede', allLabel: 'Tutte le sedi', alwaysShowAll: false };
@@ -1358,10 +1318,6 @@ function getSecondaryFilterConfig(category) {
     return null;
 }
 
-// ===== Filtro terziario — compare SOLO quando categoria = Info Acquisto
-// effettuato E il filtro Allert è impostato su "Con Allert" (SI). Permette
-// di restringere ulteriormente a "Da gestire" (nessuno stato ancora),
-// "In gestione" o "Gestita". Mostra sempre tutte e tre le opzioni. =====
 function getTertiaryFilterConfig(category, secondaryValue) {
     if (category === 'Info Acquisto effettuato' && secondaryValue === 'SI') {
         return {
@@ -1552,10 +1508,6 @@ function closeDayView() {
     renderChartMarcheCustom(contactLogsFiltered);
     renderChartNoleggio(contactLogsFiltered);
 }
-
-// ============================================================
-// FINE VISTA GIORNALIERA
-// ============================================================
 
 function getISOWeekMonday(dateStr) {
     const d = parseLocalDate(dateStr);
@@ -1825,7 +1777,6 @@ function selectNoleggioTipo(tipo) {
     if (btn) btn.classList.add('btn-sede-active');
 }
 
-// ===== "Furto" aggiunto al mapping =====
 function selectAcquisto(tipo) {
     selectedAcquisto = tipo;
     document.getElementById('contactAcquistoTipo').value = tipo;
@@ -1973,10 +1924,6 @@ async function createContactLog() {
     const isService = category === 'Service';
     const isAcquisto = category === 'Info Acquisto effettuato';
 
-    // Marca/Modello/Targa per Info Acquisto sono OPZIONALI e vengono scritti
-    // negli STESSI campi backend usati da Vendita/Noleggio/Service (marca,
-    // modello, serviceTarga), così nessuna modifica al server è necessaria:
-    // riusano meccanismi già esistenti e già visualizzati nella riga tabella.
     const payload = {
         category,
         clienteNome: nonComunicaNominativo ? (clienteNome || null) : clienteNome,

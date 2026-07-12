@@ -224,6 +224,23 @@
             <h2>RECALL CLIENTI</h2>
             <button onclick="showNewWaiting()" class="btn-primary" style="width:auto;padding:10px 20px">+ AGGIUNGI</button>
         </div>
+
+        <!-- NAV INTERNO: Attivi / Archivio -->
+        <div style="display:flex;gap:10px;margin-bottom:20px">
+            <button id="waitingNavAttivi" class="btn-sede waiting-nav-active" onclick="switchWaitingView('attivi')">📋 Attivi</button>
+            <button id="waitingNavArchivio" class="btn-sede" onclick="switchWaitingView('archivio')">📁 Archivio (Chiusi/Falliti)</button>
+        </div>
+
+        <!-- STATISTICHE -->
+        <div class="stats-grid" style="margin-bottom:24px">
+            <div class="stat-card blue"><div class="stat-label">TOTALE CLIENTI</div><div class="stat-value" id="waitingStatTotal">0</div></div>
+            <div class="stat-card green"><div class="stat-label">INTERESSATI</div><div class="stat-value" id="waitingStatInteressati">0%</div></div>
+            <div class="stat-card gold"><div class="stat-label">APPUNTAMENTI</div><div class="stat-value" id="waitingStatAppuntamenti">0%</div></div>
+            <div class="stat-card purple"><div class="stat-label">CHIUSI</div><div class="stat-value" id="waitingStatChiusi">0%</div></div>
+            <div class="stat-card" style="border-color:#ff3d3d"><div class="stat-label">FALLITI</div><div class="stat-value" id="waitingStatFalliti" style="color:#ff3d3d">0%</div></div>
+            <div class="stat-card" style="border-color:#ff9800"><div class="stat-label">🔔 DA RICHIAMARE</div><div class="stat-value" id="waitingStatDaRichiamare" style="color:#ff9800">0</div></div>
+        </div>
+
         <div id="newWaitingForm" class="form-card" style="display:none">
             <h3>NUOVO CLIENTE RECALL</h3>
             <div class="form-grid">
@@ -243,6 +260,69 @@
                 <button onclick="hideNewWaiting()" class="btn-secondary">ANNULLA</button>
             </div>
         </div>
+
+        <!-- MODAL RECALL DI OGGI/SCADUTI — popup automatico -->
+        <div id="waitingRecallModal" class="modal-overlay" style="display:none" onclick="closeWaitingRecallModal(event)">
+            <div class="modal-box" onclick="event.stopPropagation()">
+                <div class="modal-header"><h3>🔔 Recall Da Effettuare</h3><button type="button" class="modal-close" onclick="closeWaitingRecallModal()">✕</button></div>
+                <div id="waitingRecallModalList" class="modal-body"></div>
+            </div>
+        </div>
+
+        <!-- MODAL DETTAGLIO/GESTIONE CLIENTE — scheda completa -->
+        <div id="waitingDetailModal" class="modal-overlay" style="display:none" onclick="closeWaitingDetailModal(event)">
+            <div class="modal-box" onclick="event.stopPropagation()" style="max-width:560px">
+                <div class="modal-header">
+                    <h3>Dettaglio Cliente Recall</h3>
+                    <button type="button" class="modal-close" onclick="closeWaitingDetailModal()">✕</button>
+                </div>
+                <div class="modal-body">
+
+                    <div style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px;font-size:12px;color:var(--text-secondary)">
+                        📅 Inserito: <strong id="wdCreatedInfo" style="color:var(--text-primary)">—</strong>
+                    </div>
+
+                    <div class="form-grid">
+                        <input type="text" id="wdFullName" placeholder="Cognome e Nome *" class="input-field">
+                        <input type="text" id="wdContact" placeholder="Telefono o Email *" class="input-field">
+                        <input type="text" id="wdBrand" placeholder="Marchio *" class="input-field">
+                        <input type="text" id="wdModel" placeholder="Modello *" class="input-field">
+                        <input type="number" id="wdPrice" placeholder="Prezzo (opzionale)" class="input-field">
+                    </div>
+
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTE</label>
+                    <textarea id="wdNotes" placeholder="Note aggiuntive..." class="input-field"></textarea>
+
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">STATO *</label>
+                    <select id="wdStatus" class="input-field">
+                        <option value="WAITING">In Attesa</option>
+                        <option value="CALLED">Richiamato</option>
+                        <option value="APPOINTMENT">Appuntamento</option>
+                        <option value="INTERESTED">Interessato</option>
+                        <option value="CLOSED">Chiuso</option>
+                        <option value="FAILED">Fallito</option>
+                    </select>
+
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px;margin-top:10px">DATA RECALL ATTUALE</label>
+                    <input type="date" id="wdRecallDate" class="input-field">
+
+                    <button type="button" id="wdRichiamatoBtn" class="btn-sede" onclick="toggleWaitingRichiamato()" style="width:100%;margin-bottom:16px">⭕ Richiamato: No</button>
+
+                    <div class="form-actions" style="margin-bottom:16px">
+                        <button onclick="saveWaitingDetail()" class="btn-gold">SALVA MODIFICHE</button>
+                        <button onclick="registraNuovoRecall()" class="btn-secondary" style="color:#f0c040;border-color:#f0c040">🔄 Registra Nuovo Recall</button>
+                        <button onclick="deleteWaitingFromDetail()" class="btn-secondary" style="color:#ff3d3d;border-color:#ff3d3d">🗑️ ELIMINA</button>
+                        <button onclick="closeWaitingDetailModal()" class="btn-secondary">CHIUDI</button>
+                    </div>
+
+                    <div style="border-top:1px solid var(--border);padding-top:14px">
+                        <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:var(--text-secondary);margin-bottom:10px;text-transform:uppercase">🕐 Storico Recall Precedenti</div>
+                        <div id="wdHistoryList"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div id="waitingList"></div>
     </div>
 
