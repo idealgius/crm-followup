@@ -27,6 +27,9 @@
     --folder-border: #2a2d3e;
     --folder-tab-bg: #1e2235;
     --folder-body-bg: #14162a;
+    /* Colore accento per titoli/testo blu — chiaro su sfondo scuro,
+       così non sparisce più (blu su blu) come accadeva con #1a4080 fisso. */
+    --heading-accent: #4a90d9;
 }
 
 [data-theme="light"] {
@@ -57,6 +60,7 @@
     --folder-border: #c8d4e4;
     --folder-tab-bg: #f0f4fa;
     --folder-body-bg: #f8fafd;
+    --heading-accent: #1a4080;
 }
 
 * {
@@ -221,8 +225,8 @@ select.input-dark {
 }
 
 .btn-secondary:hover {
-    border-color: #1a4080;
-    color: #1a4080;
+    border-color: var(--heading-accent);
+    color: var(--heading-accent);
 }
 
 .btn-logout {
@@ -480,15 +484,11 @@ select.input-dark {
     font-size: 11px;
     font-weight: 800;
     letter-spacing: 2px;
-    color: #1a4080;
+    color: var(--heading-accent);
     text-transform: uppercase;
     padding: 10px 0;
     margin-bottom: 10px;
     border-bottom: 1px solid var(--border);
-}
-
-[data-theme="light"] .search-results-header {
-    color: #1a4080;
 }
 
 #searchResults {
@@ -771,7 +771,7 @@ select.input-dark {
     font-size: 11px;
     font-weight: 800;
     letter-spacing: 2px;
-    color: #1a4080;
+    color: var(--heading-accent);
     margin-bottom: 18px;
     text-transform: uppercase;
 }
@@ -791,7 +791,7 @@ select.input-dark {
     font-size: 12px;
     font-weight: 800;
     letter-spacing: 2px;
-    color: #1a4080;
+    color: var(--heading-accent);
     margin-bottom: 18px;
     text-transform: uppercase;
 }
@@ -888,10 +888,6 @@ select.input-dark {
     letter-spacing: 0.5px;
 }
 
-[data-theme="light"] .folder-consultant-name {
-    color: #0d1a2e;
-}
-
 .folder-stats {
     display: flex;
     gap: 8px;
@@ -906,8 +902,7 @@ select.input-dark {
     border-radius: 10px;
 }
 
-.stat-total { background: rgba(26,64,128,0.1); color: #1a4080; }
-[data-theme="light"] .stat-total { background: rgba(26,64,128,0.08); }
+.stat-total { background: rgba(26,64,128,0.1); color: var(--heading-accent); }
 .stat-responded { background: rgba(0,200,83,0.12); color: #00c853; }
 .stat-abandoned { background: rgba(255,61,61,0.12); color: #ff3d3d; }
 .stat-appointment { background: rgba(240,192,64,0.15); color: #d4a820; }
@@ -1032,7 +1027,7 @@ select.input-dark {
 .step-title {
     font-size: 10px;
     font-weight: 800;
-    color: #1a4080;
+    color: var(--heading-accent);
     letter-spacing: 1px;
     margin-bottom: 6px;
     text-transform: uppercase;
@@ -1056,16 +1051,12 @@ select.input-dark {
 .step-timestamp {
     font-size: 10px;
     font-weight: 600;
-    color: #1a4080;
+    color: var(--heading-accent);
     background: rgba(26,64,128,0.08);
     padding: 3px 8px;
     border-radius: 6px;
     margin-bottom: 8px;
     display: inline-block;
-}
-
-[data-theme="light"] .step-timestamp {
-    background: rgba(26,64,128,0.06);
 }
 
 /* ===== WAITING CARDS ===== */
@@ -1167,18 +1158,14 @@ select.input-field {
     align-items: center;
     justify-content: space-between;
     cursor: pointer;
-    border-bottom: 2px solid #1a4080;
+    border-bottom: 2px solid var(--heading-accent);
     font-size: 13px;
     font-weight: 800;
-    color: #1a4080;
+    color: var(--heading-accent);
     letter-spacing: 1px;
     text-transform: uppercase;
     user-select: none;
     transition: all 0.2s;
-}
-
-[data-theme="light"] .contact-week-header {
-    color: #1a4080;
 }
 
 .contact-week-header:hover {
@@ -1385,7 +1372,7 @@ select.input-field {
 .contact-tree-month {
     background: var(--bg-card);
     font-size: 13px;
-    color: #1a4080;
+    color: var(--heading-accent);
     border-bottom: 1px solid var(--border);
 }
 
@@ -1536,15 +1523,7 @@ select.input-field {
     }
 }
 
-/* ===== REGISTRO CONTATTI — RIGA GRAFICI =====
-   UNICO blocco per questo layout (rimossi i due blocchi duplicati/in
-   conflitto che c'erano prima: uno flex-nowrap e uno grid, uno sopra
-   l'altro nello stesso file). Schema a larghezze fisse come la versione
-   che funzionava bene: 3 card per riga, flex-wrap naturale, tutto
-   leggibile e ben distanziato, niente scroll, niente schiacciamenti.
-
-   Riga 1: Distribuzione Categorie (520px) — Calendario+Appuntamenti Sede (380px) — Info Acquisto+Fonte (340px)
-   Riga 2: Service per Sede (680px, due colonne interne) — Performance Marche (420px) — Tipologia Noleggio (380px) */
+/* ===== REGISTRO CONTATTI — RIGA GRAFICI ===== */
 .contact-charts-row {
     display: flex;
     flex-wrap: wrap;
@@ -1583,8 +1562,6 @@ select.input-field {
     max-width: 340px;
 }
 
-/* Service per sede: larga quanto basta per ospitare due colonne leggibili
-   con etichette lunghe ("Dispositivo satellitare") senza schiacciarle */
 .contact-chart-service {
     width: 680px;
     min-width: 680px;
@@ -1618,14 +1595,12 @@ select.input-field {
     gap: 10px;
 }
 
-/* Tipologia Noleggio affiancata a Performance Marche nella seconda riga */
 .contact-chart-noleggio {
     width: 380px;
     min-width: 380px;
     max-width: 380px;
 }
 
-/* Solo su schermi davvero stretti le card vanno a capo singolarmente */
 @media (max-width: 1500px) {
     .contact-chart-categorie,
     .contact-chart-calendario,
@@ -1978,18 +1953,8 @@ select.input-field {
 .multi-select-actions button:hover {
     text-decoration: underline;
 }
-/* ===== (... tutto il resto del file style.css invariato ...) ===== */
 
-/* ===== RENT — Tabella "Info Noleggio da Registro Contatti" (8 colonne) =====
-   Riusa lo stile base di .contact-table ma NON le sue larghezze nth-child,
-   pensate per la tabella a 6 colonne del Registro Contatti. Con 8 colonne
-   quelle regole schiacciavano Data/Marca/Lead forzando il testo a
-   sovrapporsi visivamente alle celle vicine (colonna troppo stretta +
-   nowrap + niente overflow:hidden = il testo "sborda" sopra la cella
-   accanto — esattamente l'effetto nello screenshot).
-   Il selettore composto .contact-table.rent-contatti-table ha specificità
-   maggiore delle regole nth-child di .contact-table da sola, quindi vince
-   automaticamente senza bisogno di !important. */
+/* ===== RENT — Tabella "Info Noleggio da Registro Contatti" (8 colonne) ===== */
 .contact-table.rent-contatti-table {
     table-layout: auto;
 }

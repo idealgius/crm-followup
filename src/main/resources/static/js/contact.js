@@ -63,9 +63,9 @@ const ACQUISTO_ALERT_STATUS_LABELS = { 'DA_GESTIRE': '⚪ Da gestire', 'IN_GESTI
 const MARCHE_LIST = [
     'ALFA ROMEO', 'AUDI', 'BMW', 'BYD', 'CITROEN', 'CUPRA', 'DACIA', 'DR', 'DS',
     'EVO', 'FIAT', 'FORD', 'FERRARI', 'HYUNDAI', 'ICH-X', 'INFINITI',
-    'IVECO', 'JEEP', 'KIA', 'LAMBORGHINI', 'LANCIA', 'LAND ROVER', 'LEAPMOTOR', 'MAXUS',
+    'IVECO', 'JAECOO', 'JEEP', 'KIA', 'LAMBORGHINI', 'LANCIA', 'LAND ROVER', 'LEAPMOTOR', 'MAXUS',
     'MAZDA', 'MERCEDES-BENZ', 'MG', 'MINI', 'MASERATI', 'MITSUBISHI', 'NISSAN',
-    'OPEL', 'PEUGEOT', 'PORSCHE', 'RENAULT', 'SAAB', 'SEAT', 'SKODA', 'SMART',
+    'OMODA', 'OPEL', 'PEUGEOT', 'PORSCHE', 'RENAULT', 'SAAB', 'SEAT', 'SKODA', 'SMART',
     'SPORTEQUIPE', 'SUZUKI', 'SWM', 'TIGER', 'TOYOTA', 'TESLA', 'VOLKSWAGEN'
 ];
 
@@ -144,6 +144,47 @@ function acquistoAlertVisual(log) {
 function acquistoAlertNameColor(log) {
     if (log.category !== 'Info Acquisto effettuato' || !log.acquistoAlert) return null;
     return acquistoAlertVisual(log).color;
+}
+
+function formatDateTimeIT(isoString) {
+    if (!isoString) return null;
+    try {
+        const d = new Date(isoString);
+        if (isNaN(d.getTime())) return null;
+        const date = d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const time = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+        return `${date} · ${time}`;
+    } catch (e) { return null; }
+}
+
+// FIX: gestisce sia il caso in cui acquistoAlertInGestioneDa/acquistoAlertGestitaDa
+// siano una stringa semplice, sia il caso in cui il backend restituisca un
+// oggetto {id, fullName, role} (come già visto con gestitoDa in Rent). Senza
+// questo fix, stampare un oggetto dentro un template literal produce
+// letteralmente "[object Object]" invece del nome dell'operatore.
+function acquistoAlertAuditInfo(log) {
+    const nameOf = (val) => {
+        if (!val) return null;
+        if (typeof val === 'string') return val;
+        if (typeof val === 'object') return val.fullName || val.name || null;
+        return null;
+    };
+
+    const info = { inGestione: null, gestita: null };
+
+    const inGestioneNome = nameOf(log.acquistoAlertInGestioneDa);
+    if (inGestioneNome || log.acquistoAlertInGestioneAt) {
+        const when = formatDateTimeIT(log.acquistoAlertInGestioneAt);
+        info.inGestione = `👤 ${inGestioneNome || '—'}${when ? ' · 🕐 ' + when : ''}`;
+    }
+
+    const gestitaNome = nameOf(log.acquistoAlertGestitaDa);
+    if (gestitaNome || log.acquistoAlertGestitaAt) {
+        const when = formatDateTimeIT(log.acquistoAlertGestitaAt);
+        info.gestita = `👤 ${gestitaNome || '—'}${when ? ' · 🕐 ' + when : ''}`;
+    }
+
+    return info;
 }
 
 function findChartTitleElement(canvas) {
@@ -341,8 +382,6 @@ document.addEventListener('click', function(e) {
     if (promoDropdown && promoInput && !promoInput.contains(e.target) && !promoDropdown.contains(e.target)) promoDropdown.style.display = 'none';
 });
 
-// ===== FIX: aggiunta chiamata a checkAcquistoAlertDaGestire() dopo il caricamento
-// dei contatti — questa era la riga mancante che impediva al popup di attivarsi =====
 async function loadContactLogs(from, to, restoreDayView) {
     try {
         let url = '/api/contacts';
@@ -357,13 +396,6 @@ async function loadContactLogs(from, to, restoreDayView) {
     } catch (err) { console.error('Errore caricamento contatti:', err); }
 }
 
-// ============================================================
-// POPUP AUTOMATICO "INFO ACQUISTO DA GESTIRE" — FUNZIONI MANCANTI (NUOVE)
-// Si apre una sola volta per sessione di navigazione (non ad ogni refresh
-// filtri), solo per chi ha i permessi di gestione (canManageAlerts()), e
-// solo se esiste almeno un contatto Info Acquisto con allert attivo e
-// stato ancora "da gestire" (nessuno stato o DA_GESTIRE esplicito).
-// ============================================================
 function checkAcquistoAlertDaGestire() {
     const modal = document.getElementById('acquistoAlertDaGestireModal');
     const list = document.getElementById('acquistoAlertDaGestireList');
@@ -371,31 +403,47 @@ function checkAcquistoAlertDaGestire() {
     if (!canManageAlerts()) return;
     if (acquistoAlertDaGestireShownThisSession) return;
 
-    const daGestire = contactLogs.filter(l =>
-        hasAcquistoAlert(l) && (!l.acquistoAlertStatus || l.acquistoAlertStatus === 'DA_GESTIRE')
+    const alertAttivi = contactLogs.filter(l =>
+        hasAcquistoAlert(l) && l.acquistoAlertStatus !== 'GESTITA'
     );
 
-    if (daGestire.length === 0) return;
+    if (alertAttivi.length === 0) return;
 
     acquistoAlertDaGestireShownThisSession = true;
 
-    list.innerHTML = daGestire.map(log => {
+    const daGestire = alertAttivi.filter(l => !l.acquistoAlertStatus || l.acquistoAlertStatus === 'DA_GESTIRE');
+    const inGestione = alertAttivi.filter(l => l.acquistoAlertStatus === 'IN_GESTIONE');
+
+    const renderCard = (log) => {
         const date = log.contactDate.split('T')[0];
         const time = log.contactDate.split('T')[1]?.substring(0,5) || '';
-        return `<div class="followup-card" style="margin-bottom:10px;cursor:pointer" onclick="closeAcquistoAlertDaGestireModal();openAcquistoAlertModal(${log.id})">
+        const visual = acquistoAlertVisual(log);
+        return `<div class="followup-card" style="margin-bottom:10px;cursor:pointer;border-left:4px solid ${visual.color}" onclick="closeAcquistoAlertDaGestireModal();openAcquistoAlertModal(${log.id})">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
                 <div>
-                    <div style="font-weight:800;color:#ff9800;font-size:14px">🔔 ${clienteNomeCompleto(log)}</div>
+                    <div style="font-weight:800;color:${visual.color};font-size:14px">${visual.icon} ${clienteNomeCompleto(log)}</div>
+                    <div style="margin-top:4px"><span style="font-size:11px;font-weight:700;background:${visual.bg};color:${visual.color};padding:2px 8px;border-radius:8px">${visual.icon} ${visual.label}</span></div>
                     <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">📅 ${formatDateIT(date)} · 🕐 ${time}</div>
                     <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📞 ${clienteNumeroDisplay(log)}</div>
                     <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📋 ${log.otherNote || '—'}${log.acquistoNote ? ' · ' + log.acquistoNote : ''}</div>
                     <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">👤 Segnalato da ${log.user?.fullName || '—'}</div>
                 </div>
-                <span style="color:#ff9800;font-size:18px">→</span>
+                <span style="color:${visual.color};font-size:18px">→</span>
             </div>
         </div>`;
-    }).join('');
+    };
 
+    let html = '';
+    if (daGestire.length > 0) {
+        html += `<div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#ff9800;text-transform:uppercase;margin-bottom:10px">🔔 Da Gestire (${daGestire.length})</div>`;
+        html += daGestire.map(renderCard).join('');
+    }
+    if (inGestione.length > 0) {
+        html += `<div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#f0c040;text-transform:uppercase;margin:16px 0 10px">🟡 In Gestione (${inGestione.length})</div>`;
+        html += inGestione.map(renderCard).join('');
+    }
+
+    list.innerHTML = html;
     modal.style.display = 'flex';
 }
 
@@ -1173,6 +1221,18 @@ function refreshAcquistoAlertModalDisplay(log) {
     } else {
         const infoEl = document.getElementById('acquistoAlertModalInfo');
         if (infoEl) infoEl.textContent = `${log.otherNote || ''}${log.acquistoNote ? ' · ' + log.acquistoNote : ''} · segnalato da ${log.user?.fullName || '—'}`;
+    }
+
+    const audit = acquistoAlertAuditInfo(log);
+    const auditInGestioneEl = document.getElementById('acquistoAlertInGestioneInfo');
+    if (auditInGestioneEl) {
+        auditInGestioneEl.textContent = audit.inGestione || '';
+        auditInGestioneEl.style.display = audit.inGestione ? 'block' : 'none';
+    }
+    const auditGestitaEl = document.getElementById('acquistoAlertGestitaInfo');
+    if (auditGestitaEl) {
+        auditGestitaEl.textContent = audit.gestita || '';
+        auditGestitaEl.style.display = audit.gestita ? 'block' : 'none';
     }
 
     const noteGestioneRow = document.getElementById('acquistoAlertNoteGestioneRow');

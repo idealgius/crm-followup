@@ -256,6 +256,13 @@ public class ContactLogController {
         if (body.containsKey("serviceSede")) log.setServiceSede((String) body.get("serviceSede"));
         if (body.containsKey("acquistoNote")) log.setAcquistoNote((String) body.get("acquistoNote"));
         if (body.containsKey("acquistoAlert")) log.setAcquistoAlert((Boolean) body.get("acquistoAlert"));
+
+        // ===== ALLERT — cambio stato: valorizza automaticamente "chi" e "quando" =====
+        // Quando lo stato passa a IN_GESTIONE o GESTITA, registriamo l'utente corrente
+        // e il timestamp SOLO se non era già presente, così riaprire/toccare lo stesso
+        // stato più volte non sovrascrive la prima presa in carico. Quando lo stato
+        // viene rimosso (status == null, "Rimuovi Gestione"), azzeriamo entrambe le
+        // coppie chi/quando così la scheda torna pulita per una nuova gestione.
         if (body.containsKey("acquistoAlertStatus")) {
             Object statusVal = body.get("acquistoAlertStatus");
             String status = statusVal == null ? null : (String) statusVal;
@@ -263,7 +270,27 @@ public class ContactLogController {
                 return ResponseEntity.badRequest().body(Map.of("error", "Stato allert non valido"));
             }
             log.setAcquistoAlertStatus(status);
+
+            if ("IN_GESTIONE".equals(status)) {
+                if (log.getAcquistoAlertInGestioneDa() == null) {
+                    Optional<User> currentUserOpt = userRepository.findById(userId);
+                    currentUserOpt.ifPresent(log::setAcquistoAlertInGestioneDa);
+                    log.setAcquistoAlertInGestioneAt(LocalDateTime.now());
+                }
+            } else if ("GESTITA".equals(status)) {
+                if (log.getAcquistoAlertGestitaDa() == null) {
+                    Optional<User> currentUserOpt = userRepository.findById(userId);
+                    currentUserOpt.ifPresent(log::setAcquistoAlertGestitaDa);
+                    log.setAcquistoAlertGestitaAt(LocalDateTime.now());
+                }
+            } else if (status == null) {
+                log.setAcquistoAlertInGestioneDa(null);
+                log.setAcquistoAlertInGestioneAt(null);
+                log.setAcquistoAlertGestitaDa(null);
+                log.setAcquistoAlertGestitaAt(null);
+            }
         }
+
         if (body.containsKey("acquistoAlertNoteGestione")) log.setAcquistoAlertNoteGestione((String) body.get("acquistoAlertNoteGestione"));
         if (body.containsKey("acquistoAlertNoteGestita")) log.setAcquistoAlertNoteGestita((String) body.get("acquistoAlertNoteGestita"));
         if (body.containsKey("noleggioTipo")) log.setNoleggioTipo((String) body.get("noleggioTipo"));
@@ -338,6 +365,20 @@ public class ContactLogController {
         m.put("acquistoAlertStatus", log.getAcquistoAlertStatus());
         m.put("acquistoAlertNoteGestione", log.getAcquistoAlertNoteGestione());
         m.put("acquistoAlertNoteGestita", log.getAcquistoAlertNoteGestita());
+
+        // ===== NUOVO: chi + quando per "In gestione" e "Gestita" =====
+        // Serializzati come oggetto {id, fullName, role}, coerente con il campo
+        // "user" già presente in questa toMap() e con "gestitoDa" in Rent — cosi'
+        // extractUserName() nel frontend li legge senza bisogno di adattamenti.
+        m.put("acquistoAlertInGestioneDa", userToMap(log.getAcquistoAlertInGestioneDa()));
+        m.put("acquistoAlertInGestioneAt", log.getAcquistoAlertInGestioneAt() != null
+                ? log.getAcquistoAlertInGestioneAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+                : null);
+        m.put("acquistoAlertGestitaDa", userToMap(log.getAcquistoAlertGestitaDa()));
+        m.put("acquistoAlertGestitaAt", log.getAcquistoAlertGestitaAt() != null
+                ? log.getAcquistoAlertGestitaAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+                : null);
+
         m.put("noleggioTipo", log.getNoleggioTipo());
         m.put("noleggioLink", log.getNoleggioLink());
         m.put("serviceNomeCliente", log.getServiceNomeCliente());
@@ -356,6 +397,17 @@ public class ContactLogController {
         userMap.put("fullName", log.getUser().getFullName());
         userMap.put("role", log.getUser().getRole());
         m.put("user", userMap);
+        return m;
+    }
+
+    // Helper: converte un User (o null) nella stessa struttura {id, fullName, role}
+    // usata per "user" — evita duplicazione di codice tra i 4 punti che serializzano utenti.
+    private Map<String, Object> userToMap(User user) {
+        if (user == null) return null;
+        Map<String, Object> m = new HashMap<>();
+        m.put("id", user.getId());
+        m.put("fullName", user.getFullName());
+        m.put("role", user.getRole());
         return m;
     }
 }

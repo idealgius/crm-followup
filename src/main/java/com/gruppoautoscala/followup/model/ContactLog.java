@@ -77,6 +77,26 @@ public class ContactLog {
     @Column(name = "acquisto_alert_note_gestita", length = 1000)
     private String acquistoAlertNoteGestita;
 
+    // ===== NUOVO: chi ha messo "in gestione" e quando =====
+    // Relazione verso User (non stringa libera) cosi il frontend riceve un
+    // oggetto {id, fullName, role} coerente con com'e' gia' fatto per
+    // gestitoDa in NoleggioTrattativa. Valorizzati automaticamente dal
+    // controller quando arriva il cambio di stato via PATCH.
+    @ManyToOne
+    @JoinColumn(name = "acquisto_alert_in_gestione_da_id")
+    private User acquistoAlertInGestioneDa;
+
+    @Column(name = "acquisto_alert_in_gestione_at")
+    private LocalDateTime acquistoAlertInGestioneAt;
+
+    // ===== NUOVO: chi ha messo "gestita" e quando =====
+    @ManyToOne
+    @JoinColumn(name = "acquisto_alert_gestita_da_id")
+    private User acquistoAlertGestitaDa;
+
+    @Column(name = "acquisto_alert_gestita_at")
+    private LocalDateTime acquistoAlertGestitaAt;
+
     @Column(name = "noleggio_tipo", length = 50)
     private String noleggioTipo;
 

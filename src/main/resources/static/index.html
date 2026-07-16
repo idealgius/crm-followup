@@ -674,9 +674,7 @@
                         <span id="acquistoAlertModalStatus" style="font-weight:800;margin-left:6px">—</span>
                     </div>
 
-                    <!-- Scheda cliente completa (data/ora, telefono, operatore, tipologia,
-                         nota, veicolo, targa, link) — sostituisce il vecchio testo a riga
-                         singola con una vista più ricca, "con info, situazione ecc." -->
+                    <!-- Scheda cliente completa -->
                     <div id="acquistoAlertModalClientInfo" style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px"></div>
 
                     <div id="acquistoAlertModalInfo" style="display:none"></div>
@@ -685,14 +683,20 @@
                         Solo Moderatore, Gestore e Admin possono gestire questo allert.
                     </div>
 
-                    <button type="button" id="acquistoAlertBtnInGestione" class="btn-gold" onclick="setAcquistoAlertStatus('IN_GESTIONE')" style="background:linear-gradient(135deg,#f0c040,#d4a820);width:100%;margin-bottom:10px">🟡 IN GESTIONE</button>
+                    <button type="button" id="acquistoAlertBtnInGestione" class="btn-gold" onclick="setAcquistoAlertStatus('IN_GESTIONE')" style="background:linear-gradient(135deg,#f0c040,#d4a820);width:100%;margin-bottom:6px">🟡 IN GESTIONE</button>
+
+                    <!-- Chi ha messo "in gestione" e quando -->
+                    <div id="acquistoAlertInGestioneInfo" style="display:none;font-size:11px;color:var(--text-secondary);margin-bottom:10px;padding:0 4px"></div>
 
                     <div id="acquistoAlertNoteGestioneRow" style="display:none;margin-bottom:16px">
                         <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA IN GESTIONE</label>
                         <textarea id="acquistoAlertNoteGestione" placeholder="Note sulla presa in carico..." class="input-field" onblur="saveAcquistoAlertNote('acquistoAlertNoteGestione')"></textarea>
                     </div>
 
-                    <button type="button" id="acquistoAlertBtnGestita" class="btn-gold" onclick="setAcquistoAlertStatus('GESTITA')" style="background:linear-gradient(135deg,#00c853,#00913c);color:#fff;width:100%;margin-bottom:10px">🟢 GESTITA</button>
+                    <button type="button" id="acquistoAlertBtnGestita" class="btn-gold" onclick="setAcquistoAlertStatus('GESTITA')" style="background:linear-gradient(135deg,#00c853,#00913c);color:#fff;width:100%;margin-bottom:6px">🟢 GESTITA</button>
+
+                    <!-- Chi ha messo "gestita" e quando -->
+                    <div id="acquistoAlertGestitaInfo" style="display:none;font-size:11px;color:var(--text-secondary);margin-bottom:10px;padding:0 4px"></div>
 
                     <div id="acquistoAlertNoteGestitaRow" style="display:none;margin-bottom:16px">
                         <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA GESTITA</label>
@@ -893,8 +897,7 @@
                         <input type="hidden" id="contactAcquistoAlert" value="false">
                     </div>
 
-                    <!-- Marca/Modello/Targa OPZIONALI per Info Acquisto — riusano i campi
-                         backend marca/modello/serviceTarga già gestiti da createContactLog() -->
+                    <!-- Marca/Modello/Targa OPZIONALI per Info Acquisto -->
                     <div style="margin-bottom:14px">
                         <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MARCA VEICOLO (opzionale)</label>
                         <div style="position:relative;margin-bottom:14px">
@@ -1229,8 +1232,7 @@
             </div>
         </div>
 
-        <!-- MODAL TRATTATIVE DA GESTIRE — popup automatico all'apertura della
-             dashboard Rent, mostrato solo a chi ha i permessi di gestione -->
+        <!-- MODAL TRATTATIVE DA GESTIRE -->
         <div id="rentDaGestireModal" class="modal-overlay" style="display:none" onclick="closeRentDaGestireModal(event)">
             <div class="modal-box" onclick="event.stopPropagation()">
                 <div class="modal-header"><h3>🔔 Trattative Da Gestire</h3><button type="button" class="modal-close" onclick="closeRentDaGestireModal()">✕</button></div>
@@ -1238,7 +1240,7 @@
             </div>
         </div>
 
-        <!-- MODAL DETTAGLIO/GESTIONE TRATTATIVA — si apre cliccando una card -->
+        <!-- MODAL DETTAGLIO/GESTIONE TRATTATIVA -->
         <div id="rentTrattativaModal" class="modal-overlay" style="display:none" onclick="closeRentTrattativaModal(event)">
             <div class="modal-box" onclick="event.stopPropagation()" style="max-width:560px">
                 <div class="modal-header">
@@ -1252,10 +1254,7 @@
                         &nbsp;·&nbsp; 📅 Creata: <strong id="rtdCreatedInfo" style="color:var(--text-primary)">—</strong>
                     </div>
 
-                    <!-- SEZIONE GESTIONE — visibile solo per ruoli abilitati (Noleggio/Moderatore/Gestore/Admin).
-                         Il backend non prevede una nota testuale: è un'azione secca (prendi in
-                         carico / rimuovi presa in carico), gestitoDa registra automaticamente
-                         chi ha cliccato "Gestisci". -->
+                    <!-- SEZIONE GESTIONE -->
                     <div id="rtdGestioneSection" style="background:rgba(255,152,0,0.06);border:1.5px solid rgba(255,152,0,0.3);border-radius:10px;padding:14px;margin-bottom:16px">
                         <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#ff9800;margin-bottom:8px;text-transform:uppercase">🔔 Gestione</div>
                         <div style="margin-bottom:10px">
