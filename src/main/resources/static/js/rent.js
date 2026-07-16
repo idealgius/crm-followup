@@ -144,9 +144,6 @@ function applyRentFilters() {
         if (fontiSelezionate.length > 0 && !fontiSelezionate.includes(t.fonte)) return false;
         if (ruolo === 'NOLEGGIO' && t.user?.role !== 'NOLEGGIO') return false;
         if (ruolo === 'BDC' && t.user?.role === 'NOLEGGIO') return false;
-        // FIX: match sull'operatore selezionato sia come CREATORE (t.user) sia
-        // come GESTORE (t.gestitoDa) — se un operatore è scelto nel filtro,
-        // devono comparire sia le trattative da lui create sia quelle da lui gestite.
         if (operatoriSelezionati.length > 0
             && !operatoriSelezionati.includes(t.user?.fullName)
             && !operatoriSelezionati.includes(t.gestitoDa?.fullName)) return false;
@@ -309,6 +306,12 @@ function renderRentTrattative(list) {
     const currentYear = new Date().getFullYear().toString();
     const todayMonday = getISOWeekMonday(today);
 
+    // Palette per distinguere visivamente i giorni di una stessa settimana:
+    // un ciclo di 6 colori riconoscibili (lun-sab) invece di lasciarli
+    // tutti uguali, così l'occhio percepisce subito il cambio di giorno
+    // anche senza leggere l'etichetta.
+    const DAY_BOX_COLORS = ['#4a90d9', '#00c853', '#f0c040', '#e91e63', '#7c4dff', '#ff6b35'];
+
     container.innerHTML = `<div style="position:relative;padding-left:4px">
         ${Object.entries(tree).sort((a,b) => b[0]-a[0]).map(([year, months]) => {
             const yearKey = `rtl-year-${year}`;
@@ -354,15 +357,20 @@ function renderRentTrattative(list) {
                                             <span id="arrow-${weekKey}" style="margin-left:auto;font-size:9px;transition:transform 0.3s;${isCurrentWeek?'':'transform:rotate(-90deg)'}">▼</span>
                                         </div>
                                         <div id="body-${weekKey}" style="display:${isCurrentWeek?'block':'none'}">
-                                            ${Object.entries(weekData.days).sort((a,b) => b[0].localeCompare(a[0])).map(([date, items]) => {
+                                            ${Object.entries(weekData.days).sort((a,b) => b[0].localeCompare(a[0])).map(([date, items], dayIdx) => {
                                                 const itemsSorted = [...items].sort((a,b) => rentTrattativeSortDir === 'desc'
                                                     ? (b.createdAt||'').localeCompare(a.createdAt||'')
                                                     : (a.createdAt||'').localeCompare(b.createdAt||''));
+                                                const dayColor = DAY_BOX_COLORS[dayIdx % DAY_BOX_COLORS.length];
+                                                // Ogni giorno diventa un vero "riquadro": bordo colorato a sinistra,
+                                                // sfondo leggermente tintato, angoli arrotondati e padding interno.
+                                                // L'header del giorno resta cliccabile per la vista "solo questo giorno",
+                                                // ma ora è parte integrante del riquadro invece di una riga fluttuante.
                                                 return `
-                                                <div style="margin-bottom:10px;padding-left:14px">
-                                                    <div onclick="showRentDayView('${date}')" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;font-size:10px;font-weight:800;color:var(--text-secondary);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;padding:4px 10px;border-radius:8px;transition:background 0.15s" onmouseover="this.style.background='rgba(46,204,113,0.10)'" onmouseout="this.style.background='transparent'">
+                                                <div style="margin-bottom:14px;border-left:4px solid ${dayColor};background:${dayColor}0d;border-radius:0 10px 10px 0;padding:12px 14px">
+                                                    <div onclick="showRentDayView('${date}')" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:800;color:${dayColor};text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;padding:5px 12px;border-radius:8px;background:${dayColor}22;transition:background 0.15s" onmouseover="this.style.background='${dayColor}33'" onmouseout="this.style.background='${dayColor}22'">
                                                         📅 ${formatDateIT(date)}
-                                                        <span style="color:#2ecc71;font-weight:900">👁 vedi solo questo giorno</span>
+                                                        <span style="opacity:0.85;font-weight:700">· ${itemsSorted.length} trattativ${itemsSorted.length===1?'a':'e'} · 👁 vedi solo questo giorno</span>
                                                     </div>
                                                     <div style="display:flex;gap:10px;flex-wrap:wrap">
                                                         ${itemsSorted.map(t => renderRentTrattativaCard(t)).join('')}
@@ -512,14 +520,7 @@ function openRentTrattativaModal(id) {
 }
 
 // ============================================================
-// SEZIONE GESTIONE nel modal dettaglio — funziona SOLO se questi elementi
-// esistono in index.html (controllo difensivo: se mancano non fa nulla):
-//   rtdGestioneStatus       -> testo di stato ("Da gestire" / "Gestita da X")
-//   rtdGestioneBtn          -> bottone "🔔 Gestisci" (visibile solo se ruolo abilitato e non ancora gestita)
-//   rtdAnnullaGestioneBtn   -> bottone "↺ Annulla Gestione" (visibile solo se già gestita)
-// Il backend non prevede una nota testuale sulla gestione: è un'azione secca
-// (prendi in carico / rimuovi la presa in carico), quindi qui non c'è più
-// alcuna textarea da leggere o mostrare.
+// SEZIONE GESTIONE nel modal dettaglio
 // ============================================================
 function populateRentGestioneSection(t) {
     const statusEl = document.getElementById('rtdGestioneStatus');
@@ -1027,8 +1028,7 @@ function refreshRentChartsOnThemeChange() {
 
 // ============================================================
 // DETTAGLIO GENERICO — usato sia dai grafici (showRentTrattativeDetail)
-// sia dalle stat-card (showRentStatDetail). Fattorizzato in un'unica
-// funzione di rendering per evitare duplicazione.
+// sia dalle stat-card (showRentStatDetail).
 // ============================================================
 function showRentGenericDetail(title, items) {
     const modal = document.getElementById('rentDetailModal');
