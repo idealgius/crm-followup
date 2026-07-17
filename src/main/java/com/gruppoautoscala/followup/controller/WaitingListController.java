@@ -88,6 +88,13 @@ public class WaitingListController {
             String rd = (String) body.get("recallDate");
             entry.setRecallDate(rd != null && !rd.isEmpty() ? LocalDate.parse(rd) : null);
         }
+        // FIX: il payload mandava "richiamato" ma il controller non lo leggeva
+        // mai, quindi il valore non veniva mai scritto sull'entità né salvato.
+        // Object invece di Boolean diretto perché arriva deserializzato da
+        // Jackson come java.lang.Boolean dentro la Map<String,Object>.
+        if (body.containsKey("richiamato") && body.get("richiamato") != null) {
+            entry.setRichiamato((Boolean) body.get("richiamato"));
+        }
         entry.setUpdatedAt(java.time.LocalDateTime.now());
         return ResponseEntity.ok(waitingListService.update(entry));
     }
