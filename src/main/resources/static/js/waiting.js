@@ -1,309 +1,275 @@
-// ============================================================
-// RECALL — waiting.js completo, con stat-card cliccabili aggiunte
-// ============================================================
+let chartFollowUp = null;
+let chartWaiting = null;
+let calendarYear = new Date().getFullYear();
+let calendarMonth = new Date().getMonth() + 1;
+let calendarDays = {};
+let recallCalendarYear = new Date().getFullYear();
+let recallCalendarMonth = new Date().getMonth() + 1;
+let recallEntries = [];
 
-let waitingEntries = [];
-let waitingEntriesFiltered = [];
-let waitingView = 'attivi'; // 'attivi' | 'archivio'
-let waitingDetailId = null;
-let waitingAlertShownThisSession = false;
-
-const WAITING_STATUS_LIST = ['WAITING', 'CALLED', 'APPOINTMENT', 'INTERESTED', 'CLOSED', 'FAILED'];
-const WAITING_STATUS_LABELS = {
-    'WAITING': 'In Attesa',
-    'CALLED': 'Richiamato',
-    'APPOINTMENT': 'Appuntamento',
-    'INTERESTED': 'Interessato',
-    'CLOSED': 'Chiuso',
-    'FAILED': 'Fallito'
+const STAT_DETAIL_TITLES = {
+    all: 'Follow-up totali',
+    responded: 'Risposte ricevute',
+    appointments: 'Appuntamenti',
+    abandoned: 'Abbandonati'
 };
-const WAITING_STATUS_COLORS = {
-    'WAITING': '#4a90d9',
-    'CALLED': '#ff9800',
-    'APPOINTMENT': '#f0c040',
-    'INTERESTED': '#00c853',
-    'CLOSED': '#7c4dff',
-    'FAILED': '#ff3d3d'
+
+const WAITING_STATUS_TITLES = {
+    WAITING: 'In Attesa',
+    CALLED: 'Richiamati',
+    APPOINTMENT: 'Appuntamento',
+    INTERESTED: 'Interessati',
+    CLOSED: 'Chiusi'
 };
-const WAITING_ARCHIVE_STATUSES = ['CLOSED', 'FAILED'];
 
-// ============================================================
-// CARICAMENTO
-// ============================================================
+const MONTH_NAMES = [
+    'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno',
+    'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'
+];
 
-async function loadWaitingList() {
+function getStatsQueryParams() {
+    const from = document.getElementById('statsFrom').value;
+    const to = document.getElementById('statsTo').value;
+    const consultant = document.getElementById('statsConsultant')?.value || '';
+    let qs = `from=${from}&to=${to}`;
+    if (consultant) qs += `&consultant=${encodeURIComponent(consultant)}`;
+    return { from, to, consultant, qs };
+}
+
+async function loadStats() {
+    const { from, to, qs } = getStatsQueryParams();
+    if (!from || !to) return;
+
+    const consultant = document.getElementById('statsConsultant')?.value || '';
+    let calQs = `year=${calendarYear}&month=${calendarMonth}`;
+    if (consultant) calQs += `&consultant=${encodeURIComponent(consultant)}`;
+
+    try {
+        const [fuRes, wRes, calRes, recallRes] = await Promise.all([
+            fetch(`/api/stats/followups?${qs}`),
+            fetch('/api/stats/waiting'),
+            fetch(`/api/stats/calendar?${calQs}`),
+            fetch('/api/waiting')
+        ]);
+
+        if (fuRes.ok) {
+            const fuStats = await fuRes.json();
+            document.getElementById('statTotal').textContent = fuStats.total;
+            document.getElementById('statResponded').textContent = fuStats.responded;
+            document.getElementById('statAppointments').textContent = fuStats.appointments;
+            document.getElementById('statResponseRate').textContent = fuStats.responseRate + '%';
+            document.getElementById('statAppointmentRate').textContent = fuStats.appointmentRate + '%';
+            renderFollowUpChart(fuStats);
+        }
+
+        if (wRes.ok) {
+            const wStats = await wRes.json();
+            renderWaitingChart(wStats);
+        }
+
+        if (calRes.ok) {
+            const calData = await calRes.json();
+            calendarDays = calData.days || {};
+            renderCalendar();
+        }
+
+        if (recallRes.ok) {
+            recallEntries = await recallRes.json();
+            renderRecallCalendar();
+        }
+
+    } catch (err) {
+        console.error('Errore caricamento statistiche:', err);
+    }
+}
+
+async function loadRecallEntries() {
     try {
         const res = await fetch('/api/waiting');
         if (!res.ok) return;
-        waitingEntries = await res.json();
-        waitingEntries.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-        applyWaitingFilters();
-        checkWaitingRecallOggi();
+        recallEntries = await res.json();
+        renderRecallCalendar();
     } catch (err) {
-        console.error('Errore caricamento lista recall:', err);
+        console.error('Errore caricamento recall:', err);
     }
 }
 
-function applyWaitingFilters() {
-    if (waitingView === 'attivi') {
-        waitingEntriesFiltered = waitingEntries.filter(e => !WAITING_ARCHIVE_STATUSES.includes(e.status));
-    } else {
-        waitingEntriesFiltered = waitingEntries.filter(e => WAITING_ARCHIVE_STATUSES.includes(e.status));
+async function loadCalendar() {
+    const consultant = document.getElementById('statsConsultant')?.value || '';
+    let qs = `year=${calendarYear}&month=${calendarMonth}`;
+    if (consultant) qs += `&consultant=${encodeURIComponent(consultant)}`;
+
+    try {
+        const res = await fetch(`/api/stats/calendar?${qs}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        calendarDays = data.days || {};
+        renderCalendar();
+    } catch (err) {
+        console.error('Errore caricamento calendario:', err);
     }
-    renderWaitingStats();
-    renderWaitingList(waitingEntriesFiltered);
 }
 
-// ============================================================
-// NAV INTERNO — Attivi / Archivio
-// ============================================================
-
-function switchWaitingView(view) {
-    waitingView = view;
-    const btnAttivi = document.getElementById('waitingNavAttivi');
-    const btnArchivio = document.getElementById('waitingNavArchivio');
-    if (btnAttivi) btnAttivi.classList.toggle('waiting-nav-active', view === 'attivi');
-    if (btnArchivio) btnArchivio.classList.toggle('waiting-nav-active', view === 'archivio');
-    applyWaitingFilters();
+function changeCalendarMonth(delta) {
+    calendarMonth += delta;
+    if (calendarMonth > 12) { calendarMonth = 1; calendarYear++; }
+    else if (calendarMonth < 1) { calendarMonth = 12; calendarYear--; }
+    loadCalendar();
 }
 
-// ============================================================
-// STATISTICHE — ora ogni stat-card è cliccabile e apre il dettaglio
-// filtrato corrispondente (usa lo stesso modal del popup recall)
-// ============================================================
+function changeRecallCalendarMonth(delta) {
+    recallCalendarMonth += delta;
+    if (recallCalendarMonth > 12) { recallCalendarMonth = 1; recallCalendarYear++; }
+    else if (recallCalendarMonth < 1) { recallCalendarMonth = 12; recallCalendarYear--; }
+    renderRecallCalendar();
+}
 
-function renderWaitingStats() {
-    const all = waitingEntries;
-    const total = all.length;
-    const el = id => document.getElementById(id);
+function renderCalendar() {
+    const container = document.getElementById('fuCalendar');
+    const title = document.getElementById('calendarTitle');
+    if (!container || !title) return;
 
-    const countByStatus = st => all.filter(e => e.status === st).length;
-    const pct = n => total > 0 ? Math.round(n * 1000 / total) /10 : 0;
+    title.textContent = `Calendario Follow Up — ${MONTH_NAMES[calendarMonth - 1]} ${calendarYear}`;
 
-    if (el('waitingStatTotal')) el('waitingStatTotal').textContent = total;
-    if (el('waitingStatInteressati')) el('waitingStatInteressati').textContent = pct(countByStatus('INTERESTED')) + '%';
-    if (el('waitingStatAppuntamenti')) el('waitingStatAppuntamenti').textContent = pct(countByStatus('APPOINTMENT')) + '%';
-    if (el('waitingStatChiusi')) el('waitingStatChiusi').textContent = pct(countByStatus('CLOSED')) + '%';
-    if (el('waitingStatFalliti')) el('waitingStatFalliti').textContent = pct(countByStatus('FAILED')) + '%';
-    if (el('waitingStatDaRichiamare')) {
-        const daRichiamare = all.filter(e => !WAITING_ARCHIVE_STATUSES.includes(e.status) && !e.richiamato && e.recallDate).length;
-        el('waitingStatDaRichiamare').textContent = daRichiamare;
+    const firstDay = new Date(calendarYear, calendarMonth - 1, 1);
+    const daysInMonth = new Date(calendarYear, calendarMonth, 0).getDate();
+    let startWeekday = firstDay.getDay();
+    startWeekday = startWeekday === 0 ? 6 : startWeekday - 1;
+
+    const weekdays = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+    let html = weekdays.map(d => `<div class="cal-weekday">${d}</div>`).join('');
+
+    for (let i = 0; i < startWeekday; i++) {
+        html += '<div class="cal-day cal-day-empty"></div>';
     }
 
-    attachWaitingStatClickHandlers();
+    const today = new Date().toISOString().split('T')[0];
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${calendarYear}-${String(calendarMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const info = calendarDays[dateStr];
+        let dayClass = 'cal-day';
+        if (info) {
+            dayClass += info.complete ? ' cal-day-complete' : ' cal-day-pending';
+        }
+        if (dateStr === today) dayClass += ' cal-day-today';
+        html += `<button type="button" class="${dayClass}" onclick="openCalendarDay('${dateStr}')">${day}</button>`;
+    }
+
+    container.innerHTML = html;
 }
 
-// Aggancia il click a ogni stat-card, trovando il div .stat-card che
-// contiene il valore — stesso pattern usato in contact.js.
-function attachWaitingStatClickHandlers() {
-    const map = {
-        waitingStatTotal: 'total',
-        waitingStatInteressati: 'interessati',
-        waitingStatAppuntamenti: 'appuntamenti',
-        waitingStatChiusi: 'chiusi',
-        waitingStatFalliti: 'falliti',
-        waitingStatDaRichiamare: 'darichiamare'
-    };
-    Object.entries(map).forEach(([elId, type]) => {
-        const valueEl = document.getElementById(elId);
-        if (!valueEl) return;
-        const card = valueEl.closest('.stat-card');
-        if (!card) return;
-        card.style.cursor = 'pointer';
-        card.classList.add('stat-card-clickable');
-        card.onclick = () => showWaitingStatDetail(type);
+// ============================================================
+// CALENDARIO RECALL — FIX APPLICATI:
+// 1) Colore "scaduto" ora ignora le entry già segnate come richiamate
+//    (e.richiamato === true): un giorno con SOLO recall già richiamati
+//    diventa verde invece di restare rosso per sempre.
+// 2) Ogni giorno con recall è ora cliccabile (onclick="openRecallCalendarDay(...)"),
+//    prima non aveva alcun gestore di click.
+// ============================================================
+function renderRecallCalendar() {
+    const container = document.getElementById('recallCalendar');
+    const title = document.getElementById('recallCalendarTitle');
+    if (!container || !title) return;
+
+    title.textContent = `Calendario Recall — ${MONTH_NAMES[recallCalendarMonth - 1]} ${recallCalendarYear}`;
+
+    const firstDay = new Date(recallCalendarYear, recallCalendarMonth - 1, 1);
+    const daysInMonth = new Date(recallCalendarYear, recallCalendarMonth, 0).getDate();
+    let startWeekday = firstDay.getDay();
+    startWeekday = startWeekday === 0 ? 6 : startWeekday - 1;
+
+    const today = new Date().toISOString().split('T')[0];
+
+    const byDay = {};
+    recallEntries.forEach(e => {
+        if (e.recallDate) {
+            if (!byDay[e.recallDate]) byDay[e.recallDate] = [];
+            byDay[e.recallDate].push(e);
+        }
     });
-}
 
-function showWaitingStatDetail(type) {
-    let items = [];
-    let title = '';
-    switch (type) {
-        case 'total':
-            items = waitingEntries;
-            title = 'Totale Clienti Recall';
-            break;
-        case 'interessati':
-            items = waitingEntries.filter(e => e.status === 'INTERESTED');
-            title = 'Interessati';
-            break;
-        case 'appuntamenti':
-            items = waitingEntries.filter(e => e.status === 'APPOINTMENT');
-            title = 'Appuntamenti';
-            break;
-        case 'chiusi':
-            items = waitingEntries.filter(e => e.status === 'CLOSED');
-            title = 'Chiusi';
-            break;
-        case 'falliti':
-            items = waitingEntries.filter(e => e.status === 'FAILED');
-            title = 'Falliti';
-            break;
-        case 'darichiamare':
-            items = waitingEntries.filter(e => !WAITING_ARCHIVE_STATUSES.includes(e.status) && !e.richiamato && e.recallDate);
-            title = 'Da Richiamare';
-            break;
+    const weekdays = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+    let html = weekdays.map(d => `<div class="cal-weekday">${d}</div>`).join('');
+
+    for (let i = 0; i < startWeekday; i++) {
+        html += '<div class="cal-day cal-day-empty"></div>';
     }
-    showGenericWaitingDetail(title, items);
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${recallCalendarYear}-${String(recallCalendarMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const entries = byDay[dateStr] || [];
+        const isToday = dateStr === today;
+        const isPast = dateStr < today;
+
+        // Solo le entry NON ancora richiamate contano per determinare il colore
+        // "da fare" (oggi/scaduto/futuro). Se tutte le entry del giorno sono
+        // già state richiamate, il giorno diventa verde ("gestito").
+        const daFare = entries.filter(e => !e.richiamato);
+        const tutteGestite = entries.length > 0 && daFare.length === 0;
+
+        let bgStyle = '';
+        let borderStyle = '';
+        let title2 = '';
+
+        if (tutteGestite) {
+            bgStyle = 'background:rgba(0,200,83,0.2);';
+            borderStyle = 'border-color:#00c853;';
+            title2 = `title="${entries.map(e => e.fullName).join(', ')} — tutti richiamati"`;
+        } else if (daFare.length > 0) {
+            if (isToday) {
+                bgStyle = 'background:rgba(240,192,64,0.35);';
+                borderStyle = 'border-color:#f0c040;';
+            } else if (isPast) {
+                bgStyle = 'background:rgba(255,61,61,0.2);';
+                borderStyle = 'border-color:#ff3d3d;';
+            } else {
+                bgStyle = 'background:rgba(74,144,217,0.2);';
+                borderStyle = 'border-color:#4a90d9;';
+            }
+            title2 = `title="${daFare.map(e => e.fullName).join(', ')}"`;
+        }
+
+        const todayClass = isToday ? ' cal-day-today' : '';
+        const clickable = entries.length > 0 ? ` onclick="openRecallCalendarDay('${dateStr}')" style="cursor:pointer;${bgStyle}${borderStyle}"` : ` style="${bgStyle}${borderStyle}"`;
+        html += `<button type="button" class="cal-day${todayClass}"${clickable} ${title2}>${day}${entries.length > 0 ? `<span style="display:block;font-size:9px;font-weight:900">${entries.length}</span>` : ''}</button>`;
+    }
+
+    container.innerHTML = html;
 }
 
-// Dettaglio generico riusabile — usa lo stesso modal del popup recall
-// automatico (waitingRecallModal), così non serve aggiungere HTML nuovo.
-function showGenericWaitingDetail(title, items) {
-    const modal = document.getElementById('waitingRecallModal');
-    const list = document.getElementById('waitingRecallModalList');
-    if (!modal || !list) return;
+// Apre l'elenco clienti recall del giorno cliccato. Riusa statDetailModal
+// (NON annidato in una pagina nascosta, quindi visibile anche stando sulla
+// Dashboard — a differenza di waitingRecallModal/waitingDetailModal che
+// sono dentro #waitingPage e non si vedrebbero da qui).
+function openRecallCalendarDay(dateStr) {
+    const entries = recallEntries.filter(e => e.recallDate === dateStr);
+    if (entries.length === 0) return;
 
-    const modalHeader = modal.querySelector('.modal-header h3');
-    if (modalHeader) modalHeader.textContent = `${title} (${items.length})`;
+    const modal = document.getElementById('statDetailModal');
+    const list = document.getElementById('statDetailList');
+    const title = document.getElementById('statDetailTitle');
+    if (!modal || !list || !title) return;
 
-    if (items.length === 0) {
-        list.innerHTML = '<div class="empty-state" style="padding:20px"><p>Nessun cliente per questo filtro</p></div>';
-    } else {
-        list.innerHTML = items.map(e => {
-            const color = WAITING_STATUS_COLORS[e.status] || '#8a8faa';
-            return `<div class="followup-card" style="margin-bottom:10px;cursor:pointer" onclick="closeWaitingRecallModal();openWaitingDetailModal(${e.id})">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start">
-                    <div>
-                        <div style="font-weight:800;color:var(--text-primary);font-size:14px">${e.fullName}</div>
-                        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">🚗 ${e.brand} ${e.model}</div>
-                        <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📞 ${e.contact}</div>
-                        <div style="margin-top:6px">
-                            <span class="status-badge" style="background:${color}22;color:${color}">${WAITING_STATUS_LABELS[e.status] || e.status}</span>
-                            ${e.recallDate ? `<span class="recall-badge recall-future" style="margin-left:6px">📅 ${formatDateITWaiting(e.recallDate)}</span>` : ''}
-                        </div>
+    const dateLabel = formatDateITChart(dateStr);
+    title.textContent = `Recall — ${dateLabel} (${entries.length})`;
+
+    list.innerHTML = entries.map(e => {
+        const color = e.richiamato ? '#00c853' : '#ff9800';
+        const statusLabel = e.richiamato ? '✅ Richiamato' : '🔔 Da richiamare';
+        return `<div class="followup-card stat-detail-card" onclick="goToRecallEntry(${e.id})">
+            <div class="followup-header" style="margin-bottom:0">
+                <div>
+                    <div class="followup-name">${e.fullName}</div>
+                    <div class="followup-meta">
+                        🚗 ${e.brand} ${e.model}
+                        · 📞 ${e.contact}
                     </div>
+                </div>
+                <div style="display:flex;gap:6px;align-items:center">
+                    <span class="status-badge" style="background:${color}22;color:${color}">${statusLabel}</span>
                     <span style="color:#f0c040;font-size:18px">→</span>
                 </div>
-            </div>`;
-        }).join('');
-    }
-
-    modal.style.display = 'flex';
-}
-
-// ============================================================
-// RENDER LISTA
-// ============================================================
-
-function renderWaitingList(entries) {
-    const container = document.getElementById('waitingList');
-    if (!container) return;
-
-    if (entries.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <h3>🚗</h3>
-                <p>${waitingView === 'attivi' ? 'Nessun cliente in lista recall' : 'Nessun cliente in archivio'}</p>
-            </div>`;
-        return;
-    }
-
-    const today = todayStrWaiting();
-
-    container.innerHTML = entries.map(e => renderWaitingCard(e, today)).join('');
-}
-
-function todayStrWaiting() {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-
-function renderWaitingCard(e, today) {
-    const isRecallToday = e.recallDate === today && !e.richiamato;
-    const isRecallPast = e.recallDate && e.recallDate < today && !e.richiamato;
-    const isRecallSoon = e.recallDate && e.recallDate > today && !e.richiamato;
-
-    let recallBadge = '';
-    if (e.recallDate) {
-        if (e.richiamato) {
-            recallBadge = `<span class="recall-badge" style="background:rgba(0,200,83,0.15);color:#00c853;border:1.5px solid #00c853">✅ RICHIAMATO · ${formatDateITWaiting(e.recallDate)}</span>`;
-        } else if (isRecallToday) {
-            recallBadge = `<span class="recall-badge recall-today">🔔 RECALL OGGI · ${formatDateITWaiting(e.recallDate)}</span>`;
-        } else if (isRecallPast) {
-            recallBadge = `<span class="recall-badge recall-past">⚠️ RECALL SCADUTO · ${formatDateITWaiting(e.recallDate)}</span>`;
-        } else {
-            recallBadge = `<span class="recall-badge recall-future">📅 RECALL · ${formatDateITWaiting(e.recallDate)}</span>`;
-        }
-    }
-
-    const historyCount = (e.recallHistory && e.recallHistory.length) ? e.recallHistory.length : 0;
-    const createdInfo = e.createdAt ? `<span style="font-size:11px;color:var(--text-secondary)">📅 Inserito: ${formatDateTimeWaiting(e.createdAt)}</span>` : '';
-
-    return `
-    <div class="waiting-card ${isRecallToday ? 'recall-card-today' : isRecallPast ? 'recall-card-past' : ''}" onclick="openWaitingDetailModal(${e.id})" style="cursor:pointer">
-        <div>
-            <div class="waiting-name">${e.fullName}</div>
-            <div class="waiting-details">
-                📞 ${e.contact} · 🚗 ${e.brand} ${e.model}
-                ${e.price ? ' · 💰 €' + Number(e.price).toLocaleString('it-IT') : ''}
-                ${e.notes ? '<br>📝 ' + e.notes : ''}
-            </div>
-            <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-                <span class="status-badge status-${e.status}" style="background:${WAITING_STATUS_COLORS[e.status]}22;color:${WAITING_STATUS_COLORS[e.status]}">${WAITING_STATUS_LABELS[e.status] || e.status}</span>
-                ${recallBadge}
-                ${historyCount > 0 ? `<span style="font-size:10px;font-weight:700;color:var(--text-secondary);background:var(--step-bg);padding:2px 8px;border-radius:10px">🕐 ${historyCount} recall precedent${historyCount===1?'e':'i'}</span>` : ''}
-            </div>
-            ${createdInfo ? `<div style="margin-top:6px">${createdInfo}</div>` : ''}
-        </div>
-        <div class="waiting-actions" onclick="event.stopPropagation()">
-            <button class="btn-small btn-blue" onclick="openWaitingDetailModal(${e.id})">✏️ Gestisci</button>
-            <button class="btn-small btn-red" onclick="deleteWaiting(${e.id})">🗑️</button>
-        </div>
-    </div>
-    `;
-}
-
-function formatDateITWaiting(dateStr) {
-    if (!dateStr) return '';
-    const [y, m, d] = dateStr.split('-').map(Number);
-    const date = new Date(y, m - 1, d);
-    return date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
-
-function formatDateTimeWaiting(isoStr) {
-    if (!isoStr) return '';
-    const d = new Date(isoStr);
-    const date = d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const time = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-    return `${date} · ${time}`;
-}
-
-// ============================================================
-// POPUP AUTOMATICO RECALL DI OGGI/SCADUTI
-// ============================================================
-
-function checkWaitingRecallOggi() {
-    const modal = document.getElementById('waitingRecallModal');
-    const list = document.getElementById('waitingRecallModalList');
-    if (!modal || !list) return;
-    if (waitingAlertShownThisSession) return;
-
-    const today = todayStrWaiting();
-    const daRichiamare = waitingEntries.filter(e =>
-        !WAITING_ARCHIVE_STATUSES.includes(e.status) && e.recallDate && e.recallDate <= today && !e.richiamato
-    );
-
-    if (daRichiamare.length === 0) return;
-
-    waitingAlertShownThisSession = true;
-
-    const modalHeader = modal.querySelector('.modal-header h3');
-    if (modalHeader) modalHeader.textContent = '🔔 Recall Da Effettuare';
-
-    list.innerHTML = daRichiamare.map(e => {
-        const isPast = e.recallDate < today;
-        return `<div class="followup-card" style="margin-bottom:10px;cursor:pointer" onclick="closeWaitingRecallModal();openWaitingDetailModal(${e.id})">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start">
-                <div>
-                    <div style="font-weight:800;color:var(--text-primary);font-size:14px">${e.fullName}</div>
-                    <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">🚗 ${e.brand} ${e.model}</div>
-                    <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📞 ${e.contact}</div>
-                    <div style="font-size:12px;margin-top:6px">
-                        <span class="recall-badge ${isPast ? 'recall-past' : 'recall-today'}">${isPast ? '⚠️ SCADUTO' : '🔔 OGGI'} · ${formatDateITWaiting(e.recallDate)}</span>
-                    </div>
-                </div>
-                <span style="color:#f0c040;font-size:18px">→</span>
             </div>
         </div>`;
     }).join('');
@@ -311,244 +277,254 @@ function checkWaitingRecallOggi() {
     modal.style.display = 'flex';
 }
 
-function closeWaitingRecallModal(event) {
-    if (event && event.target.id !== 'waitingRecallModal') return;
-    const modal = document.getElementById('waitingRecallModal');
-    if (modal) modal.style.display = 'none';
-}
-
-// ============================================================
-// MODAL DETTAGLIO/GESTIONE CLIENTE — scheda completa editabile
-// ============================================================
-
-function openWaitingDetailModal(id) {
-    const e = waitingEntries.find(x => x.id === id);
-    if (!e) return;
-    waitingDetailId = id;
-
-    const setVal = (elId, val) => { const el = document.getElementById(elId); if (el) el.value = val || ''; };
-    setVal('wdFullName', e.fullName);
-    setVal('wdContact', e.contact);
-    setVal('wdBrand', e.brand);
-    setVal('wdModel', e.model);
-    setVal('wdPrice', e.price);
-    setVal('wdNotes', e.notes);
-    setVal('wdRecallDate', e.recallDate);
-    setVal('wdStatus', e.status);
-
-    const richiamatoBtn = document.getElementById('wdRichiamatoBtn');
-    if (richiamatoBtn) {
-        richiamatoBtn.classList.toggle('btn-sede-active', !!e.richiamato);
-        richiamatoBtn.textContent = e.richiamato ? '✅ Richiamato: Sì' : '⭕ Richiamato: No';
+// Passa alla pagina Recall vera, ricarica la lista (necessario perché
+// waitingEntries in waiting.js è un array separato da recallEntries qui)
+// e apre la scheda completa del cliente selezionato.
+async function goToRecallEntry(id) {
+    closeStatDetail();
+    showPage('waiting');
+    if (typeof loadWaitingList === 'function') {
+        await loadWaitingList();
     }
-
-    const createdInfo = document.getElementById('wdCreatedInfo');
-    if (createdInfo) createdInfo.textContent = e.createdAt ? formatDateTimeWaiting(e.createdAt) : '—';
-
-    renderWaitingHistory(e);
-
-    const modal = document.getElementById('waitingDetailModal');
-    if (modal) modal.style.display = 'flex';
-}
-
-function renderWaitingHistory(e) {
-    const container = document.getElementById('wdHistoryList');
-    if (!container) return;
-    const history = e.recallHistory || [];
-    if (history.length === 0) {
-        container.innerHTML = `<div style="font-size:12px;color:var(--text-secondary);padding:10px 0">Nessun recall precedente registrato</div>`;
-        return;
+    if (typeof openWaitingDetailModal === 'function') {
+        openWaitingDetailModal(id);
     }
-    container.innerHTML = history.slice().reverse().map(h => `
-        <div style="background:var(--step-bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px">
-            <div style="font-size:12px;font-weight:700;color:var(--text-primary)">📅 ${formatDateITWaiting(h.data)}</div>
-            ${h.esito ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:2px">Esito: ${WAITING_STATUS_LABELS[h.esito] || h.esito}</div>` : ''}
-            ${h.note ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:2px">📝 ${h.note}</div>` : ''}
-        </div>
-    `).join('');
 }
 
-function closeWaitingDetailModal(event) {
-    if (event && event.target.id !== 'waitingDetailModal') return;
-    const modal = document.getElementById('waitingDetailModal');
-    if (modal) modal.style.display = 'none';
-    waitingDetailId = null;
+function formatDateITChart(dateStr) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    return date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-function toggleWaitingRichiamato() {
-    if (!waitingDetailId) return;
-    const e = waitingEntries.find(x => x.id === waitingDetailId);
-    if (!e) return;
-    const newVal = !e.richiamato;
-
-    fetch(`/api/waiting/${waitingDetailId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ richiamato: newVal })
-    }).then(async res => {
-        if (!res.ok) return;
-        e.richiamato = newVal;
-        const btn = document.getElementById('wdRichiamatoBtn');
-        if (btn) {
-            btn.classList.toggle('btn-sede-active', newVal);
-            btn.textContent = newVal ? '✅ Richiamato: Sì' : '⭕ Richiamato: No';
-        }
-        applyWaitingFilters();
-    }).catch(err => console.error('Errore aggiornamento richiamato:', err));
+function openCalendarDay(dateStr) {
+    document.getElementById('statsFrom').value = dateStr;
+    document.getElementById('statsTo').value = dateStr;
+    loadStats();
+    showStatDetail('all');
 }
 
-async function saveWaitingDetail() {
-    if (!waitingDetailId) return;
+async function showStatDetail(type) {
+    const { from, to, consultant } = getStatsQueryParams();
+    if (!from || !to) return;
 
-    const fullName = document.getElementById('wdFullName')?.value.trim() || '';
-    const contact = document.getElementById('wdContact')?.value.trim() || '';
-    const brand = document.getElementById('wdBrand')?.value.trim() || '';
-    const model = document.getElementById('wdModel')?.value.trim() || '';
-    const price = document.getElementById('wdPrice')?.value.trim() || '';
-    const notes = document.getElementById('wdNotes')?.value.trim() || '';
-    const recallDate = document.getElementById('wdRecallDate')?.value || '';
-    const status = document.getElementById('wdStatus')?.value || '';
+    let qs = `from=${from}&to=${to}&type=${type}`;
+    if (consultant) qs += `&consultant=${encodeURIComponent(consultant)}`;
 
-    if (!fullName || !contact || !brand || !model) {
-        alert('Nome, contatto, marchio e modello sono obbligatori');
-        return;
-    }
+    const modal = document.getElementById('statDetailModal');
+    const list = document.getElementById('statDetailList');
+    const title = document.getElementById('statDetailTitle');
+
+    title.textContent = STAT_DETAIL_TITLES[type] || 'Dettaglio';
+    list.innerHTML = '<div class="empty-state" style="padding:30px"><p>Caricamento...</p></div>';
+    modal.style.display = 'flex';
 
     try {
-        const res = await fetch(`/api/waiting/${waitingDetailId}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                fullName, contact, brand, model,
-                price: price || null,
-                notes: notes || null,
-                recallDate: recallDate || null,
-                status
-            })
-        });
+        const res = await fetch(`/api/stats/followups/list?${qs}`);
         if (!res.ok) {
-            const data = await res.json().catch(() => null);
-            alert(data?.error || 'Errore nel salvataggio');
+            list.innerHTML = '<div class="empty-state" style="padding:30px"><p>Errore nel caricamento</p></div>';
             return;
         }
-        closeWaitingDetailModal();
-        loadWaitingList();
+        const items = await res.json();
+        renderStatDetailList(items, from, to, consultant);
     } catch (err) {
-        console.error('Errore salvataggio scheda recall:', err);
+        console.error('Errore dettaglio stats:', err);
+        list.innerHTML = '<div class="empty-state" style="padding:30px"><p>Errore nel caricamento</p></div>';
     }
 }
 
-async function registraNuovoRecall() {
-    if (!waitingDetailId) return;
-    const e = waitingEntries.find(x => x.id === waitingDetailId);
-    if (!e) return;
+function renderStatDetailList(items, from, to, consultant) {
+    const list = document.getElementById('statDetailList');
+    const filterNote = consultant ? ` · Consulente: ${consultant}` : '';
+    const rangeNote = from === to ? from : `${from} → ${to}`;
 
-    if (!e.recallDate) {
-        alert('Non c\'è nessuna data di recall attiva da archiviare. Imposta prima una data recall.');
+    if (!items || items.length === 0) {
+        list.innerHTML = `<div class="empty-state" style="padding:30px"><p>Nessun risultato (${rangeNote}${filterNote})</p></div>`;
         return;
     }
 
-    const nuovaData = prompt('Inserisci la nuova data di recall (AAAA-MM-GG):', '');
-    if (!nuovaData) return;
+    list.innerHTML = `
+        <div class="stat-detail-meta">${items.length} risultati · ${rangeNote}${filterNote}</div>
+        ${items.map(fu => `
+            <div class="followup-card stat-detail-card" onclick="goToFollowUpFromDashboard('${fu.workDate}', ${fu.id})">
+                <div class="followup-header" style="margin-bottom:0">
+                    <div>
+                        <div class="followup-name">${fu.customer.fullName}</div>
+                        <div class="followup-meta">
+                            ${fu.customer.email ? '✉️ ' + fu.customer.email : ''}
+                            ${fu.customer.phone ? (fu.customer.email ? ' · ' : '') + '📞 ' + fu.customer.phone : ''}
+                            · 📅 ${fu.workDate}
+                            · 👤 ${fu.consultantName || 'N/D'}
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:6px;align-items:center">
+                        <span class="status-badge status-${fu.status}">${formatStatus(fu.status)}</span>
+                        ${fu.hasAppointment ? '<span class="status-badge status-APPOINTMENT">📅 APP.</span>' : ''}
+                        <span style="color:#f0c040;font-size:18px">→</span>
+                    </div>
+                </div>
+            </div>
+        `).join('')}
+    `;
+}
 
-    const notaPrecedente = document.getElementById('wdNotes')?.value.trim() || '';
-
-    try {
-        const res = await fetch(`/api/waiting/${waitingDetailId}/nuovo-recall`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                nuovaDataRecall: nuovaData,
-                notaRecallPrecedente: notaPrecedente || null
-            })
-        });
-        if (!res.ok) {
-            const data = await res.json().catch(() => null);
-            alert(data?.error || 'Errore nella registrazione del nuovo recall');
-            return;
+function goToFollowUpFromDashboard(date, followUpId) {
+    closeStatDetail();
+    showPage('followups');
+    document.getElementById('workDateFilter').value = date;
+    loadFollowUps();
+    setTimeout(() => {
+        const el = document.getElementById(`fu-${followUpId}`);
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.style.borderColor = '#f0c040';
+            el.style.boxShadow = '0 0 0 3px rgba(240,192,64,0.3)';
+            setTimeout(() => {
+                el.style.borderColor = '';
+                el.style.boxShadow = '';
+            }, 3000);
         }
-        const updated = await res.json();
-        const idx = waitingEntries.findIndex(x => x.id === updated.id);
-        if (idx !== -1) waitingEntries[idx] = updated;
-        openWaitingDetailModal(updated.id);
-        applyWaitingFilters();
-    } catch (err) {
-        console.error('Errore registrazione nuovo recall:', err);
-    }
+    }, 700);
 }
 
-async function deleteWaitingFromDetail() {
-    if (!waitingDetailId) return;
-    if (!confirm('Eliminare definitivamente questo cliente?')) return;
-    try {
-        await fetch(`/api/waiting/${waitingDetailId}`, { method: 'DELETE' });
-        closeWaitingDetailModal();
-        loadWaitingList();
-    } catch (err) {
-        console.error('Errore eliminazione:', err);
-    }
+function closeStatDetail(event) {
+    if (event && event.target !== event.currentTarget) return;
+    document.getElementById('statDetailModal').style.display = 'none';
 }
 
-async function deleteWaiting(id) {
-    if (!confirm('Sei sicuro di voler eliminare questo cliente?')) return;
-    try {
-        await fetch(`/api/waiting/${id}`, { method: 'DELETE' });
-        loadWaitingList();
-    } catch (err) {
-        console.error('Errore eliminazione:', err);
+function showWaitingDetail(status) {
+    const items = recallEntries.filter(e => e.status === status);
+    const modal = document.getElementById('statDetailModal');
+    const list = document.getElementById('statDetailList');
+    const title = document.getElementById('statDetailTitle');
+    if (!modal || !list || !title) return;
+
+    title.textContent = WAITING_STATUS_TITLES[status] || 'Dettaglio';
+    if (items.length === 0) {
+        list.innerHTML = `<div class="empty-state" style="padding:30px"><p>Nessun cliente in questo stato</p></div>`;
+    } else {
+        list.innerHTML = `
+            <div class="stat-detail-meta">${items.length} risultati</div>
+            ${items.map(e => `
+                <div class="followup-card stat-detail-card" style="cursor:default">
+                    <div class="followup-header" style="margin-bottom:0">
+                        <div>
+                            <div class="followup-name">${e.fullName}</div>
+                            <div class="followup-meta">
+                                📞 ${e.contact} · 🚗 ${e.brand} ${e.model}
+                                ${e.price ? ' · 💰 €' + Number(e.price).toLocaleString('it-IT') : ''}
+                                ${e.recallDate ? ' · 📅 ' + e.recallDate : ''}
+                            </div>
+                        </div>
+                        <div>
+                            <span class="status-badge status-${e.status}">${formatWaitingStatus ? formatWaitingStatus(e.status) : e.status}</span>
+                        </div>
+                    </div>
+                </div>
+            `).join('')}
+        `;
     }
+    modal.style.display = 'flex';
 }
 
-// ============================================================
-// FORM NUOVO CLIENTE
-// ============================================================
+function renderFollowUpChart(stats) {
+    const ctx = document.getElementById('chartFollowUp').getContext('2d');
+    if (chartFollowUp) chartFollowUp.destroy();
 
-async function createWaiting() {
-    const fullName = document.getElementById('wFullName').value.trim();
-    const contact = document.getElementById('wContact').value.trim();
-    const brand = document.getElementById('wBrand').value.trim();
-    const model = document.getElementById('wModel').value.trim();
-    const price = document.getElementById('wPrice').value.trim();
-    const notes = document.getElementById('wNotes').value.trim();
-    const recallDate = document.getElementById('wRecallDate').value;
+    const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+    const gridColor = isDark ? '#2a2d3e' : '#e0e0e0';
+    const tickColor = isDark ? '#8a8faa' : '#555';
 
-    if (!fullName || !contact || !brand || !model) {
-        alert('Nome, contatto, marchio e modello sono obbligatori');
-        return;
-    }
+    const labels = ['Totali', 'Risposte', 'Appuntamenti', 'Abbandonati'];
+    const types = ['all', 'responded', 'appointments', 'abandoned'];
+    const dataValues = [stats.total, stats.responded, stats.appointments, stats.abandoned];
+    const total = stats.total || 0;
 
-    try {
-        const res = await fetch('/api/waiting', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fullName, contact, brand, model, price: price || null, notes: notes || null, recallDate: recallDate || null })
-        });
-
-        if (!res.ok) {
-            const data = await res.json();
-            alert(data.error || 'Errore nella creazione');
-            return;
+    chartFollowUp = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Follow-Up',
+                data: dataValues,
+                backgroundColor: [
+                    'rgba(33,150,243,0.7)',
+                    'rgba(0,200,83,0.7)',
+                    'rgba(240,192,64,0.7)',
+                    'rgba(255,68,68,0.7)'
+                ],
+                borderColor: ['#2196f3','#00c853','#f0c040','#ff4444'],
+                borderWidth: 2,
+                borderRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            animation: { duration: 300 },
+            onClick: (evt, elements) => { if (elements.length > 0) showStatDetail(types[elements[0].index]); },
+            onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: ctx => {
+                    const val = ctx.raw;
+                    const pct = total > 0 ? Math.round(val*1000/total)/10 : 0;
+                    return ` Valore: ${val} — ${pct}%`;
+                } } }
+            },
+            scales: {
+                x: { ticks: { color: tickColor }, grid: { color: gridColor } },
+                y: { ticks: { color: tickColor, precision: 0 }, grid: { color: gridColor }, beginAtZero: true }
+            }
         }
-
-        hideNewWaiting();
-        loadWaitingList();
-    } catch (err) {
-        console.error('Errore creazione cliente attesa:', err);
-    }
+    });
 }
 
-function showNewWaiting() {
-    document.getElementById('newWaitingForm').style.display = 'block';
-    document.getElementById('newWaitingForm').scrollIntoView({ behavior: 'smooth' });
-}
+function renderWaitingChart(stats) {
+    const ctx = document.getElementById('chartWaiting').getContext('2d');
+    if (chartWaiting) chartWaiting.destroy();
 
-function hideNewWaiting() {
-    document.getElementById('newWaitingForm').style.display = 'none';
-    document.getElementById('wFullName').value = '';
-    document.getElementById('wContact').value = '';
-    document.getElementById('wBrand').value = '';
-    document.getElementById('wModel').value = '';
-    document.getElementById('wPrice').value = '';
-    document.getElementById('wNotes').value = '';
-    document.getElementById('wRecallDate').value = '';
+    const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+    const legendColor = isDark ? '#8a8faa' : '#555';
+
+    const labels = ['In Attesa', 'Richiamati', 'Appuntamento', 'Interessati', 'Chiusi'];
+    const statuses = ['WAITING', 'CALLED', 'APPOINTMENT', 'INTERESTED', 'CLOSED'];
+    const dataValues = [stats.waiting, stats.called, stats.appointments, stats.interested, stats.closed];
+    const colors = ['#2196f3','#ff9800','#f0c040','#00c853','#9c27b0'];
+    const total = dataValues.reduce((a,b) => a+b, 0);
+
+    chartWaiting = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels,
+            datasets: [{
+                data: dataValues,
+                backgroundColor: colors.map(c => c + 'b3'),
+                borderColor: colors,
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            animation: { duration: 300 },
+            onClick: (evt, elements) => { if (elements.length > 0) showWaitingDetail(statuses[elements[0].index]); },
+            onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { color: legendColor, font: { size: 11 }, padding: 10, boxWidth: 12,
+                        generateLabels: chart => chart.data.labels.map((label, i) => {
+                            const val = chart.data.datasets[0].data[i];
+                            const pct = total > 0 ? Math.round(val*1000/total)/10 : 0;
+                            return { text: `${label}: ${val} (${pct}%)`, fillStyle: colors[i]+'b3', strokeStyle: colors[i], fontColor: legendColor, lineWidth: 0, index: i };
+                        })
+                    }
+                },
+                tooltip: { callbacks: { label: ctx => {
+                    const val = ctx.raw;
+                    const pct = total > 0 ? Math.round(val*1000/total)/10 : 0;
+                    return ` Valore: ${val} — ${pct}%`;
+                } } }
+            }
+        }
+    });
 }
