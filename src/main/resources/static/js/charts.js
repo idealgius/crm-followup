@@ -194,11 +194,18 @@ function renderRecallCalendar() {
         const isToday = dateStr === today;
         const isPast = dateStr < today;
 
+        const daFare = entries.filter(e => !e.richiamato);
+        const tutteGestite = entries.length > 0 && daFare.length === 0;
+
         let bgStyle = '';
         let borderStyle = '';
         let title2 = '';
 
-        if (entries.length > 0) {
+        if (tutteGestite) {
+            bgStyle = 'background:rgba(0,200,83,0.2);';
+            borderStyle = 'border-color:#00c853;';
+            title2 = `title="${entries.map(e => e.fullName).join(', ')} — tutti richiamati"`;
+        } else if (daFare.length > 0) {
             if (isToday) {
                 bgStyle = 'background:rgba(240,192,64,0.35);';
                 borderStyle = 'border-color:#f0c040;';
@@ -209,14 +216,69 @@ function renderRecallCalendar() {
                 bgStyle = 'background:rgba(74,144,217,0.2);';
                 borderStyle = 'border-color:#4a90d9;';
             }
-            title2 = `title="${entries.map(e => e.fullName).join(', ')}"`;
+            title2 = `title="${daFare.map(e => e.fullName).join(', ')}"`;
         }
 
         const todayClass = isToday ? ' cal-day-today' : '';
-        html += `<button type="button" class="cal-day${todayClass}" style="${bgStyle}${borderStyle}" ${title2}>${day}${entries.length > 0 ? `<span style="display:block;font-size:9px;font-weight:900">${entries.length}</span>` : ''}</button>`;
+        const clickable = entries.length > 0
+            ? ` onclick="openRecallCalendarDay('${dateStr}')" style="cursor:pointer;${bgStyle}${borderStyle}"`
+            : ` style="${bgStyle}${borderStyle}"`;
+        html += `<button type="button" class="cal-day${todayClass}"${clickable} ${title2}>${day}${entries.length > 0 ? `<span style="display:block;font-size:9px;font-weight:900">${entries.length}</span>` : ''}</button>`;
     }
 
     container.innerHTML = html;
+}
+
+function openRecallCalendarDay(dateStr) {
+    const entries = recallEntries.filter(e => e.recallDate === dateStr);
+    if (entries.length === 0) return;
+
+    const modal = document.getElementById('statDetailModal');
+    const list = document.getElementById('statDetailList');
+    const title = document.getElementById('statDetailTitle');
+    if (!modal || !list || !title) return;
+
+    const dateLabel = formatDateITChart(dateStr);
+    title.textContent = `Recall — ${dateLabel} (${entries.length})`;
+
+    list.innerHTML = entries.map(e => {
+        const color = e.richiamato ? '#00c853' : '#ff9800';
+        const statusLabel = e.richiamato ? '✅ Richiamato' : '🔔 Da richiamare';
+        return `<div class="followup-card stat-detail-card" onclick="goToRecallEntry(${e.id})">
+            <div class="followup-header" style="margin-bottom:0">
+                <div>
+                    <div class="followup-name">${e.fullName}</div>
+                    <div class="followup-meta">
+                        🚗 ${e.brand} ${e.model}
+                        · 📞 ${e.contact}
+                    </div>
+                </div>
+                <div style="display:flex;gap:6px;align-items:center">
+                    <span class="status-badge" style="background:${color}22;color:${color}">${statusLabel}</span>
+                    <span style="color:#f0c040;font-size:18px">→</span>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+
+    modal.style.display = 'flex';
+}
+
+async function goToRecallEntry(id) {
+    closeStatDetail();
+    showPage('waiting');
+    if (typeof loadWaitingList === 'function') {
+        await loadWaitingList();
+    }
+    if (typeof openWaitingDetailModal === 'function') {
+        openWaitingDetailModal(id);
+    }
+}
+
+function formatDateITChart(dateStr) {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const date = new Date(y, m - 1, d);
+    return date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 function openCalendarDay(dateStr) {
