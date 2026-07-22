@@ -231,26 +231,26 @@ function renderWaitingCard(e, today) {
     const createdInfo = e.createdAt ? `<span style="font-size:11px;color:var(--text-secondary)">📅 Inserito: ${formatDateTimeWaiting(e.createdAt)}</span>` : '';
 
     return `
-    <div class="waiting-card ${isRecallToday ? 'recall-card-today' : isRecallPast ? 'recall-card-past' : ''}" onclick="openWaitingDetailModal(${e.id})" style="cursor:pointer">
-        <div>
-            <div class="waiting-name">${e.fullName}</div>
-            <div class="waiting-details">
-                📞 ${e.contact} · 🚗 ${e.brand} ${e.model}
-                ${e.price ? ' · 💰 €' + Number(e.price).toLocaleString('it-IT') : ''}
-                ${e.notes ? '<br>📝 ' + e.notes : ''}
+        <div class="waiting-card ${isRecallToday ? 'recall-card-today' : isRecallPast ? 'recall-card-past' : ''}" onclick="openWaitingDetailModal(${e.id})" style="cursor:pointer">
+            <div>
+                <div class="waiting-name">${e.fullName}</div>
+                <div class="waiting-details">
+                    📞 ${e.contact} · 🚗 ${e.brand} ${e.model}
+                    ${e.price ? ' · 💰 €' + Number(e.price).toLocaleString('it-IT') : ''}
+                    ${e.notes ? '<br>📝 ' + e.notes : ''}
+                </div>
+                <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                    <span class="status-badge status-${e.status}" style="background:${WAITING_STATUS_COLORS[e.status]}22;color:${WAITING_STATUS_COLORS[e.status]}">${WAITING_STATUS_LABELS[e.status] || e.status}</span>
+                    ${recallBadge}
+                    ${historyCount > 0 ? `<span style="font-size:10px;font-weight:700;color:var(--text-secondary);background:var(--step-bg);padding:2px 8px;border-radius:10px">🕐 ${historyCount} recall precedent${historyCount===1?'e':'i'}</span>` : ''}
+                </div>
+                ${createdInfo ? `<div style="margin-top:6px">${createdInfo}</div>` : ''}
             </div>
-            <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-                <span class="status-badge status-${e.status}" style="background:${WAITING_STATUS_COLORS[e.status]}22;color:${WAITING_STATUS_COLORS[e.status]}">${WAITING_STATUS_LABELS[e.status] || e.status}</span>
-                ${recallBadge}
-                ${historyCount > 0 ? `<span style="font-size:10px;font-weight:700;color:var(--text-secondary);background:var(--step-bg);padding:2px 8px;border-radius:10px">🕐 ${historyCount} recall precedent${historyCount===1?'e':'i'}</span>` : ''}
+            <div class="waiting-actions" onclick="event.stopPropagation()">
+                <button class="btn-small btn-blue" onclick="openWaitingDetailModal(${e.id})">✏️ Gestisci</button>
+                <button class="btn-small btn-red" onclick="deleteWaiting(${e.id})">🗑️</button>
             </div>
-            ${createdInfo ? `<div style="margin-top:6px">${createdInfo}</div>` : ''}
         </div>
-        <div class="waiting-actions" onclick="event.stopPropagation()">
-            <button class="btn-small btn-blue" onclick="openWaitingDetailModal(${e.id})">✏️ Gestisci</button>
-            <button class="btn-small btn-red" onclick="deleteWaiting(${e.id})">🗑️</button>
-        </div>
-    </div>
     `;
 }
 
@@ -261,9 +261,16 @@ function formatDateITWaiting(dateStr) {
     return date.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+// FIX: il backend restituisce createdAt come LocalDateTime senza indicazione
+// di fuso orario (es. "2026-07-21T11:45:00"). Senza la 'Z' finale, JS lo
+// interpreta erroneamente già come ora locale, causando uno sfasamento di
+// 2 ore (l'orario salvato è in realtà UTC). Aggiungendo 'Z' se assente,
+// forziamo JS a trattarlo come UTC e convertirlo correttamente in locale.
 function formatDateTimeWaiting(isoStr) {
     if (!isoStr) return '';
-    const d = new Date(isoStr);
+    const hasTimezone = /Z$|[+-]\d{2}:\d{2}$/.test(isoStr);
+    const normalized = hasTimezone ? isoStr : isoStr + 'Z';
+    const d = new Date(normalized);
     const date = d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
     const time = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
     return `${date} · ${time}`;
@@ -281,7 +288,10 @@ function checkWaitingRecallOggi() {
 
     const today = todayStrWaiting();
     const daRichiamare = waitingEntries.filter(e =>
-        !WAITING_ARCHIVE_STATUSES.includes(e.status) && e.recallDate && e.recallDate <= today && !e.richiamato
+        !WAITING_ARCHIVE_STATUSES.includes(e.status) &&
+        e.recallDate &&
+        e.recallDate <= today &&
+        !e.richiamato
     );
 
     if (daRichiamare.length === 0) return;
@@ -326,10 +336,15 @@ function openWaitingDetailModal(id) {
     if (!e) return;
     waitingDetailId = id;
 
-    const setVal = (elId, val) => { const el = document.getElementById(elId); if (el) el.value = val || ''; };
+    const setVal = (elId, val) => {
+        const el = document.getElementById(elId);
+        if (el) el.value = val || '';
+    };
+
     setVal('wdFullName', e.fullName);
     setVal('wdContact', e.contact);
     setVal('wdBrand', e.brand);
+    setVal('wdBrandInput', e.brand);
     setVal('wdModel', e.model);
     setVal('wdPrice', e.price);
     setVal('wdNotes', e.notes);
@@ -354,11 +369,13 @@ function openWaitingDetailModal(id) {
 function renderWaitingHistory(e) {
     const container = document.getElementById('wdHistoryList');
     if (!container) return;
+
     const history = e.recallHistory || [];
     if (history.length === 0) {
         container.innerHTML = `<div style="font-size:12px;color:var(--text-secondary);padding:10px 0">Nessun recall precedente registrato</div>`;
         return;
     }
+
     container.innerHTML = history.slice().reverse().map(h => `
         <div style="background:var(--step-bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px">
             <div style="font-size:12px;font-weight:700;color:var(--text-primary)">📅 ${formatDateITWaiting(h.data)}</div>
@@ -521,15 +538,18 @@ async function createWaiting() {
         const res = await fetch('/api/waiting', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fullName, contact, brand, model, price: price || null, notes: notes || null, recallDate: recallDate || null })
+            body: JSON.stringify({
+                fullName, contact, brand, model,
+                price: price || null,
+                notes: notes || null,
+                recallDate: recallDate || null
+            })
         });
-
         if (!res.ok) {
             const data = await res.json();
             alert(data.error || 'Errore nella creazione');
             return;
         }
-
         hideNewWaiting();
         loadWaitingList();
     } catch (err) {
@@ -547,8 +567,64 @@ function hideNewWaiting() {
     document.getElementById('wFullName').value = '';
     document.getElementById('wContact').value = '';
     document.getElementById('wBrand').value = '';
+    document.getElementById('wBrandInput').value = '';
     document.getElementById('wModel').value = '';
     document.getElementById('wPrice').value = '';
     document.getElementById('wNotes').value = '';
     document.getElementById('wRecallDate').value = '';
 }
+
+// ============================================================
+// TENDINA MARCHIO — riusa MARCHE_NORMALIZED già definita in contact.js
+// Applicata sia al form "Nuovo Cliente Recall" (wBrand) sia al modal
+// di dettaglio/modifica (wdBrand).
+// ============================================================
+
+// --- Form "Nuovo Cliente Recall" ---
+function showWaitingMarcheDropdown() { filterWaitingMarche('', true); }
+function filterWaitingMarche(query, showAll) {
+    const dropdown = document.getElementById('waitingMarcaDropdown');
+    if (!dropdown) return;
+    const matches = (!query || query.trim() === '' || showAll) ? MARCHE_NORMALIZED : MARCHE_NORMALIZED.filter(m => m.normalized.includes(normalizeText(query.trim())));
+    if (matches.length === 0) { dropdown.style.display = 'none'; return; }
+    dropdown.innerHTML = matches.map(m => `
+        <div onclick="selectWaitingMarca('${m.original}')" style="padding:10px 14px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary);border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''">
+            ${m.original}
+        </div>`).join('');
+    dropdown.style.display = 'block';
+}
+function selectWaitingMarca(marca) {
+    document.getElementById('wBrandInput').value = marca;
+    document.getElementById('wBrand').value = marca;
+    document.getElementById('waitingMarcaDropdown').style.display = 'none';
+}
+
+// --- Modal di dettaglio/modifica ---
+function showWdMarcheDropdown() { filterWdMarche('', true); }
+function filterWdMarche(query, showAll) {
+    const dropdown = document.getElementById('wdMarcaDropdown');
+    if (!dropdown) return;
+    const matches = (!query || query.trim() === '' || showAll) ? MARCHE_NORMALIZED : MARCHE_NORMALIZED.filter(m => m.normalized.includes(normalizeText(query.trim())));
+    if (matches.length === 0) { dropdown.style.display = 'none'; return; }
+    dropdown.innerHTML = matches.map(m => `
+        <div onclick="selectWdMarca('${m.original}')" style="padding:10px 14px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary);border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''">
+            ${m.original}
+        </div>`).join('');
+    dropdown.style.display = 'block';
+}
+function selectWdMarca(marca) {
+    document.getElementById('wdBrandInput').value = marca;
+    document.getElementById('wdBrand').value = marca;
+    document.getElementById('wdMarcaDropdown').style.display = 'none';
+}
+
+// Chiude i dropdown se si clicca fuori
+document.addEventListener('click', function(e) {
+    const waitingDropdown = document.getElementById('waitingMarcaDropdown');
+    const waitingInput = document.getElementById('wBrandInput');
+    if (waitingDropdown && waitingInput && !waitingInput.contains(e.target) && !waitingDropdown.contains(e.target)) waitingDropdown.style.display = 'none';
+
+    const wdDropdown = document.getElementById('wdMarcaDropdown');
+    const wdInput = document.getElementById('wdBrandInput');
+    if (wdDropdown && wdInput && !wdInput.contains(e.target) && !wdDropdown.contains(e.target)) wdDropdown.style.display = 'none';
+});

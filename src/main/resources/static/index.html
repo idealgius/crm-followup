@@ -246,7 +246,11 @@
             <div class="form-grid">
                 <input type="text" id="wFullName" placeholder="Cognome e Nome *" class="input-field">
                 <input type="text" id="wContact" placeholder="Telefono o Email *" class="input-field">
-                <input type="text" id="wBrand" placeholder="Marchio (es. Peugeot) *" class="input-field">
+                <div style="position:relative">
+                    <input type="text" id="wBrandInput" placeholder="Clicca o cerca marchio... *" class="input-field" style="margin-bottom:0;cursor:pointer" oninput="filterWaitingMarche(this.value)" onfocus="showWaitingMarcheDropdown()" autocomplete="off">
+                    <div id="waitingMarcaDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1.5px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;box-shadow:var(--shadow)"></div>
+                    <input type="hidden" id="wBrand" value="">
+                </div>
                 <input type="text" id="wModel" placeholder="Modello (es. 208) *" class="input-field">
                 <input type="number" id="wPrice" placeholder="Prezzo (opzionale)" class="input-field">
                 <div>
@@ -285,7 +289,11 @@
                     <div class="form-grid">
                         <input type="text" id="wdFullName" placeholder="Cognome e Nome *" class="input-field">
                         <input type="text" id="wdContact" placeholder="Telefono o Email *" class="input-field">
-                        <input type="text" id="wdBrand" placeholder="Marchio *" class="input-field">
+                        <div style="position:relative">
+                            <input type="text" id="wdBrandInput" placeholder="Clicca o cerca marchio... *" class="input-field" style="margin-bottom:0;cursor:pointer" oninput="filterWdMarche(this.value)" onfocus="showWdMarcheDropdown()" autocomplete="off">
+                            <div id="wdMarcaDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1.5px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;box-shadow:var(--shadow)"></div>
+                            <input type="hidden" id="wdBrand" value="">
+                        </div>
                         <input type="text" id="wdModel" placeholder="Modello *" class="input-field">
                         <input type="number" id="wdPrice" placeholder="Prezzo (opzionale)" class="input-field">
                     </div>
@@ -1069,6 +1077,10 @@
         <div class="page-header">
             <h2>🚗 RENT — GESTIONE NOLEGGIO</h2>
             <div class="filter-bar">
+
+                <input type="date" id="rentTrattativeFrom" class="input-dark" onchange="applyRentFilters();showRentResetBtn()">
+                <input type="date" id="rentTrattativeTo" class="input-dark" onchange="applyRentFilters();showRentResetBtn()">
+                <button id="rentResetBtn" onclick="resetRentDateFilters()" class="btn-secondary" style="display:none;padding:10px 16px">↺ RESET</button>
 
                 <!-- FILTRO STATO — multi-select -->
                 <div class="multi-select-wrapper">

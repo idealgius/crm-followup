@@ -129,7 +129,30 @@ function rentGestioneStatoOf(t) {
     return 'NESSUNA';
 }
 
+// ============================================================
+// FILTRO PERIODO — nuovi input rentTrattativeFrom/rentTrattativeTo
+// filtrano sulla data di creazione (createdAt) della trattativa,
+// stesso pattern usato in Registro Contatti.
+// ============================================================
+function showRentResetBtn() {
+    const btn = document.getElementById('rentResetBtn');
+    const from = document.getElementById('rentTrattativeFrom')?.value;
+    const to = document.getElementById('rentTrattativeTo')?.value;
+    if (btn) btn.style.display = (from || to) ? 'inline-block' : 'none';
+}
+
+function resetRentDateFilters() {
+    const fromEl = document.getElementById('rentTrattativeFrom');
+    const toEl = document.getElementById('rentTrattativeTo');
+    if (fromEl) fromEl.value = '';
+    if (toEl) toEl.value = '';
+    showRentResetBtn();
+    applyRentFilters();
+}
+
 function applyRentFilters() {
+    const from = document.getElementById('rentTrattativeFrom')?.value || '';
+    const to = document.getElementById('rentTrattativeTo')?.value || '';
     const statoSelezionati = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('rentStatoFilterMulti') : [];
     const marchiSelezionati = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('rentMarchioFilterMulti') : [];
     const fontiSelezionate = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('rentFonteFilterMulti') : [];
@@ -139,6 +162,9 @@ function applyRentFilters() {
     const ruolo = document.getElementById('rentRuoloFilter')?.value || '';
 
     rentTrattativeFiltered = rentTrattative.filter(t => {
+        const dataCreazione = (t.createdAt || '').split('T')[0];
+        if (from && dataCreazione && dataCreazione < from) return false;
+        if (to && dataCreazione && dataCreazione > to) return false;
         if (statoSelezionati.length > 0 && !statoSelezionati.includes(t.stato)) return false;
         if (marchiSelezionati.length > 0 && !marchiSelezionati.includes(t.marchio)) return false;
         if (fontiSelezionate.length > 0 && !fontiSelezionate.includes(t.fonte)) return false;
@@ -362,10 +388,6 @@ function renderRentTrattative(list) {
                                                     ? (b.createdAt||'').localeCompare(a.createdAt||'')
                                                     : (a.createdAt||'').localeCompare(b.createdAt||''));
                                                 const dayColor = DAY_BOX_COLORS[dayIdx % DAY_BOX_COLORS.length];
-                                                // Ogni giorno diventa un vero "riquadro": bordo colorato a sinistra,
-                                                // sfondo leggermente tintato, angoli arrotondati e padding interno.
-                                                // L'header del giorno resta cliccabile per la vista "solo questo giorno",
-                                                // ma ora è parte integrante del riquadro invece di una riga fluttuante.
                                                 return `
                                                 <div style="margin-bottom:14px;border-left:4px solid ${dayColor};background:${dayColor}0d;border-radius:0 10px 10px 0;padding:12px 14px">
                                                     <div onclick="showRentDayView('${date}')" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:800;color:${dayColor};text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;padding:5px 12px;border-radius:8px;background:${dayColor}22;transition:background 0.15s" onmouseover="this.style.background='${dayColor}33'" onmouseout="this.style.background='${dayColor}22'">
@@ -389,10 +411,6 @@ function renderRentTrattative(list) {
     </div>`;
 }
 
-// Card cliccabile ovunque -> apre il modal di dettaglio/gestione completo.
-// I pulsanti interni (modifica rapida, elimina, link) fermano la propagazione
-// del click con event.stopPropagation() per non aprire il modal per errore.
-// Badge "🔔 Da Gestire" / "✅ Gestita da X" basati su t.daGestire / t.gestitoDa (oggetto).
 function renderRentTrattativaCard(t) {
     const today = todayStr();
     const isRecallToday = t.stato === 'DA_RICHIAMARE' && t.dataRichiamo === today;
@@ -875,12 +893,16 @@ async function deleteRentTrattativa(id) {
 }
 
 function exportRentExcel() {
+    const from = document.getElementById('rentTrattativeFrom')?.value || '';
+    const to = document.getElementById('rentTrattativeTo')?.value || '';
     const statoSelezionati = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('rentStatoFilterMulti') : [];
     const marchiSelezionati = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('rentMarchioFilterMulti') : [];
     const fontiSelezionate = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('rentFonteFilterMulti') : [];
     const operatoriSelezionati = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('rentOperatoreFilterMulti') : [];
     const ruolo = document.getElementById('rentRuoloFilter')?.value || '';
     let url = '/api/noleggio/trattative/export-excel?';
+    if (from) url += `from=${encodeURIComponent(from)}&`;
+    if (to) url += `to=${encodeURIComponent(to)}&`;
     if (statoSelezionati.length > 0) url += `stato=${encodeURIComponent(statoSelezionati.join(','))}&`;
     if (marchiSelezionati.length > 0) url += `marchio=${encodeURIComponent(marchiSelezionati.join(','))}&`;
     if (fontiSelezionate.length > 0) url += `fonte=${encodeURIComponent(fontiSelezionate.join(','))}&`;
