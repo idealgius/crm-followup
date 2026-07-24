@@ -291,8 +291,20 @@ public class ContactLogController {
             }
         }
 
-        if (body.containsKey("acquistoAlertNoteGestione")) log.setAcquistoAlertNoteGestione((String) body.get("acquistoAlertNoteGestione"));
-        if (body.containsKey("acquistoAlertNoteGestita")) log.setAcquistoAlertNoteGestita((String) body.get("acquistoAlertNoteGestita"));
+        // FIX: ogni modifica alla nota (inserita, riscritta o cancellata del
+        // tutto) aggiorna chi/quando — a differenza del cambio stato, qui NON
+        // controlliamo se era già valorizzato: ogni salvataggio conta come
+        // una modifica, comprese le cancellazioni (valore vuoto/null).
+        if (body.containsKey("acquistoAlertNoteGestione")) {
+            log.setAcquistoAlertNoteGestione((String) body.get("acquistoAlertNoteGestione"));
+            userRepository.findById(userId).ifPresent(log::setAcquistoAlertNoteGestioneModificataDa);
+            log.setAcquistoAlertNoteGestioneModificataAt(LocalDateTime.now());
+        }
+        if (body.containsKey("acquistoAlertNoteGestita")) {
+            log.setAcquistoAlertNoteGestita((String) body.get("acquistoAlertNoteGestita"));
+            userRepository.findById(userId).ifPresent(log::setAcquistoAlertNoteGestitaModificataDa);
+            log.setAcquistoAlertNoteGestitaModificataAt(LocalDateTime.now());
+        }
         if (body.containsKey("noleggioTipo")) log.setNoleggioTipo((String) body.get("noleggioTipo"));
         if (body.containsKey("noleggioLink")) log.setNoleggioLink((String) body.get("noleggioLink"));
         if (body.containsKey("serviceNomeCliente")) log.setServiceNomeCliente((String) body.get("serviceNomeCliente"));
@@ -366,7 +378,7 @@ public class ContactLogController {
         m.put("acquistoAlertNoteGestione", log.getAcquistoAlertNoteGestione());
         m.put("acquistoAlertNoteGestita", log.getAcquistoAlertNoteGestita());
 
-        // ===== NUOVO: chi + quando per "In gestione" e "Gestita" =====
+        // ===== chi + quando per "In gestione" e "Gestita" =====
         // Serializzati come oggetto {id, fullName, role}, coerente con il campo
         // "user" già presente in questa toMap() e con "gestitoDa" in Rent — cosi'
         // extractUserName() nel frontend li legge senza bisogno di adattamenti.
@@ -377,6 +389,16 @@ public class ContactLogController {
         m.put("acquistoAlertGestitaDa", userToMap(log.getAcquistoAlertGestitaDa()));
         m.put("acquistoAlertGestitaAt", log.getAcquistoAlertGestitaAt() != null
                 ? log.getAcquistoAlertGestitaAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+                : null);
+
+        // ===== NUOVO: chi + quando per l'ultima modifica alle note =====
+        m.put("acquistoAlertNoteGestioneModificataDa", userToMap(log.getAcquistoAlertNoteGestioneModificataDa()));
+        m.put("acquistoAlertNoteGestioneModificataAt", log.getAcquistoAlertNoteGestioneModificataAt() != null
+                ? log.getAcquistoAlertNoteGestioneModificataAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+                : null);
+        m.put("acquistoAlertNoteGestitaModificataDa", userToMap(log.getAcquistoAlertNoteGestitaModificataDa()));
+        m.put("acquistoAlertNoteGestitaModificataAt", log.getAcquistoAlertNoteGestitaModificataAt() != null
+                ? log.getAcquistoAlertNoteGestitaModificataAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
                 : null);
 
         m.put("noleggioTipo", log.getNoleggioTipo());
@@ -401,7 +423,7 @@ public class ContactLogController {
     }
 
     // Helper: converte un User (o null) nella stessa struttura {id, fullName, role}
-    // usata per "user" — evita duplicazione di codice tra i 4 punti che serializzano utenti.
+    // usata per "user" — evita duplicazione di codice tra i punti che serializzano utenti.
     private Map<String, Object> userToMap(User user) {
         if (user == null) return null;
         Map<String, Object> m = new HashMap<>();

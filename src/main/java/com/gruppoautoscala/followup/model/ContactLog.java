@@ -77,7 +77,24 @@ public class ContactLog {
     @Column(name = "acquisto_alert_note_gestita", length = 1000)
     private String acquistoAlertNoteGestita;
 
-    // ===== NUOVO: chi ha messo "in gestione" e quando =====
+    // ===== NUOVO: chi ha modificato l'ultima volta le note (anche solo
+    // cancellandole o riscrivendole) e quando. Ogni salvataggio della
+    // textarea conta come modifica, comprese le cancellazioni. =====
+    @ManyToOne
+    @JoinColumn(name = "acquisto_alert_note_gestione_modificata_da_id")
+    private User acquistoAlertNoteGestioneModificataDa;
+
+    @Column(name = "acquisto_alert_note_gestione_modificata_at")
+    private LocalDateTime acquistoAlertNoteGestioneModificataAt;
+
+    @ManyToOne
+    @JoinColumn(name = "acquisto_alert_note_gestita_modificata_da_id")
+    private User acquistoAlertNoteGestitaModificataDa;
+
+    @Column(name = "acquisto_alert_note_gestita_modificata_at")
+    private LocalDateTime acquistoAlertNoteGestitaModificataAt;
+
+    // ===== chi ha messo "in gestione" e quando =====
     // Relazione verso User (non stringa libera) cosi il frontend riceve un
     // oggetto {id, fullName, role} coerente con com'e' gia' fatto per
     // gestitoDa in NoleggioTrattativa. Valorizzati automaticamente dal
@@ -89,7 +106,7 @@ public class ContactLog {
     @Column(name = "acquisto_alert_in_gestione_at")
     private LocalDateTime acquistoAlertInGestioneAt;
 
-    // ===== NUOVO: chi ha messo "gestita" e quando =====
+    // ===== chi ha messo "gestita" e quando =====
     @ManyToOne
     @JoinColumn(name = "acquisto_alert_gestita_da_id")
     private User acquistoAlertGestitaDa;

@@ -137,10 +137,19 @@ function acquistoAlertNameColor(log) {
     if (log.category !== 'Info Acquisto effettuato' || !log.acquistoAlert) return null;
     return acquistoAlertVisual(log).color;
 }
+// FIX: il backend restituisce acquistoAlertInGestioneAt/acquistoAlertGestitaAt
+// come LocalDateTime senza indicazione di fuso orario (es. "2026-07-21T11:45:00").
+// Senza la 'Z' finale, JS lo interpreta erroneamente già come ora locale,
+// causando uno sfasamento di 2 ore (l'orario salvato è in realtà UTC).
+// Aggiungendo 'Z' se assente, forziamo JS a trattarlo come UTC e convertirlo
+// correttamente in locale — stesso fix già applicato in waiting.js
+// (formatDateTimeWaiting).
 function formatDateTimeIT(isoString) {
     if (!isoString) return null;
     try {
-        const d = new Date(isoString);
+        const hasTimezone = /Z$|[+-]\d{2}:\d{2}$/.test(isoString);
+        const normalized = hasTimezone ? isoString : isoString + 'Z';
+        const d = new Date(normalized);
         if (isNaN(d.getTime())) return null;
         const date = d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' });
         const time = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
@@ -159,18 +168,18 @@ function acquistoAlertAuditInfo(log) {
         if (typeof val === 'object') return val.fullName || val.name || null;
         return null;
     };
-    const info = { inGestione: null, gestita: null };
-    const inGestioneNome = nameOf(log.acquistoAlertInGestioneDa);
-    if (inGestioneNome || log.acquistoAlertInGestioneAt) {
-        const when = formatDateTimeIT(log.acquistoAlertInGestioneAt);
-        info.inGestione = `👤 ${inGestioneNome || '—'}${when ? ' · 🕐 ' + when : ''}`;
-    }
-    const gestitaNome = nameOf(log.acquistoAlertGestitaDa);
-    if (gestitaNome || log.acquistoAlertGestitaAt) {
-        const when = formatDateTimeIT(log.acquistoAlertGestitaAt);
-        info.gestita = `👤 ${gestitaNome || '—'}${when ? ' · 🕐 ' + when : ''}`;
-    }
-    return info;
+    const build = (nomeField, atField) => {
+        const nome = nameOf(log[nomeField]);
+        const when = formatDateTimeIT(log[atField]);
+        if (!nome && !when) return null;
+        return `👤 ${nome || '—'}${when ? ' · 🕐 ' + when : ''}`;
+    };
+    return {
+        inGestione: build('acquistoAlertInGestioneDa', 'acquistoAlertInGestioneAt'),
+        gestita: build('acquistoAlertGestitaDa', 'acquistoAlertGestitaAt'),
+        noteGestioneModificata: build('acquistoAlertNoteGestioneModificataDa', 'acquistoAlertNoteGestioneModificataAt'),
+        noteGestitaModificata: build('acquistoAlertNoteGestitaModificataDa', 'acquistoAlertNoteGestitaModificataAt')
+    };
 }
 function findChartTitleElement(canvas) {
     if (!canvas) return null;
@@ -1274,6 +1283,12 @@ function refreshAcquistoAlertModalDisplay(log) {
     if (auditInGestioneEl) { auditInGestioneEl.textContent = audit.inGestione || ''; auditInGestioneEl.style.display = audit.inGestione ? 'block' : 'none'; }
     const auditGestitaEl = document.getElementById('acquistoAlertGestitaInfo');
     if (auditGestitaEl) { auditGestitaEl.textContent = audit.gestita || ''; auditGestitaEl.style.display = audit.gestita ? 'block' : 'none'; }
+
+    // NUOVO: ultima modifica alle note (chi/quando), anche per cancellazioni
+    const noteGestioneModEl = document.getElementById('acquistoAlertNoteGestioneModificataInfo');
+    if (noteGestioneModEl) { noteGestioneModEl.textContent = audit.noteGestioneModificata ? '✏️ Ultima modifica: ' + audit.noteGestioneModificata : ''; noteGestioneModEl.style.display = audit.noteGestioneModificata ? 'block' : 'none'; }
+    const noteGestitaModEl = document.getElementById('acquistoAlertNoteGestitaModificataInfo');
+    if (noteGestitaModEl) { noteGestitaModEl.textContent = audit.noteGestitaModificata ? '✏️ Ultima modifica: ' + audit.noteGestitaModificata : ''; noteGestitaModEl.style.display = audit.noteGestitaModificata ? 'block' : 'none'; }
 
     const noteGestioneRow = document.getElementById('acquistoAlertNoteGestioneRow');
     const noteGestitaRow = document.getElementById('acquistoAlertNoteGestitaRow');
