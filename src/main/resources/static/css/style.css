@@ -1986,3 +1986,83 @@ select.input-field {
     border-color: #f0c040 !important;
     color: #f0c040 !important;
 }
+/* ===== TEMA SERVICE — Blu Navy e Grigio Chiaro (standard professionale) =====
+   Stessa struttura del tema Rent (noleggio), applicata a servicePage.
+   Navy per navbar/sfondi, grigio chiaro come colore accento/testo, così
+   risalta leggibile sul navy scuro senza scomparire come farebbe un blu
+   scuro su blu scuro. */
+[data-role-theme="service"] .navbar {
+    border-bottom: 3px solid #1e3a5f;
+    background: linear-gradient(180deg, var(--navbar-bg) 0%, #0c1826 100%);
+}
+
+[data-role-theme="service"] #navBrandBadge {
+    color: #5b85c4 !important;
+}
+
+[data-role-theme="service"] .nav-link:hover,
+[data-role-theme="service"] .nav-link.active {
+    color: #5b85c4;
+    background: rgba(91,133,196,0.14);
+}
+
+[data-role-theme="service"] #servicePage .page-header h2 {
+    color: #5b85c4;
+}
+
+[data-role-theme="service"] #servicePage .btn-primary {
+    background: linear-gradient(135deg, #3a5a8c, #1e3a5f);
+    color: #eef2f8;
+}
+
+[data-role-theme="service"] #servicePage .btn-gold {
+    background: linear-gradient(135deg, #3a5a8c, #1e3a5f);
+    color: #eef2f8;
+}
+
+[data-role-theme="service"] #servicePage .form-card {
+    border-top: 3px solid #3a5a8c;
+}
+
+[data-role-theme="service"] #servicePage .form-card h3,
+[data-role-theme="service"] #servicePage .chart-card h3 {
+    color: #7a92b8;
+}
+
+[data-role-theme="service"] #servicePage .btn-sede:hover {
+    border-color: #3a5a8c;
+    color: #7a92b8;
+    background: rgba(58,90,140,0.08);
+}
+
+[data-role-theme="service"] #servicePage .btn-sede-active {
+    background: rgba(58,90,140,0.18) !important;
+    border-color: #3a5a8c !important;
+    color: #7a92b8 !important;
+    box-shadow: 0 0 0 2px rgba(58,90,140,0.25);
+}
+
+[data-role-theme="service"] #servicePage .contact-tree-year,
+[data-role-theme="service"] #servicePage .contact-week-header {
+    border-bottom-color: #3a5a8c;
+}
+
+[data-role-theme="service"] #serviceRicambioModal .modal-box,
+[data-role-theme="service"] #serviceAppuntamentiDomaniModal .modal-box,
+[data-role-theme="service"] #serviceAppuntamentiDaGestireModal .modal-box,
+[data-role-theme="service"] #servicePraticaModal .modal-box {
+    border-color: #3a5a8c;
+    box-shadow: 0 20px 60px rgba(30,58,95,0.25);
+}
+
+[data-role-theme="service"] #servicePage .stat-card.blue { border-color: #3a5a8c; }
+[data-role-theme="service"] #servicePage .stat-card.blue::after { background: #3a5a8c; }
+
+[data-role-theme="service"] #servicePage .stat-card-clickable:hover {
+    box-shadow: 0 8px 24px rgba(30,58,95,0.22);
+}
+
+[data-role-theme="service"] #servicePage .btn-secondary:hover {
+    border-color: #7a92b8;
+    color: #7a92b8;
+}

@@ -292,16 +292,27 @@ public class ContactLogController {
         }
 
         // FIX: ogni modifica alla nota (inserita, riscritta o cancellata del
-        // tutto) aggiorna chi/quando — a differenza del cambio stato, qui NON
-        // controlliamo se era già valorizzato: ogni salvataggio conta come
-        // una modifica, comprese le cancellazioni (valore vuoto/null).
+        // tutto) aggiorna chi/quando ha modificato l'ULTIMA volta — a
+        // differenza del cambio stato, qui NON controlliamo se era già
+        // valorizzato: ogni salvataggio conta come una modifica, comprese le
+        // cancellazioni. "InseritaDa/At" invece si valorizza SOLO alla prima
+        // volta e non viene mai più toccato, per conservare chi l'ha scritta
+        // per primo anche se qualcun altro la modifica in seguito.
         if (body.containsKey("acquistoAlertNoteGestione")) {
             log.setAcquistoAlertNoteGestione((String) body.get("acquistoAlertNoteGestione"));
+            if (log.getAcquistoAlertNoteGestioneInseritaDa() == null) {
+                userRepository.findById(userId).ifPresent(log::setAcquistoAlertNoteGestioneInseritaDa);
+                log.setAcquistoAlertNoteGestioneInseritaAt(LocalDateTime.now());
+            }
             userRepository.findById(userId).ifPresent(log::setAcquistoAlertNoteGestioneModificataDa);
             log.setAcquistoAlertNoteGestioneModificataAt(LocalDateTime.now());
         }
         if (body.containsKey("acquistoAlertNoteGestita")) {
             log.setAcquistoAlertNoteGestita((String) body.get("acquistoAlertNoteGestita"));
+            if (log.getAcquistoAlertNoteGestitaInseritaDa() == null) {
+                userRepository.findById(userId).ifPresent(log::setAcquistoAlertNoteGestitaInseritaDa);
+                log.setAcquistoAlertNoteGestitaInseritaAt(LocalDateTime.now());
+            }
             userRepository.findById(userId).ifPresent(log::setAcquistoAlertNoteGestitaModificataDa);
             log.setAcquistoAlertNoteGestitaModificataAt(LocalDateTime.now());
         }
@@ -391,7 +402,17 @@ public class ContactLogController {
                 ? log.getAcquistoAlertGestitaAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
                 : null);
 
-        // ===== NUOVO: chi + quando per l'ultima modifica alle note =====
+        // ===== NUOVO: chi + quando per l'INSERIMENTO iniziale delle note =====
+        m.put("acquistoAlertNoteGestioneInseritaDa", userToMap(log.getAcquistoAlertNoteGestioneInseritaDa()));
+        m.put("acquistoAlertNoteGestioneInseritaAt", log.getAcquistoAlertNoteGestioneInseritaAt() != null
+                ? log.getAcquistoAlertNoteGestioneInseritaAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+                : null);
+        m.put("acquistoAlertNoteGestitaInseritaDa", userToMap(log.getAcquistoAlertNoteGestitaInseritaDa()));
+        m.put("acquistoAlertNoteGestitaInseritaAt", log.getAcquistoAlertNoteGestitaInseritaAt() != null
+                ? log.getAcquistoAlertNoteGestitaInseritaAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+                : null);
+
+        // ===== chi + quando per l'ultima modifica alle note =====
         m.put("acquistoAlertNoteGestioneModificataDa", userToMap(log.getAcquistoAlertNoteGestioneModificataDa()));
         m.put("acquistoAlertNoteGestioneModificataAt", log.getAcquistoAlertNoteGestioneModificataAt() != null
                 ? log.getAcquistoAlertNoteGestioneModificataAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))

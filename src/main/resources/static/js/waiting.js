@@ -1,5 +1,5 @@
 // ============================================================
-// RECALL — waiting.js completo, con stat-card cliccabili aggiunte
+// RECALL — waiting.js completo, con stat-card cliccabili e ricerca
 // ============================================================
 
 let waitingEntries = [];
@@ -65,6 +65,54 @@ function switchWaitingView(view) {
     if (btnAttivi) btnAttivi.classList.toggle('waiting-nav-active', view === 'attivi');
     if (btnArchivio) btnArchivio.classList.toggle('waiting-nav-active', view === 'archivio');
     applyWaitingFilters();
+}
+
+// ============================================================
+// RICERCA — nominativo, numero, marchio o modello
+// ============================================================
+
+function searchWaitingList(query) {
+    const resultsWrapper = document.getElementById('waitingSearchResults');
+    const resultsList = document.getElementById('waitingSearchResultsList');
+    if (!resultsWrapper || !resultsList) return;
+    const q = query.trim();
+    if (!q) { resultsWrapper.style.display = 'none'; return; }
+
+    const qLower = q.toLowerCase();
+    const matches = waitingEntries.filter(e => {
+        const fullName = (e.fullName || '').toLowerCase();
+        const contact = (e.contact || '').toLowerCase();
+        const brand = (e.brand || '').toLowerCase();
+        const model = (e.model || '').toLowerCase();
+        return fullName.includes(qLower) || contact.includes(qLower) || brand.includes(qLower) || model.includes(qLower);
+    }).slice(0, 50);
+
+    if (matches.length === 0) {
+        resultsList.innerHTML = `<div class="empty-state" style="padding:20px"><p>Nessun cliente trovato</p></div>`;
+    } else {
+        resultsList.innerHTML = matches.map(e => {
+            const color = WAITING_STATUS_COLORS[e.status] || '#8a8faa';
+            return `<div class="followup-card" style="margin-bottom:8px;cursor:pointer" onclick="closeWaitingSearch();openWaitingDetailModal(${e.id})">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <div>
+                        <div style="font-weight:800;color:var(--text-primary);font-size:14px">${e.fullName}</div>
+                        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
+                            📞 ${e.contact || '—'} · 🚗 ${e.brand || ''} ${e.model || ''}
+                            · <span style="font-weight:700;color:${color}">${WAITING_STATUS_LABELS[e.status] || e.status}</span>
+                        </div>
+                    </div>
+                    <span style="color:#f0c040;font-size:16px">→</span>
+                </div>
+            </div>`;
+        }).join('');
+    }
+    resultsWrapper.style.display = 'block';
+}
+function closeWaitingSearch() {
+    const resultsWrapper = document.getElementById('waitingSearchResults');
+    const input = document.getElementById('waitingSearchInput');
+    if (resultsWrapper) resultsWrapper.style.display = 'none';
+    if (input) input.value = '';
 }
 
 // ============================================================

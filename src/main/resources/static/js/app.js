@@ -24,33 +24,48 @@ function refreshChartsOnThemeChange() {
     if (typeof refreshRentChartsOnThemeChange === 'function' && document.getElementById('rentPage')?.style.display === 'block') {
         refreshRentChartsOnThemeChange();
     }
+    if (typeof refreshServiceChartsOnThemeChange === 'function' && document.getElementById('servicePage')?.style.display === 'block') {
+        refreshServiceChartsOnThemeChange();
+    }
 }
 
 // Ruoli che vedono la dashboard Rent (in aggiunta o in esclusiva)
 const RENT_ROLES = ['NOLEGGIO', 'MODERATORE', 'GESTORE', 'ADMIN'];
 
+// Ruoli che vedono la dashboard Service (in aggiunta o in esclusiva) —
+// stesso pattern di RENT_ROLES.
+const SERVICE_ROLES = ['SERVICE', 'MODERATORE', 'GESTORE', 'ADMIN'];
+
 // Pagine valide riconosciute dal router — usato per validare l'hash dell'URL
 // (evita che un hash sporco o obsoleto mandi l'app in uno stato indefinito)
-const VALID_PAGES = ['dashboard', 'followups', 'waiting', 'contacts', 'promo', 'admin', 'rent'];
+const VALID_PAGES = ['dashboard', 'followups', 'waiting', 'contacts', 'promo', 'admin', 'rent', 'service'];
 
 function applyRolePermissions(role) {
     const isAdmin = role === 'ADMIN';
     const isGestore = role === 'GESTORE';
     const isModerator = role === 'MODERATORE';
     const isNoleggio = role === 'NOLEGGIO';
+    const isService = role === 'SERVICE';
     const canSeeAll = isAdmin || isGestore || isModerator;
     const canSeeRent = RENT_ROLES.includes(role);
+    const canSeeService = SERVICE_ROLES.includes(role);
 
-    // Il ruolo NOLEGGIO vede SOLO la dashboard Rent: tutto il resto nascosto
-    document.getElementById('navDashboard').style.display = (canSeeAll && !isNoleggio) ? 'inline-block' : 'none';
-    document.getElementById('navFollowups').style.display = (canSeeAll && !isNoleggio) ? 'inline-block' : 'none';
-    document.getElementById('navWaiting').style.display = (canSeeAll && !isNoleggio) ? 'inline-block' : 'none';
-    document.getElementById('navContacts').style.display = isNoleggio ? 'none' : 'inline-block';
-    document.getElementById('navPromo').style.display = (canSeeAll && !isNoleggio) ? 'inline-block' : 'none';
-    document.getElementById('adminLink').style.display = ((isAdmin || isGestore) && !isNoleggio) ? 'inline-block' : 'none';
+    // I ruoli NOLEGGIO e SERVICE vedono SOLO la propria dashboard dedicata:
+    // tutto il resto (Dashboard, Follow-up, Recall, Registro Contatti, Promo,
+    // Utenti) resta nascosto. Moderatore/Gestore/Admin vedono tutto, incluse
+    // entrambe le dashboard verticali.
+    document.getElementById('navDashboard').style.display = (canSeeAll && !isNoleggio && !isService) ? 'inline-block' : 'none';
+    document.getElementById('navFollowups').style.display = (canSeeAll && !isNoleggio && !isService) ? 'inline-block' : 'none';
+    document.getElementById('navWaiting').style.display = (canSeeAll && !isNoleggio && !isService) ? 'inline-block' : 'none';
+    document.getElementById('navContacts').style.display = (isNoleggio || isService) ? 'none' : 'inline-block';
+    document.getElementById('navPromo').style.display = (canSeeAll && !isNoleggio && !isService) ? 'inline-block' : 'none';
+    document.getElementById('adminLink').style.display = ((isAdmin || isGestore) && !isNoleggio && !isService) ? 'inline-block' : 'none';
 
     const navRent = document.getElementById('navRent');
     if (navRent) navRent.style.display = canSeeRent ? 'inline-block' : 'none';
+
+    const navService = document.getElementById('navService');
+    if (navService) navService.style.display = canSeeService ? 'inline-block' : 'none';
 
     if (role === 'UTENTE') {
         const wrapper = document.getElementById('contactOperatorFilterWrapper');
@@ -67,17 +82,25 @@ function applyRolePermissions(role) {
     }
 }
 
-// Il tema Rent (navbar verde + badge "RENT") dipende dalla pagina in cui ci si trova,
-// non solo dal ruolo: NOLEGGIO lo vede sempre, gli altri ruoli gestionali solo
-// quando sono dentro la pagina Rent, tornando al tema normale altrove.
+// Il tema di una dashboard verticale (navbar colorata + badge) dipende dalla
+// pagina in cui ci si trova, non solo dal ruolo: NOLEGGIO/SERVICE lo vedono
+// sempre, gli altri ruoli gestionali solo quando sono dentro quella pagina,
+// tornando al tema normale altrove. Service ha priorità su Rent nel caso
+// (teorico, non dovrebbe capitare) in cui entrambe le condizioni fossero vere.
 function applyPageTheme(page, role) {
     const isNoleggio = role === 'NOLEGGIO';
+    const isService = role === 'SERVICE';
     const isRentPage = page === 'rent';
+    const isServicePage = page === 'service';
     const showRentTheme = isNoleggio || isRentPage;
+    const showServiceTheme = isService || isServicePage;
 
     const body = document.body;
     const badge = document.getElementById('navBrandBadge');
-    if (showRentTheme) {
+    if (showServiceTheme) {
+        body.setAttribute('data-role-theme', 'service');
+        if (badge) badge.textContent = 'SERVICE';
+    } else if (showRentTheme) {
         body.setAttribute('data-role-theme', 'noleggio');
         if (badge) badge.textContent = 'RENT';
     } else {
@@ -96,14 +119,24 @@ function showPage(page, updateHash = true) {
     const role = currentUser?.role || 'UTENTE';
     const canSeeAll = role === 'ADMIN' || role === 'GESTORE' || role === 'MODERATORE';
     const isNoleggio = role === 'NOLEGGIO';
+    const isService = role === 'SERVICE';
 
     if (!VALID_PAGES.includes(page)) page = 'dashboard';
 
-    // Il ruolo NOLEGGIO è forzato sempre sulla pagina Rent, come UTENTE è forzato su contacts
+    // I ruoli NOLEGGIO e SERVICE sono forzati sempre sulla propria pagina,
+    // come UTENTE è forzato su contacts.
     if (isNoleggio && page !== 'rent') page = 'rent';
-    else if (!canSeeAll && !isNoleggio && page !== 'contacts') page = 'contacts';
+    else if (isService && page !== 'service') page = 'service';
+    else if (!canSeeAll && !isNoleggio && !isService && page !== 'contacts') page = 'contacts';
 
     sessionStorage.setItem('currentPage', page);
+
+    // FIX: senza questo reset, la posizione di scroll della pagina precedente
+    // resta invariata al cambio pagina (mostra/nascondi div, non una vera
+    // navigazione). Se si arrivava da una pagina scrollata più in basso, la
+    // pagina nuova sembrava "vuota" finché non si scorreva manualmente,
+    // perché in realtà si era già scrollati oltre il suo contenuto iniziale.
+    window.scrollTo(0, 0);
 
     if (updateHash) {
         // replaceState invece di location.hash diretto: evita di intasare la
@@ -121,6 +154,8 @@ function showPage(page, updateHash = true) {
     document.getElementById('adminPage').style.display = 'none';
     const rentPageEl = document.getElementById('rentPage');
     if (rentPageEl) rentPageEl.style.display = 'none';
+    const servicePageEl = document.getElementById('servicePage');
+    if (servicePageEl) servicePageEl.style.display = 'none';
 
     document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
 
@@ -170,6 +205,11 @@ function showPage(page, updateHash = true) {
         const navRent = document.getElementById('navRent');
         if (navRent) navRent.classList.add('active');
         if (typeof loadRentDashboard === 'function') loadRentDashboard();
+    } else if (page === 'service') {
+        if (servicePageEl) servicePageEl.style.display = 'block';
+        const navService = document.getElementById('navService');
+        if (navService) navService.classList.add('active');
+        if (typeof loadServiceDashboard === 'function') loadServiceDashboard();
     }
 
     applyPageTheme(page, role);
@@ -222,11 +262,12 @@ window.onload = function() {
             // o un "apri in nuova scheda" riaprono esattamente dove si era, invece
             // di tornare sempre alla pagina di default del ruolo.
             const isNoleggio = data.role === 'NOLEGGIO';
+            const isService = data.role === 'SERVICE';
             const hashPage = getPageFromHash();
-            const defaultPage = isNoleggio ? 'rent' : (data.role === 'UTENTE' ? 'contacts' : 'dashboard');
+            const defaultPage = isNoleggio ? 'rent' : (isService ? 'service' : (data.role === 'UTENTE' ? 'contacts' : 'dashboard'));
             showPage(hashPage || defaultPage);
 
-            if (data.role !== 'UTENTE' && !isNoleggio) {
+            if (data.role !== 'UTENTE' && !isNoleggio && !isService) {
                 loadStats();
                 if (typeof loadPromo === 'function') loadPromo();
             }

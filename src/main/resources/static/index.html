@@ -43,6 +43,7 @@
             <a href="#contacts" class="nav-link" id="navContacts" onclick="showPage('contacts');return false">📞 REGISTRO CONTATTI</a>
             <a href="#promo" class="nav-link" id="navPromo" style="display:none" onclick="showPage('promo');return false">🎯 PROMO</a>
             <a href="#rent" class="nav-link" id="navRent" style="display:none" onclick="showPage('rent');return false">🚗 RENT</a>
+            <a href="#service" class="nav-link" id="navService" style="display:none" onclick="showPage('service');return false">🔧 SERVICE</a>
             <a href="#admin" class="nav-link" id="adminLink" style="display:none" onclick="showPage('admin');return false">⚙️ UTENTI</a>
         </div>
         <div class="nav-user">
@@ -231,6 +232,17 @@
             <button id="waitingNavArchivio" class="btn-sede" onclick="switchWaitingView('archivio')">📁 Archivio (Chiusi/Falliti)</button>
         </div>
 
+        <!-- BARRA DI RICERCA -->
+        <div class="search-bar">
+            <div style="display:flex;gap:10px;align-items:center">
+                <input type="text" id="waitingSearchInput" placeholder="🔍 Cerca per nominativo, numero, marchio o modello..." class="input-field" style="margin-bottom:0;flex:1" oninput="searchWaitingList(this.value)">
+            </div>
+        </div>
+        <div id="waitingSearchResults" style="display:none">
+            <div class="search-results-header">RISULTATI RICERCA<span style="float:right;cursor:pointer;font-size:13px;color:var(--text-secondary)" onclick="closeWaitingSearch()">✕ Chiudi</span></div>
+            <div id="waitingSearchResultsList"></div>
+        </div>
+
         <!-- STATISTICHE -->
         <div class="stats-grid" style="margin-bottom:24px">
             <div class="stat-card blue"><div class="stat-label">TOTALE CLIENTI</div><div class="stat-value" id="waitingStatTotal">0</div></div>
@@ -388,6 +400,21 @@
                 </div>
 
                 <button onclick="loadContactLogs(document.getElementById('contactFrom').value, document.getElementById('contactTo').value)" class="btn-gold">FILTRA</button>
+                <button class="btn-sort-toggle" onclick="toggleContactTreeSortDir()" id="contactTreeSortBtn">⬇️ Più recenti prima</button>
+
+                <select id="contactYearFilter" class="input-dark" onchange="onContactPeriodFilterChange()">
+                    <option value="">Tutti gli anni</option>
+                </select>
+                <select id="contactMonthFilter" class="input-dark" onchange="onContactPeriodFilterChange()">
+                    <option value="">Tutti i mesi</option>
+                    <option value="1">Gennaio</option><option value="2">Febbraio</option><option value="3">Marzo</option>
+                    <option value="4">Aprile</option><option value="5">Maggio</option><option value="6">Giugno</option>
+                    <option value="7">Luglio</option><option value="8">Agosto</option><option value="9">Settembre</option>
+                    <option value="10">Ottobre</option><option value="11">Novembre</option><option value="12">Dicembre</option>
+                </select>
+                <select id="contactWeekFilter" class="input-dark" onchange="onContactPeriodFilterChange()">
+                    <option value="">Tutte le settimane</option>
+                </select>
                 <button id="contactResetBtn" onclick="resetContactFilters()" class="btn-secondary" style="display:none;padding:10px 16px">↺ RESET</button>
                 <button onclick="showNewContactForm()" class="btn-primary" style="width:auto;padding:10px 20px">+ NUOVO</button>
                 <button onclick="exportContactsExcel()" class="btn-secondary" style="padding:10px 16px">📥 EXCEL</button>
@@ -614,6 +641,15 @@
                             <option>Tagliando</option><option>Dispositivo satellitare</option><option>Prenotazione</option>
                             <option>Lavorazione in corso</option><option>Doctor Glass</option><option>Cambio Gomme</option><option>Altro</option>
                         </select>
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MARCA VEICOLO</label>
+                        <div style="position:relative;margin-bottom:14px">
+                            <input type="text" id="editContactServiceMarcaInput" placeholder="Clicca o cerca marca..." class="input-field" style="margin-bottom:0;cursor:pointer"
+                                   oninput="filterEditServiceMarche(this.value)" onfocus="showEditServiceMarcheDropdown()" autocomplete="off">
+                            <div id="editServiceMarcaDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1.5px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;box-shadow:var(--shadow)"></div>
+                            <input type="hidden" id="editContactServiceMarca" value="">
+                        </div>
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLO VEICOLO</label>
+                        <input type="text" id="editContactServiceModello" placeholder="Es. 208 1.2 PureTech 100cv" class="input-field">
                         <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA SERVICE</label>
                         <textarea id="editContactServiceNote" placeholder="Nota / motivazione" class="input-field"></textarea>
                         <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TIPOLOGIA CLIENTE SERVICE</label>
@@ -699,6 +735,7 @@
                     <div id="acquistoAlertNoteGestioneRow" style="display:none;margin-bottom:16px">
                         <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA IN GESTIONE</label>
                         <textarea id="acquistoAlertNoteGestione" placeholder="Note sulla presa in carico..." class="input-field" onblur="saveAcquistoAlertNote('acquistoAlertNoteGestione')"></textarea>
+                        <div id="acquistoAlertNoteGestioneInseritaInfo" style="display:none;font-size:11px;color:var(--text-secondary);margin-top:4px;padding:0 4px"></div>
                         <div id="acquistoAlertNoteGestioneModificataInfo" style="display:none;font-size:11px;color:var(--text-secondary);margin-top:4px;padding:0 4px"></div>
                     </div>
 
@@ -710,6 +747,7 @@
                     <div id="acquistoAlertNoteGestitaRow" style="display:none;margin-bottom:16px">
                         <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA GESTITA</label>
                         <textarea id="acquistoAlertNoteGestita" placeholder="Note sulla risoluzione..." class="input-field" onblur="saveAcquistoAlertNote('acquistoAlertNoteGestita')"></textarea>
+                        <div id="acquistoAlertNoteGestitaInseritaInfo" style="display:none;font-size:11px;color:var(--text-secondary);margin-top:4px;padding:0 4px"></div>
                         <div id="acquistoAlertNoteGestitaModificataInfo" style="display:none;font-size:11px;color:var(--text-secondary);margin-top:4px;padding:0 4px"></div>
                     </div>
 
@@ -949,7 +987,19 @@
                     </div>
                     <input type="hidden" id="contactServiceTipo" value="">
 
-                    <div id="contactServiceNoteRow" style="display:none;margin-bottom:14px">
+                    <!-- MARCA/MODELLO — obbligatori ora per ogni pratica Service -->
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MARCA VEICOLO *</label>
+                    <div style="position:relative;margin-bottom:14px">
+                        <input type="text" id="contactServiceMarcaInput" placeholder="Clicca o cerca marca..." class="input-field" style="margin-bottom:0;cursor:pointer"
+                               oninput="filterServiceMarche(this.value)" onfocus="showServiceMarcheDropdown()" autocomplete="off">
+                        <div id="serviceMarcaDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1.5px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;box-shadow:var(--shadow)"></div>
+                        <input type="hidden" id="contactServiceMarca" value="">
+                    </div>
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLO VEICOLO *</label>
+                    <input type="text" id="contactServiceModello" placeholder="Es. 208 1.2 PureTech 100cv" class="input-field">
+
+                    <!-- NOTA — sempre visibile, per qualsiasi tipologia (Tagliando, Doctor Glass, ecc.) -->
+                    <div id="contactServiceNoteRow" style="margin-bottom:14px">
                         <label id="contactServiceNoteLabel" style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA (opzionale)</label>
                         <textarea id="contactServiceNote" placeholder="Scrivi qui il dettaglio..." class="input-field"></textarea>
                     </div>
@@ -1064,6 +1114,7 @@
                     <option value="GESTORE">Gestore</option>
                     <option value="ADMIN">Admin</option>
                     <option value="NOLEGGIO">Noleggio</option>
+                    <option value="SERVICE">Service</option>
                 </select>
             </div>
             <div class="form-actions">
@@ -1435,6 +1486,317 @@
         <div id="rentContattiNoleggioList"></div>
     </div>
 
+<!-- SERVICE PAGE -->
+<div id="servicePage" class="page" style="display:none">
+    <div class="page-header">
+        <h2>🔧 SERVICE — GESTIONE OFFICINA</h2>
+        <div class="filter-bar">
+            <input type="date" id="servicePraticheFrom" class="input-dark" onchange="applyServiceFilters();showServiceResetBtn()">
+            <input type="date" id="servicePraticheTo" class="input-dark" onchange="applyServiceFilters();showServiceResetBtn()">
+            <button id="serviceResetBtn" onclick="resetServiceDateFilters()" class="btn-secondary" style="display:none;padding:10px 16px">↺ RESET</button>
+
+            <!-- FILTRO STATO — multi-select -->
+            <div class="multi-select-wrapper">
+                <div class="multi-select-trigger" onclick="toggleMultiDropdown('serviceStatoFilterMulti')">
+                    <span id="serviceStatoFilterMulti-label">Tutti gli stati</span>
+                    <span class="multi-select-count" id="serviceStatoFilterMulti-count">0</span>
+                    <span>▾</span>
+                </div>
+                <div class="multi-select-dropdown" id="serviceStatoFilterMulti-dropdown">
+                    <div id="serviceStatoFilterMulti-options">
+                        <label class="multi-select-option"><input type="checkbox" value="SOLO_INFO" onchange="onMultiSelectChange('serviceStatoFilterMulti')"> Solo Info</label>
+                        <label class="multi-select-option"><input type="checkbox" value="IN_CONTATTO" onchange="onMultiSelectChange('serviceStatoFilterMulti')"> In Contatto</label>
+                        <label class="multi-select-option"><input type="checkbox" value="ORDINE_RICAMBIO" onchange="onMultiSelectChange('serviceStatoFilterMulti')"> Ordine Ricambio/Accessori</label>
+                        <label class="multi-select-option"><input type="checkbox" value="APPUNTAMENTO" onchange="onMultiSelectChange('serviceStatoFilterMulti')"> Appuntamento</label>
+                        <label class="multi-select-option"><input type="checkbox" value="PROBLEMATICA" onchange="onMultiSelectChange('serviceStatoFilterMulti')"> Problematica</label>
+                        <label class="multi-select-option"><input type="checkbox" value="FALLITA" onchange="onMultiSelectChange('serviceStatoFilterMulti')"> Fallita</label>
+                        <label class="multi-select-option"><input type="checkbox" value="CONCLUSA" onchange="onMultiSelectChange('serviceStatoFilterMulti')"> Conclusa</label>
+                    </div>
+                    <div class="multi-select-actions">
+                        <button type="button" onclick="multiSelectClear('serviceStatoFilterMulti');applyServiceFilters()">Pulisci</button>
+                        <button type="button" onclick="closeAllMultiDropdowns();applyServiceFilters()">Applica</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FILTRO MARCA — multi-select -->
+            <div class="multi-select-wrapper">
+                <div class="multi-select-trigger" onclick="toggleMultiDropdown('serviceMarcaFilterMulti')">
+                    <span id="serviceMarcaFilterMulti-label">Tutte le marche</span>
+                    <span class="multi-select-count" id="serviceMarcaFilterMulti-count">0</span>
+                    <span>▾</span>
+                </div>
+                <div class="multi-select-dropdown" id="serviceMarcaFilterMulti-dropdown">
+                    <div id="serviceMarcaFilterMulti-options"></div>
+                    <div class="multi-select-actions">
+                        <button type="button" onclick="multiSelectClear('serviceMarcaFilterMulti');applyServiceFilters()">Pulisci</button>
+                        <button type="button" onclick="closeAllMultiDropdowns();applyServiceFilters()">Applica</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FILTRO OPERATORE — multi-select -->
+            <div class="multi-select-wrapper">
+                <div class="multi-select-trigger" onclick="toggleMultiDropdown('serviceOperatoreFilterMulti')">
+                    <span id="serviceOperatoreFilterMulti-label">Tutti gli operatori</span>
+                    <span class="multi-select-count" id="serviceOperatoreFilterMulti-count">0</span>
+                    <span>▾</span>
+                </div>
+                <div class="multi-select-dropdown" id="serviceOperatoreFilterMulti-dropdown">
+                    <div id="serviceOperatoreFilterMulti-options"></div>
+                    <div class="multi-select-actions">
+                        <button type="button" onclick="multiSelectClear('serviceOperatoreFilterMulti');applyServiceFilters()">Pulisci</button>
+                        <button type="button" onclick="closeAllMultiDropdowns();applyServiceFilters()">Applica</button>
+                    </div>
+                </div>
+            </div>
+
+            <select id="serviceSedeFilter" class="input-dark" onchange="applyServiceFilters()">
+                <option value="">Tutte le sedi</option>
+                <option>Agnano</option><option>Salerno</option>
+            </select>
+
+            <button onclick="showNewServiceForm()" class="btn-primary" style="width:auto;padding:10px 20px">+ NUOVA PRATICA</button>
+            <button onclick="exportServiceExcel()" class="btn-secondary" style="padding:10px 16px">📥 EXCEL</button>
+        </div>
+    </div>
+
+    <!-- BARRA DI RICERCA CLIENTE SERVICE -->
+    <div class="search-bar">
+        <div style="display:flex;gap:10px;align-items:center">
+            <input type="text" id="serviceSearchInput" placeholder="🔍 Cerca cliente per nome, cognome o cellulare..." class="input-field" style="margin-bottom:0;flex:1" oninput="searchServicePratiche(this.value)">
+        </div>
+    </div>
+    <div id="serviceSearchResults" style="display:none">
+        <div class="search-results-header">RISULTATI RICERCA<span style="float:right;cursor:pointer;font-size:13px;color:var(--text-secondary)" onclick="closeServiceSearch()">✕ Chiudi</span></div>
+        <div id="serviceSearchResultsList"></div>
+    </div>
+
+    <!-- STATS -->
+    <div class="stats-grid" style="margin-bottom:28px">
+        <div class="stat-card blue"><div class="stat-label">TOTALE PRATICHE</div><div class="stat-value" id="serviceStatTotal">0</div></div>
+        <div class="stat-card purple"><div class="stat-label">IN CONTATTO</div><div class="stat-value" id="serviceStatInContatto">0</div></div>
+        <div class="stat-card gold"><div class="stat-label">ORDINE RICAMBIO</div><div class="stat-value" id="serviceStatOrdine">0</div></div>
+        <div class="stat-card" style="border-color:#7c4dff"><div class="stat-label">APPUNTAMENTO</div><div class="stat-value" id="serviceStatAppuntamento" style="color:#7c4dff">0</div></div>
+        <div class="stat-card" style="border-color:#ff9800"><div class="stat-label">PROBLEMATICA</div><div class="stat-value" id="serviceStatProblematica" style="color:#ff9800">0</div></div>
+        <div class="stat-card green"><div class="stat-label">CONCLUSE</div><div class="stat-value" id="serviceStatConclusa">0</div></div>
+        <div class="stat-card" style="border-color:#ff9800"><div class="stat-label">🔔 DA GESTIRE</div><div class="stat-value" id="serviceStatDaGestire" style="color:#ff9800">0</div></div>
+    </div>
+
+    <!-- GRAFICI -->
+    <div style="margin-bottom:28px;display:flex;gap:20px;flex-wrap:wrap;align-items:stretch">
+        <div class="chart-card" style="width:340px;min-width:340px;flex:1">
+            <h3>DISTRIBUZIONE STATO PRATICHE</h3>
+            <div style="position:relative;height:260px">
+                <canvas id="chartServiceStato2"></canvas>
+            </div>
+        </div>
+        <div class="chart-card" style="width:340px;min-width:340px;flex:1">
+            <h3>CHIAMATE RICEVUTE vs APPUNTAMENTI FISSATI</h3>
+            <div style="position:relative;height:260px">
+                <canvas id="chartServiceChiamateAppuntamenti"></canvas>
+            </div>
+        </div>
+        <div class="chart-card" style="width:340px;min-width:340px;flex:1">
+            <h3>ESITO APPUNTAMENTI/LAVORAZIONI</h3>
+            <div style="position:relative;height:260px">
+                <canvas id="chartServiceLavorazioni"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- PLANNING -->
+    <div style="margin-bottom:28px;display:flex;gap:20px;flex-wrap:wrap">
+        <div class="chart-card" style="flex:1;min-width:320px">
+            <h3>📅 PROSSIMI APPUNTAMENTI</h3>
+            <div id="servicePlanningAppuntamenti" style="margin-top:10px"></div>
+        </div>
+        <div class="chart-card" style="flex:1;min-width:320px">
+            <h3>📦 ORDINI RICAMBIO IN ATTESA</h3>
+            <div id="servicePlanningOrdini" style="margin-top:10px"></div>
+        </div>
+    </div>
+
+    <!-- MODAL RICAMBIO DA GESTIRE — popup automatico "è arrivato?" -->
+    <div id="serviceRicambioModal" class="modal-overlay" style="display:none" onclick="closeServiceRicambioModal(event)">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <div class="modal-header"><h3>📦 Ricambi da Verificare</h3><button type="button" class="modal-close" onclick="closeServiceRicambioModal()">✕</button></div>
+            <div id="serviceRicambioList" class="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- MODAL PROMEMORIA APPUNTAMENTI DI DOMANI -->
+    <div id="serviceAppuntamentiDomaniModal" class="modal-overlay" style="display:none" onclick="closeServiceAppuntamentiDomaniModal(event)">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <div class="modal-header"><h3>📅 Appuntamenti di Domani</h3><button type="button" class="modal-close" onclick="closeServiceAppuntamentiDomaniModal()">✕</button></div>
+            <div id="serviceAppuntamentiDomaniList" class="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- MODAL APPUNTAMENTI DA GESTIRE — orario passato, chiede l'esito -->
+    <div id="serviceAppuntamentiDaGestireModal" class="modal-overlay" style="display:none" onclick="closeServiceAppuntamentiDaGestireModal(event)">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <div class="modal-header"><h3>🔔 Esito Appuntamenti</h3><button type="button" class="modal-close" onclick="closeServiceAppuntamentiDaGestireModal()">✕</button></div>
+            <div id="serviceAppuntamentiDaGestireList" class="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- MODAL DETTAGLIO GENERICO (da stat-card/grafici) -->
+    <div id="serviceDetailModal" class="modal-overlay" style="display:none" onclick="closeServiceDetailModal(event)">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <div class="modal-header"><h3 id="serviceDetailTitle">Dettaglio</h3><button type="button" class="modal-close" onclick="closeServiceDetailModal()">✕</button></div>
+            <div id="serviceDetailList" class="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- MODAL DETTAGLIO/GESTIONE PRATICA -->
+    <div id="servicePraticaModal" class="modal-overlay" style="display:none" onclick="closeServicePraticaModal(event)">
+        <div class="modal-box" onclick="event.stopPropagation()" style="max-width:560px">
+            <div class="modal-header">
+                <h3>Dettaglio Pratica</h3>
+                <button type="button" class="modal-close" onclick="closeServicePraticaModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px;font-size:12px;color:var(--text-secondary)">
+                    👤 Operatore: <strong id="spdOperatoreInfo" style="color:var(--text-primary)">—</strong>
+                    &nbsp;·&nbsp; 📅 Creata: <strong id="spdCreatedInfo" style="color:var(--text-primary)">—</strong>
+                </div>
+
+                <div id="spdGestioneSection" style="background:rgba(255,152,0,0.06);border:1.5px solid rgba(255,152,0,0.3);border-radius:10px;padding:14px;margin-bottom:16px">
+                    <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#ff9800;margin-bottom:8px;text-transform:uppercase">🔔 Gestione</div>
+                    <div style="margin-bottom:10px">
+                        <span style="font-size:11px;font-weight:700;color:var(--text-secondary)">STATO:</span>
+                        <span id="spdGestioneStatus" style="font-weight:800;margin-left:6px">—</span>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap">
+                        <button type="button" id="spdGestioneBtn" class="btn-gold" onclick="gestisciServicePratica()" style="background:linear-gradient(135deg,#ff9800,#e08600)">🔔 Gestisci</button>
+                        <button type="button" id="spdAnnullaGestioneBtn" class="btn-secondary" onclick="annullaGestioneServicePratica()">↺ Annulla Gestione</button>
+                    </div>
+                </div>
+
+                <div class="form-grid">
+                    <input type="text" id="spdNome" placeholder="Nome *" class="input-field">
+                    <input type="text" id="spdCognome" placeholder="Cognome *" class="input-field">
+                    <input type="text" id="spdCellulare" placeholder="Cellulare *" class="input-field">
+                    <input type="email" id="spdEmail" placeholder="Email (opzionale)" class="input-field">
+                    <input type="text" id="spdMarca" placeholder="Marca *" class="input-field">
+                    <input type="text" id="spdModello" placeholder="Modello (opzionale)" class="input-field">
+                    <input type="text" id="spdTarga" placeholder="Targa (opzionale)" class="input-field" style="text-transform:uppercase">
+                </div>
+
+                <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTE</label>
+                <textarea id="spdNote" placeholder="Note aggiuntive..." class="input-field"></textarea>
+
+                <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">STATO *</label>
+                <select id="spdStato" class="input-field" onchange="onSpdStatoChange()">
+                    <option value="SOLO_INFO">Solo Info</option>
+                    <option value="IN_CONTATTO">In Contatto</option>
+                    <option value="ORDINE_RICAMBIO">Ordine Ricambio/Accessori</option>
+                    <option value="APPUNTAMENTO">Appuntamento</option>
+                    <option value="PROBLEMATICA">Problematica</option>
+                    <option value="FALLITA">Fallita</option>
+                    <option value="CONCLUSA">Conclusa</option>
+                </select>
+
+                <div id="spdOrdineRicambioRow" style="display:none;margin-top:10px">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">DATA ORDINE RICAMBIO</label>
+                    <input type="date" id="spdDataOrdineRicambio" class="input-field">
+                </div>
+
+                <div id="spdAppuntamentoRow" style="display:none;margin-top:10px">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">DATA APPUNTAMENTO *</label>
+                    <input type="date" id="spdDataAppuntamento" class="input-field">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">ORARIO APPUNTAMENTO *</label>
+                    <input type="time" id="spdOraAppuntamento" class="input-field">
+                </div>
+
+                <div id="spdNoteProblematicaRow" style="display:none;margin-top:10px">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA PROBLEMATICA (opzionale)</label>
+                    <textarea id="spdNoteProblematica" placeholder="Descrivi la problematica..." class="input-field"></textarea>
+                </div>
+
+                <div id="spdNoteFallimentoRow" style="display:none;margin-top:10px">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MOTIVAZIONE FALLIMENTO (opzionale)</label>
+                    <textarea id="spdNoteFallimento" placeholder="Descrivi il motivo..." class="input-field"></textarea>
+                </div>
+
+                <div id="spdNoteConclusaRow" style="display:none;margin-top:10px">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA CONCLUSIONE</label>
+                    <textarea id="spdNoteConclusa" placeholder="Note sulla conclusione..." class="input-field"></textarea>
+                </div>
+
+                <div class="form-actions" style="margin-top:16px;flex-wrap:wrap">
+                    <button onclick="saveServicePraticaDetail()" class="btn-gold">SALVA MODIFICHE</button>
+                    <button onclick="deleteServicePraticaFromModal()" class="btn-secondary" style="color:#ff3d3d;border-color:#ff3d3d">🗑️ ELIMINA</button>
+                    <button onclick="closeServicePraticaModal()" class="btn-secondary">CHIUDI</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FORM NUOVA PRATICA -->
+    <div id="newServiceForm" class="form-card" style="display:none">
+        <h3 id="serviceFormTitle">NUOVA PRATICA</h3>
+        <input type="hidden" id="serviceEditId" value="">
+        <div class="form-grid">
+            <input type="text" id="spNome" placeholder="Nome *" class="input-field">
+            <input type="text" id="spCognome" placeholder="Cognome *" class="input-field">
+            <input type="text" id="spCellulare" placeholder="Cellulare *" class="input-field">
+            <input type="email" id="spEmail" placeholder="Email (opzionale)" class="input-field">
+            <div style="position:relative">
+                <input type="text" id="spMarcaInput" placeholder="Clicca o cerca marca... *" class="input-field" style="margin-bottom:0;cursor:pointer"
+                       oninput="filterSpMarche(this.value)" onfocus="showSpMarcheDropdown()" autocomplete="off">
+                <div id="spMarcaDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1.5px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;box-shadow:var(--shadow)"></div>
+                <input type="hidden" id="spMarca" value="">
+            </div>
+            <input type="text" id="spModello" placeholder="Modello (opzionale)" class="input-field">
+            <input type="text" id="spTarga" placeholder="Targa (opzionale)" class="input-field" style="text-transform:uppercase">
+        </div>
+
+        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:8px">SEDE</label>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+            <button type="button" class="btn-sede" id="spSede-Agnano" onclick="selectSpSede('Agnano')">📍 Agnano</button>
+            <button type="button" class="btn-sede" id="spSede-Salerno" onclick="selectSpSede('Salerno')">📍 Salerno</button>
+        </div>
+
+        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:8px">TIPOLOGIA</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+            <button type="button" class="btn-sede" id="spTipo-Tagliando" onclick="selectSpTipologia('Tagliando')">🔧 Tagliando</button>
+            <button type="button" class="btn-sede" id="spTipo-DispositivoSatellitare" onclick="selectSpTipologia('Dispositivo satellitare')">🛰️ Dispositivo satellitare</button>
+            <button type="button" class="btn-sede" id="spTipo-Prenotazione" onclick="selectSpTipologia('Prenotazione')">📅 Prenotazione</button>
+            <button type="button" class="btn-sede" id="spTipo-LavorazioneInCorso" onclick="selectSpTipologia('Lavorazione in corso')">⚙️ Lavorazione in corso</button>
+            <button type="button" class="btn-sede" id="spTipo-DoctorGlass" onclick="selectSpTipologia('Doctor Glass')">🔍 Doctor Glass</button>
+            <button type="button" class="btn-sede" id="spTipo-CambioGomme" onclick="selectSpTipologia('Cambio Gomme')">🔄 Cambio Gomme</button>
+            <button type="button" class="btn-sede" id="spTipo-Altro" onclick="selectSpTipologia('Altro')">❓ Altro</button>
+        </div>
+
+        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTE (opzionale)</label>
+        <textarea id="spNote" placeholder="Scrivi qui il dettaglio..." class="input-field"></textarea>
+
+        <div class="form-actions" style="margin-top:16px">
+            <button onclick="saveNewServicePratica()" class="btn-gold">SALVA PRATICA</button>
+            <button onclick="hideNewServiceForm()" class="btn-secondary">ANNULLA</button>
+        </div>
+    </div>
+
+    <!-- LISTA PRATICHE -->
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap">
+        <h3 style="font-size:13px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);text-transform:uppercase;margin:0">GESTIONE PRATICHE</h3>
+    </div>
+    <div id="servicePraticheList" style="margin-bottom:32px"></div>
+
+    <!-- CONTATTI SERVICE DA REGISTRO CONTATTI (sola lettura) -->
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap">
+        <h3 style="font-size:13px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);text-transform:uppercase;margin:0">📋 CONTATTI SERVICE DA REGISTRO CONTATTI (TUTTI GLI OPERATORI)</h3>
+    </div>
+    <div class="filter-bar" style="margin-bottom:16px">
+        <input type="date" id="serviceContattiFrom" class="input-dark" onchange="loadServiceContatti()">
+        <input type="date" id="serviceContattiTo" class="input-dark" onchange="loadServiceContatti()">
+        <button class="btn-sort-toggle" onclick="toggleServiceContattiSortDir()" id="serviceContattiSortBtn2">⬇️ Più recenti prima</button>
+    </div>
+    <div id="serviceContattiRegistroList"></div>
+</div>
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
@@ -1446,6 +1808,7 @@
 <script src="/js/promo.js"></script>
 <script src="/js/admin.js"></script>
 <script src="/js/rent.js"></script>
+<script src="/js/service.js"></script>
 <script src="/js/app.js"></script>
 <script src="/js/multiselect.js"></script>
 </body>

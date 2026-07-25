@@ -68,7 +68,7 @@ const MARCHE_LIST = [
     'ALFA ROMEO', 'AUDI', 'BMW', 'BYD', 'CITROEN', 'CUPRA', 'DACIA', 'DR', 'DS', 'EVO',
     'FIAT', 'FORD', 'FERRARI', 'HYUNDAI', 'ICH-X', 'INFINITI', 'IVECO', 'JAECOO', 'JEEP',
     'KIA', 'LAMBORGHINI', 'LANCIA', 'LAND ROVER', 'LEAPMOTOR', 'MAXUS', 'MAZDA',
-    'MERCEDES-BENZ', 'MG', 'MINI', 'MASERATI', 'MITSUBISHI', 'NISSAN', 'OMODA', 'OPEL',
+    'MARCA GENERICA', 'MASERATI', 'MERCEDES-BENZ', 'MG', 'MINI', 'MITSUBISHI', 'NISSAN', 'OMODA', 'OPEL',
     'PEUGEOT', 'PORSCHE', 'RENAULT', 'SAAB', 'SEAT', 'SKODA', 'SMART', 'SPORTEQUIPE',
     'SUZUKI', 'SWM', 'TIGER', 'TOYOTA', 'TESLA', 'VOLKSWAGEN'
 ];
@@ -177,7 +177,9 @@ function acquistoAlertAuditInfo(log) {
     return {
         inGestione: build('acquistoAlertInGestioneDa', 'acquistoAlertInGestioneAt'),
         gestita: build('acquistoAlertGestitaDa', 'acquistoAlertGestitaAt'),
+        noteGestioneInserita: build('acquistoAlertNoteGestioneInseritaDa', 'acquistoAlertNoteGestioneInseritaAt'),
         noteGestioneModificata: build('acquistoAlertNoteGestioneModificataDa', 'acquistoAlertNoteGestioneModificataAt'),
+        noteGestitaInserita: build('acquistoAlertNoteGestitaInseritaDa', 'acquistoAlertNoteGestitaInseritaAt'),
         noteGestitaModificata: build('acquistoAlertNoteGestitaModificataDa', 'acquistoAlertNoteGestitaModificataAt')
     };
 }
@@ -260,6 +262,42 @@ function selectAcquistoMarca(marca) {
     document.getElementById('contactAcquistoMarca').value = marca;
     document.getElementById('contactAcquistoMarcaDropdown').style.display = 'none';
 }
+// ===== Tendina marca — Service (nuovo contatto) =====
+function showServiceMarcheDropdown() { filterServiceMarche('', true); }
+function filterServiceMarche(query, showAll) {
+    const dropdown = document.getElementById('serviceMarcaDropdown');
+    if (!dropdown) return;
+    const matches = (!query || query.trim() === '' || showAll) ? MARCHE_NORMALIZED : MARCHE_NORMALIZED.filter(m => m.normalized.includes(normalizeText(query.trim())));
+    if (matches.length === 0) { dropdown.style.display = 'none'; return; }
+    dropdown.innerHTML = matches.map(m => `
+        <div onclick="selectServiceMarca('${m.original}')" style="padding:10px 14px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary);border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''">
+            ${m.original}
+        </div>`).join('');
+    dropdown.style.display = 'block';
+}
+function selectServiceMarca(marca) {
+    document.getElementById('contactServiceMarcaInput').value = marca;
+    document.getElementById('contactServiceMarca').value = marca;
+    document.getElementById('serviceMarcaDropdown').style.display = 'none';
+}
+// ===== Tendina marca — Service (modal "Modifica Contatto") =====
+function showEditServiceMarcheDropdown() { filterEditServiceMarche('', true); }
+function filterEditServiceMarche(query, showAll) {
+    const dropdown = document.getElementById('editServiceMarcaDropdown');
+    if (!dropdown) return;
+    const matches = (!query || query.trim() === '' || showAll) ? MARCHE_NORMALIZED : MARCHE_NORMALIZED.filter(m => m.normalized.includes(normalizeText(query.trim())));
+    if (matches.length === 0) { dropdown.style.display = 'none'; return; }
+    dropdown.innerHTML = matches.map(m => `
+        <div onclick="selectEditServiceMarca('${m.original}')" style="padding:10px 14px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary);border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''">
+            ${m.original}
+        </div>`).join('');
+    dropdown.style.display = 'block';
+}
+function selectEditServiceMarca(marca) {
+    document.getElementById('editContactServiceMarcaInput').value = marca;
+    document.getElementById('editContactServiceMarca').value = marca;
+    document.getElementById('editServiceMarcaDropdown').style.display = 'none';
+}
 function showPromoModelliDropdown() {
     const promoAttiva = typeof promoAttive !== 'undefined' && promoAttive.length > 0 ? promoAttive[0] : null;
     if (!promoAttiva) return;
@@ -339,6 +377,14 @@ document.addEventListener('click', function(e) {
     const promoDropdown = document.getElementById('promoModelloDropdown');
     const promoInput = document.getElementById('promoModelloInput');
     if (promoDropdown && promoInput && !promoInput.contains(e.target) && !promoDropdown.contains(e.target)) promoDropdown.style.display = 'none';
+
+    const serviceMarcaDropdown = document.getElementById('serviceMarcaDropdown');
+    const serviceMarcaInput = document.getElementById('contactServiceMarcaInput');
+    if (serviceMarcaDropdown && serviceMarcaInput && !serviceMarcaInput.contains(e.target) && !serviceMarcaDropdown.contains(e.target)) serviceMarcaDropdown.style.display = 'none';
+
+    const editServiceMarcaDropdown = document.getElementById('editServiceMarcaDropdown');
+    const editServiceMarcaInput = document.getElementById('editContactServiceMarcaInput');
+    if (editServiceMarcaDropdown && editServiceMarcaInput && !editServiceMarcaInput.contains(e.target) && !editServiceMarcaDropdown.contains(e.target)) editServiceMarcaDropdown.style.display = 'none';
 });
 
 async function loadContactLogs(from, to, restoreDayView) {
@@ -420,15 +466,85 @@ function populateOperatorFilter() {
         const current = select.value;
         select.innerHTML = '<option value="">Tutti gli operatori</option>' + operators.map(op => `<option value="${op}" ${op===current?'selected':''}>${op}</option>`).join('');
     }
+    populateContactYearFilter();
+}
+
+// ============================================================
+// FILTRO PERIODO — Anno / Mese / Settimana (vero filtro, non solo
+// ordinamento). Il Giorno resta accessibile cliccando su una card giorno
+// o sul calendario, che aprono già la vista giornaliera dedicata.
+// ============================================================
+
+function populateContactYearFilter() {
+    const sel = document.getElementById('contactYearFilter');
+    if (!sel) return;
+    const years = [...new Set(contactLogs.map(l => l.contactDate.split('T')[0].split('-')[0]))].sort((a, b) => b - a);
+    const current = sel.value;
+    sel.innerHTML = '<option value="">Tutti gli anni</option>' + years.map(y => `<option value="${y}" ${y === current ? 'selected' : ''}>${y}</option>`).join('');
+    populateContactWeekFilter();
+}
+
+// Le settimane disponibili dipendono da anno/mese eventualmente già
+// selezionati, così la tendina mostra solo settimane che esistono davvero
+// nel sottoinsieme corrente, non tutte le 52 dell'anno.
+function populateContactWeekFilter() {
+    const sel = document.getElementById('contactWeekFilter');
+    if (!sel) return;
+    const yearFilter = document.getElementById('contactYearFilter')?.value || '';
+    const monthFilter = document.getElementById('contactMonthFilter')?.value || '';
+
+    const scoped = contactLogs.filter(l => {
+        const d = parseLocalDate(l.contactDate.split('T')[0]);
+        if (yearFilter && d.getFullYear().toString() !== yearFilter) return false;
+        if (monthFilter && (d.getMonth() + 1).toString() !== monthFilter) return false;
+        return true;
+    });
+
+    const weeksSet = new Map(); // sortKey -> label
+    scoped.forEach(l => {
+        const date = l.contactDate.split('T')[0];
+        const label = getWeekKey(date);
+        const monday = getISOWeekMonday(date);
+        const match = label.match(/Settimana (\d+)/);
+        const num = match ? parseInt(match[1], 10) : 0;
+        const sortKey = `${monday.getFullYear()}-${String(num).padStart(2, '0')}`;
+        weeksSet.set(sortKey, label);
+    });
+    const sortedWeeks = [...weeksSet.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+
+    const current = sel.value;
+    sel.innerHTML = '<option value="">Tutte le settimane</option>' + sortedWeeks.map(([key, label]) => `<option value="${key}" ${key === current ? 'selected' : ''}>${label}</option>`).join('');
+}
+
+function onContactPeriodFilterChange() {
+    populateContactWeekFilter();
+    applyContactFilters();
 }
 
 function applyContactFilters(restoreDayView) {
     const operatorsSelected = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('contactOperatorFilterMulti') : [];
     const categoriesSelected = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('contactCategoryFilterMulti') : [];
+    const yearFilter = document.getElementById('contactYearFilter')?.value || '';
+    const monthFilter = document.getElementById('contactMonthFilter')?.value || '';
+    const weekFilter = document.getElementById('contactWeekFilter')?.value || '';
 
     contactLogsFiltered = contactLogs.filter(l => {
         if (operatorsSelected.length > 0 && !operatorsSelected.includes(l.user.fullName)) return false;
         if (categoriesSelected.length > 0 && !categoriesSelected.includes(l.category)) return false;
+        if (yearFilter || monthFilter || weekFilter) {
+            const date = l.contactDate.split('T')[0];
+            const d = parseLocalDate(date);
+            if (yearFilter && d.getFullYear().toString() !== yearFilter) return false;
+            if (monthFilter && (d.getMonth() + 1).toString() !== monthFilter) return false;
+            if (weekFilter) {
+                const monday = getISOWeekMonday(date);
+                const label = getWeekKey(date);
+                const match = label.match(/Settimana (\d+)/);
+                const num = match ? parseInt(match[1], 10) : 0;
+                const sortKey = `${monday.getFullYear()}-${String(num).padStart(2, '0')}`;
+                if (sortKey !== weekFilter) return false;
+            }
+        }
         return true;
     });
 
@@ -469,6 +585,12 @@ function resetContactFilters() {
         multiSelectClear('contactOperatorFilterMulti');
         multiSelectClear('contactCategoryFilterMulti');
     }
+    const yearFilterEl = document.getElementById('contactYearFilter');
+    const monthFilterEl = document.getElementById('contactMonthFilter');
+    const weekFilterEl = document.getElementById('contactWeekFilter');
+    if (yearFilterEl) yearFilterEl.value = '';
+    if (monthFilterEl) monthFilterEl.value = '';
+    if (weekFilterEl) weekFilterEl.value = '';
     currentDayView = null;
     dayViewCategoryFilter = '';
     dayViewSubFilter = '';
@@ -1284,6 +1406,13 @@ function refreshAcquistoAlertModalDisplay(log) {
     const auditGestitaEl = document.getElementById('acquistoAlertGestitaInfo');
     if (auditGestitaEl) { auditGestitaEl.textContent = audit.gestita || ''; auditGestitaEl.style.display = audit.gestita ? 'block' : 'none'; }
 
+    // NUOVO: chi ha inserito la nota la prima volta (separato da chi l'ha
+    // modificata l'ultima volta)
+    const noteGestioneInsEl = document.getElementById('acquistoAlertNoteGestioneInseritaInfo');
+    if (noteGestioneInsEl) { noteGestioneInsEl.textContent = audit.noteGestioneInserita ? '✍️ Inserita da: ' + audit.noteGestioneInserita : ''; noteGestioneInsEl.style.display = audit.noteGestioneInserita ? 'block' : 'none'; }
+    const noteGestitaInsEl = document.getElementById('acquistoAlertNoteGestitaInseritaInfo');
+    if (noteGestitaInsEl) { noteGestitaInsEl.textContent = audit.noteGestitaInserita ? '✍️ Inserita da: ' + audit.noteGestitaInserita : ''; noteGestitaInsEl.style.display = audit.noteGestitaInserita ? 'block' : 'none'; }
+
     // NUOVO: ultima modifica alle note (chi/quando), anche per cancellazioni
     const noteGestioneModEl = document.getElementById('acquistoAlertNoteGestioneModificataInfo');
     if (noteGestioneModEl) { noteGestioneModEl.textContent = audit.noteGestioneModificata ? '✏️ Ultima modifica: ' + audit.noteGestioneModificata : ''; noteGestioneModEl.style.display = audit.noteGestioneModificata ? 'block' : 'none'; }
@@ -1366,9 +1495,143 @@ function applyUpdatedLogEverywhere(updatedLog) {
     else { renderContactLogs(contactLogsFiltered); }
 
     renderChartInfoAcquisto(contactLogsFiltered);
+
+    // FIX: se è aperto un modal "dettaglio" (da click su stat-card o grafico),
+    // conteneva uno SNAPSHOT della lista preso al momento dell'apertura —
+    // senza questo, cambiare stato/nota di un allert da lì (o da qualunque
+    // altro punto mentre quel modal resta aperto dietro) non si vedeva finché
+    // non si ricaricava la pagina. Ora si aggiorna anche lui, dal vivo.
+    const detailIdx = lastDetailItems.findIndex(l => l.id === updatedLog.id);
+    if (detailIdx !== -1) {
+        lastDetailItems[detailIdx] = updatedLog;
+        const detailModal = document.getElementById('sedeDetailModal');
+        if (detailModal && detailModal.style.display === 'flex') {
+            renderGenericContactDetail();
+        }
+    }
+
+    // FIX: stesso discorso per il popup automatico "Info Acquisto Da Gestire"
+    // — se è aperto e l'allert appena aggiornato non è più "da gestire" o
+    // "in gestione", va tolto dalla lista subito, non solo al prossimo login.
+    const daGestireModal = document.getElementById('acquistoAlertDaGestireModal');
+    if (daGestireModal && daGestireModal.style.display === 'flex') {
+        refreshAcquistoAlertDaGestireModalLive();
+    }
+}
+
+// Ridisegna il contenuto del popup "Info Acquisto Da Gestire" già aperto,
+// usando i dati aggiornati in contactLogs — non tocca il flag di sessione,
+// quindi non lo riapre da solo se l'utente lo ha già chiuso.
+function refreshAcquistoAlertDaGestireModalLive() {
+    const modal = document.getElementById('acquistoAlertDaGestireModal');
+    const list = document.getElementById('acquistoAlertDaGestireList');
+    if (!modal || !list) return;
+
+    const alertAttivi = contactLogs.filter(l => hasAcquistoAlert(l) && l.acquistoAlertStatus !== 'GESTITA');
+    if (alertAttivi.length === 0) { modal.style.display = 'none'; return; }
+
+    const daGestire = alertAttivi.filter(l => !l.acquistoAlertStatus || l.acquistoAlertStatus === 'DA_GESTIRE');
+    const inGestione = alertAttivi.filter(l => l.acquistoAlertStatus === 'IN_GESTIONE');
+
+    const renderCard = (log) => {
+        const date = log.contactDate.split('T')[0];
+        const time = log.contactDate.split('T')[1]?.substring(0,5) || '';
+        const visual = acquistoAlertVisual(log);
+        return `<div class="followup-card" style="margin-bottom:10px;cursor:pointer;border-left:4px solid ${visual.color}" onclick="closeAcquistoAlertDaGestireModal();openAcquistoAlertModal(${log.id})">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+                <div>
+                    <div style="font-weight:800;color:${visual.color};font-size:14px">${visual.icon} ${clienteNomeCompleto(log)}</div>
+                    <div style="margin-top:4px"><span style="font-size:11px;font-weight:700;background:${visual.bg};color:${visual.color};padding:2px 8px;border-radius:8px">${visual.icon} ${visual.label}</span></div>
+                    <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">📅 ${formatDateIT(date)} · 🕐 ${time}</div>
+                    <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📞 ${clienteNumeroDisplay(log)}</div>
+                    <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📋 ${log.otherNote || '—'}${log.acquistoNote ? ' · ' + log.acquistoNote : ''}</div>
+                    <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">👤 Segnalato da ${log.user?.fullName || '—'}</div>
+                </div>
+                <span style="color:${visual.color};font-size:18px">→</span>
+            </div>
+        </div>`;
+    };
+
+    let html = '';
+    if (daGestire.length > 0) {
+        html += `<div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#ff9800;text-transform:uppercase;margin-bottom:10px">🔔 Da Gestire (${daGestire.length})</div>`;
+        html += daGestire.map(renderCard).join('');
+    }
+    if (inGestione.length > 0) {
+        html += `<div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#f0c040;text-transform:uppercase;margin:16px 0 10px">🟡 In Gestione (${inGestione.length})</div>`;
+        html += inGestione.map(renderCard).join('');
+    }
+    list.innerHTML = html;
 }
 
 let currentDayView = null;
+
+// ============================================================
+// SINCRONIZZAZIONE "LIVE" TRA OPERATORI — polling leggero.
+// Non è un vero push in tempo reale (richiederebbe WebSocket, quindi
+// modifiche al backend che non abbiamo ancora fatto) — ma un controllo
+// automatico ogni 15 secondi che confronta i dati col server e aggiorna
+// SOLO se qualcosa è davvero cambiato, senza disturbare chi sta scrivendo
+// in un form o in una nota allert in quel momento.
+// ============================================================
+
+let contactPollIntervalId = null;
+const CONTACT_POLL_INTERVAL_MS = 15000;
+
+function startContactPolling() {
+    stopContactPolling();
+    contactPollIntervalId = setInterval(pollContactUpdates, CONTACT_POLL_INTERVAL_MS);
+}
+
+function stopContactPolling() {
+    if (contactPollIntervalId) {
+        clearInterval(contactPollIntervalId);
+        contactPollIntervalId = null;
+    }
+}
+
+async function pollContactUpdates() {
+    // Non toccare la lista se l'operatore ha il form "Nuovo Contatto" aperto
+    // (perderebbe quello che sta scrivendo se ricostruissimo tutto sotto di lui)
+    if (document.getElementById('newContactForm')?.style.display === 'block') return;
+
+    // Non toccare se in questo momento ha il focus dentro una nota allert
+    // (altrimenti gli sparirebbe il testo che sta digitando)
+    const activeEl = document.activeElement;
+    const isTypingNote = activeEl && (activeEl.id === 'acquistoAlertNoteGestione' || activeEl.id === 'acquistoAlertNoteGestita');
+    if (isTypingNote) return;
+
+    try {
+        const from = document.getElementById('contactFrom')?.value;
+        const to = document.getElementById('contactTo')?.value;
+        let url = '/api/contacts';
+        if (from && to) url += `?from=${from}&to=${to}`;
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const fresh = await res.json();
+
+        // Aggiorna solo se il server ha davvero qualcosa di diverso da quello
+        // che abbiamo già in memoria — evita di ridisegnare (e quindi
+        // richiudere l'albero anno/mese/settimana) ogni 15 secondi a vuoto.
+        const changed = JSON.stringify(fresh) !== JSON.stringify(contactLogs);
+        if (!changed) return;
+
+        contactLogs = fresh;
+        contactLogs.sort((a, b) => (b.contactDate || '').localeCompare(a.contactDate || ''));
+        applyContactFilters(currentDayView || undefined);
+
+        // Se il modal Allert è aperto su un contatto ancora esistente,
+        // aggiornalo dal vivo — così se un altro operatore lo mette "in
+        // gestione" o "gestita" mentre tu ce l'hai aperto, lo vedi subito,
+        // note comprese.
+        if (acquistoAlertModalId) {
+            const updated = contactLogs.find(l => l.id === acquistoAlertModalId);
+            if (updated) refreshAcquistoAlertModalDisplay(updated);
+        }
+    } catch (err) {
+        console.error('Errore polling aggiornamenti contatti:', err);
+    }
+}
 let dayViewCategoryFilter = '';
 let dayViewSubFilter = '';
 
@@ -1537,6 +1800,28 @@ function getISOWeekMonday(dateStr) {
     return d;
 }
 
+let contactTreeSortDir = 'desc';
+
+// FIX: prima l'ordinamento di mesi e settimane era alfabetico sulla label
+// visualizzata (es. "agosto" prima di "luglio" perché A viene prima di L
+// nell'alfabeto, anche se luglio è cronologicamente precedente), e le
+// settimane a doppia cifra finivano fuori posto ("Settimana 10" prima di
+// "Settimana 9"). Ora si ordina su chiavi numeriche reali (anno-mese,
+// anno-numero settimana), con un toggle crescente/decrescente.
+function toggleContactTreeSortDir() {
+    contactTreeSortDir = contactTreeSortDir === 'desc' ? 'asc' : 'desc';
+    const btn = document.getElementById('contactTreeSortBtn');
+    if (btn) btn.textContent = contactTreeSortDir === 'desc' ? '⬇️ Più recenti prima' : '⬆️ Meno recenti prima';
+    renderContactLogs(contactLogsFiltered);
+}
+
+function sortTreeEntries(entries) {
+    return entries.sort((a, b) => {
+        const cmp = a[0] < b[0] ? -1 : (a[0] > b[0] ? 1 : 0);
+        return contactTreeSortDir === 'desc' ? -cmp : cmp;
+    });
+}
+
 function renderContactLogs(logs) {
     const container = document.getElementById('contactLogsList');
     if (!container) return;
@@ -1549,45 +1834,51 @@ function renderContactLogs(logs) {
         const date = log.contactDate.split('T')[0];
         const d = parseLocalDate(date);
         const year = d.getFullYear().toString();
-        const month = d.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
-        const week = getWeekKey(date);
+        const monthLabel = d.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
+        const monthKey = `${year}-${String(d.getMonth()).padStart(2,'0')}`;
+        const weekLabel = getWeekKey(date);
+        const weekMonday = getISOWeekMonday(date);
+        const weekNumMatch = weekLabel.match(/Settimana (\d+)/);
+        const weekNum = weekNumMatch ? parseInt(weekNumMatch[1], 10) : 0;
+        const weekSortKey = `${weekMonday.getFullYear()}-${String(weekNum).padStart(2,'0')}`;
+
         if (!tree[year]) tree[year] = {};
-        if (!tree[year][month]) tree[year][month] = {};
-        if (!tree[year][month][week]) tree[year][month][week] = { days: {}, monday: getISOWeekMonday(date) };
-        if (!tree[year][month][week].days[date]) tree[year][month][week].days[date] = [];
-        tree[year][month][week].days[date].push(log);
+        if (!tree[year][monthKey]) tree[year][monthKey] = { label: monthLabel, weeks: {} };
+        if (!tree[year][monthKey].weeks[weekSortKey]) tree[year][monthKey].weeks[weekSortKey] = { label: weekLabel, days: {}, monday: weekMonday };
+        if (!tree[year][monthKey].weeks[weekSortKey].days[date]) tree[year][monthKey].weeks[weekSortKey].days[date] = [];
+        tree[year][monthKey].weeks[weekSortKey].days[date].push(log);
     });
 
     const today = todayStr();
-    container.innerHTML = Object.entries(tree).sort((a,b) => b[0]-a[0]).map(([year, months]) => {
+    container.innerHTML = sortTreeEntries(Object.entries(tree)).map(([year, months]) => {
         const yearKey = `year-${year}`;
-        const yearCount = Object.values(months).flatMap(w => Object.values(w)).flatMap(w => Object.values(w.days)).flat().length;
+        const yearCount = Object.values(months).flatMap(m => Object.values(m.weeks)).flatMap(w => Object.values(w.days)).flat().length;
         return `<div class="contact-tree-section">
             <div class="contact-tree-header contact-tree-year" onclick="toggleTree('${yearKey}')">
                 <span>📁 ${year} <span class="tree-count">${yearCount} contatti</span></span>
                 <span class="folder-arrow" id="arrow-${yearKey}">▼</span>
             </div>
             <div id="body-${yearKey}">
-                ${Object.entries(months).sort().map(([month, weeks]) => {
-                    const monthKey = `month-${year}-${month.replace(/\s/g,'_')}`;
-                    const monthCount = Object.values(weeks).flatMap(w => Object.values(w.days)).flat().length;
+                ${sortTreeEntries(Object.entries(months)).map(([monthKey, monthData]) => {
+                    const monthDomKey = `month-${year}-${monthKey.replace(/\s/g,'_')}`;
+                    const monthCount = Object.values(monthData.weeks).flatMap(w => Object.values(w.days)).flat().length;
                     return `<div class="contact-tree-indent">
-                        <div class="contact-tree-header contact-tree-month" onclick="toggleTree('${monthKey}')">
-                            <span>📂 ${month} <span class="tree-count">${monthCount} contatti</span></span>
-                            <span class="folder-arrow" id="arrow-${monthKey}">▼</span>
+                        <div class="contact-tree-header contact-tree-month" onclick="toggleTree('${monthDomKey}')">
+                            <span>📂 ${monthData.label} <span class="tree-count">${monthCount} contatti</span></span>
+                            <span class="folder-arrow" id="arrow-${monthDomKey}">▼</span>
                         </div>
-                        <div id="body-${monthKey}">
-                            ${Object.entries(weeks).sort().map(([week, weekData]) => {
-                                const weekKey = `week-${week.replace(/[\s—]/g,'_')}`;
+                        <div id="body-${monthDomKey}">
+                            ${sortTreeEntries(Object.entries(monthData.weeks)).map(([weekSortKey, weekData]) => {
+                                const weekDomKey = `week-${weekSortKey.replace(/[\s—]/g,'_')}`;
                                 const weekCount = Object.values(weekData.days).flat().length;
                                 const todayMonday = getISOWeekMonday(today);
                                 const isCurrentWeek = weekData.monday.getTime() === todayMonday.getTime();
                                 return `<div class="contact-tree-indent">
-                                    <div class="contact-tree-header contact-tree-week" onclick="toggleTree('${weekKey}')">
-                                        <span>🗓️ ${week} <span class="tree-count">${weekCount} contatti</span></span>
-                                        <span class="folder-arrow" id="arrow-${weekKey}">▼</span>
+                                    <div class="contact-tree-header contact-tree-week" onclick="toggleTree('${weekDomKey}')">
+                                        <span>🗓️ ${weekData.label} <span class="tree-count">${weekCount} contatti</span></span>
+                                        <span class="folder-arrow" id="arrow-${weekDomKey}">▼</span>
                                     </div>
-                                    <div id="body-${weekKey}" style="display:${isCurrentWeek?'block':'none'}">
+                                    <div id="body-${weekDomKey}" style="display:${isCurrentWeek?'block':'none'}">
                                         ${renderWeekDayCards(weekData.days, weekData.monday)}
                                     </div>
                                 </div>`;
@@ -1828,11 +2119,13 @@ function selectService(tipo) {
     const keyMap = { 'Tagliando':'Tagliando','Dispositivo satellitare':'DispositivoSatellitare','Prenotazione':'Prenotazione','Lavorazione in corso':'LavorazioneInCorso','Doctor Glass':'DoctorGlass','Cambio Gomme':'CambioGomme','Altro':'Altro' };
     const btn = document.getElementById(`service-${keyMap[tipo]}`);
     if (btn) btn.classList.add('btn-sede-active');
-    const noteRow = document.getElementById('contactServiceNoteRow');
+    // FIX: la nota è ora sempre visibile per qualsiasi tipologia service
+    // (Tagliando, Doctor Glass, Cambio Gomme ecc.), non solo per Altro/Prenotazione.
+    // Cambia solo l'etichetta/placeholder per guidare l'operatore.
     const noteLabel = document.getElementById('contactServiceNoteLabel');
-    if (tipo === 'Altro') { if (noteRow) noteRow.style.display = 'block'; if (noteLabel) noteLabel.textContent = 'NOTA / MOTIVAZIONE *'; }
-    else if (tipo === 'Prenotazione') { if (noteRow) noteRow.style.display = 'block'; if (noteLabel) noteLabel.textContent = 'PRENOTAZIONE PER... (opzionale)'; }
-    else { if (noteRow) noteRow.style.display = 'none'; const noteEl = document.getElementById('contactServiceNote'); if (noteEl) noteEl.value = ''; }
+    if (tipo === 'Altro') { if (noteLabel) noteLabel.textContent = 'NOTA / MOTIVAZIONE *'; }
+    else if (tipo === 'Prenotazione') { if (noteLabel) noteLabel.textContent = 'PRENOTAZIONE PER... (opzionale)'; }
+    else { if (noteLabel) noteLabel.textContent = 'NOTA (opzionale)'; }
 }
 function selectServiceTipoCliente(tipo) {
     selectedServiceTipoCliente = tipo;
@@ -1886,6 +2179,8 @@ async function createContactLog() {
     const serviceTipo = document.getElementById('contactServiceTipo')?.value || '';
     const serviceSede = document.getElementById('contactServiceSede')?.value || '';
     const serviceNote = document.getElementById('contactServiceNote')?.value.trim() || '';
+    const serviceMarca = document.getElementById('contactServiceMarca')?.value.trim() || '';
+    const serviceModello = document.getElementById('contactServiceModello')?.value.trim() || '';
     const marca = document.getElementById('contactMarca')?.value.trim() || '';
     const modello = document.getElementById('contactModello')?.value.trim() || '';
     const linkAuto = document.getElementById('contactLinkAuto')?.value.trim() || '';
@@ -1911,6 +2206,8 @@ async function createContactLog() {
     if (category === 'Info Vendita' && !fonte) { alert('Seleziona la fonte'); return; }
     if (category === 'Service' && !serviceSede) { alert('Seleziona la sede Service'); return; }
     if (category === 'Service' && !serviceTipo) { alert('Seleziona la tipologia service'); return; }
+    if (category === 'Service' && !serviceMarca) { alert('Seleziona la marca del veicolo dal menù a tendina'); return; }
+    if (category === 'Service' && !serviceModello) { alert('Inserisci il modello del veicolo'); return; }
     if (category === 'Service' && serviceTipo === 'Altro' && !serviceNote) { alert('Inserisci la nota per Service Altro'); return; }
     if (category === 'Service' && !serviceTipoCliente) { alert('Seleziona Cliente o Non Cliente'); return; }
     if (category === 'Service' && serviceTipoCliente === 'CLIENTE' && !serviceTarga) { alert('Inserisci la targa'); return; }
@@ -1949,8 +2246,8 @@ async function createContactLog() {
         nonComunicaNominativo,
         otherNote: finalNote,
         contactDate,
-        marca: isNoleggio ? (noleggioMarca || null) : (isAcquisto ? (acquistoMarca || null) : (marca || null)),
-        modello: isNoleggio ? (noleggioModello || null) : (isAcquisto ? (acquistoModello || null) : (modello || null)),
+        marca: isNoleggio ? (noleggioMarca || null) : (isAcquisto ? (acquistoMarca || null) : (isService ? (serviceMarca || null) : (marca || null))),
+        modello: isNoleggio ? (noleggioModello || null) : (isAcquisto ? (acquistoModello || null) : (isService ? (serviceModello || null) : (modello || null))),
         linkAuto: (isNoleggio || isAcquisto) ? null : (linkAuto || null),
         serviceTipo: serviceTipo||null,
         serviceNote: isService ? (serviceNote || null) : null,
@@ -2011,6 +2308,10 @@ function openEditContactModal(id) {
     setVal('editContactCognome', log.clienteCognome);
     setVal('editContactNumero', log.clienteNumero || (clienteNumeroDisplay(log) !== '—' ? clienteNumeroDisplay(log) : ''));
     setVal('editContactTarga', log.serviceTarga);
+    setVal('editContactServiceMarcaInput', log.marca);
+    setVal('editContactServiceMarca', log.marca);
+    setVal('editContactServiceModello', log.modello);
+    setVal('editContactServiceNote', log.serviceNote);
     const modal = document.getElementById('editContactModal');
     if (modal) modal.style.display = 'flex';
 }
@@ -2027,13 +2328,22 @@ async function saveEditContactLog() {
     const clienteCognome = document.getElementById('editContactCognome')?.value.trim() || '';
     const clienteNumero = document.getElementById('editContactNumero')?.value.trim() || '';
     const serviceTarga = document.getElementById('editContactTarga')?.value.trim() || '';
+    const editServiceMarca = document.getElementById('editContactServiceMarca')?.value.trim() || '';
+    const editServiceModello = document.getElementById('editContactServiceModello')?.value.trim() || '';
+    const editServiceNote = document.getElementById('editContactServiceNote')?.value.trim() || '';
     if (!category) { alert('Seleziona una categoria'); return; }
     if (!clienteNumero) { alert('Il numero cliente è obbligatorio'); return; }
     const savedDayView = currentDayView;
     try {
+        const payload = { category, clienteNome: clienteNome || null, clienteCognome: clienteCognome || null, clienteNumero, serviceTarga: serviceTarga || null };
+        if (category === 'Service') {
+            payload.marca = editServiceMarca || null;
+            payload.modello = editServiceModello || null;
+            payload.serviceNote = editServiceNote || null;
+        }
         const res = await fetch(`/api/contacts/${editingContactId}`, {
             method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ category, clienteNome: clienteNome || null, clienteCognome: clienteCognome || null, clienteNumero, serviceTarga: serviceTarga || null })
+            body: JSON.stringify(payload)
         });
         if (!res.ok) { const data = await res.json().catch(() => null); alert(data?.error || 'Errore nel salvataggio'); return; }
         closeEditContactModal();
@@ -2072,6 +2382,7 @@ function hideNewContactForm() {
      'contactAcquistoMarcaInput','contactAcquistoMarca','contactAcquistoModello','contactAcquistoTarga',
      'contactNoleggioMarcaInput','contactNoleggioMarca','contactNoleggioModello',
      'contactNoleggioTipo','contactNoleggioLink','contactNoleggioRichiesta',
+     'contactServiceMarcaInput','contactServiceMarca','contactServiceModello',
      'serviceTarga','serviceTipoCliente']
         .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     const nonComEl = document.getElementById('nonComunicaNominativo');
@@ -2144,7 +2455,7 @@ function onCategoryChange() {
         SERVICE_SEDI_LIST.forEach(s=>{const b=document.getElementById(`serviceSede-${s}`);if(b)b.classList.remove('btn-sede-active');});
         ['Tagliando','DispositivoSatellitare','Prenotazione','LavorazioneInCorso','DoctorGlass','CambioGomme','Altro'].forEach(k=>{const b=document.getElementById(`service-${k}`);if(b)b.classList.remove('btn-sede-active');});
         ['CLIENTE','NON_CLIENTE'].forEach(k=>{const b=document.getElementById(`serviceCliente-${k}`);if(b)b.classList.remove('btn-sede-active');});
-        ['serviceTarga','serviceTipoCliente','contactServiceSede','contactServiceNote'].forEach(id=>{const e=document.getElementById(id);if(e) e.value='';});
+        ['serviceTarga','serviceTipoCliente','contactServiceSede','contactServiceNote','contactServiceMarcaInput','contactServiceMarca','contactServiceModello'].forEach(id=>{const e=document.getElementById(id);if(e) e.value='';});
         const noteRow = document.getElementById('contactServiceNoteRow'); if (noteRow) noteRow.style.display = 'none';
         const tl = document.getElementById('serviceTargaLabel'); if (tl) tl.textContent = 'TARGA (opzionale)';
     }

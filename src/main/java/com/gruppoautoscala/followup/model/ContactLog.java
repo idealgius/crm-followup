@@ -77,6 +77,23 @@ public class ContactLog {
     @Column(name = "acquisto_alert_note_gestita", length = 1000)
     private String acquistoAlertNoteGestita;
 
+    // ===== NUOVO: chi ha inserito la nota la PRIMA volta e quando — si
+    // valorizza una sola volta e non viene mai più toccato, a differenza dei
+    // campi "Modificata" qui sotto che si aggiornano ad ogni salvataggio. =====
+    @ManyToOne
+    @JoinColumn(name = "acquisto_alert_note_gestione_inserita_da_id")
+    private User acquistoAlertNoteGestioneInseritaDa;
+
+    @Column(name = "acquisto_alert_note_gestione_inserita_at")
+    private LocalDateTime acquistoAlertNoteGestioneInseritaAt;
+
+    @ManyToOne
+    @JoinColumn(name = "acquisto_alert_note_gestita_inserita_da_id")
+    private User acquistoAlertNoteGestitaInseritaDa;
+
+    @Column(name = "acquisto_alert_note_gestita_inserita_at")
+    private LocalDateTime acquistoAlertNoteGestitaInseritaAt;
+
     // ===== NUOVO: chi ha modificato l'ultima volta le note (anche solo
     // cancellandole o riscrivendole) e quando. Ogni salvataggio della
     // textarea conta come modifica, comprese le cancellazioni. =====
