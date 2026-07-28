@@ -7,6 +7,7 @@ import com.gruppoautoscala.followup.service.ContactLogService;
 import com.gruppoautoscala.followup.service.ExcelExportService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -29,7 +30,24 @@ public class ContactLogController {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
+
     private final ExcelExportService excelExportService = new ExcelExportService();
+
+    // Canale su cui vengono pubblicati gli eventi real-time per i Contatti.
+    // Il frontend si iscrive con: stompClient.subscribe('/topic/contacts', ...)
+    private static final String WS_TOPIC = "/topic/contacts";
+
+    // Piccolo helper: pubblica un evento {type, log} sul canale WebSocket.
+    // "type" vale "created" / "updated" / "deleted" così il frontend sa come
+    // aggiornare la sua lista senza dover fare un nuovo fetch completo.
+    private void broadcast(String type, Object payload) {
+        Map<String, Object> event = new HashMap<>();
+        event.put("type", type);
+        event.put("data", payload);
+        messagingTemplate.convertAndSend(WS_TOPIC, event);
+    }
 
     // Whitelist categorie valide — impedisce categorie "fantasma" scritte a mano
     private static final List<String> VALID_CATEGORIES = List.of(
@@ -201,7 +219,9 @@ public class ContactLogController {
             log = contactLogService.update(log);
         }
 
-        return ResponseEntity.ok(toMap(log));
+        Map<String, Object> logMap = toMap(log);
+        broadcast("created", logMap);
+        return ResponseEntity.ok(logMap);
     }
 
     @PatchMapping("/{id}")
@@ -331,7 +351,9 @@ public class ContactLogController {
             log.setContactDate(LocalDateTime.parse((String) body.get("contactDate")));
         }
 
-        return ResponseEntity.ok(toMap(contactLogService.update(log)));
+        Map<String, Object> updatedMap = toMap(contactLogService.update(log));
+        broadcast("updated", updatedMap);
+        return ResponseEntity.ok(updatedMap);
     }
 
     @DeleteMapping("/{id}")
@@ -349,6 +371,13 @@ public class ContactLogController {
         }
 
         contactLogService.delete(id);
+
+        // Per il delete basta l'id: il frontend rimuove la riga corrispondente
+        // dalla lista, non serve rimandare l'intero oggetto (che non esiste più).
+        Map<String, Object> deletedPayload = new HashMap<>();
+        deletedPayload.put("id", id);
+        broadcast("deleted", deletedPayload);
+
         return ResponseEntity.ok(Map.of("message", "Eliminato"));
     }
 

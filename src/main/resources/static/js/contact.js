@@ -1578,9 +1578,97 @@ let currentDayView = null;
 let contactPollIntervalId = null;
 const CONTACT_POLL_INTERVAL_MS = 15000;
 
+// ============================================================
+// WEBSOCKET (STOMP su /ws, topic /topic/contacts) — push reale.
+// Il polling qui sotto resta attivo in parallelo come rete di sicurezza:
+// se il WS è connesso i dati arrivano istantanei, se per qualche motivo
+// cade la connessione il polling ogni 15s copre comunque l'aggiornamento.
+// ============================================================
+
+let contactStompClient = null;
+let contactWsConnected = false;
+
+function connectContactWebSocket() {
+    if (contactStompClient) return; // già creato (in fase di connessione o connesso)
+
+    contactStompClient = new StompJs.Client({
+        webSocketFactory: () => new SockJS('/ws'),
+        reconnectDelay: 5000,
+        onConnect: () => {
+            contactWsConnected = true;
+            contactStompClient.subscribe('/topic/contacts', (message) => {
+                try {
+                    const event = JSON.parse(message.body);
+                    handleContactWsEvent(event);
+                } catch (err) {
+                    console.error('Errore parsing evento WebSocket contatti:', err);
+                }
+            });
+        },
+        onDisconnect: () => {
+            contactWsConnected = false;
+        },
+        onWebSocketClose: () => {
+            contactWsConnected = false;
+        },
+        onStompError: (frame) => {
+            console.error('Errore STOMP contatti:', frame.headers && frame.headers['message']);
+        }
+    });
+
+    contactStompClient.activate();
+}
+
+function disconnectContactWebSocket() {
+    if (contactStompClient) {
+        contactStompClient.deactivate();
+        contactStompClient = null;
+    }
+    contactWsConnected = false;
+}
+
+function handleContactWsEvent(event) {
+    if (!event || !event.type) return;
+
+    // Stessa protezione già usata dal polling: non toccare la lista se
+    // l'operatore ha il form "Nuovo Contatto" aperto o sta scrivendo
+    // dentro una nota allert, altrimenti perderebbe quello che sta scrivendo.
+    if (document.getElementById('newContactForm')?.style.display === 'block') return;
+    const activeEl = document.activeElement;
+    const isTypingNote = activeEl && (activeEl.id === 'acquistoAlertNoteGestione' || activeEl.id === 'acquistoAlertNoteGestita');
+    if (isTypingNote) return;
+
+    const { type, data } = event;
+
+    if (type === 'created') {
+        if (!contactLogs.some(l => l.id === data.id)) {
+            contactLogs.push(data);
+        }
+    } else if (type === 'updated') {
+        const idx = contactLogs.findIndex(l => l.id === data.id);
+        if (idx !== -1) contactLogs[idx] = data;
+        else contactLogs.push(data);
+    } else if (type === 'deleted') {
+        contactLogs = contactLogs.filter(l => l.id !== data.id);
+    } else {
+        return;
+    }
+
+    contactLogs.sort((a, b) => (b.contactDate || '').localeCompare(a.contactDate || ''));
+    applyContactFilters(currentDayView || undefined);
+
+    // Se il modal Allert è aperto sul contatto toccato dall'evento,
+    // aggiornalo dal vivo (stesso comportamento del polling).
+    if (acquistoAlertModalId) {
+        const updated = contactLogs.find(l => l.id === acquistoAlertModalId);
+        if (updated) refreshAcquistoAlertModalDisplay(updated);
+    }
+}
+
 function startContactPolling() {
     stopContactPolling();
     contactPollIntervalId = setInterval(pollContactUpdates, CONTACT_POLL_INTERVAL_MS);
+    connectContactWebSocket();
 }
 
 function stopContactPolling() {
@@ -1588,6 +1676,7 @@ function stopContactPolling() {
         clearInterval(contactPollIntervalId);
         contactPollIntervalId = null;
     }
+    disconnectContactWebSocket();
 }
 
 async function pollContactUpdates() {
