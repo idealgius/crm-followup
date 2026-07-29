@@ -137,6 +137,7 @@ function showPage(page, updateHash = true) {
     if (typeof stopContactPolling === 'function') stopContactPolling();
     if (typeof disconnectContactWebSocket === 'function') disconnectContactWebSocket();
     if (typeof disconnectRentWebSocket === 'function') disconnectRentWebSocket();
+    if (typeof disconnectServiceWebSocket === 'function') disconnectServiceWebSocket();
 
     // FIX: senza questo reset, la posizione di scroll della pagina precedente
     // resta invariata al cambio pagina (mostra/nascondi div, non una vera

@@ -16,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.ByteArrayOutputStream;
@@ -55,6 +56,18 @@ public class ServicePraticaController {
 
     @Autowired
     private ContactLogService contactLogService;
+
+    // Stesso meccanismo già collaudato su Contatti e Rent — canale dedicato
+    // /topic/service, indipendente dagli altri.
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
+
+    private void broadcastServiceEvent(String type, Object data) {
+        Map<String, Object> event = new HashMap<>();
+        event.put("type", type);
+        event.put("data", data);
+        messagingTemplate.convertAndSend("/topic/service", event);
+    }
 
     private final ObjectMapper mapper = new ObjectMapper();
 
@@ -125,7 +138,9 @@ public class ServicePraticaController {
 
         applyStatoSideEffects(p, stato, body);
 
-        return ResponseEntity.ok(toMap(servicePraticaRepository.save(p)));
+        Map<String, Object> createdMap = toMap(servicePraticaRepository.save(p));
+        broadcastServiceEvent("created", createdMap);
+        return ResponseEntity.ok(createdMap);
     }
 
     @PatchMapping("/pratiche/{id}")
@@ -163,7 +178,9 @@ public class ServicePraticaController {
         if (body.containsKey("noteConclusa")) p.setNoteConclusa((String) body.get("noteConclusa"));
         if (body.containsKey("noteProblematica")) p.setNoteProblematica((String) body.get("noteProblematica"));
 
-        return ResponseEntity.ok(toMap(servicePraticaRepository.save(p)));
+        Map<String, Object> updatedMap = toMap(servicePraticaRepository.save(p));
+        broadcastServiceEvent("updated", updatedMap);
+        return ResponseEntity.ok(updatedMap);
     }
 
     @DeleteMapping("/pratiche/{id}")
@@ -175,6 +192,9 @@ public class ServicePraticaController {
 
         if (servicePraticaRepository.findById(id).isEmpty()) return ResponseEntity.notFound().build();
         servicePraticaRepository.deleteById(id);
+        Map<String, Object> deletedPayload = new HashMap<>();
+        deletedPayload.put("id", id);
+        broadcastServiceEvent("deleted", deletedPayload);
         return ResponseEntity.ok(Map.of("message", "Eliminata"));
     }
 
@@ -214,7 +234,9 @@ public class ServicePraticaController {
         p.setGestitoDa(userOpt.get());
         p.setGestitoAt(LocalDateTime.now());
 
-        return ResponseEntity.ok(toMap(servicePraticaRepository.save(p)));
+        Map<String, Object> gestitaMap = toMap(servicePraticaRepository.save(p));
+        broadcastServiceEvent("updated", gestitaMap);
+        return ResponseEntity.ok(gestitaMap);
     }
 
     @PatchMapping("/pratiche/{id}/annulla-gestione")
@@ -230,7 +252,9 @@ public class ServicePraticaController {
         p.setGestitoDa(null);
         p.setGestitoAt(null);
 
-        return ResponseEntity.ok(toMap(servicePraticaRepository.save(p)));
+        Map<String, Object> annullataMap = toMap(servicePraticaRepository.save(p));
+        broadcastServiceEvent("updated", annullataMap);
+        return ResponseEntity.ok(annullataMap);
     }
 
     // ============================================================
@@ -300,7 +324,9 @@ public class ServicePraticaController {
             p.setRicambioAlertRimandatoAl(addBusinessDays(LocalDate.now(), 1));
         }
 
-        return ResponseEntity.ok(toMap(servicePraticaRepository.save(p)));
+        Map<String, Object> ricambioMap = toMap(servicePraticaRepository.save(p));
+        broadcastServiceEvent("updated", ricambioMap);
+        return ResponseEntity.ok(ricambioMap);
     }
 
     // Popup 2a: appuntamenti di domani (promemoria informativo)
@@ -375,7 +401,9 @@ public class ServicePraticaController {
         // in attesa che l'operatore scelga (dal frontend) tra "nuovo appuntamento"
         // e "segna come fallita" tramite gli endpoint dedicati qui sotto.
 
-        return ResponseEntity.ok(toMap(servicePraticaRepository.save(p)));
+        Map<String, Object> esitoMap = toMap(servicePraticaRepository.save(p));
+        broadcastServiceEvent("updated", esitoMap);
+        return ResponseEntity.ok(esitoMap);
     }
 
     // Richiama per un nuovo appuntamento: la data/ora precedente va nello
@@ -416,7 +444,9 @@ public class ServicePraticaController {
         p.setEsitoAppuntamento(null);
         p.setStato("APPUNTAMENTO");
 
-        return ResponseEntity.ok(toMap(servicePraticaRepository.save(p)));
+        Map<String, Object> nuovoAppMap = toMap(servicePraticaRepository.save(p));
+        broadcastServiceEvent("updated", nuovoAppMap);
+        return ResponseEntity.ok(nuovoAppMap);
     }
 
     // Segna la pratica come Fallita direttamente dal flusso post-appuntamento
@@ -434,7 +464,9 @@ public class ServicePraticaController {
         p.setStato("FALLITA");
         p.setNoteFallimento((String) body.get("noteFallimento"));
 
-        return ResponseEntity.ok(toMap(servicePraticaRepository.save(p)));
+        Map<String, Object> fallitaMap = toMap(servicePraticaRepository.save(p));
+        broadcastServiceEvent("updated", fallitaMap);
+        return ResponseEntity.ok(fallitaMap);
     }
 
     @GetMapping("/pratiche/export-excel")

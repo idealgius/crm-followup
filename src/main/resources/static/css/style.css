@@ -2066,3 +2066,136 @@ select.input-field {
     border-color: #7a92b8;
     color: #7a92b8;
 }
+
+/* ============================================================
+   MOBILE — Fase A: navbar in basso, fissa, scorrevole, stile app.
+   Sotto una certa larghezza (768px), la barra dei link diventa una
+   barra fissa in fondo allo schermo con icona sopra ed etichetta sotto
+   (come una vera app), scorrevole orizzontalmente col dito se le voci
+   visibili (in base al ruolo) non ci stanno tutte. La barra in alto
+   resta solo per logo + utente/tema/uscita, più compatta.
+   Il desktop (sopra i 768px) resta ESATTAMENTE come prima — queste
+   regole non lo toccano, sono tutte dentro il media query.
+   ============================================================ */
+@media (max-width: 768px) {
+    .navbar {
+        height: 54px;
+        padding: 0 14px;
+        gap: 10px;
+    }
+
+    .nav-logo img {
+        height: 30px;
+    }
+
+    #navBrandBadge {
+        font-size: 10px !important;
+        letter-spacing: 1px !important;
+    }
+
+    /* Il nome utente per esteso occupa troppo spazio in alto su schermo
+       piccolo — resta comunque cliccabile (icona), il nome si legge dentro
+       il menu a tendina che si apre. */
+    .nav-user {
+        gap: 8px;
+    }
+
+    #navUserName {
+        font-size: 0;
+    }
+    #navUserName::before {
+        content: '👤';
+        font-size: 18px;
+    }
+
+    .theme-switch .theme-icon {
+        font-size: 12px;
+    }
+
+    .btn-logout {
+        padding: 5px 10px;
+        font-size: 10px;
+    }
+
+    /* La barra dei link "stacca" dal resto della navbar e si fissa in
+       fondo allo schermo, sempre visibile mentre si scrolla la pagina —
+       lo scroll orizzontale (già presente nel CSS base con la scrollbar
+       nascosta) resta attivo, così se le voci non ci stanno tutte si
+       scorrono col dito invece di rimpicciolirsi illeggibili. */
+    .nav-links {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        top: auto;
+        z-index: 300;
+        background: var(--navbar-bg);
+        border-top: 2px solid var(--navbar-border);
+        box-shadow: 0 -6px 24px rgba(0,0,0,0.35);
+        padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+        gap: 2px;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Icona sopra, etichetta sotto — le due metà del link (prima erano
+       un'unica riga di testo "📊 DASHBOARD", ora divise in due span dedicati
+       nell'HTML) diventano due righe impilate, più larghe da toccare col
+       dito e più leggibili di una scritta piccola tutta su una riga. */
+    .nav-link {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 3px;
+        min-width: 66px;
+        padding: 8px 6px;
+        border-radius: 10px;
+    }
+
+    .nav-link-icon {
+        font-size: 20px;
+        line-height: 1;
+    }
+
+    .nav-link-label {
+        font-size: 9px;
+        letter-spacing: 0.5px;
+        line-height: 1;
+    }
+
+    .nav-link.active {
+        background: rgba(240,192,64,0.16);
+    }
+    /* Un pallino sotto la voce attiva, più immediato da notare di un
+       semplice cambio di colore su schermo piccolo. */
+    .nav-link.active::after {
+        content: '';
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: #f0c040;
+        margin-top: 1px;
+    }
+
+    /* Tutte le pagine hanno bisogno di spazio in fondo pari all'altezza
+       della barra fissa, altrimenti l'ultimo pezzo di contenuto (es.
+       l'ultima riga di una tabella, l'ultimo bottone di un form) resta
+       nascosto dietro alla barra. */
+    .page {
+        padding: 16px 14px calc(86px + env(safe-area-inset-bottom, 0px));
+    }
+
+    /* I modal (popup) su mobile devono occupare bene lo spazio disponibile
+       invece di restare piccoli al centro con margini enormi ai lati. */
+    .modal-box {
+        width: 100%;
+        max-height: 88vh;
+    }
+    .modal-overlay {
+        padding: 0;
+        align-items: flex-end;
+    }
+    .modal-box {
+        border-radius: 16px 16px 0 0;
+    }
+}

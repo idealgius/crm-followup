@@ -60,6 +60,7 @@ function loadServiceDashboard() {
     checkServiceRicambioDaGestire();
     checkServiceAppuntamentiDomani();
     checkServiceAppuntamentiDaGestire();
+    connectServiceWebSocket();
 }
 
 async function loadServicePratiche() {
@@ -1200,4 +1201,116 @@ function closeServiceAppuntamentiDaGestireModal(event) {
     if (event && event.target.id !== 'serviceAppuntamentiDaGestireModal') return;
     const modal = document.getElementById('serviceAppuntamentiDaGestireModal');
     if (modal) modal.style.display = 'none';
+}
+
+// ============================================================
+// WEBSOCKET — push istantaneo per Service.
+// Due canali distinti:
+// - /topic/service: pratiche create/update/delete/gestisci/popup automatici
+//   (ServicePraticaController)
+// - /topic/contacts: già esistente per il Registro Contatti generale — qui
+//   filtriamo solo gli eventi con categoria "Service", per tenere
+//   sincronizzata la tabella "Contatti Service da Registro Contatti" senza
+//   duplicare un canale che esiste già (stesso identico schema usato in Rent).
+// ============================================================
+
+let serviceStompClient = null;
+let serviceWsConnected = false;
+
+function connectServiceWebSocket() {
+    if (serviceStompClient) return; // già creato (in connessione o connesso)
+
+    serviceStompClient = new StompJs.Client({
+        webSocketFactory: () => new SockJS('/ws'),
+        reconnectDelay: 5000,
+        onConnect: () => {
+            serviceWsConnected = true;
+            console.log('%c✅ WebSocket Service CONNESSO', 'color:#00c853;font-weight:bold');
+
+            serviceStompClient.subscribe('/topic/service', (message) => {
+                try {
+                    const event = JSON.parse(message.body);
+                    handleServiceWsEvent(event);
+                } catch (err) {
+                    console.error('Errore parsing evento WebSocket service:', err);
+                }
+            });
+
+            serviceStompClient.subscribe('/topic/contacts', (message) => {
+                try {
+                    const event = JSON.parse(message.body);
+                    handleServiceContattiWsEvent(event);
+                } catch (err) {
+                    console.error('Errore parsing evento WebSocket contatti (service):', err);
+                }
+            });
+        },
+        onDisconnect: () => { serviceWsConnected = false; },
+        onWebSocketClose: () => { serviceWsConnected = false; },
+        onStompError: (frame) => {
+            console.error('❌ Errore STOMP service:', frame.headers && frame.headers['message']);
+        }
+    });
+
+    serviceStompClient.activate();
+}
+
+function disconnectServiceWebSocket() {
+    if (serviceStompClient) {
+        serviceStompClient.deactivate();
+        serviceStompClient = null;
+    }
+    serviceWsConnected = false;
+}
+
+function handleServiceWsEvent(event) {
+    if (!event || !event.type) return;
+
+    // Non toccare se l'operatore ha il form nuova pratica o il modal
+    // dettaglio/gestione aperti, per non perdere quello che sta scrivendo.
+    if (document.getElementById('newServiceForm')?.style.display === 'block') return;
+    if (document.getElementById('servicePraticaModal')?.style.display === 'flex') return;
+
+    const { type, data } = event;
+
+    if (type === 'created') {
+        if (!servicePratiche.some(p => p.id === data.id)) servicePratiche.push(data);
+    } else if (type === 'updated') {
+        const idx = servicePratiche.findIndex(p => p.id === data.id);
+        if (idx !== -1) servicePratiche[idx] = data;
+        else servicePratiche.push(data);
+    } else if (type === 'deleted') {
+        servicePratiche = servicePratiche.filter(p => p.id !== data.id);
+    } else {
+        return;
+    }
+
+    servicePratiche.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    populateServiceFilters();
+    applyServiceFilters();
+}
+
+// Filtra gli eventi del Registro Contatti generale, tenendo solo quelli di
+// categoria "Service" — è l'unica categoria che alimenta la tabella di sola
+// lettura di questa pagina.
+function handleServiceContattiWsEvent(event) {
+    if (!event || !event.type) return;
+    const { type, data } = event;
+
+    if (type === 'deleted') {
+        serviceContattiRegistro = serviceContattiRegistro.filter(c => c.id !== data.id);
+    } else if (data && data.category === 'Service') {
+        const idx = serviceContattiRegistro.findIndex(c => c.id === data.id);
+        if (idx !== -1) serviceContattiRegistro[idx] = data;
+        else serviceContattiRegistro.push(data);
+    } else if (data) {
+        // La categoria è stata cambiata e non è più "Service": se prima era
+        // presente in questa tabella, va tolta.
+        serviceContattiRegistro = serviceContattiRegistro.filter(c => c.id !== data.id);
+    } else {
+        return;
+    }
+
+    renderServiceContattiRegistro(serviceContattiRegistro);
+    if (typeof renderChartServiceChiamateAppuntamenti === 'function') renderChartServiceChiamateAppuntamenti();
 }
