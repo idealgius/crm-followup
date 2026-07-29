@@ -777,13 +777,35 @@ function renderServiceContattiRegistro(list) {
 // generale nel periodo selezionato (serviceContattiRegistro). "Appuntamenti
 // fissati" = pratiche che hanno avuto almeno una data di appuntamento
 // impostata (anche se poi concluse/fallite/riprogrammate).
-function renderChartServiceChiamateAppuntamenti() {
+async function renderChartServiceChiamateAppuntamenti() {
     const ctx = document.getElementById('chartServiceChiamateAppuntamenti');
     if (!ctx) return;
+
+    // FIX: prima "chiamate" filtrava serviceContattiRegistro — un array
+    // caricato per UN'ALTRA sezione della pagina (la tabella "Contatti
+    // Service da Registro Contatti"), con un SUO proprio filtro data
+    // (serviceContattiFrom/To), separato da quello principale. Se il
+    // periodo scelto qui non era compreso in quello già caricato lì, i dati
+    // semplicemente non c'erano ancora — risultato: il numero restava
+    // "fermo" a quello dell'altro filtro, invece di aggiornarsi.
+    // Ora si fa una richiesta dedicata al server con l'esatto periodo del
+    // filtro principale, indipendente da cosa è già caricato altrove.
+    const from = document.getElementById('servicePraticheFrom')?.value || '';
+    const to = document.getElementById('servicePraticheTo')?.value || '';
+
+    let chiamate = 0;
+    try {
+        let url = '/api/service/contatti';
+        if (from && to) url += `?from=${from}&to=${to}`;
+        const res = await fetch(url);
+        if (res.ok) chiamate = (await res.json()).length;
+    } catch (err) {
+        console.error('Errore caricamento chiamate per grafico Service:', err);
+    }
+
     if (chartServiceChiamateAppuntamenti) chartServiceChiamateAppuntamenti.destroy();
 
-    const chiamate = serviceContattiRegistro.length;
-    const appuntamenti = servicePratiche.filter(p => p.dataAppuntamento || p.esitoAppuntamento).length;
+    const appuntamenti = servicePraticheFiltered.filter(p => p.dataAppuntamento || p.esitoAppuntamento).length;
     const total = chiamate + appuntamenti;
     const legendColor = getLegendColor();
     const colors = ['#4a90d9', '#7c4dff'];

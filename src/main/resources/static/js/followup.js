@@ -576,3 +576,107 @@ function formatOutcome(outcome, stepNumber, isSendOnly) {
     };
     return map[outcome] || outcome;
 }
+
+// ============================================================
+// STAMPA PER CONSULENTE — elenco clienti raggruppati per consulente,
+// esclusi quelli che hanno già risposto o sono stati abbandonati (la
+// stampa serve come "foglio chiamate" per chi resta ancora da lavorare).
+// Per ogni cliente: ● nominativo, poi per ciascuno dei 3 step — chiamata
+// (📞 con ✓ risposto / ✗ non risposto / ○ non ancora fatto) oppure invio
+// email/WhatsApp (✉️ sottolineata se inviata, normale se no) — la
+// distinzione chiamata-vs-invio segue lo stesso "isSendOnly" già usato nel
+// resto della pagina (step 3, o tutti e 3 se il cliente è Solo Email).
+// ============================================================
+
+async function printFollowUpsByConsultant() {
+    const date = document.getElementById('workDateFilter').value;
+    if (!date) { alert('Seleziona prima una data'); return; }
+
+    let followUps;
+    try {
+        const res = await fetch(`/api/followups/with-steps?date=${date}`);
+        if (!res.ok) { alert('Errore nel caricamento dei dati da stampare'); return; }
+        followUps = await res.json();
+    } catch (err) {
+        console.error('Errore caricamento stampa follow-up:', err);
+        alert('Errore nel caricamento dei dati da stampare');
+        return;
+    }
+
+    // Filtri richiesti: fuori chi ha già risposto, fuori chi è stato abbandonato
+    const daStampare = followUps.filter(fu => fu.status !== 'RESPONDED' && fu.status !== 'ABANDONED');
+
+    if (daStampare.length === 0) {
+        alert('Nessun follow-up da stampare per questa data (tutti risposti o abbandonati)');
+        return;
+    }
+
+    // Raggruppa per consulente
+    const perConsulente = {};
+    daStampare.forEach(fu => {
+        const nome = fu.consultantName || 'Senza consulente';
+        if (!perConsulente[nome]) perConsulente[nome] = [];
+        perConsulente[nome].push(fu);
+    });
+    const consulentiOrdinati = Object.keys(perConsulente).sort();
+
+    // FIX: lo Step 3 è sempre l'invio (mail/WhatsApp), gli Step 1, 2 e 4 sono
+    // sempre chiamate — ordine di stampa: chiamata 1, chiamata 2, invio,
+    // chiamata 4. Si stampa SOLO quello che è stato effettivamente segnato
+    // (risposto/non risposto/inviato) — se uno step è ancora in sospeso
+    // (PENDING) o non esiste, non si stampa nulla per quello slot, niente
+    // segnaposto vuoti. L'icona della posta non è sottolineata.
+    const stepIndicators = (steps) => {
+        const order = [1, 2, 3, 4];
+        return order.map(n => {
+            const step = (steps || []).find(s => s.stepNumber === n);
+            if (!step) return '';
+            if (n === 3) {
+                // Step 3 = invio — si stampa solo se è stato davvero inviato
+                const isSent = step.outcome === 'SENT' || step.outcome === 'ANSWERED';
+                return isSent ? '<span class="print-step">✉️</span>' : '';
+            }
+            // Step 1, 2, 4 = chiamate — si stampa solo se risposto o non
+            // risposto è stato effettivamente segnato
+            if (step.outcome === 'ANSWERED') return '<span class="print-step">📞✓</span>';
+            if (step.outcome === 'NO_ANSWER') return '<span class="print-step">📞✗</span>';
+            return '';
+        }).join('');
+    };
+
+    const bodyHtml = consulentiOrdinati.map(nome => `
+        <div class="print-consultant-block">
+            <h2 class="print-consultant-name">${nome}</h2>
+            ${perConsulente[nome].map(fu => `
+                <div class="print-client-row">
+                    <span class="print-bullet">●</span>
+                    <span class="print-client-name">${fu.customer.fullName}</span>
+                    <span class="print-steps">${stepIndicators(fu.steps)}</span>
+                </div>
+            `).join('')}
+        </div>
+    `).join('');
+
+    const win = window.open('', '_blank');
+    win.document.write(`<html><head><title>Foglio Chiamate — ${date}</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 24px; color: #000; }
+        h1 { font-size: 16px; margin-bottom: 4px; }
+        .print-date { font-size: 12px; color: #555; margin-bottom: 24px; }
+        .print-consultant-block { margin-bottom: 26px; break-inside: avoid; }
+        .print-consultant-name { font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 10px; }
+        .print-client-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid #ddd; font-size: 13px; }
+        .print-bullet { font-size: 16px; }
+        .print-client-name { flex: 1; font-weight: 600; }
+        .print-steps { display: flex; gap: 10px; font-size: 14px; }
+        .print-step-empty { opacity: 0.3; }
+        @page { margin: 15mm; }
+        @media print { .print-consultant-block { page-break-inside: avoid; } }
+    </style></head><body>
+        <h1>Foglio Chiamate Follow-up</h1>
+        <div class="print-date">📅 ${date} — esclusi risposti e abbandonati</div>
+        ${bodyHtml}
+    </body></html>`);
+    win.document.close();
+    win.print();
+}

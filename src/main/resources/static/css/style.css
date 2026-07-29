@@ -2160,7 +2160,10 @@ select.input-field {
     .nav-link-label {
         font-size: 9px;
         letter-spacing: 0.5px;
-        line-height: 1;
+        line-height: 1.15;
+        white-space: normal;
+        text-align: center;
+        max-width: 70px;
     }
 
     .nav-link.active {

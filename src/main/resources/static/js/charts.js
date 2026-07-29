@@ -327,8 +327,18 @@ function renderStatDetailList(items, from, to, consultant) {
         return;
     }
 
+    // NUOVO: oltre al totale, mostra quanti hanno già risposto, quanti sono
+    // stati abbandonati, e quanti restano ancora da lavorare (il calcolo
+    // richiesto: totale - risposto - abbandonati).
+    const responded = items.filter(fu => fu.status === 'RESPONDED').length;
+    const abandoned = items.filter(fu => fu.status === 'ABANDONED').length;
+    const remaining = items.length - responded - abandoned;
+
     list.innerHTML = `
-        <div class="stat-detail-meta">${items.length} risultati · ${rangeNote}${filterNote}</div>
+        <div class="stat-detail-meta">
+            ${items.length} risultati · ${rangeNote}${filterNote}<br>
+            <span style="font-size:11px;opacity:0.85">✅ ${responded} risposti &nbsp;·&nbsp; ❌ ${abandoned} abbandonati &nbsp;·&nbsp; ⏳ ${remaining} rimanenti</span>
+        </div>
         ${items.map(fu => `
             <div class="followup-card stat-detail-card" onclick="goToFollowUpFromDashboard('${fu.workDate}', ${fu.id})">
                 <div class="followup-header" style="margin-bottom:0">

@@ -415,7 +415,18 @@ async function loadContactLogs(from, to, restoreDayView) {
         populateOperatorFilter();
         applyContactFilters(restoreDayView);
         checkAcquistoAlertDaGestire();
-        loadContactStatsTotaliStorici();
+        // FIX: prima questa chiamata partiva "e basta" — i grafici si
+        // disegnavano PRIMA che i totali veri arrivassero (mostrando quindi
+        // ancora il numero vecchio, calcolato sul periodo filtrato), e non
+        // venivano più ridisegnati una volta arrivato il dato corretto. Ora
+        // appena i totali arrivano, i 4 badge "Totale storico" si aggiornano
+        // per davvero, indipendentemente dal filtro data attivo.
+        loadContactStatsTotaliStorici().then(() => {
+            renderChartInfoAcquisto(contactLogsFiltered);
+            renderChartFonteVendita(contactLogsFiltered);
+            renderChartNoleggio(contactLogsFiltered);
+            updateServiceCounterBadge();
+        });
     } catch (err) {
         console.error('Errore caricamento contatti:', err);
     }
@@ -788,17 +799,23 @@ function renderGenericContactDetail() {
             const alert = hasAcquistoAlert(log);
             const alertVisual = alert ? acquistoAlertVisual(log) : null;
             const links = [];
-            if (log.linkAuto) links.push(`<a href="${log.linkAuto}" target="_blank" rel="noopener" title="Lead veicolo" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(124,77,255,0.15);color:#7c4dff;text-decoration:none;font-size:13px">🔗</a>`);
-            if (log.linkAppuntamento) links.push(`<a href="${log.linkAppuntamento}" target="_blank" rel="noopener" title="Link appuntamento" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(74,144,217,0.15);color:#4a90d9;text-decoration:none;font-size:13px">🔗</a>`);
-            if (log.noleggioLink) links.push(`<a href="${log.noleggioLink}" target="_blank" rel="noopener" title="Lead noleggio" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(0,200,83,0.15);color:#00c853;text-decoration:none;font-size:13px">🔗</a>`);
-            if (alert) links.push(`<button onclick="openAcquistoAlertModal(${log.id})" title="Gestisci Allert — ${alertVisual.label}" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:${alertVisual.bg};color:${alertVisual.color};border:none;cursor:pointer;font-size:13px">${alertVisual.icon}</button>`);
-            return `<div class="followup-card" style="margin-bottom:10px">
+            if (log.linkAuto) links.push(`<a href="${log.linkAuto}" target="_blank" rel="noopener" title="Lead veicolo" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(124,77,255,0.15);color:#7c4dff;text-decoration:none;font-size:13px">🔗</a>`);
+            if (log.linkAppuntamento) links.push(`<a href="${log.linkAppuntamento}" target="_blank" rel="noopener" title="Link appuntamento" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(74,144,217,0.15);color:#4a90d9;text-decoration:none;font-size:13px">🔗</a>`);
+            if (log.noleggioLink) links.push(`<a href="${log.noleggioLink}" target="_blank" rel="noopener" title="Lead noleggio" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(0,200,83,0.15);color:#00c853;text-decoration:none;font-size:13px">🔗</a>`);
+            if (alert) links.push(`<button onclick="event.stopPropagation();openAcquistoAlertModal(${log.id})" title="Gestisci Allert — ${alertVisual.label}" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:${alertVisual.bg};color:${alertVisual.color};border:none;cursor:pointer;font-size:13px">${alertVisual.icon}</button>`);
+            // FIX: prima la card non aveva alcun click — nessun modo di
+            // aprire la scheda del cliente da questa lista (che si apre
+            // cliccando su una fetta di grafico o una stat-card). Ora
+            // cliccando sulla card si apre la modifica, come nel resto
+            // dell'app; i pulsanti/link interni fermano la propagazione
+            // per non aprire ANCHE la scheda quando si clicca su di loro.
+            return `<div class="followup-card" style="margin-bottom:10px;cursor:pointer" onclick="closeGenericDetailAndEdit(${log.id})">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
                     <div>
                         <div style="font-weight:800;color:${acquistoAlertNameColor(log) || 'var(--text-primary)'};font-size:14px">${alert ? alertVisual.icon + ' ' : ''}${clienteNomeCompleto(log)}</div>
                         <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap">
                             <span class="contact-category-badge cat-${catClass}">${log.category}</span>
-                            ${alert ? `<span onclick="openAcquistoAlertModal(${log.id})" style="cursor:pointer;font-size:11px;font-weight:700;background:${alertVisual.bg};color:${alertVisual.color};padding:2px 8px;border-radius:8px">${alertVisual.icon} ${alertVisual.label}</span>` : ''}
+                            ${alert ? `<span onclick="event.stopPropagation();openAcquistoAlertModal(${log.id})" style="cursor:pointer;font-size:11px;font-weight:700;background:${alertVisual.bg};color:${alertVisual.color};padding:2px 8px;border-radius:8px">${alertVisual.icon} ${alertVisual.label}</span>` : ''}
                         </div>
                         <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">📅 ${formatDateIT(date)} · 🕐 ${time}</div>
                         <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📞 ${clienteNumeroDisplay(log)}</div>
@@ -930,6 +947,16 @@ function showSedeDetail(sede) {
 function closeSedeDetail(event) {
     if (event && event.target.id !== 'sedeDetailModal') return;
     document.getElementById('sedeDetailModal').style.display = 'none';
+}
+
+// NUOVO: chiude il modal "dettaglio" (quello che si apre da un click su una
+// fetta di grafico o una stat-card) e apre subito la scheda del cliente
+// cliccato — prima mancava del tutto, la card in quella lista non era
+// cliccabile.
+function closeGenericDetailAndEdit(id) {
+    const modal = document.getElementById('sedeDetailModal');
+    if (modal) modal.style.display = 'none';
+    openEditContactModal(id);
 }
 
 function renderChartInfoAcquisto(logs) {

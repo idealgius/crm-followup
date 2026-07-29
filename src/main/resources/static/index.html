@@ -40,7 +40,7 @@
             <a href="#dashboard" class="nav-link active" id="navDashboard" onclick="showPage('dashboard');return false"><span class="nav-link-icon">📊</span><span class="nav-link-label">DASHBOARD</span></a>
             <a href="#followups" class="nav-link" id="navFollowups" onclick="showPage('followups');return false"><span class="nav-link-icon">📋</span><span class="nav-link-label">FOLLOW-UP</span></a>
             <a href="#waiting" class="nav-link" id="navWaiting" onclick="showPage('waiting');return false"><span class="nav-link-icon">🔔</span><span class="nav-link-label">RECALL</span></a>
-            <a href="#contacts" class="nav-link" id="navContacts" onclick="showPage('contacts');return false"><span class="nav-link-icon">📞</span><span class="nav-link-label">CONTATTI</span></a>
+            <a href="#contacts" class="nav-link" id="navContacts" onclick="showPage('contacts');return false"><span class="nav-link-icon">📞</span><span class="nav-link-label">REGISTRO CONTATTI</span></a>
             <a href="#promo" class="nav-link" id="navPromo" style="display:none" onclick="showPage('promo');return false"><span class="nav-link-icon">🎯</span><span class="nav-link-label">PROMO</span></a>
             <a href="#rent" class="nav-link" id="navRent" style="display:none" onclick="showPage('rent');return false"><span class="nav-link-icon">🚗</span><span class="nav-link-label">RENT</span></a>
             <a href="#service" class="nav-link" id="navService" style="display:none" onclick="showPage('service');return false"><span class="nav-link-icon">🔧</span><span class="nav-link-label">SERVICE</span></a>
@@ -175,6 +175,7 @@
 
                 <button onclick="loadFollowUps()" class="btn-gold">CARICA</button>
                 <button onclick="showNewFollowUp()" class="btn-primary" style="width:auto;padding:10px 20px">+ NUOVO</button>
+                <button onclick="printFollowUpsByConsultant()" class="btn-secondary" style="padding:10px 20px">🖨️ STAMPA</button>
             </div>
         </div>
         <div class="search-bar">
