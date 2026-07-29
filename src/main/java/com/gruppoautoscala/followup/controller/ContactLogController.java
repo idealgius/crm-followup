@@ -248,13 +248,14 @@ public class ContactLogController {
         ContactLog log = logOpt.get();
 
         // ===== ALLERT — permessi dedicati =====
-        // La gestione dell'Allert (stato + note) è riservata a MODERATORE, GESTORE, ADMIN,
+        // La gestione dell'Allert (stato + note) è riservata a MODERATORE, GESTORE, ADMIN
+        // e ora anche BACK_OFFICE (stesso potere del Moderatore su questo fronte),
         // separatamente dal normale controllo di modifica/proprietà del contatto qui sotto.
         boolean isTouchingAlertManagement = body.containsKey("acquistoAlertStatus")
                 || body.containsKey("acquistoAlertNoteGestione")
                 || body.containsKey("acquistoAlertNoteGestita");
         if (isTouchingAlertManagement) {
-            boolean canManageAlert = "ADMIN".equals(role) || "GESTORE".equals(role) || "MODERATORE".equals(role);
+            boolean canManageAlert = "ADMIN".equals(role) || "GESTORE".equals(role) || "MODERATORE".equals(role) || "BACK_OFFICE".equals(role);
             if (!canManageAlert) {
                 return ResponseEntity.status(403).body(Map.of("error", "Solo Moderatore, Gestore o Admin possono gestire l'Allert"));
             }
@@ -377,6 +378,12 @@ public class ContactLogController {
         if (logOpt.isEmpty()) return ResponseEntity.notFound().build();
 
         ContactLog log = logOpt.get();
+        // BACK_OFFICE ha lo stesso potere del Moderatore per la gestione
+        // allert, ma per l'eliminazione si comporta come un normale
+        // UTENTE/BDC: può eliminare SOLO i propri contatti, non quelli
+        // altrui. Non serve un controllo dedicato: il check sotto (owner o
+        // ADMIN/GESTORE) già lo gestisce correttamente, visto che BACK_OFFICE
+        // non è incluso tra i ruoli con bypass totale.
         if (!"ADMIN".equals(role) && !"GESTORE".equals(role) && !log.getUser().getId().equals(userId)) {
             return ResponseEntity.status(403).body(Map.of("error", "Non autorizzato"));
         }

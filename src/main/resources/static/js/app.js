@@ -276,7 +276,8 @@ window.onload = function() {
             const isNoleggio = data.role === 'NOLEGGIO';
             const isService = data.role === 'SERVICE';
             const hashPage = getPageFromHash();
-            const defaultPage = isNoleggio ? 'rent' : (isService ? 'service' : (data.role === 'UTENTE' ? 'contacts' : 'dashboard'));
+            const isBackOffice = data.role === 'BACK_OFFICE';
+            const defaultPage = isNoleggio ? 'rent' : (isService ? 'service' : ((data.role === 'UTENTE' || isBackOffice) ? 'contacts' : 'dashboard'));
             showPage(hashPage || defaultPage);
 
             // FIX PRESTAZIONI: loadStats() veniva chiamata QUI e poi anche
@@ -284,7 +285,7 @@ window.onload = function() {
             // sopra) — due volte di seguito, raddoppiando le 4 richieste
             // parallele della Dashboard a 8 proprio al primo caricamento.
             // showPage() la richiama già da sola quando serve davvero.
-            if (data.role !== 'UTENTE' && !isNoleggio && !isService) {
+            if (data.role !== 'UTENTE' && !isNoleggio && !isService && !isBackOffice) {
                 if (typeof loadPromo === 'function') loadPromo();
             }
 
