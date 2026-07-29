@@ -402,6 +402,39 @@ public class ContactLogController {
         return ResponseEntity.ok(contactLogService.getStats(fromDt, toDt));
     }
 
+    // NUOVO: totali VERAMENTE storici, su tutto il database, senza alcun
+    // filtro (né date né altro) — a differenza di /stats (che rispetta from/to)
+    // questo endpoint serve solo per i badge "Totale storico" che non devono
+    // mai cambiare in base ai filtri attivi sullo schermo.
+    @GetMapping("/stats-totali-storici")
+    public ResponseEntity<?> getStatsTotaliStorici(HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+
+        List<ContactLog> all = contactLogService.getAll();
+
+        long infoVendita = all.stream().filter(l ->
+            "Info Vendita".equals(l.getCategory()) || "Info + Appuntamento".equals(l.getCategory()) || "Info Vendita in Promo".equals(l.getCategory())
+        ).count();
+        long infoNoleggio = all.stream().filter(l -> "Info Noleggio".equals(l.getCategory())).count();
+        long service = all.stream().filter(l -> "Service".equals(l.getCategory())).count();
+        long infoAcquisto = all.stream().filter(l -> "Info Acquisto effettuato".equals(l.getCategory())).count();
+        long acquistoDaGestire = all.stream().filter(l -> Boolean.TRUE.equals(l.getAcquistoAlert())
+            && (l.getAcquistoAlertStatus() == null || "DA_GESTIRE".equals(l.getAcquistoAlertStatus()))).count();
+        long acquistoInGestione = all.stream().filter(l -> "IN_GESTIONE".equals(l.getAcquistoAlertStatus())).count();
+        long acquistoGestita = all.stream().filter(l -> "GESTITA".equals(l.getAcquistoAlertStatus())).count();
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("infoVendita", infoVendita);
+        result.put("infoNoleggio", infoNoleggio);
+        result.put("service", service);
+        result.put("infoAcquisto", infoAcquisto);
+        result.put("acquistoDaGestire", acquistoDaGestire);
+        result.put("acquistoInGestione", acquistoInGestione);
+        result.put("acquistoGestita", acquistoGestita);
+        return ResponseEntity.ok(result);
+    }
+
     private Map<String, Object> toMap(ContactLog log) {
         Map<String, Object> m = new HashMap<>();
         m.put("id", log.getId());

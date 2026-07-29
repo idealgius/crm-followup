@@ -1,4 +1,21 @@
 let contactLogs = [];
+
+// FIX: "Totale storico" nei badge sotto i grafici NON deve mai cambiare in
+// base ai filtri attivi (data, operatore, categoria) — prima veniva
+// calcolato su contactLogs, che è limitato all'intervallo di date filtrato,
+// quindi cambiava ogni volta che si cambiavano le date. Ora arriva da un
+// endpoint dedicato che conta su TUTTO il database, senza alcun filtro.
+let contactStatsTotaliStorici = null;
+
+async function loadContactStatsTotaliStorici() {
+    try {
+        const res = await fetch('/api/contacts/stats-totali-storici');
+        if (!res.ok) return;
+        contactStatsTotaliStorici = await res.json();
+    } catch (err) {
+        console.error('Errore caricamento totali storici:', err);
+    }
+}
 let contactLogsFiltered = [];
 let contactCalendarYear = new Date().getFullYear();
 let contactCalendarMonth = new Date().getMonth() + 1;
@@ -208,7 +225,7 @@ function updateServiceCounterBadge() {
     const canvas = document.getElementById('chartServiceAgnano');
     const h3 = findChartTitleElement(canvas);
     if (!h3) return;
-    const total = contactLogs.filter(l => l.category === 'Service').length;
+    const total = contactStatsTotaliStorici?.service ?? contactLogs.filter(l => l.category === 'Service').length;
     setChartCounterBadge(h3, total, 'Totale storico');
 }
 function showMarcheDropdown() { filterMarche('', true); }
@@ -398,6 +415,7 @@ async function loadContactLogs(from, to, restoreDayView) {
         populateOperatorFilter();
         applyContactFilters(restoreDayView);
         checkAcquistoAlertDaGestire();
+        loadContactStatsTotaliStorici();
     } catch (err) {
         console.error('Errore caricamento contatti:', err);
     }
@@ -956,10 +974,13 @@ function renderChartInfoAcquisto(logs) {
         }
     });
 
-    const totalAll = contactLogs.filter(l => l.category === 'Info Acquisto effettuato').length;
-    const totalDaGestire = contactLogs.filter(l => l.category === 'Info Acquisto effettuato' && l.acquistoAlert && (!l.acquistoAlertStatus || l.acquistoAlertStatus === 'DA_GESTIRE')).length;
-    const totalInGestione = contactLogs.filter(l => l.category === 'Info Acquisto effettuato' && l.acquistoAlertStatus === 'IN_GESTIONE').length;
-    const totalGestita = contactLogs.filter(l => l.category === 'Info Acquisto effettuato' && l.acquistoAlertStatus === 'GESTITA').length;
+    // FIX: prima calcolato su contactLogs (limitato dal filtro date attivo),
+    // quindi "storico" cambiava ogni volta che si cambiavano le date — ora
+    // usa i totali veri, indipendenti da qualunque filtro.
+    const totalAll = contactStatsTotaliStorici?.infoAcquisto ?? contactLogs.filter(l => l.category === 'Info Acquisto effettuato').length;
+    const totalDaGestire = contactStatsTotaliStorici?.acquistoDaGestire ?? contactLogs.filter(l => l.category === 'Info Acquisto effettuato' && l.acquistoAlert && (!l.acquistoAlertStatus || l.acquistoAlertStatus === 'DA_GESTIRE')).length;
+    const totalInGestione = contactStatsTotaliStorici?.acquistoInGestione ?? contactLogs.filter(l => l.category === 'Info Acquisto effettuato' && l.acquistoAlertStatus === 'IN_GESTIONE').length;
+    const totalGestita = contactStatsTotaliStorici?.acquistoGestita ?? contactLogs.filter(l => l.category === 'Info Acquisto effettuato' && l.acquistoAlertStatus === 'GESTITA').length;
     const alertBreakdown = [];
     if (totalDaGestire > 0) alertBreakdown.push(`🔔 ${totalDaGestire} da gestire`);
     if (totalInGestione > 0) alertBreakdown.push(`🟡 ${totalInGestione} in gestione`);
@@ -1011,7 +1032,7 @@ function renderChartFonteVendita(logs) {
         }
     });
 
-    const totalVenditaAll = contactLogs.filter(l => l.category === 'Info Vendita' || l.category === 'Info + Appuntamento' || l.category === 'Info Vendita in Promo').length;
+    const totalVenditaAll = contactStatsTotaliStorici?.infoVendita ?? contactLogs.filter(l => l.category === 'Info Vendita' || l.category === 'Info + Appuntamento' || l.category === 'Info Vendita in Promo').length;
     setChartCounterBadge(findChartTitleElement(ctx), totalVenditaAll, 'Totale storico Info Vendita');
 }
 
@@ -1148,7 +1169,7 @@ function renderChartNoleggio(logs) {
                 }
             }
         });
-        const totalNoleggioAll = contactLogs.filter(l => l.category === 'Info Noleggio').length;
+        const totalNoleggioAll = contactStatsTotaliStorici?.infoNoleggio ?? contactLogs.filter(l => l.category === 'Info Noleggio').length;
         setChartCounterBadge(findChartTitleElement(ctxTipo), totalNoleggioAll, 'Totale storico');
     }
 
@@ -1495,6 +1516,7 @@ function applyUpdatedLogEverywhere(updatedLog) {
     else { renderContactLogs(contactLogsFiltered); }
 
     renderChartInfoAcquisto(contactLogsFiltered);
+    loadContactStatsTotaliStorici().then(() => renderChartInfoAcquisto(contactLogsFiltered));
 
     // FIX: se è aperto un modal "dettaglio" (da click su stat-card o grafico),
     // conteneva uno SNAPSHOT della lista preso al momento dell'apertura —
@@ -1661,6 +1683,7 @@ function handleContactWsEvent(event) {
 
     contactLogs.sort((a, b) => (b.contactDate || '').localeCompare(a.contactDate || ''));
     applyContactFilters(currentDayView || undefined);
+    loadContactStatsTotaliStorici().then(() => renderChartInfoAcquisto(contactLogsFiltered));
 
     // Se il modal Allert è aperto sul contatto toccato dall'evento,
     // aggiornalo dal vivo (stesso comportamento del polling).

@@ -26,7 +26,14 @@ async function loadFollowUps() {
     const consultantFilters = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('consultantFilterMulti') : [];
 
     try {
-        const res = await fetch(`/api/followups?date=${date}`);
+        // FIX PRESTAZIONI: prima si faceva 1 richiesta per la lista + 1
+        // richiesta PER OGNI singolo follow-up per i suoi step (in parallelo,
+        // ma comunque tante richieste HTTP separate — col browser che ne
+        // esegue solo ~6 alla volta, con tanti follow-up in un giorno ci
+        // volevano diversi secondi). Il backend aveva già pronto un endpoint
+        // dedicato (/with-steps) che restituisce tutto — follow-up e relativi
+        // step — in UNA sola richiesta, semplicemente non veniva usato.
+        const res = await fetch(`/api/followups/with-steps?date=${date}`);
         if (!res.ok) return;
         let followUps = await res.json();
 
@@ -36,15 +43,8 @@ async function loadFollowUps() {
             );
         }
 
-        // Carica tutti gli steps in parallelo
         const stepsMap = {};
-        await Promise.all(followUps.map(async fu => {
-            try {
-                const r = await fetch(`/api/followups/${fu.id}/steps`);
-                if (r.ok) stepsMap[fu.id] = await r.json();
-                else stepsMap[fu.id] = [];
-            } catch { stepsMap[fu.id] = []; }
-        }));
+        followUps.forEach(fu => { stepsMap[fu.id] = fu.steps || []; });
 
         renderFollowUps(followUps, stepsMap);
     } catch (err) {

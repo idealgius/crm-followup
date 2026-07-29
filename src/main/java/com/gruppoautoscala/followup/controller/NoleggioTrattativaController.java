@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -39,6 +40,18 @@ public class NoleggioTrattativaController {
 
     @Autowired
     private UserRepository userRepository;
+
+    // Stesso meccanismo già usato/testato su ContactLogController — un
+    // canale dedicato /topic/rent, indipendente da /topic/contacts.
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
+
+    private void broadcastRentEvent(String type, Object data) {
+        Map<String, Object> event = new HashMap<>();
+        event.put("type", type);
+        event.put("data", data);
+        messagingTemplate.convertAndSend("/topic/rent", event);
+    }
 
     private final NoleggioExcelExportService excelExportService = new NoleggioExcelExportService();
 
@@ -158,7 +171,9 @@ public class NoleggioTrattativaController {
             "FALLITO".equals(stato) ? noteFallimento : null, tipoCliente,
             (String) body.get("linkLeadspark"), (String) body.get("linkAutoRichiesta")
         );
-        return ResponseEntity.ok(toMap(t));
+        Map<String, Object> createdMap = toMap(t);
+        broadcastRentEvent("created", createdMap);
+        return ResponseEntity.ok(createdMap);
     }
 
     @PatchMapping("/trattative/{id}")
@@ -223,7 +238,9 @@ public class NoleggioTrattativaController {
         }
 
         t.setUpdatedAt(LocalDateTime.now(ZONA_ITALIA));
-        return ResponseEntity.ok(toMap(noleggioService.update(t)));
+        Map<String, Object> updatedMap = toMap(noleggioService.update(t));
+        broadcastRentEvent("updated", updatedMap);
+        return ResponseEntity.ok(updatedMap);
     }
 
     // ===== GESTISCI — presa in carico dell'allert "Da Gestire" =====
@@ -248,7 +265,9 @@ public class NoleggioTrattativaController {
 
         t.setGestitoDa(userOpt.get());
         t.setUpdatedAt(LocalDateTime.now(ZONA_ITALIA));
-        return ResponseEntity.ok(toMap(noleggioService.update(t)));
+        Map<String, Object> gestitaMap = toMap(noleggioService.update(t));
+        broadcastRentEvent("updated", gestitaMap);
+        return ResponseEntity.ok(gestitaMap);
     }
 
     // ===== ANNULLA GESTIONE — rimuove la presa in carico, per correggere
@@ -267,7 +286,9 @@ public class NoleggioTrattativaController {
 
         t.setGestitoDa(null);
         t.setUpdatedAt(LocalDateTime.now(ZONA_ITALIA));
-        return ResponseEntity.ok(toMap(noleggioService.update(t)));
+        Map<String, Object> annullataMap = toMap(noleggioService.update(t));
+        broadcastRentEvent("updated", annullataMap);
+        return ResponseEntity.ok(annullataMap);
     }
 
     @DeleteMapping("/trattative/{id}")
@@ -278,6 +299,9 @@ public class NoleggioTrattativaController {
         if (!canAccessRent(role)) return ResponseEntity.status(403).body(Map.of("error", "Non autorizzato"));
 
         noleggioService.delete(id);
+        Map<String, Object> deletedPayload = new HashMap<>();
+        deletedPayload.put("id", id);
+        broadcastRentEvent("deleted", deletedPayload);
         return ResponseEntity.ok(Map.of("message", "Eliminato"));
     }
 

@@ -70,6 +70,7 @@ function loadRentDashboard() {
     loadRentTrattative();
     loadRentContattiNoleggio();
     checkRentRecallOggi();
+    connectRentWebSocket();
 }
 
 async function loadRentTrattative() {
@@ -1302,4 +1303,119 @@ function closeRentSearch() {
     const input = document.getElementById('rentSearchInput');
     if (resultsWrapper) resultsWrapper.style.display = 'none';
     if (input) input.value = '';
+}
+
+// ============================================================
+// WEBSOCKET — push istantaneo per Rent.
+// Due canali distinti:
+// - /topic/rent: trattative create/update/delete/gestisci (NoleggioTrattativaController)
+// - /topic/contacts: già esistente per il Registro Contatti generale — qui
+//   filtriamo solo gli eventi con categoria "Info Noleggio", per tenere
+//   sincronizzata la tabella di sola lettura "Info Noleggio da Registro
+//   Contatti" senza duplicare un canale che esiste già.
+// ============================================================
+
+let rentStompClient = null;
+let rentWsConnected = false;
+
+function connectRentWebSocket() {
+    if (rentStompClient) return; // già creato (in connessione o connesso)
+
+    rentStompClient = new StompJs.Client({
+        webSocketFactory: () => new SockJS('/ws'),
+        reconnectDelay: 5000,
+        onConnect: () => {
+            rentWsConnected = true;
+            console.log('%c✅ WebSocket Rent CONNESSO', 'color:#00c853;font-weight:bold');
+
+            rentStompClient.subscribe('/topic/rent', (message) => {
+                try {
+                    const event = JSON.parse(message.body);
+                    handleRentWsEvent(event);
+                } catch (err) {
+                    console.error('Errore parsing evento WebSocket rent:', err);
+                }
+            });
+
+            rentStompClient.subscribe('/topic/contacts', (message) => {
+                try {
+                    const event = JSON.parse(message.body);
+                    handleRentContattiWsEvent(event);
+                } catch (err) {
+                    console.error('Errore parsing evento WebSocket contatti (rent):', err);
+                }
+            });
+        },
+        onDisconnect: () => { rentWsConnected = false; },
+        onWebSocketClose: () => { rentWsConnected = false; },
+        onStompError: (frame) => {
+            console.error('❌ Errore STOMP rent:', frame.headers && frame.headers['message']);
+        }
+    });
+
+    rentStompClient.activate();
+}
+
+function disconnectRentWebSocket() {
+    if (rentStompClient) {
+        rentStompClient.deactivate();
+        rentStompClient = null;
+    }
+    rentWsConnected = false;
+}
+
+function handleRentWsEvent(event) {
+    if (!event || !event.type) return;
+
+    // Non toccare se l'operatore ha il form nuova/modifica trattativa aperto,
+    // per non perdere quello che sta scrivendo.
+    if (document.getElementById('newRentForm')?.style.display === 'block') return;
+
+    const { type, data } = event;
+
+    if (type === 'created') {
+        if (!rentTrattative.some(t => t.id === data.id)) rentTrattative.push(data);
+    } else if (type === 'updated') {
+        const idx = rentTrattative.findIndex(t => t.id === data.id);
+        if (idx !== -1) rentTrattative[idx] = data;
+        else rentTrattative.push(data);
+    } else if (type === 'deleted') {
+        rentTrattative = rentTrattative.filter(t => t.id !== data.id);
+    } else {
+        return;
+    }
+
+    rentTrattative.sort((a, b) => rentTrattativeSortDir === 'desc'
+        ? (b.createdAt || '').localeCompare(a.createdAt || '')
+        : (a.createdAt || '').localeCompare(b.createdAt || ''));
+    populateRentFilters();
+    applyRentFilters();
+}
+
+// Filtra gli eventi del Registro Contatti generale, tenendo solo quelli di
+// categoria "Info Noleggio" — è l'unica categoria che alimenta la tabella
+// di sola lettura di questa pagina.
+function handleRentContattiWsEvent(event) {
+    if (!event || !event.type) return;
+    const { type, data } = event;
+
+    if (type === 'deleted') {
+        rentContattiNoleggio = rentContattiNoleggio.filter(c => c.id !== data.id);
+    } else if (data && data.category === 'Info Noleggio') {
+        const idx = rentContattiNoleggio.findIndex(c => c.id === data.id);
+        if (idx !== -1) rentContattiNoleggio[idx] = data;
+        else rentContattiNoleggio.push(data);
+    } else if (data) {
+        // La categoria è stata cambiata e non è più "Info Noleggio":
+        // se prima era presente in questa tabella, va tolta.
+        rentContattiNoleggio = rentContattiNoleggio.filter(c => c.id !== data.id);
+    } else {
+        return;
+    }
+
+    rentContattiNoleggio.sort((a, b) => rentContattiSortDir === 'desc'
+        ? (b.contactDate || '').localeCompare(a.contactDate || '')
+        : (a.contactDate || '').localeCompare(b.contactDate || ''));
+    renderRentContattiNoleggio(rentContattiNoleggio);
+    renderChartRentInfoVsRichiesta(rentContattiNoleggio);
 }

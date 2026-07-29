@@ -1,6 +1,7 @@
 package com.gruppoautoscala.followup.service;
 
 import com.gruppoautoscala.followup.model.FollowUp;
+import com.gruppoautoscala.followup.model.WaitingEntry;
 import com.gruppoautoscala.followup.repository.FollowUpRepository;
 import com.gruppoautoscala.followup.repository.WaitingEntryRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -105,12 +106,22 @@ public class StatsService {
     }
 
     public Map<String, Object> getWaitingListStats() {
-        long total = waitingEntryRepository.count();
-        long waiting = waitingEntryRepository.findByStatus("WAITING").size();
-        long called = waitingEntryRepository.findByStatus("CALLED").size();
-        long appointments = waitingEntryRepository.findByStatus("APPOINTMENT").size();
-        long interested = waitingEntryRepository.findByStatus("INTERESTED").size();
-        long closed = waitingEntryRepository.findByStatus("CLOSED").size();
+        // FIX PRESTAZIONI: prima faceva 6 query separate al database — un
+        // count() più CINQUE findByStatus(), ognuna delle quali scaricava
+        // TUTTE le righe intere corrispondenti solo per contarle con .size()
+        // e poi buttarle via. Ora una sola query (findAll) e tutti i
+        // conteggi calcolati in memoria in un solo passaggio sui dati già
+        // caricati — stesso identico risultato, un sesto delle query.
+        List<WaitingEntry> all = waitingEntryRepository.findAll();
+        long total = all.size();
+        Map<String, Long> countByStatus = all.stream()
+                .collect(Collectors.groupingBy(WaitingEntry::getStatus, Collectors.counting()));
+
+        long waiting = countByStatus.getOrDefault("WAITING", 0L);
+        long called = countByStatus.getOrDefault("CALLED", 0L);
+        long appointments = countByStatus.getOrDefault("APPOINTMENT", 0L);
+        long interested = countByStatus.getOrDefault("INTERESTED", 0L);
+        long closed = countByStatus.getOrDefault("CLOSED", 0L);
 
         double appointmentRate = total > 0 ? (double) appointments / total * 100 : 0;
         double interestRate = total > 0 ? (double) interested / total * 100 : 0;

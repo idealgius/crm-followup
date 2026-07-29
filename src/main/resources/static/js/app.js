@@ -136,6 +136,7 @@ function showPage(page, updateHash = true) {
     // si è sul Registro Contatti.
     if (typeof stopContactPolling === 'function') stopContactPolling();
     if (typeof disconnectContactWebSocket === 'function') disconnectContactWebSocket();
+    if (typeof disconnectRentWebSocket === 'function') disconnectRentWebSocket();
 
     // FIX: senza questo reset, la posizione di scroll della pagina precedente
     // resta invariata al cambio pagina (mostra/nascondi div, non una vera
@@ -277,13 +278,63 @@ window.onload = function() {
             const defaultPage = isNoleggio ? 'rent' : (isService ? 'service' : (data.role === 'UTENTE' ? 'contacts' : 'dashboard'));
             showPage(hashPage || defaultPage);
 
+            // FIX PRESTAZIONI: loadStats() veniva chiamata QUI e poi anche
+            // dentro showPage() quando la pagina è "dashboard" (poche righe
+            // sopra) — due volte di seguito, raddoppiando le 4 richieste
+            // parallele della Dashboard a 8 proprio al primo caricamento.
+            // showPage() la richiama già da sola quando serve davvero.
             if (data.role !== 'UTENTE' && !isNoleggio && !isService) {
-                loadStats();
                 if (typeof loadPromo === 'function') loadPromo();
             }
+
+            // FIX: la sessione scadeva per inattività se il CRM restava aperto
+            // senza interazioni (es. una scheda dimenticata aperta), costringendo
+            // poi a refresh + nuovo login. Un "ping" leggero ogni 10 minuti tiene
+            // viva la sessione automaticamente finché la scheda resta aperta,
+            // così l'inattività dell'operatore non fa mai scadere nulla.
+            startSessionKeepAlive();
         })
         .catch(() => {
             document.getElementById('loginPage').style.display = 'flex';
             document.getElementById('mainApp').style.display = 'none';
         });
 };
+
+let sessionKeepAliveIntervalId = null;
+const SESSION_KEEPALIVE_INTERVAL_MS = 10 * 60 * 1000; // 10 minuti
+
+function startSessionKeepAlive() {
+    if (sessionKeepAliveIntervalId) return; // già attivo
+    sessionKeepAliveIntervalId = setInterval(async () => {
+        try {
+            const res = await fetch('/api/auth/me');
+            if (!res.ok) {
+                // La sessione è scaduta comunque (es. riavvio del server) —
+                // avvisa con calma invece di lasciare che le prossime azioni
+                // falliscano silenziosamente con errori poco chiari.
+                clearInterval(sessionKeepAliveIntervalId);
+                sessionKeepAliveIntervalId = null;
+                showSessionExpiredNotice();
+            }
+        } catch (err) {
+            // Errore di rete temporaneo: non trattarlo come sessione scaduta,
+            // ci riprova al giro successivo.
+            console.warn('Ping sessione fallito (probabile problema di rete):', err);
+        }
+    }, SESSION_KEEPALIVE_INTERVAL_MS);
+}
+
+function showSessionExpiredNotice() {
+    if (document.getElementById('sessionExpiredOverlay')) return; // già mostrato
+    const overlay = document.createElement('div');
+    overlay.id = 'sessionExpiredOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+    overlay.innerHTML = `
+        <div style="background:var(--bg-card,#14162a);border:1.5px solid var(--border,#2a2d3e);border-radius:16px;padding:32px;max-width:420px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.5)">
+            <div style="font-size:36px;margin-bottom:12px">🔒</div>
+            <h3 style="color:var(--text-primary,#fff);font-size:16px;font-weight:800;margin-bottom:10px">Sessione scaduta</h3>
+            <p style="color:var(--text-secondary,#8a8faa);font-size:13px;margin-bottom:20px">La tua sessione non è più valida. Ricarica la pagina per accedere di nuovo.</p>
+            <button onclick="window.location.reload()" style="background:linear-gradient(135deg,#f0c040,#d4a820);color:#1a1200;border:none;border-radius:8px;padding:12px 28px;font-size:13px;font-weight:800;letter-spacing:1px;cursor:pointer;text-transform:uppercase">Ricarica ora</button>
+        </div>`;
+    document.body.appendChild(overlay);
+}
