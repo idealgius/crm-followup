@@ -140,6 +140,7 @@ public class ContactLogController {
         String clienteNumero = (String) body.get("clienteNumero");
         Boolean nonComunicaNominativo = (Boolean) body.get("nonComunicaNominativo");
         String otherNote = (String) body.get("otherNote");
+        String notaAggiuntiva = (String) body.get("notaAggiuntiva");
         String nominativoAppuntamento = (String) body.get("nominativoAppuntamento");
         String linkAppuntamento = (String) body.get("linkAppuntamento");
         String marca = (String) body.get("marca");
@@ -218,6 +219,13 @@ public class ContactLogController {
             log = contactLogService.update(log);
         }
 
+        // Stessa tecnica per la nuova nota universale — disponibile per
+        // qualsiasi categoria, senza dover cambiare la firma di create().
+        if (notaAggiuntiva != null && !notaAggiuntiva.isBlank()) {
+            log.setNotaAggiuntiva(notaAggiuntiva);
+            log = contactLogService.update(log);
+        }
+
         Map<String, Object> logMap = toMap(log);
         // Trasmette l'evento in tempo reale a tutti i browser connessi (Registro
         // Contatti aperto altrove) — sostituisce, per questa entità, il polling
@@ -268,6 +276,7 @@ public class ContactLogController {
         if (body.containsKey("clienteNumero")) log.setClienteNumero((String) body.get("clienteNumero"));
         if (body.containsKey("nonComunicaNominativo")) log.setNonComunicaNominativo((Boolean) body.get("nonComunicaNominativo"));
         if (body.containsKey("otherNote")) log.setOtherNote((String) body.get("otherNote"));
+        if (body.containsKey("notaAggiuntiva")) log.setNotaAggiuntiva((String) body.get("notaAggiuntiva"));
         if (body.containsKey("nominativoAppuntamento")) log.setNominativoAppuntamento((String) body.get("nominativoAppuntamento"));
         if (body.containsKey("linkAppuntamento")) log.setLinkAppuntamento((String) body.get("linkAppuntamento"));
         if (body.containsKey("marca")) log.setMarca((String) body.get("marca"));
@@ -402,6 +411,7 @@ public class ContactLogController {
         m.put("clienteNumero", log.getClienteNumero());
         m.put("nonComunicaNominativo", log.getNonComunicaNominativo());
         m.put("otherNote", log.getOtherNote());
+        m.put("notaAggiuntiva", log.getNotaAggiuntiva());
         m.put("nominativoAppuntamento", log.getNominativoAppuntamento());
         m.put("linkAppuntamento", log.getLinkAppuntamento());
         m.put("marca", log.getMarca());

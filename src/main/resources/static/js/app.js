@@ -131,6 +131,12 @@ function showPage(page, updateHash = true) {
 
     sessionStorage.setItem('currentPage', page);
 
+    // Ferma polling/WebSocket dei Contatti ogni volta che si cambia pagina —
+    // no-op sicuro se non erano attivi, evita che girino a vuoto quando non
+    // si è sul Registro Contatti.
+    if (typeof stopContactPolling === 'function') stopContactPolling();
+    if (typeof disconnectContactWebSocket === 'function') disconnectContactWebSocket();
+
     // FIX: senza questo reset, la posizione di scroll della pagina precedente
     // resta invariata al cambio pagina (mostra/nascondi div, non una vera
     // navigazione). Se si arrivava da una pagina scrollata più in basso, la
@@ -190,6 +196,10 @@ function showPage(page, updateHash = true) {
                 document.getElementById('contactFrom').value,
                 document.getElementById('contactTo').value
             );
+            // Avvia la connessione WebSocket per gli aggiornamenti istantanei
+            // (con il polling ogni 15s come rete di sicurezza in parallelo,
+            // già gestito da startContactPolling stesso).
+            if (typeof startContactPolling === 'function') startContactPolling();
         }, 0);
     } else if (page === 'promo') {
         document.getElementById('promoPage').style.display = 'block';

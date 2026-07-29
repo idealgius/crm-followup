@@ -1596,9 +1596,11 @@ function connectContactWebSocket() {
         reconnectDelay: 5000,
         onConnect: () => {
             contactWsConnected = true;
+            console.log('%c✅ WebSocket contatti CONNESSO', 'color:#00c853;font-weight:bold');
             contactStompClient.subscribe('/topic/contacts', (message) => {
                 try {
                     const event = JSON.parse(message.body);
+                    console.log('📩 Evento WebSocket ricevuto:', event);
                     handleContactWsEvent(event);
                 } catch (err) {
                     console.error('Errore parsing evento WebSocket contatti:', err);
@@ -1607,15 +1609,18 @@ function connectContactWebSocket() {
         },
         onDisconnect: () => {
             contactWsConnected = false;
+            console.warn('⚠️ WebSocket contatti DISCONNESSO');
         },
         onWebSocketClose: () => {
             contactWsConnected = false;
+            console.warn('⚠️ WebSocket contatti: connessione chiusa (onWebSocketClose)');
         },
         onStompError: (frame) => {
-            console.error('Errore STOMP contatti:', frame.headers && frame.headers['message']);
+            console.error('❌ Errore STOMP contatti:', frame.headers && frame.headers['message']);
         }
     });
 
+    console.log('🔌 Tentativo di connessione WebSocket contatti in corso...');
     contactStompClient.activate();
 }
 
@@ -2056,7 +2061,13 @@ function renderContactRow(log) {
             ${log.serviceTarga ? `<span style="font-size:11px;background:rgba(240,192,64,0.08);color:#f0c040;padding:2px 8px;border-radius:8px;margin-left:6px">🔖 ${log.serviceTarga}</span>` : ''}
             ${log.linkAuto ? `<a href="${log.linkAuto}" target="_blank" rel="noopener" style="font-size:11px;background:rgba(124,77,255,0.1);color:#7c4dff;padding:2px 8px;border-radius:8px;margin-left:6px;text-decoration:none">🔗 Lead</a>` : ''}
         </td>
-        <td style="font-size:12px;color:var(--text-secondary)">${(log.category !== 'Info Acquisto effettuato' && log.category !== 'Service') ? (log.otherNote||'—') : (log.acquistoNote||log.serviceNote||'—')}</td>
+        <td style="font-size:12px;color:var(--text-secondary)">${(() => {
+            const parts = [];
+            const primary = (log.category !== 'Info Acquisto effettuato' && log.category !== 'Service') ? log.otherNote : (log.acquistoNote || log.serviceNote);
+            if (primary) parts.push(primary);
+            if (log.notaAggiuntiva) parts.push('📝 ' + log.notaAggiuntiva);
+            return parts.length > 0 ? parts.join(' · ') : '—';
+        })()}</td>
         <td style="font-size:12px;color:var(--text-secondary)">${log.user.fullName}</td>
         <td>${canEdit ? `<button class="btn-contact-action btn-orange" onclick="openEditContactModal(${log.id})" title="Modifica">✏️</button><button class="btn-contact-action btn-red" onclick="deleteContactLog(${log.id})" title="Elimina">🗑️</button>` : ''}</td>
     </tr>`;
@@ -2253,6 +2264,7 @@ async function createContactLog() {
     const clienteCognome = document.getElementById('clienteCognome')?.value.trim() || '';
     const clienteNumero = document.getElementById('clienteNumero')?.value.trim() || '';
     const nonComunicaNominativo = document.getElementById('nonComunicaNominativo')?.checked || false;
+    const notaAggiuntiva = document.getElementById('contactNotaAggiuntiva')?.value.trim() || '';
     const otherNote = document.getElementById('contactOtherNote').value.trim();
     const dateVal = document.getElementById('contactDate').value;
     const timeVal = document.getElementById('contactTime').value;
@@ -2335,6 +2347,7 @@ async function createContactLog() {
         clienteNumero,
         nonComunicaNominativo,
         otherNote: finalNote,
+        notaAggiuntiva: notaAggiuntiva || null,
         contactDate,
         marca: isNoleggio ? (noleggioMarca || null) : (isAcquisto ? (acquistoMarca || null) : (isService ? (serviceMarca || null) : (marca || null))),
         modello: isNoleggio ? (noleggioModello || null) : (isAcquisto ? (acquistoModello || null) : (isService ? (serviceModello || null) : (modello || null))),
@@ -2459,6 +2472,8 @@ function hideNewContactForm() {
     document.getElementById('newContactForm').style.display = 'none';
     document.getElementById('contactCategory').value = '';
     document.getElementById('contactOtherNote').value = '';
+    const notaAggiuntivaEl = document.getElementById('contactNotaAggiuntiva');
+    if (notaAggiuntivaEl) notaAggiuntivaEl.value = '';
     ['contactOtherNoteRow','contactAppuntamentoRow','contactAcquistoRow','contactAcquistoNoteRow',
      'contactFonteRow','contactServiceRow','contactMarcaModelloRow','contactLinkAutoRow',
      'contactPromoRow','contactNoleggioRow','contactServiceNoteRow']
@@ -2502,12 +2517,15 @@ function hideNewContactForm() {
 
 function onCategoryChange() {
     const cat = document.getElementById('contactCategory').value;
-    document.getElementById('contactOtherNoteRow').style.display = (cat === 'Altro' || cat === 'Amministrazione') ? 'block' : 'none';
-    const otherNoteLabel = document.getElementById('contactOtherNoteLabel');
-    if (otherNoteLabel) otherNoteLabel.textContent = cat === 'Amministrazione' ? 'NOTA (opzionale)' : 'MOTIVAZIONE *';
+    document.getElementById('contactOtherNoteRow').style.display = cat === 'Altro' ? 'block' : 'none';
     document.getElementById('contactAppuntamentoRow').style.display = cat === 'Info + Appuntamento' ? 'block' : 'none';
     document.getElementById('contactAcquistoRow').style.display = cat === 'Info Acquisto effettuato' ? 'block' : 'none';
     document.getElementById('contactServiceRow').style.display = cat === 'Service' ? 'block' : 'none';
+    // FIX: senza questa riga, se si lasciava Service e poi ci si tornava,
+    // la nota restava nascosta per sempre — il codice più sotto la nasconde
+    // quando si esce da Service ma nessuno la faceva ricomparire al rientro.
+    const serviceNoteRowEl = document.getElementById('contactServiceNoteRow');
+    if (serviceNoteRowEl && cat === 'Service') serviceNoteRowEl.style.display = 'block';
     document.getElementById('contactNoleggioRow').style.display = cat === 'Info Noleggio' ? 'block' : 'none';
     document.getElementById('contactFonteRow').style.display = (cat === 'Info Vendita' || cat === 'Info + Appuntamento' || cat === 'Info Vendita in Promo') ? 'block' : 'none';
     const isVenditaLike = cat === 'Info Vendita' || cat === 'Info + Appuntamento' || cat === 'Info Vendita in Promo';

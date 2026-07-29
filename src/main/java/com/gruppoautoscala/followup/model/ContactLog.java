@@ -35,6 +35,14 @@ public class ContactLog {
     @Column(name = "other_note", length = 500)
     private String otherNote;
 
+    // NUOVO: nota libera, opzionale, indipendente da otherNote/acquistoNote/
+    // serviceNote — sempre disponibile per QUALSIASI categoria, anche quelle
+    // che prima non avevano alcun campo nota (Amministrazione, Pratica
+    // Leasing, Pratica Finanziamento, ecc.), senza toccare i campi nota già
+    // esistenti e il modo in cui sono già usati per categoria.
+    @Column(name = "nota_aggiuntiva", length = 1000)
+    private String notaAggiuntiva;
+
     @Column(name = "nominativo_appuntamento", length = 200)
     private String nominativoAppuntamento;
 
