@@ -2327,6 +2327,31 @@ async function createContactLog() {
     }
 
     const contactDate = `${dateVal}T${timeVal}:00`;
+
+    // ANTI-DOPPIONE: se lo stesso cliente (nome+cognome, senza distinguere
+    // maiuscole/minuscole o spazi) è già stato registrato NELLO STESSO GIORNO
+    // scelto in "DATA", avvisa l'operatore con i dettagli della chiamata già
+    // presente e chiede conferma prima di salvare comunque. Controlla solo
+    // tra i contatti già caricati in memoria (il periodo attualmente visibile
+    // nel Registro Contatti) — se il giorno scelto è fuori da quel periodo,
+    // il controllo non può accorgersene.
+    if (!nonComunicaNominativo && clienteNome && clienteCognome) {
+        const nomeNorm = normalizeText(clienteNome.trim());
+        const cognomeNorm = normalizeText(clienteCognome.trim());
+        const giaChiamato = contactLogs.find(l => {
+            if (!l.clienteNome || !l.clienteCognome) return false;
+            if (normalizeText(l.clienteNome.trim()) !== nomeNorm) return false;
+            if (normalizeText(l.clienteCognome.trim()) !== cognomeNorm) return false;
+            return l.contactDate.split('T')[0] === dateVal;
+        });
+        if (giaChiamato) {
+            const oraGia = giaChiamato.contactDate.split('T')[1]?.substring(0, 5) || '';
+            const notaGia = giaChiamato.otherNote || giaChiamato.acquistoNote || giaChiamato.serviceNote || giaChiamato.notaAggiuntiva || '';
+            const messaggio = `Il cliente ${clienteNome} ${clienteCognome} (${clienteNumero || 'numero non specificato'}) ha già chiamato alle ${oraGia} per "${giaChiamato.category}"${notaGia ? ` — nota: ${notaGia}` : ''}.\n\nDesideri inserirlo ugualmente?`;
+            if (!confirm(messaggio)) return;
+        }
+    }
+
     const savedDayView = currentDayView || dateVal;
 
     let finalNote = otherNote;
