@@ -2295,8 +2295,9 @@ async function createContactLog() {
     if (category === 'Info Vendita' && !fonte) { alert('Seleziona la fonte'); return; }
     if (category === 'Service' && !serviceSede) { alert('Seleziona la sede Service'); return; }
     if (category === 'Service' && !serviceTipo) { alert('Seleziona la tipologia service'); return; }
-    if (category === 'Service' && !serviceMarca) { alert('Seleziona la marca del veicolo dal menù a tendina'); return; }
-    if (category === 'Service' && !serviceModello) { alert('Inserisci il modello del veicolo'); return; }
+    // FIX: marca/modello Service ora opzionali su richiesta (prima erano
+    // obbligatori) — l'operatore può salvare un contatto Service anche senza
+    // sapere ancora il veicolo del cliente.
     if (category === 'Service' && serviceTipo === 'Altro' && !serviceNote) { alert('Inserisci la nota per Service Altro'); return; }
     if (category === 'Service' && !serviceTipoCliente) { alert('Seleziona Cliente o Non Cliente'); return; }
     if (category === 'Service' && serviceTipoCliente === 'CLIENTE' && !serviceTarga) { alert('Inserisci la targa'); return; }
@@ -2501,7 +2502,9 @@ function hideNewContactForm() {
 
 function onCategoryChange() {
     const cat = document.getElementById('contactCategory').value;
-    document.getElementById('contactOtherNoteRow').style.display = cat === 'Altro' ? 'block' : 'none';
+    document.getElementById('contactOtherNoteRow').style.display = (cat === 'Altro' || cat === 'Amministrazione') ? 'block' : 'none';
+    const otherNoteLabel = document.getElementById('contactOtherNoteLabel');
+    if (otherNoteLabel) otherNoteLabel.textContent = cat === 'Amministrazione' ? 'NOTA (opzionale)' : 'MOTIVAZIONE *';
     document.getElementById('contactAppuntamentoRow').style.display = cat === 'Info + Appuntamento' ? 'block' : 'none';
     document.getElementById('contactAcquistoRow').style.display = cat === 'Info Acquisto effettuato' ? 'block' : 'none';
     document.getElementById('contactServiceRow').style.display = cat === 'Service' ? 'block' : 'none';

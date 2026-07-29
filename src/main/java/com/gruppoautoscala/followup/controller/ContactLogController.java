@@ -7,10 +7,10 @@ import com.gruppoautoscala.followup.service.ContactLogService;
 import com.gruppoautoscala.followup.service.ExcelExportService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -30,24 +30,13 @@ public class ContactLogController {
     @Autowired
     private UserRepository userRepository;
 
+    // Iniettato da WebSocketConfig — invia messaggi ai client sottoscritti a
+    // un topic (es. /topic/contacts). Se non è configurato correttamente
+    // Spring non parte, quindi se l'app si avvia regolarmente è già ok.
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
 
     private final ExcelExportService excelExportService = new ExcelExportService();
-
-    // Canale su cui vengono pubblicati gli eventi real-time per i Contatti.
-    // Il frontend si iscrive con: stompClient.subscribe('/topic/contacts', ...)
-    private static final String WS_TOPIC = "/topic/contacts";
-
-    // Piccolo helper: pubblica un evento {type, log} sul canale WebSocket.
-    // "type" vale "created" / "updated" / "deleted" così il frontend sa come
-    // aggiornare la sua lista senza dover fare un nuovo fetch completo.
-    private void broadcast(String type, Object payload) {
-        Map<String, Object> event = new HashMap<>();
-        event.put("type", type);
-        event.put("data", payload);
-        messagingTemplate.convertAndSend(WS_TOPIC, event);
-    }
 
     // Whitelist categorie valide — impedisce categorie "fantasma" scritte a mano
     private static final List<String> VALID_CATEGORIES = List.of(
@@ -55,6 +44,16 @@ public class ContactLogController {
         "Pratica Leasing", "Pratica Finanziamento", "Amministrazione",
         "Info + Appuntamento", "Info Vendita in Promo", "Altro"
     );
+
+    // Pubblica l'evento sul canale /topic/contacts — payload {type, data},
+    // esattamente la forma che handleContactWsEvent() si aspetta lato
+    // frontend (contact.js). "type" è "created" | "updated" | "deleted".
+    private void broadcastContactEvent(String type, Object data) {
+        Map<String, Object> event = new HashMap<>();
+        event.put("type", type);
+        event.put("data", data);
+        messagingTemplate.convertAndSend("/topic/contacts", event);
+    }
 
     // Stati validi per la gestione dell'Allert (Info Acquisto effettuato)
     private static final List<String> VALID_ALERT_STATUSES = List.of("IN_GESTIONE", "GESTITA");
@@ -220,7 +219,10 @@ public class ContactLogController {
         }
 
         Map<String, Object> logMap = toMap(log);
-        broadcast("created", logMap);
+        // Trasmette l'evento in tempo reale a tutti i browser connessi (Registro
+        // Contatti aperto altrove) — sostituisce, per questa entità, il polling
+        // ogni 15s con un aggiornamento istantaneo.
+        broadcastContactEvent("created", logMap);
         return ResponseEntity.ok(logMap);
     }
 
@@ -352,7 +354,7 @@ public class ContactLogController {
         }
 
         Map<String, Object> updatedMap = toMap(contactLogService.update(log));
-        broadcast("updated", updatedMap);
+        broadcastContactEvent("updated", updatedMap);
         return ResponseEntity.ok(updatedMap);
     }
 
@@ -371,13 +373,9 @@ public class ContactLogController {
         }
 
         contactLogService.delete(id);
-
-        // Per il delete basta l'id: il frontend rimuove la riga corrispondente
-        // dalla lista, non serve rimandare l'intero oggetto (che non esiste più).
         Map<String, Object> deletedPayload = new HashMap<>();
         deletedPayload.put("id", id);
-        broadcast("deleted", deletedPayload);
-
+        broadcastContactEvent("deleted", deletedPayload);
         return ResponseEntity.ok(Map.of("message", "Eliminato"));
     }
 

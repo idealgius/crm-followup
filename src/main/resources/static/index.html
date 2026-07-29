@@ -987,15 +987,15 @@
                     </div>
                     <input type="hidden" id="contactServiceTipo" value="">
 
-                    <!-- MARCA/MODELLO — obbligatori ora per ogni pratica Service -->
-                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MARCA VEICOLO *</label>
+                    <!-- MARCA/MODELLO — ora opzionali (prima obbligatori) -->
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MARCA VEICOLO (opzionale)</label>
                     <div style="position:relative;margin-bottom:14px">
                         <input type="text" id="contactServiceMarcaInput" placeholder="Clicca o cerca marca..." class="input-field" style="margin-bottom:0;cursor:pointer"
                                oninput="filterServiceMarche(this.value)" onfocus="showServiceMarcheDropdown()" autocomplete="off">
                         <div id="serviceMarcaDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1.5px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;box-shadow:var(--shadow)"></div>
                         <input type="hidden" id="contactServiceMarca" value="">
                     </div>
-                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLO VEICOLO *</label>
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLO VEICOLO (opzionale)</label>
                     <input type="text" id="contactServiceModello" placeholder="Es. 208 1.2 PureTech 100cv" class="input-field">
 
                     <!-- NOTA — sempre visibile, per qualsiasi tipologia (Tagliando, Doctor Glass, ecc.) -->
@@ -1028,9 +1028,9 @@
                     <input type="url" id="contactAppuntamentoLink" placeholder="https://..." class="input-field">
                 </div>
 
-                <!-- ALTRO -->
+                <!-- ALTRO / AMMINISTRAZIONE -->
                 <div id="contactOtherNoteRow" style="display:none">
-                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MOTIVAZIONE *</label>
+                    <label id="contactOtherNoteLabel" style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MOTIVAZIONE *</label>
                     <input type="text" id="contactOtherNote" placeholder="Descrivi il motivo..." class="input-field">
                 </div>
             </div>
