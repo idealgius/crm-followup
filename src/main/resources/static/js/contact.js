@@ -2974,8 +2974,13 @@ async function deleteContactLog(id) {
     }
 }
 
-function openEditContactModal(id) {
-    const log = contactLogs.find(l => l.id === id);
+function openEditContactModal(id, logData) {
+    // FIX: se il log arriva da fuori contactLogs (es. dallo Storico Cliente,
+    // che può includere contatti di QUALSIASI data, non solo il periodo
+    // attualmente caricato in memoria), passarlo direttamente come secondo
+    // argomento evita una contactLogs.find() che altrimenti fallirebbe
+    // silenziosamente per le date non caricate.
+    const log = logData || contactLogs.find(l => l.id === id);
     if (!log) return;
     editingContactId = id;
     const categorySelect = document.getElementById('editContactCategory');
@@ -3208,6 +3213,19 @@ function formatDateIT(dateStr) {
 // differenza dell'anti-doppione al salvataggio, qui non c'è bisogno di
 // distinguere per giorno: è semplicemente l'elenco completo, più recente
 // per primo (il backend ordina già per data DESC).
+let customerHistoryCache = [];
+
+// Apre il dettaglio di una card cliccata nel modal Storico Cliente. Usa i
+// dati già scaricati (customerHistoryCache), non contactLogs, perché lo
+// storico può includere contatti di qualsiasi data, anche mai caricata
+// nella vista corrente del Registro Contatti.
+function openHistoryCardDetail(id) {
+    const log = customerHistoryCache.find(l => l.id === id);
+    if (!log) return;
+    closeCustomerHistoryModal();
+    openEditContactModal(id, log);
+}
+
 async function openCustomerHistoryModal(nome, cognome, numero) {
     const modal = document.getElementById('customerHistoryModal');
     const body = document.getElementById('customerHistoryModalBody');
@@ -3233,13 +3251,17 @@ async function openCustomerHistoryModal(nome, cognome, numero) {
             body.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-secondary)">Nessuno storico trovato per questo cliente.</div>`;
             return;
         }
+        // Salvata per il click sulla card (vedi openHistoryCardDetail) — i
+        // dati vengono da customer-history, non da contactLogs, quindi
+        // potrebbero riguardare date mai caricate nella vista corrente.
+        customerHistoryCache = storico;
         body.innerHTML = storico.map(l => {
             const [y, m, d] = l.contactDate.split('T')[0].split('-');
             const dataFmt = `${d}/${m}/${y}`;
             const oraFmt = l.contactDate.split('T')[1]?.substring(0, 5) || '';
             const tipo = l.otherNote || l.acquistoNote || l.serviceNote || '';
             const notaExtra = l.notaAggiuntiva || '';
-            return `<div style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">
+            return `<div onclick="openHistoryCardDetail(${l.id})" style="cursor:pointer;background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px" onmouseover="this.style.borderColor='var(--accent, #4a90d9)'" onmouseout="this.style.borderColor='var(--border)'">
                 <div style="font-weight:700;color:var(--text-primary);margin-bottom:4px">📅 ${dataFmt} · 🕐 ${oraFmt}</div>
                 <div style="font-size:12px;color:var(--text-secondary)">
                     <span class="contact-category-badge">${l.category}</span>

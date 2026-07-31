@@ -1,9 +1,13 @@
 /* ===== CSS VARIABLES - TEMI ===== */
 :root {
-    --bg-main: #0d0f1a;
+    /* FIX: colore base schiarito e mescolato blu/grigio — prima #0d0f1a era
+       quasi nero. Border anche schiarito: con lo sfondo più chiaro, il
+       vecchio #2a2d3e (pensato per contrastare su quasi-nero) si perdeva
+       quasi del tutto sui bottoni a sfondo trasparente (es. Excel, Stampa). */
+    --bg-main: #2c3448;
     --bg-card: #14162a;
     --bg-card2: #1a1d2e;
-    --border: #2a2d3e;
+    --border: #4a5470;
     --text-primary: #ffffff;
     --text-secondary: #8a8faa;
     --text-dark: #ffffff;
@@ -14,12 +18,12 @@
     --input-color: #ffffff;
     --stat-bg: #14162a;
     --shadow: 0 4px 20px rgba(0,0,0,0.4);
-    --step-bg: #0d0f1a;
+    --step-bg: #2c3448;
     --form-top: #f0c040;
     --auth-box-bg: #1a1d2e;
     --auth-box-color: #ffffff;
     --auth-h2: #f0c040;
-    --page-bg: #0d0f1a;
+    --page-bg: #2c3448;
     --followup-hover: rgba(240,192,64,0.15);
     --badge-in-progress-bg: rgba(33,150,243,0.15);
     --badge-in-progress-color: #4fc3f7;
@@ -215,7 +219,11 @@ select.input-dark {
 .btn-secondary {
     background: transparent;
     color: var(--text-secondary);
-    border: 1px solid var(--border);
+    /* FIX: bordo più spesso (1.5px, prima 1px) — con lo sfondo scuro
+       schiarito i bottoni a sfondo trasparente come Excel/Stampa si
+       perdevano quasi del tutto. Resta var(--border), già schiarito sopra
+       per la modalità scura, così la modalità chiara non cambia. */
+    border: 1.5px solid var(--border);
     border-radius: 8px;
     padding: 10px 20px;
     font-size: 13px;
@@ -433,10 +441,45 @@ select.input-dark {
 }
 
 /* ===== PAGES ===== */
+/* FIX: il pattern va messo qui, non su body — #mainApp ha un background
+   OPACO che sta sopra il body e lo copriva del tutto, per questo prima non
+   si vedeva da nessuna parte tranne dove il pattern era stato messo
+   direttamente su #rentPage (che è dentro #mainApp e quindi vince sopra
+   di esso). Un'unica composizione ad archi (non una piastrella ripetuta),
+   ancorata in alto e fissa rispetto al viewport durante lo scroll. */
 #mainApp {
-    background: var(--page-bg);
+    background-color: var(--page-bg);
+    background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA2NDAgNDAwJz48cGF0aCBkPSdNMTAwIDM4MCBMMzA2IDg2IFEzMjAgNzIgMzM0IDg2IEw1NDAgMzgwJyBzdHJva2U9JyM5ZGIyZDAnIHN0cm9rZS13aWR0aD0nMS42JyBmaWxsPSdub25lJyBvcGFjaXR5PScwLjIwJy8+PHBhdGggZD0nTTE0NSAzODAgTDMwOSAxNDYgUTMyMCAxMzUgMzMxIDE0NiBMNDk1IDM4MCcgc3Ryb2tlPScjOWRiMmQwJyBzdHJva2Utd2lkdGg9JzEuNicgZmlsbD0nbm9uZScgb3BhY2l0eT0nMC4yMCcvPjxwYXRoIGQ9J00xOTAgMzgwIEwzMTIgMjA2IFEzMjAgMTk4IDMyOCAyMDYgTDQ1MCAzODAnIHN0cm9rZT0nIzlkYjJkMCcgc3Ryb2tlLXdpZHRoPScxLjYnIGZpbGw9J25vbmUnIG9wYWNpdHk9JzAuMjAnLz48cGF0aCBkPSdNMjM1IDM4MCBMMzE1IDI2NiBRMzIwIDI2MSAzMjUgMjY2IEw0MDUgMzgwJyBzdHJva2U9JyM5ZGIyZDAnIHN0cm9rZS13aWR0aD0nMS42JyBmaWxsPSdub25lJyBvcGFjaXR5PScwLjIwJy8+PHBhdGggZD0nTTI4MCAzODAgTDMxNyAzMjcgUTMyMCAzMjQgMzIzIDMyNyBMMzYwIDM4MCcgc3Ryb2tlPScjOWRiMmQwJyBzdHJva2Utd2lkdGg9JzEuNicgZmlsbD0nbm9uZScgb3BhY2l0eT0nMC4yMCcvPjwvc3ZnPg==");
+    background-repeat: no-repeat;
+    background-position: top center;
+    background-size: min(1500px, 100vw) auto;
+    background-attachment: fixed;
     min-height: 100vh;
-    transition: background 0.3s;
+    transition: background-color 0.3s;
+}
+
+/* Modalità chiara: stesso motivo, ma le linee diventano blu invece di
+   bianco/grigio chiaro (che su sfondo chiaro sarebbero invisibili). */
+[data-theme="light"] #mainApp {
+    background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA2NDAgNDAwJz48cGF0aCBkPSdNMTAwIDM4MCBMMzA2IDg2IFEzMjAgNzIgMzM0IDg2IEw1NDAgMzgwJyBzdHJva2U9JyMxYTQwODAnIHN0cm9rZS13aWR0aD0nMS42JyBmaWxsPSdub25lJyBvcGFjaXR5PScwLjE2Jy8+PHBhdGggZD0nTTE0NSAzODAgTDMwOSAxNDYgUTMyMCAxMzUgMzMxIDE0NiBMNDk1IDM4MCcgc3Ryb2tlPScjMWE0MDgwJyBzdHJva2Utd2lkdGg9JzEuNicgZmlsbD0nbm9uZScgb3BhY2l0eT0nMC4xNicvPjxwYXRoIGQ9J00xOTAgMzgwIEwzMTIgMjA2IFEzMjAgMTk4IDMyOCAyMDYgTDQ1MCAzODAnIHN0cm9rZT0nIzFhNDA4MCcgc3Ryb2tlLXdpZHRoPScxLjYnIGZpbGw9J25vbmUnIG9wYWNpdHk9JzAuMTYnLz48cGF0aCBkPSdNMjM1IDM4MCBMMzE1IDI2NiBRMzIwIDI2MSAzMjUgMjY2IEw0MDUgMzgwJyBzdHJva2U9JyMxYTQwODAnIHN0cm9rZS13aWR0aD0nMS42JyBmaWxsPSdub25lJyBvcGFjaXR5PScwLjE2Jy8+PHBhdGggZD0nTTI4MCAzODAgTDMxNyAzMjcgUTMyMCAzMjQgMzIzIDMyNyBMMzYwIDM4MCcgc3Ryb2tlPScjMWE0MDgwJyBzdHJva2Utd2lkdGg9JzEuNicgZmlsbD0nbm9uZScgb3BhY2l0eT0nMC4xNicvPjwvc3ZnPg==");
+}
+
+/* FIX v2: il colore Rent/Service era ancora messo su #rentPage/#servicePage
+   (elementi .page, quindi dentro la colonna centrale max-width:1440px) —
+   il pattern di base su #mainApp si vedeva a piena pagina (linee), ma il
+   colore verde/grigio restava confinato in quel rettangolo stretto sopra
+   di esso. Ora il colore sostituisce il pattern di base direttamente su
+   #mainApp (stesso elemento full-screen), quindi copre tutto allo stesso
+   modo. :not([data-theme="light"]) esclude la modalità chiara, che deve
+   restare identica a tutte le altre sezioni (pattern blu di base). */
+[data-role-theme="noleggio"]:not([data-theme="light"]) #mainApp {
+    background-color: #0e1a15;
+    background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA2NDAgNDAwJz48cGF0aCBkPSdNMTAwIDM4MCBMMzA2IDg2IFEzMjAgNzIgMzM0IDg2IEw1NDAgMzgwJyBzdHJva2U9JyM2YmIwOTAnIHN0cm9rZS13aWR0aD0nMS42JyBmaWxsPSdub25lJyBvcGFjaXR5PScwLjIyJy8+PHBhdGggZD0nTTE0NSAzODAgTDMwOSAxNDYgUTMyMCAxMzUgMzMxIDE0NiBMNDk1IDM4MCcgc3Ryb2tlPScjNmJiMDkwJyBzdHJva2Utd2lkdGg9JzEuNicgZmlsbD0nbm9uZScgb3BhY2l0eT0nMC4yMicvPjxwYXRoIGQ9J00xOTAgMzgwIEwzMTIgMjA2IFEzMjAgMTk4IDMyOCAyMDYgTDQ1MCAzODAnIHN0cm9rZT0nIzZiYjA5MCcgc3Ryb2tlLXdpZHRoPScxLjYnIGZpbGw9J25vbmUnIG9wYWNpdHk9JzAuMjInLz48cGF0aCBkPSdNMjM1IDM4MCBMMzE1IDI2NiBRMzIwIDI2MSAzMjUgMjY2IEw0MDUgMzgwJyBzdHJva2U9JyM2YmIwOTAnIHN0cm9rZS13aWR0aD0nMS42JyBmaWxsPSdub25lJyBvcGFjaXR5PScwLjIyJy8+PHBhdGggZD0nTTI4MCAzODAgTDMxNyAzMjcgUTMyMCAzMjQgMzIzIDMyNyBMMzYwIDM4MCcgc3Ryb2tlPScjNmJiMDkwJyBzdHJva2Utd2lkdGg9JzEuNicgZmlsbD0nbm9uZScgb3BhY2l0eT0nMC4yMicvPjwvc3ZnPg==");
+}
+
+[data-role-theme="service"]:not([data-theme="light"]) #mainApp {
+    background-color: #24272e;
+    background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA2NDAgNDAwJz48cGF0aCBkPSdNMTAwIDM4MCBMMzA2IDg2IFEzMjAgNzIgMzM0IDg2IEw1NDAgMzgwJyBzdHJva2U9JyNhYWIwYmEnIHN0cm9rZS13aWR0aD0nMS42JyBmaWxsPSdub25lJyBvcGFjaXR5PScwLjIyJy8+PHBhdGggZD0nTTE0NSAzODAgTDMwOSAxNDYgUTMyMCAxMzUgMzMxIDE0NiBMNDk1IDM4MCcgc3Ryb2tlPScjYWFiMGJhJyBzdHJva2Utd2lkdGg9JzEuNicgZmlsbD0nbm9uZScgb3BhY2l0eT0nMC4yMicvPjxwYXRoIGQ9J00xOTAgMzgwIEwzMTIgMjA2IFEzMjAgMTk4IDMyOCAyMDYgTDQ1MCAzODAnIHN0cm9rZT0nI2FhYjBiYScgc3Ryb2tlLXdpZHRoPScxLjYnIGZpbGw9J25vbmUnIG9wYWNpdHk9JzAuMjInLz48cGF0aCBkPSdNMjM1IDM4MCBMMzE1IDI2NiBRMzIwIDI2MSAzMjUgMjY2IEw0MDUgMzgwJyBzdHJva2U9JyNhYWIwYmEnIHN0cm9rZS13aWR0aD0nMS42JyBmaWxsPSdub25lJyBvcGFjaXR5PScwLjIyJy8+PHBhdGggZD0nTTI4MCAzODAgTDMxNyAzMjcgUTMyMCAzMjQgMzIzIDMyNyBMMzYwIDM4MCcgc3Ryb2tlPScjYWFiMGJhJyBzdHJva2Utd2lkdGg9JzEuNicgZmlsbD0nbm9uZScgb3BhY2l0eT0nMC4yMicvPjwvc3ZnPg==");
 }
 
 .page {
