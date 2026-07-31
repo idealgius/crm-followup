@@ -36,7 +36,7 @@ function renderUsers(users) {
                     ${canChangeRole ? `
                         <select class="input-dark" style="font-size:12px;padding:4px 10px;border-radius:6px"
                             onchange="changeUserRole(${u.id}, this.value)">
-                            <option value="UTENTE" ${u.role === 'UTENTE' ? 'selected' : ''}>Utente</option>
+                            <option value="UTENTE" ${u.role === 'UTENTE' ? 'selected' : ''}>BDC</option>
                             <option value="BACK_OFFICE" ${u.role === 'BACK_OFFICE' ? 'selected' : ''}>Back Office</option>
                             <option value="MODERATORE" ${u.role === 'MODERATORE' ? 'selected' : ''}>Moderatore</option>
                             <option value="GESTORE" ${u.role === 'GESTORE' ? 'selected' : ''}>Gestore</option>
@@ -59,7 +59,7 @@ function renderUsers(users) {
 
 function formatRole(role) {
     const map = {
-        'UTENTE': 'Utente',
+        'UTENTE': 'BDC',
         'BACK_OFFICE': 'Back Office',
         'MODERATORE': 'Moderatore',
         'GESTORE': 'Gestore',

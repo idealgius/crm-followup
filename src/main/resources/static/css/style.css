@@ -48,7 +48,10 @@
 }
 
 [data-theme="light"] {
-    --bg-main: #eef2f7;
+    /* FIX: bianco leggermente attenuato — l'utente lo trovava troppo
+       accecante. Resta comunque un bianco/grigio chiarissimo, solo un
+       filo più morbido. */
+    --bg-main: #e6eaf0;
     --bg-card: #ffffff;
     --bg-card2: #ffffff;
     --border: #d0d8e8;
@@ -67,7 +70,7 @@
     --auth-box-bg: #ffffff;
     --auth-box-color: #0d1a2e;
     --auth-h2: #0d1a2e;
-    --page-bg: #eef2f7;
+    --page-bg: #e6eaf0;
     --followup-hover: rgba(26,64,128,0.10);
     --badge-in-progress-bg: rgba(26,64,128,0.08);
     --badge-in-progress-color: #1a4080;
@@ -470,9 +473,11 @@ select.input-dark {
 }
 
 /* Modalità chiara: stesso motivo, ma le linee diventano blu invece di
-   bianco/grigio chiaro (che su sfondo chiaro sarebbero invisibili). */
+   bianco/grigio chiaro (che su sfondo chiaro sarebbero invisibili).
+   !important come rete di sicurezza: deve vincere sempre sulla regola
+   base sopra, indipendentemente da eventuali altre regole. */
 [data-theme="light"] #mainApp {
-    background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA2NDAgNDAwJz48cGF0aCBkPSdNMTAwIDM4MCBMMzA2IDg2IFEzMjAgNzIgMzM0IDg2IEw1NDAgMzgwJyBzdHJva2U9JyMxYTQwODAnIHN0cm9rZS13aWR0aD0nMS42JyBmaWxsPSdub25lJyBvcGFjaXR5PScwLjE2Jy8+PHBhdGggZD0nTTE0NSAzODAgTDMwOSAxNDYgUTMyMCAxMzUgMzMxIDE0NiBMNDk1IDM4MCcgc3Ryb2tlPScjMWE0MDgwJyBzdHJva2Utd2lkdGg9JzEuNicgZmlsbD0nbm9uZScgb3BhY2l0eT0nMC4xNicvPjxwYXRoIGQ9J00xOTAgMzgwIEwzMTIgMjA2IFEzMjAgMTk4IDMyOCAyMDYgTDQ1MCAzODAnIHN0cm9rZT0nIzFhNDA4MCcgc3Ryb2tlLXdpZHRoPScxLjYnIGZpbGw9J25vbmUnIG9wYWNpdHk9JzAuMTYnLz48cGF0aCBkPSdNMjM1IDM4MCBMMzE1IDI2NiBRMzIwIDI2MSAzMjUgMjY2IEw0MDUgMzgwJyBzdHJva2U9JyMxYTQwODAnIHN0cm9rZS13aWR0aD0nMS42JyBmaWxsPSdub25lJyBvcGFjaXR5PScwLjE2Jy8+PHBhdGggZD0nTTI4MCAzODAgTDMxNyAzMjcgUTMyMCAzMjQgMzIzIDMyNyBMMzYwIDM4MCcgc3Ryb2tlPScjMWE0MDgwJyBzdHJva2Utd2lkdGg9JzEuNicgZmlsbD0nbm9uZScgb3BhY2l0eT0nMC4xNicvPjwvc3ZnPg==");
+    background-image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCA2NDAgNDAwJz48cGF0aCBkPSdNMTAwIDM4MCBMMzA2IDg2IFEzMjAgNzIgMzM0IDg2IEw1NDAgMzgwJyBzdHJva2U9JyMxYTQwODAnIHN0cm9rZS13aWR0aD0nMS42JyBmaWxsPSdub25lJyBvcGFjaXR5PScwLjE2Jy8+PHBhdGggZD0nTTE0NSAzODAgTDMwOSAxNDYgUTMyMCAxMzUgMzMxIDE0NiBMNDk1IDM4MCcgc3Ryb2tlPScjMWE0MDgwJyBzdHJva2Utd2lkdGg9JzEuNicgZmlsbD0nbm9uZScgb3BhY2l0eT0nMC4xNicvPjxwYXRoIGQ9J00xOTAgMzgwIEwzMTIgMjA2IFEzMjAgMTk4IDMyOCAyMDYgTDQ1MCAzODAnIHN0cm9rZT0nIzFhNDA4MCcgc3Ryb2tlLXdpZHRoPScxLjYnIGZpbGw9J25vbmUnIG9wYWNpdHk9JzAuMTYnLz48cGF0aCBkPSdNMjM1IDM4MCBMMzE1IDI2NiBRMzIwIDI2MSAzMjUgMjY2IEw0MDUgMzgwJyBzdHJva2U9JyMxYTQwODAnIHN0cm9rZS13aWR0aD0nMS42JyBmaWxsPSdub25lJyBvcGFjaXR5PScwLjE2Jy8+PHBhdGggZD0nTTI4MCAzODAgTDMxNyAzMjcgUTMyMCAzMjQgMzIzIDMyNyBMMzYwIDM4MCcgc3Ryb2tlPScjMWE0MDgwJyBzdHJva2Utd2lkdGg9JzEuNicgZmlsbD0nbm9uZScgb3BhY2l0eT0nMC4xNicvPjwvc3ZnPg==") !important;
 }
 
 /* FIX v2: il colore Rent/Service era ancora messo su #rentPage/#servicePage

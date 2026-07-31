@@ -189,10 +189,73 @@ function showWaitingStatDetail(type) {
             break;
         case 'darichiamare':
             items = waitingEntries.filter(e => !WAITING_ARCHIVE_STATUSES.includes(e.status) && !e.richiamato && e.recallDate);
-            title = 'Da Richiamare';
-            break;
+            // NUOVO: ordine crescente per data di recall — confronto tramite
+            // Date (non stringa) per essere robusto anche se qualche
+            // recallDate ha un formato leggermente diverso.
+            items.sort((a, b) => new Date(a.recallDate) - new Date(b.recallDate));
+            showDaRichiamareDetail(items);
+            return;
     }
     showGenericWaitingDetail(title, items);
+}
+
+// Cache dell'elenco completo "Da Richiamare" (già ordinato per data), per
+// poter applicare/togliere il filtro "solo oggi" senza dover rifiltrare da
+// waitingEntries ogni volta — vedi toggleWaitingDaRichiamareOggi().
+let waitingDaRichiamareAllItems = [];
+let waitingDaRichiamareOnlyToday = false;
+
+function showDaRichiamareDetail(items) {
+    waitingDaRichiamareAllItems = items;
+    waitingDaRichiamareOnlyToday = false;
+    renderDaRichiamareDetail();
+}
+
+function toggleWaitingDaRichiamareOggi() {
+    waitingDaRichiamareOnlyToday = !waitingDaRichiamareOnlyToday;
+    renderDaRichiamareDetail();
+}
+
+function renderDaRichiamareDetail() {
+    const modal = document.getElementById('waitingRecallModal');
+    const list = document.getElementById('waitingRecallModalList');
+    if (!modal || !list) return;
+
+    const today = todayStrWaiting();
+    const items = waitingDaRichiamareOnlyToday
+        ? waitingDaRichiamareAllItems.filter(e => e.recallDate === today)
+        : waitingDaRichiamareAllItems;
+
+    const modalHeader = modal.querySelector('.modal-header h3');
+    if (modalHeader) modalHeader.textContent = `Da Richiamare (${items.length})`;
+
+    const filterHtml = `<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary);cursor:pointer;margin-bottom:14px;user-select:none">
+        <input type="checkbox" ${waitingDaRichiamareOnlyToday ? 'checked' : ''} onchange="toggleWaitingDaRichiamareOggi()"> Mostra recall di oggi
+    </label>`;
+
+    if (items.length === 0) {
+        list.innerHTML = filterHtml + `<div class="empty-state" style="padding:20px"><p>Nessun cliente per questo filtro</p></div>`;
+    } else {
+        list.innerHTML = filterHtml + items.map(e => {
+            const color = WAITING_STATUS_COLORS[e.status] || '#8a8faa';
+            return `<div class="followup-card" style="margin-bottom:10px;cursor:pointer" onclick="closeWaitingRecallModal();openWaitingDetailModal(${e.id})">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                    <div>
+                        <div style="font-weight:800;color:var(--text-primary);font-size:14px">${e.fullName}</div>
+                        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">🚗 ${e.brand} ${e.model}</div>
+                        <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📞 ${e.contact}</div>
+                        <div style="margin-top:6px">
+                            <span class="status-badge" style="background:${color}22;color:${color}">${WAITING_STATUS_LABELS[e.status] || e.status}</span>
+                            ${e.recallDate ? `<span class="recall-badge recall-future" style="margin-left:6px">📅 ${formatDateITWaiting(e.recallDate)}</span>` : ''}
+                        </div>
+                    </div>
+                    <span style="color:#f0c040;font-size:18px">→</span>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    modal.style.display = 'flex';
 }
 
 // Dettaglio generico riusabile — usa lo stesso modal del popup recall
