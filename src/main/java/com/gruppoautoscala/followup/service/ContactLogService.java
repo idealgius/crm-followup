@@ -30,6 +30,7 @@ public class ContactLogService {
                               String serviceTipoCliente, String serviceNumeroTelefono,
                               String noleggioRichiesta, String noleggioNomeCliente,
                               String noleggioCognomeCliente, String noleggioCellulare,
+                              Boolean alertNotifyAll, List<User> alertRecipients,
                               LocalDateTime contactDate) {
         ContactLog log = new ContactLog();
         log.setUser(user);
@@ -59,6 +60,10 @@ public class ContactLogService {
         log.setNoleggioNomeCliente(noleggioNomeCliente);
         log.setNoleggioCognomeCliente(noleggioCognomeCliente);
         log.setNoleggioCellulare(noleggioCellulare);
+        log.setAlertNotifyAll(alertNotifyAll != null ? alertNotifyAll : true);
+        if (alertRecipients != null) {
+            log.setAlertRecipients(alertRecipients);
+        }
         log.setContactDate(contactDate != null ? contactDate : LocalDateTime.now());
         return contactLogRepository.save(log);
     }

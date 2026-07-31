@@ -439,7 +439,7 @@
             <div class="stat-card green"><div class="stat-label">INFO VENDITA</div><div class="stat-value" id="statInfoVendita">0%</div></div>
             <div class="stat-card gold"><div class="stat-label">INFO NOLEGGIO</div><div class="stat-value" id="statInfoNoleggio">0%</div></div>
             <div class="stat-card purple"><div class="stat-label">SERVICE</div><div class="stat-value" id="statService">0%</div></div>
-            <div class="stat-card pink"><div class="stat-label">INFO ACQUISTO</div><div class="stat-value" id="statInfoAcquisto">0%</div></div>
+            <div class="stat-card pink"><div class="stat-label">INFO ACQUISTO EFFETTUATO</div><div class="stat-value" id="statInfoAcquisto">0%</div></div>
         </div>
 
         <!-- GRAFICI PRINCIPALI -->
@@ -670,8 +670,6 @@
                             <option value="">—</option>
                             <option>Agnano</option><option>Casamarciano</option><option>Salerno</option>
                         </select>
-                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">LINK APPUNTAMENTO</label>
-                        <input type="url" id="editContactAppuntamentoLink" placeholder="https://..." class="input-field">
                     </div>
 
                     <!-- ACQUISTO -->
@@ -967,6 +965,46 @@
                     </div>
                 </div>
 
+                <!-- DESTINATARI ALLERT — FIX: prima era annidato dentro
+                     contactAcquistoRow, quindi per Leasing/Finanziamento/
+                     Amministrazione restava invisibile anche se il suo
+                     display era "block", perché il genitore (contactAcquistoRow)
+                     era display:none per quelle categorie. Ora è indipendente,
+                     condiviso davvero da tutte e 4 le categorie con allert. -->
+                <div id="contactAlertDestinatariRow" style="display:none;margin-bottom:14px;background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:8px">A CHI VA SEGNALATO L'ALLERT</label>
+                    <label class="checkbox-label" style="padding:4px 0">
+                        <input type="checkbox" id="contactAlertInviaATutti" checked onchange="toggleAlertInviaATutti()"> Invia a tutti (chi ha i permessi di gestione)
+                    </label>
+                    <div id="contactAlertDestinatariListWrapper" style="display:none;margin-top:8px">
+                        <div id="contactAlertDestinatariList" style="max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;border:1px solid var(--border);border-radius:8px;padding:8px"></div>
+                    </div>
+                </div>
+
+                <!-- PRATICA LEASING / PRATICA FINANZIAMENTO / AMMINISTRAZIONE —
+                     condiviso da tutte e tre: stessa gestione allert di Info
+                     Acquisto (riusa contactAlertDestinatariRow sopra), più
+                     marca/modello/targa opzionali dedicati -->
+                <div id="contactLeasingFinRow" style="display:none">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MARCA VEICOLO (opzionale)</label>
+                    <div style="position:relative;margin-bottom:14px">
+                        <input type="text" id="contactLeasingMarcaInput" placeholder="Clicca o cerca marca..." class="input-field" style="margin-bottom:0;cursor:pointer"
+                               oninput="filterLeasingMarche(this.value)" onfocus="showLeasingMarcheDropdown()" autocomplete="off">
+                        <div id="contactLeasingMarcaDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1.5px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;box-shadow:var(--shadow)"></div>
+                        <input type="hidden" id="contactLeasingMarca" value="">
+                    </div>
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLO VEICOLO (opzionale)</label>
+                    <input type="text" id="contactLeasingModello" placeholder="Es. 208 1.2 PureTech 100cv" class="input-field">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TARGA (opzionale)</label>
+                    <input type="text" id="contactLeasingTarga" placeholder="Es. AB123CD" class="input-field" style="text-transform:uppercase">
+
+                    <div style="margin-bottom:14px;margin-top:14px">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">SEGNALAZIONE</label>
+                        <button type="button" class="btn-sede" id="contactLeasingAlertBtn" onclick="toggleLeasingAlert()">🔔 Segnala problematica (Allert)</button>
+                        <input type="hidden" id="contactLeasingAlert" value="false">
+                    </div>
+                </div>
+
                 <!-- SERVICE -->
                 <div id="contactServiceRow" style="display:none">
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">SEDE SERVICE *</label>
@@ -1025,8 +1063,6 @@
                         <button type="button" class="btn-sede" id="sede-Salerno" onclick="selectSede('Salerno')">📍 Salerno</button>
                     </div>
                     <input type="hidden" id="contactAppuntamentoSede" value="">
-                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">LINK APPUNTAMENTO (opzionale)</label>
-                    <input type="url" id="contactAppuntamentoLink" placeholder="https://..." class="input-field">
                 </div>
 
                 <!-- ALTRO / AMMINISTRAZIONE -->
@@ -1039,9 +1075,13 @@
             <!-- NOTA UNIVERSALE — sempre visibile, per QUALSIASI categoria
                  (Pratica Leasing, Pratica Finanziamento, Amministrazione,
                  Info Acquisto effettuato, ecc.), indipendente dai campi nota
-                 specifici delle singole categorie che restano invariati. -->
+                 specifici delle singole categorie che restano invariati.
+                 FIX: nascosta solo per Service/Altro, dove e' ridondante con
+                 il campo NOTA / MOTIVAZIONE gia' obbligatorio in quel caso. -->
+            <div id="contactNotaUniversaleRow">
             <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA (opzionale)</label>
             <textarea id="contactNotaAggiuntiva" placeholder="Note aggiuntive libere..." class="input-field" style="margin-bottom:15px"></textarea>
+            </div>
 
             <div class="form-actions">
                 <button onclick="createContactLog()" class="btn-gold">SALVA CONTATTO</button>

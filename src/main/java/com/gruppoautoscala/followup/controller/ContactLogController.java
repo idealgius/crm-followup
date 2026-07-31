@@ -55,8 +55,17 @@ public class ContactLogController {
         messagingTemplate.convertAndSend("/topic/contacts", event);
     }
 
-    // Stati validi per la gestione dell'Allert (Info Acquisto effettuato)
+    // Stati validi per la gestione dell'Allert (Info Acquisto effettuato,
+    // Pratica Leasing, Pratica Finanziamento)
     private static final List<String> VALID_ALERT_STATUSES = List.of("IN_GESTIONE", "GESTITA");
+
+    // NUOVO: categorie che possono avere un allert — prima era SOLO "Info
+    // Acquisto effettuato", poi estesa a Leasing e Finanziamento, ora anche
+    // Amministrazione riusa lo stesso identico sistema (stessi campi, stesso
+    // flusso Da Gestire/In gestione/Gestita).
+    private static final List<String> ALERT_CATEGORIES = List.of(
+        "Info Acquisto effettuato", "Pratica Leasing", "Pratica Finanziamento", "Amministrazione"
+    );
 
     @GetMapping
     public ResponseEntity<?> getAll(
@@ -151,6 +160,12 @@ public class ContactLogController {
         String serviceSede = (String) body.get("serviceSede");
         String acquistoNote = (String) body.get("acquistoNote");
         Boolean acquistoAlert = (Boolean) body.get("acquistoAlert");
+        // NUOVO: a chi mostrare l'allert. notifyAll di default true (nessun
+        // cambiamento per chi non usa la nuova funzione). recipientIds arriva
+        // solo quando notifyAll è false ed è una lista di id utente.
+        Boolean alertNotifyAll = body.containsKey("alertNotifyAll") ? (Boolean) body.get("alertNotifyAll") : true;
+        @SuppressWarnings("unchecked")
+        List<Object> alertRecipientIdsRaw = (List<Object>) body.get("alertRecipientIds");
         String noleggioTipo = (String) body.get("noleggioTipo");
         String noleggioLink = (String) body.get("noleggioLink");
         String serviceNomeCliente = (String) body.get("serviceNomeCliente");
@@ -206,16 +221,27 @@ public class ContactLogController {
                 serviceNomeCliente, serviceCognomeCliente, serviceTarga,
                 serviceTipoCliente, serviceNumeroTelefono,
                 noleggioRichiesta, noleggioNomeCliente, noleggioCognomeCliente, noleggioCellulare,
+                null, null,
                 contactDate);
 
-        // ===== ALLERT — Info Acquisto effettuato =====
+        // ===== ALLERT — Info Acquisto effettuato / Pratica Leasing / Pratica Finanziamento =====
         // Il metodo create() del service non conosce ancora questo campo (per non
         // dover modificare la sua firma / il file ContactLogService.java), quindi
         // lo impostiamo qui sull'oggetto appena salvato e lo persistiamo di nuovo
         // con update(), che già esiste e gestisce il salvataggio.
-        if ("Info Acquisto effettuato".equals(category) && Boolean.TRUE.equals(acquistoAlert)) {
+        if (ALERT_CATEGORIES.contains(category) && Boolean.TRUE.equals(acquistoAlert)) {
             log.setAcquistoAlert(true);
             log.setAcquistoAlertStatus(null);
+            log.setAlertNotifyAll(alertNotifyAll == null ? true : alertNotifyAll);
+            if (Boolean.FALSE.equals(alertNotifyAll) && alertRecipientIdsRaw != null) {
+                List<User> recipients = alertRecipientIdsRaw.stream()
+                        .map(idObj -> Long.valueOf(String.valueOf(idObj)))
+                        .map(userRepository::findById)
+                        .filter(Optional::isPresent)
+                        .map(Optional::get)
+                        .collect(Collectors.toList());
+                log.setAlertRecipients(recipients);
+            }
             log = contactLogService.update(log);
         }
 
@@ -288,6 +314,21 @@ public class ContactLogController {
         if (body.containsKey("serviceSede")) log.setServiceSede((String) body.get("serviceSede"));
         if (body.containsKey("acquistoNote")) log.setAcquistoNote((String) body.get("acquistoNote"));
         if (body.containsKey("acquistoAlert")) log.setAcquistoAlert((Boolean) body.get("acquistoAlert"));
+        if (body.containsKey("alertNotifyAll")) {
+            Boolean notifyAll = (Boolean) body.get("alertNotifyAll");
+            log.setAlertNotifyAll(notifyAll == null ? true : notifyAll);
+        }
+        if (body.containsKey("alertRecipientIds")) {
+            @SuppressWarnings("unchecked")
+            List<Object> recipientIdsRaw = (List<Object>) body.get("alertRecipientIds");
+            List<User> recipients = recipientIdsRaw == null ? List.of() : recipientIdsRaw.stream()
+                    .map(idObj -> Long.valueOf(String.valueOf(idObj)))
+                    .map(userRepository::findById)
+                    .filter(Optional::isPresent)
+                    .map(Optional::get)
+                    .collect(Collectors.toList());
+            log.setAlertRecipients(recipients);
+        }
 
         // ===== ALLERT — cambio stato: valorizza automaticamente "chi" e "quando" =====
         // Quando lo stato passa a IN_GESTIONE o GESTITA, registriamo l'utente corrente
@@ -465,6 +506,9 @@ public class ContactLogController {
         m.put("acquistoAlertStatus", log.getAcquistoAlertStatus());
         m.put("acquistoAlertNoteGestione", log.getAcquistoAlertNoteGestione());
         m.put("acquistoAlertNoteGestita", log.getAcquistoAlertNoteGestita());
+        m.put("alertNotifyAll", log.getAlertNotifyAll());
+        m.put("alertRecipients", log.getAlertRecipients() == null ? List.of()
+                : log.getAlertRecipients().stream().map(this::userToMap).collect(Collectors.toList()));
 
         // ===== chi + quando per "In gestione" e "Gestita" =====
         // Serializzati come oggetto {id, fullName, role}, coerente con il campo

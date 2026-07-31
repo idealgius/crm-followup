@@ -3,6 +3,8 @@ package com.gruppoautoscala.followup.model;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 @Entity
@@ -139,6 +141,30 @@ public class ContactLog {
     @Column(name = "acquisto_alert_gestita_at")
     private LocalDateTime acquistoAlertGestitaAt;
 
+    // ===== NUOVO: destinatari dell'allert =====
+    // Questi due campi sono condivisi da TUTTE le categorie che possono avere
+    // un allert (Info Acquisto effettuato, Pratica Leasing, Pratica
+    // Finanziamento), esattamente come i campi "acquisto_alert*" qui sopra
+    // sono già riusati per le 3 categorie e non solo per l'acquisto (il nome
+    // "acquisto" è storico, non è più letterale).
+    //
+    // alertNotifyAll = true (default)  -> l'allert è visibile a TUTTI gli
+    //   utenti, comportamento identico a quello di sempre, nessuna modifica
+    //   per chi non usa mai la nuova funzione di targeting.
+    // alertNotifyAll = false -> l'allert è visibile SOLO agli utenti presenti
+    //   in alertRecipients (né nel popup automatico "Da Gestire", né nella
+    //   lista "Da Gestire": chi non è in questa lista non lo vede proprio).
+    @Column(name = "alert_notify_all")
+    private Boolean alertNotifyAll = true;
+
+    @ManyToMany
+    @JoinTable(
+        name = "contact_log_alert_recipients",
+        joinColumns = @JoinColumn(name = "contact_log_id"),
+        inverseJoinColumns = @JoinColumn(name = "user_id")
+    )
+    private List<User> alertRecipients = new ArrayList<>();
+
     @Column(name = "noleggio_tipo", length = 50)
     private String noleggioTipo;
 
@@ -151,6 +177,11 @@ public class ContactLog {
     @Column(name = "service_cognome_cliente", length = 100)
     private String serviceCognomeCliente;
 
+    // Colonna storica "service_targa": già riusata da Service e da Info
+    // Acquisto effettuato (vedi contact.js, riga targa in salvataggio). Ora
+    // riusata anche da Pratica Leasing e Pratica Finanziamento (tutti campi
+    // opzionali marca/modello/targa) — nessuna nuova colonna necessaria,
+    // marca e modello sono già generiche più sotto.
     @Column(name = "service_targa", length = 20)
     private String serviceTarga;
 

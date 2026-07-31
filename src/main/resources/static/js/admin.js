@@ -37,9 +37,11 @@ function renderUsers(users) {
                         <select class="input-dark" style="font-size:12px;padding:4px 10px;border-radius:6px"
                             onchange="changeUserRole(${u.id}, this.value)">
                             <option value="UTENTE" ${u.role === 'UTENTE' ? 'selected' : ''}>Utente</option>
+                            <option value="BACK_OFFICE" ${u.role === 'BACK_OFFICE' ? 'selected' : ''}>Back Office</option>
                             <option value="MODERATORE" ${u.role === 'MODERATORE' ? 'selected' : ''}>Moderatore</option>
                             <option value="GESTORE" ${u.role === 'GESTORE' ? 'selected' : ''}>Gestore</option>
                             <option value="NOLEGGIO" ${u.role === 'NOLEGGIO' ? 'selected' : ''}>Noleggio</option>
+                            <option value="SERVICE" ${u.role === 'SERVICE' ? 'selected' : ''}>Service</option>
                             ${isAdmin ? `<option value="ADMIN" ${u.role === 'ADMIN' ? 'selected' : ''}>Admin</option>` : ''}
                         </select>
                     ` : `
@@ -58,10 +60,12 @@ function renderUsers(users) {
 function formatRole(role) {
     const map = {
         'UTENTE': 'Utente',
+        'BACK_OFFICE': 'Back Office',
         'MODERATORE': 'Moderatore',
         'GESTORE': 'Gestore',
         'ADMIN': 'Admin',
-        'NOLEGGIO': 'Noleggio'
+        'NOLEGGIO': 'Noleggio',
+        'SERVICE': 'Service'
     };
     return map[role] || role;
 }

@@ -51,6 +51,11 @@ let acquistoAlertNoteGestioneVisible = false;
 let acquistoAlertNoteGestitaVisible = false;
 let acquistoAlertDaGestireShownThisSession = false;
 
+// Controlla ogni minuto se sono passati i 30 minuti dall'ultima volta che
+// il popup "Da Gestire" è stato mostrato — se sì e ci sono ancora allert
+// non gestiti, lo rimostra da solo (vedi checkAcquistoAlertDaGestire).
+setInterval(() => { if (typeof checkAcquistoAlertDaGestire === 'function') checkAcquistoAlertDaGestire(); }, 60 * 1000);
+
 const CATEGORY_COLORS = {
     'Info Vendita': '#1a4080',
     'Info Noleggio': '#00c853',
@@ -147,8 +152,11 @@ function canManageAlerts() {
     // quindi può modificare/eliminare solo i propri, come un UTENTE/BDC).
     return currentUser && (currentUser.role === 'MODERATORE' || currentUser.role === 'GESTORE' || currentUser.role === 'ADMIN' || currentUser.role === 'BACK_OFFICE');
 }
+// L'allert è condiviso da Info Acquisto effettuato, Pratica Leasing e
+// Pratica Finanziamento — stesso meccanismo, tre categorie.
+const ALERT_ELIGIBLE_CATEGORIES = ['Info Acquisto effettuato', 'Pratica Leasing', 'Pratica Finanziamento', 'Amministrazione'];
 function hasAcquistoAlert(log) {
-    return log.category === 'Info Acquisto effettuato' && !!log.acquistoAlert;
+    return ALERT_ELIGIBLE_CATEGORIES.includes(log.category) && !!log.acquistoAlert;
 }
 function acquistoAlertVisual(log) {
     if (log.acquistoAlertStatus === 'GESTITA') return { color: '#00c853', bg: 'rgba(0,200,83,0.15)', icon: '🟢', label: 'Gestita' };
@@ -156,7 +164,7 @@ function acquistoAlertVisual(log) {
     return { color: '#ff9800', bg: 'rgba(255,152,0,0.15)', icon: '🔔', label: 'Da gestire' };
 }
 function acquistoAlertNameColor(log) {
-    if (log.category !== 'Info Acquisto effettuato' || !log.acquistoAlert) return null;
+    if (!ALERT_ELIGIBLE_CATEGORIES.includes(log.category) || !log.acquistoAlert) return null;
     return acquistoAlertVisual(log).color;
 }
 // FIX: il backend restituisce acquistoAlertInGestioneAt/acquistoAlertGestitaAt
@@ -284,6 +292,24 @@ function selectAcquistoMarca(marca) {
     document.getElementById('contactAcquistoMarca').value = marca;
     document.getElementById('contactAcquistoMarcaDropdown').style.display = 'none';
 }
+// ===== Tendina marca — Pratica Leasing/Finanziamento (nuovo contatto) =====
+function showLeasingMarcheDropdown() { filterLeasingMarche('', true); }
+function filterLeasingMarche(query, showAll) {
+    const dropdown = document.getElementById('contactLeasingMarcaDropdown');
+    if (!dropdown) return;
+    const matches = (!query || query.trim() === '' || showAll) ? MARCHE_NORMALIZED : MARCHE_NORMALIZED.filter(m => m.normalized.includes(normalizeText(query.trim())));
+    if (matches.length === 0) { dropdown.style.display = 'none'; return; }
+    dropdown.innerHTML = matches.map(m => `
+        <div onclick="selectLeasingMarca('${m.original}')" style="padding:10px 14px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary);border-bottom:1px solid var(--border)" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''">
+            ${m.original}
+        </div>`).join('');
+    dropdown.style.display = 'block';
+}
+function selectLeasingMarca(marca) {
+    document.getElementById('contactLeasingMarcaInput').value = marca;
+    document.getElementById('contactLeasingMarca').value = marca;
+    document.getElementById('contactLeasingMarcaDropdown').style.display = 'none';
+}
 // ===== Tendina marca — Service (nuovo contatto) =====
 function showServiceMarcheDropdown() { filterServiceMarche('', true); }
 function filterServiceMarche(query, showAll) {
@@ -396,6 +422,10 @@ document.addEventListener('click', function(e) {
     const acquistoMarcaInput = document.getElementById('contactAcquistoMarcaInput');
     if (acquistoMarcaDropdown && acquistoMarcaInput && !acquistoMarcaInput.contains(e.target) && !acquistoMarcaDropdown.contains(e.target)) acquistoMarcaDropdown.style.display = 'none';
 
+    const leasingMarcaDropdown = document.getElementById('contactLeasingMarcaDropdown');
+    const leasingMarcaInput = document.getElementById('contactLeasingMarcaInput');
+    if (leasingMarcaDropdown && leasingMarcaInput && !leasingMarcaInput.contains(e.target) && !leasingMarcaDropdown.contains(e.target)) leasingMarcaDropdown.style.display = 'none';
+
     const promoDropdown = document.getElementById('promoModelloDropdown');
     const promoInput = document.getElementById('promoModelloInput');
     if (promoDropdown && promoInput && !promoInput.contains(e.target) && !promoDropdown.contains(e.target)) promoDropdown.style.display = 'none';
@@ -431,17 +461,29 @@ async function loadContactLogs(from, to, restoreDayView) {
     }
 }
 
+// NUOVO: invece di mostrare il popup una sola volta per sessione, ora
+// ricompare ogni 30 minuti finché restano allert non gestiti — nessun
+// refresh o riapertura pagina necessari, basta che il CRM resti aperto.
+let acquistoAlertDaGestireLastShownAt = 0;
+const ACQUISTO_ALERT_REPOPUP_INTERVAL_MS = 30 * 60 * 1000;
+
 function checkAcquistoAlertDaGestire() {
     const modal = document.getElementById('acquistoAlertDaGestireModal');
     const list = document.getElementById('acquistoAlertDaGestireList');
     if (!modal || !list) return;
     if (!canManageAlerts()) return;
-    if (acquistoAlertDaGestireShownThisSession) return;
+    if (modal.style.display === 'flex') return; // già aperto
 
-    const alertAttivi = contactLogs.filter(l => hasAcquistoAlert(l) && l.acquistoAlertStatus !== 'GESTITA');
+    const now = Date.now();
+    if (acquistoAlertDaGestireLastShownAt !== 0 && (now - acquistoAlertDaGestireLastShownAt) < ACQUISTO_ALERT_REPOPUP_INTERVAL_MS) return;
+
+    // FIX: filtra anche per destinatario — se l'allert non è "per tutti" e
+    // l'utente corrente non è tra i destinatari scelti, non gli viene
+    // proprio mostrato.
+    const alertAttivi = contactLogs.filter(l => hasAcquistoAlert(l) && l.acquistoAlertStatus !== 'GESTITA' && alertIsVisibleToCurrentUser(l));
     if (alertAttivi.length === 0) return;
 
-    acquistoAlertDaGestireShownThisSession = true;
+    acquistoAlertDaGestireLastShownAt = now;
 
     const daGestire = alertAttivi.filter(l => !l.acquistoAlertStatus || l.acquistoAlertStatus === 'DA_GESTIRE');
     const inGestione = alertAttivi.filter(l => l.acquistoAlertStatus === 'IN_GESTIONE');
@@ -459,6 +501,9 @@ function checkAcquistoAlertDaGestire() {
                     <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📞 ${clienteNumeroDisplay(log)}</div>
                     <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📋 ${log.otherNote || '—'}${log.acquistoNote ? ' · ' + log.acquistoNote : ''}</div>
                     <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">👤 Segnalato da ${log.user?.fullName || '—'}</div>
+                    ${log.alertNotifyAll === false && Array.isArray(log.alertRecipients) && log.alertRecipients.length > 0
+                        ? `<div style="font-size:12px;color:#f0c040;font-weight:700;margin-top:2px">🎯 Per: ${log.alertRecipients.map(u => u.fullName).join(', ')}</div>`
+                        : ''}
                 </div>
                 <span style="color:${visual.color};font-size:18px">→</span>
             </div>
@@ -869,6 +914,7 @@ function renderContactChartFromLogs(logs) {
         type: 'doughnut',
         data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: isDark ? '#0d0f1a' : '#ffffff' }] },
         options: {
+            animation: false,
             responsive: true, maintainAspectRatio: true,
             onClick: (evt, elements) => {
                 if (elements.length === 0) return;
@@ -915,6 +961,7 @@ function renderChartAppuntamentiSede(logs) {
         type: 'bar',
         data: { labels: SEDI_LIST, datasets: [{ data: SEDI_LIST.map(s => counts[s]), backgroundColor: ['#e91e6399','#1a408099','#00c85399'], borderColor: SEDE_COLORS, borderWidth: 2, borderRadius: 8, borderSkipped: false }] },
         options: {
+            animation: false,
             responsive: true, maintainAspectRatio: true,
             onClick: (evt, elements) => { if (elements.length > 0) showSedeDetail(SEDI_LIST[elements[0].index]); },
             onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
@@ -965,6 +1012,7 @@ function renderChartInfoAcquisto(logs) {
         type: 'doughnut',
         data: { labels: ACQUISTO_LIST, datasets: [{ data: ACQUISTO_LIST.map(t => counts[t]), backgroundColor: ACQUISTO_COLORS, borderWidth: 2, borderColor: isDark ? '#0d0f1a' : '#ffffff' }] },
         options: {
+            animation: false,
             responsive: true, maintainAspectRatio: true, layout: { padding: { bottom: 10 } },
             onClick: (evt, elements) => {
                 if (elements.length === 0) return;
@@ -1023,6 +1071,7 @@ function renderChartFonteVendita(logs) {
         type: 'doughnut',
         data: { labels: FONTE_LIST, datasets: [{ data: FONTE_LIST.map(f => counts[f]), backgroundColor: FONTE_COLORS, borderWidth: 2, borderColor: isDark ? '#0d0f1a' : '#ffffff' }] },
         options: {
+            animation: false,
             responsive: true, maintainAspectRatio: true,
             onClick: (evt, elements) => {
                 if (elements.length === 0) return;
@@ -1069,6 +1118,7 @@ function buildServiceSedeChart(canvasId, existingChart, logs, sede) {
         type: 'doughnut',
         data: { labels: SERVICE_LIST, datasets: [{ data: SERVICE_LIST.map(s => counts[s]), backgroundColor: SERVICE_COLORS, borderWidth: 2, borderColor: isDark ? '#0d0f1a' : '#ffffff' }] },
         options: {
+            animation: false,
             responsive: true, maintainAspectRatio: true,
             onClick: (evt, elements) => { if (elements.length > 0) showServiceDetail(SERVICE_LIST[elements[0].index], sede); },
             onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
@@ -1161,6 +1211,7 @@ function renderChartNoleggio(logs) {
             type: 'doughnut',
             data: { labels: NOLEGGIO_TIPO_LIST, datasets: [{ data: NOLEGGIO_TIPO_LIST.map(t => counts[t]), backgroundColor: tipoColors.map(c=>c+'99'), borderColor: tipoColors, borderWidth: 2 }] },
             options: {
+                animation: false,
                 responsive: true, maintainAspectRatio: true,
                 onClick: (evt, elements) => {
                     if (elements.length === 0) return;
@@ -1200,6 +1251,7 @@ function renderChartNoleggio(logs) {
             type: 'bar',
             data: { labels: leadLabels, datasets: [{ data: [soloInfo, leadGenerata], backgroundColor: ['#8a8faa99','#00c85399'], borderColor: ['#8a8faa','#00c853'], borderWidth: 2, borderRadius: 8, borderSkipped: false }] },
             options: {
+                animation: false,
                 responsive: true, maintainAspectRatio: true,
                 onClick: (evt, elements) => {
                     if (elements.length === 0) return;
@@ -1321,6 +1373,7 @@ async function loadPromoStatsForContactCharts(totalFromLogs, textColor, gridColo
                 type: 'bar',
                 data: { labels: ['Contatti', 'Appuntamenti', 'Rich. Promo', 'Test Drive'], datasets: [{ data: [realTotal, stats.appuntamenti, stats.richiestaPromoSi, stats.testDriveSi], backgroundColor: ['#1a408099','#e91e6399','#00c85399','#7c4dff99'], borderColor: ['#1a4080','#e91e63','#00c853','#7c4dff'], borderWidth: 2, borderRadius: 8, borderSkipped: false }] },
                 options: {
+                    animation: false,
                     responsive: true, maintainAspectRatio: true,
                     plugins: {
                         legend: { display: false },
@@ -1350,6 +1403,7 @@ async function loadPromoStatsForContactCharts(totalFromLogs, textColor, gridColo
                 type: 'doughnut',
                 data: { labels: ['Richiesta Sì', 'Richiesta No'], datasets: [{ data: [si, no], backgroundColor: ['#00c85399','#ff3d3d99'], borderColor: ['#00c853','#ff3d3d'], borderWidth: 2 }] },
                 options: {
+                    animation: false,
                     responsive: true, maintainAspectRatio: true,
                     plugins: {
                         legend: { position: 'bottom', labels: { color: legendColor, font: { size: 11 }, padding: 12, boxWidth: 12,
@@ -1395,6 +1449,88 @@ function toggleAcquistoAlert() {
     if (btn) btn.classList.toggle('btn-sede-active', selectedAcquistoAlert);
     const hidden = document.getElementById('contactAcquistoAlert');
     if (hidden) hidden.value = selectedAcquistoAlert ? 'true' : 'false';
+    updateAlertDestinatariVisibility();
+}
+
+// Stesso toggle ma per Pratica Leasing/Pratica Finanziamento — condivide lo
+// stesso selettore destinatari dell'Acquisto (le categorie sono mutuamente
+// esclusive: una sola alla volta è attiva nel form).
+let selectedLeasingAlert = false;
+function toggleLeasingAlert() {
+    selectedLeasingAlert = !selectedLeasingAlert;
+    const btn = document.getElementById('contactLeasingAlertBtn');
+    if (btn) btn.classList.toggle('btn-sede-active', selectedLeasingAlert);
+    const hidden = document.getElementById('contactLeasingAlert');
+    if (hidden) hidden.value = selectedLeasingAlert ? 'true' : 'false';
+    updateAlertDestinatariVisibility();
+}
+
+function updateAlertDestinatariVisibility() {
+    const row = document.getElementById('contactAlertDestinatariRow');
+    if (!row) return;
+    const attivo = selectedAcquistoAlert || selectedLeasingAlert;
+    row.style.display = attivo ? 'block' : 'none';
+    if (attivo) loadUsersForAlertDestinatari();
+}
+
+// ============================================================
+// DESTINATARI ALLERT — "invia a tutti" oppure uno o più utenti specifici.
+// Se non è "tutti", solo i selezionati vedranno l'allert nel popup
+// automatico e nella lista "Da Gestire" (il badge sulla riga resta
+// visibile a chiunque veda comunque il contatto — è solo il "push"
+// automatico ad essere mirato).
+// ============================================================
+
+let alertDestinatariUsersCache = null;
+
+async function loadUsersForAlertDestinatari() {
+    if (alertDestinatariUsersCache) { renderAlertDestinatariList(alertDestinatariUsersCache); return; }
+    try {
+        const res = await fetch('/api/auth/users');
+        if (!res.ok) return;
+        alertDestinatariUsersCache = await res.json();
+        renderAlertDestinatariList(alertDestinatariUsersCache);
+    } catch (err) {
+        console.error('Errore caricamento utenti per destinatari allert:', err);
+    }
+}
+
+function renderAlertDestinatariList(users) {
+    const list = document.getElementById('contactAlertDestinatariList');
+    if (!list) return;
+    list.innerHTML = users.map(u => `
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-primary);cursor:pointer;padding:4px 2px">
+            <input type="checkbox" class="contact-alert-destinatario-checkbox" value="${u.id}" style="width:15px;height:15px;cursor:pointer;accent-color:#f0c040">
+            ${u.fullName}
+        </label>
+    `).join('');
+}
+
+function toggleAlertInviaATutti() {
+    const checked = document.getElementById('contactAlertInviaATutti')?.checked;
+    const wrapper = document.getElementById('contactAlertDestinatariListWrapper');
+    if (wrapper) wrapper.style.display = checked ? 'none' : 'block';
+    if (!checked) loadUsersForAlertDestinatari();
+}
+
+// Letto al salvataggio — nomi dei campi allineati a quello che
+// ContactLogController.java si aspetta: alertNotifyAll + alertRecipientIds.
+function getAlertDestinatariPayload() {
+    const inviaATutti = document.getElementById('contactAlertInviaATutti')?.checked !== false;
+    if (inviaATutti) return { alertNotifyAll: true, alertRecipientIds: null };
+    const checked = Array.from(document.querySelectorAll('.contact-alert-destinatario-checkbox:checked')).map(cb => Number(cb.value));
+    return { alertNotifyAll: false, alertRecipientIds: checked };
+}
+
+// Un allert è visibile (popup automatico / lista Da Gestire) per l'utente
+// corrente se: alertNotifyAll è true, oppure il suo ID compare tra
+// alertRecipients (oggetti {id, fullName, ...} come restituiti dal backend).
+function alertIsVisibleToCurrentUser(log) {
+    if (!currentUser) return false;
+    if (log.alertNotifyAll === false && Array.isArray(log.alertRecipients)) {
+        return log.alertRecipients.some(u => u.id === currentUser.id);
+    }
+    return true; // default: invia a tutti (compatibilità con allert vecchi)
 }
 
 function openAcquistoAlertModal(id) {
@@ -1431,6 +1567,9 @@ function refreshAcquistoAlertModalDisplay(log) {
                 ${log.marca ? `<br>🚗 Veicolo: ${log.marca}${log.modello ? ' ' + log.modello : ''}` : ''}
                 ${log.serviceTarga ? `<br>🔖 Targa: ${log.serviceTarga}` : ''}
                 ${linkParts.length ? `<br>${linkParts.join(' · ')}` : ''}
+                ${log.alertNotifyAll === false && Array.isArray(log.alertRecipients) && log.alertRecipients.length > 0
+                    ? `<br><span style="color:#f0c040;font-weight:700">🎯 Destinatario/i: ${log.alertRecipients.map(u => u.fullName).join(', ')}</span>`
+                    : ''}
             </div>`;
     } else {
         const infoEl = document.getElementById('acquistoAlertModalInfo');
@@ -1584,6 +1723,9 @@ function refreshAcquistoAlertDaGestireModalLive() {
                     <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📞 ${clienteNumeroDisplay(log)}</div>
                     <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📋 ${log.otherNote || '—'}${log.acquistoNote ? ' · ' + log.acquistoNote : ''}</div>
                     <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">👤 Segnalato da ${log.user?.fullName || '—'}</div>
+                    ${log.alertNotifyAll === false && Array.isArray(log.alertRecipients) && log.alertRecipients.length > 0
+                        ? `<div style="font-size:12px;color:#f0c040;font-weight:700;margin-top:2px">🎯 Per: ${log.alertRecipients.map(u => u.fullName).join(', ')}</div>`
+                        : ''}
                 </div>
                 <span style="color:${visual.color};font-size:18px">→</span>
             </div>
@@ -1709,61 +1851,20 @@ function handleContactWsEvent(event) {
     }
 }
 
+// FIX: il polling ogni 15 secondi confrontava i dati appena arrivati dal
+// server (nell'ordine naturale del database) con quelli già in memoria
+// (riordinati per data) — l'ordine risultava quindi SEMPRE "diverso" anche
+// quando i dati erano identici, facendo ridisegnare tutto (grafici compresi,
+// da cui l'effetto "si ricaricano da soli ogni tanto") ogni 15 secondi per
+// niente. Ora che il WebSocket funziona in modo affidabile, il polling non
+// serve più: lo rimuoviamo del tutto invece di ripararlo, così i grafici
+// restano fermi finché non arriva davvero un cambiamento.
 function startContactPolling() {
-    stopContactPolling();
-    contactPollIntervalId = setInterval(pollContactUpdates, CONTACT_POLL_INTERVAL_MS);
     connectContactWebSocket();
 }
 
 function stopContactPolling() {
-    if (contactPollIntervalId) {
-        clearInterval(contactPollIntervalId);
-        contactPollIntervalId = null;
-    }
     disconnectContactWebSocket();
-}
-
-async function pollContactUpdates() {
-    // Non toccare la lista se l'operatore ha il form "Nuovo Contatto" aperto
-    // (perderebbe quello che sta scrivendo se ricostruissimo tutto sotto di lui)
-    if (document.getElementById('newContactForm')?.style.display === 'block') return;
-
-    // Non toccare se in questo momento ha il focus dentro una nota allert
-    // (altrimenti gli sparirebbe il testo che sta digitando)
-    const activeEl = document.activeElement;
-    const isTypingNote = activeEl && (activeEl.id === 'acquistoAlertNoteGestione' || activeEl.id === 'acquistoAlertNoteGestita');
-    if (isTypingNote) return;
-
-    try {
-        const from = document.getElementById('contactFrom')?.value;
-        const to = document.getElementById('contactTo')?.value;
-        let url = '/api/contacts';
-        if (from && to) url += `?from=${from}&to=${to}`;
-        const res = await fetch(url);
-        if (!res.ok) return;
-        const fresh = await res.json();
-
-        // Aggiorna solo se il server ha davvero qualcosa di diverso da quello
-        // che abbiamo già in memoria — evita di ridisegnare (e quindi
-        // richiudere l'albero anno/mese/settimana) ogni 15 secondi a vuoto.
-        const changed = JSON.stringify(fresh) !== JSON.stringify(contactLogs);
-        if (!changed) return;
-
-        contactLogs = fresh;
-        contactLogs.sort((a, b) => (b.contactDate || '').localeCompare(a.contactDate || ''));
-        applyContactFilters(currentDayView || undefined);
-
-        // Se il modal Allert è aperto su un contatto ancora esistente,
-        // aggiornalo dal vivo — così se un altro operatore lo mette "in
-        // gestione" o "gestita" mentre tu ce l'hai aperto, lo vedi subito,
-        // note comprese.
-        if (acquistoAlertModalId) {
-            const updated = contactLogs.find(l => l.id === acquistoAlertModalId);
-            if (updated) refreshAcquistoAlertModalDisplay(updated);
-        }
-    } catch (err) {
-        console.error('Errore polling aggiornamenti contatti:', err);
-    }
 }
 let dayViewCategoryFilter = '';
 let dayViewSubFilter = '';
@@ -2180,6 +2281,7 @@ function renderContactChartByOperator() {
         type: 'doughnut',
         data: { labels, datasets: [{ data, backgroundColor: colors.map(c => c+'bb'), borderColor: colors, borderWidth: 2 }] },
         options: {
+            animation: false,
             responsive: true, maintainAspectRatio: true,
             onClick: (evt, elements) => {
                 if (elements.length === 0) return;
@@ -2250,6 +2352,11 @@ function selectAcquisto(tipo) {
     if (btn) btn.classList.add('btn-sede-active');
     const noteRow = document.getElementById('contactAcquistoNoteRow');
     if (noteRow) noteRow.style.display = tipo === 'Info generiche' ? 'block' : 'none';
+    // FIX: "Info generiche" ha una nota dedicata -> nasconde la nota universale
+    // per evitare il doppione. Le altre sottotipologie di Acquisto non hanno
+    // nota propria, quindi la nota universale resta visibile.
+    const notaUniversaleRowAcq = document.getElementById('contactNotaUniversaleRow');
+    if (notaUniversaleRowAcq) notaUniversaleRowAcq.style.display = tipo === 'Info generiche' ? 'none' : 'block';
 }
 function selectService(tipo) {
     selectedService = tipo;
@@ -2265,6 +2372,14 @@ function selectService(tipo) {
     if (tipo === 'Altro') { if (noteLabel) noteLabel.textContent = 'NOTA / MOTIVAZIONE *'; }
     else if (tipo === 'Prenotazione') { if (noteLabel) noteLabel.textContent = 'PRENOTAZIONE PER... (opzionale)'; }
     else { if (noteLabel) noteLabel.textContent = 'NOTA (opzionale)'; }
+    // FIX: la nota dedicata di Service (sopra) e' ormai sempre visibile per
+    // qualunque tipologia (Tagliando, Doctor Glass, Cambio Gomme, Altro...),
+    // quindi la nota universale sotto al form sarebbe SEMPRE ridondante in
+    // Service, non solo per "Altro" — la nascondiamo a prescindere dalla
+    // tipologia scelta (onCategoryChange la nasconde già appena si entra in
+    // Service; qui lo ribadiamo per sicurezza).
+    const notaUniversaleRow = document.getElementById('contactNotaUniversaleRow');
+    if (notaUniversaleRow) notaUniversaleRow.style.display = 'none';
 }
 function selectServiceTipoCliente(tipo) {
     selectedServiceTipoCliente = tipo;
@@ -2308,13 +2423,18 @@ async function createContactLog() {
     const dateVal = document.getElementById('contactDate').value;
     const timeVal = document.getElementById('contactTime').value;
     const sede = document.getElementById('contactAppuntamentoSede')?.value || '';
-    const link = document.getElementById('contactAppuntamentoLink')?.value.trim() || '';
     const acquistoTipo = document.getElementById('contactAcquistoTipo')?.value || '';
     const acquistoNote = document.getElementById('contactAcquistoNote')?.value.trim() || '';
     const acquistoAlert = document.getElementById('contactAcquistoAlert')?.value === 'true';
     const acquistoMarca = document.getElementById('contactAcquistoMarca')?.value.trim() || '';
     const acquistoModello = document.getElementById('contactAcquistoModello')?.value.trim() || '';
     const acquistoTarga = document.getElementById('contactAcquistoTarga')?.value.trim() || '';
+    // NUOVO: campi Pratica Leasing/Pratica Finanziamento — stesso schema
+    // di Info Acquisto (marca/modello/targa opzionali + allert)
+    const leasingMarca = document.getElementById('contactLeasingMarca')?.value.trim() || '';
+    const leasingModello = document.getElementById('contactLeasingModello')?.value.trim() || '';
+    const leasingTarga = document.getElementById('contactLeasingTarga')?.value.trim() || '';
+    const leasingAlert = document.getElementById('contactLeasingAlert')?.value === 'true';
     const fonte = document.getElementById('contactFonte')?.value || '';
     const serviceTipo = document.getElementById('contactServiceTipo')?.value || '';
     const serviceSede = document.getElementById('contactServiceSede')?.value || '';
@@ -2403,6 +2523,12 @@ async function createContactLog() {
     const isRichiestaCliente = isNoleggio && noleggioRichiesta === 'RICHIESTA_CLIENTE';
     const isService = category === 'Service';
     const isAcquisto = category === 'Info Acquisto effettuato';
+    const isLeasingFin = category === 'Pratica Leasing' || category === 'Pratica Finanziamento' || category === 'Amministrazione';
+
+    // Destinatari — condiviso da Acquisto e Leasing/Finanziamento, letto
+    // solo se una segnalazione è effettivamente attiva.
+    const alertAttivoOra = (isAcquisto && acquistoAlert) || (isLeasingFin && leasingAlert);
+    const destinatariPayload = alertAttivoOra ? getAlertDestinatariPayload() : { alertNotifyAll: true, alertRecipientIds: null };
 
     const payload = {
         category,
@@ -2413,22 +2539,23 @@ async function createContactLog() {
         otherNote: finalNote,
         notaAggiuntiva: notaAggiuntiva || null,
         contactDate,
-        marca: isNoleggio ? (noleggioMarca || null) : (isAcquisto ? (acquistoMarca || null) : (isService ? (serviceMarca || null) : (marca || null))),
-        modello: isNoleggio ? (noleggioModello || null) : (isAcquisto ? (acquistoModello || null) : (isService ? (serviceModello || null) : (modello || null))),
+        marca: isNoleggio ? (noleggioMarca || null) : (isAcquisto ? (acquistoMarca || null) : (isService ? (serviceMarca || null) : (isLeasingFin ? (leasingMarca || null) : (marca || null)))),
+        modello: isNoleggio ? (noleggioModello || null) : (isAcquisto ? (acquistoModello || null) : (isService ? (serviceModello || null) : (isLeasingFin ? (leasingModello || null) : (modello || null)))),
         linkAuto: (isNoleggio || isAcquisto) ? null : (linkAuto || null),
         serviceTipo: serviceTipo||null,
         serviceNote: isService ? (serviceNote || null) : null,
         serviceSede: isService ? (serviceSede || null) : null,
         acquistoNote: acquistoNote||null,
-        acquistoAlert: isAcquisto ? acquistoAlert : false,
+        acquistoAlert: isAcquisto ? acquistoAlert : (isLeasingFin ? leasingAlert : false),
+        alertNotifyAll: destinatariPayload.alertNotifyAll,
+        alertRecipientIds: destinatariPayload.alertRecipientIds,
         noleggioTipo: isRichiestaCliente ? (noleggioTipo||null) : null,
         noleggioLink: isRichiestaCliente ? (noleggioLink||null) : null,
-        serviceTarga: isService ? (serviceTarga || null) : (isAcquisto ? (acquistoTarga || null) : null),
+        serviceTarga: isService ? (serviceTarga || null) : (isAcquisto ? (acquistoTarga || null) : (isLeasingFin ? (leasingTarga || null) : null)),
         serviceTipoCliente: isService ? serviceTipoCliente : null,
         noleggioRichiesta: isNoleggio ? noleggioRichiesta : null
     };
     if (category === 'Info + Appuntamento') {
-        payload.linkAppuntamento = link||null;
         payload.serviceTipo = fonte||null;
     }
 
@@ -2538,22 +2665,33 @@ function hideNewContactForm() {
     document.getElementById('contactOtherNote').value = '';
     const notaAggiuntivaEl = document.getElementById('contactNotaAggiuntiva');
     if (notaAggiuntivaEl) notaAggiuntivaEl.value = '';
+    const notaUniversaleRowReset = document.getElementById('contactNotaUniversaleRow');
+    if (notaUniversaleRowReset) notaUniversaleRowReset.style.display = 'block';
     ['contactOtherNoteRow','contactAppuntamentoRow','contactAcquistoRow','contactAcquistoNoteRow',
      'contactFonteRow','contactServiceRow','contactMarcaModelloRow','contactLinkAutoRow',
-     'contactPromoRow','contactNoleggioRow','contactServiceNoteRow']
+     'contactPromoRow','contactNoleggioRow','contactServiceNoteRow','contactLeasingFinRow',
+     'contactAlertDestinatariRow','contactAlertDestinatariListWrapper']
         .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
     const noleggioDettagli = document.getElementById('contactNoleggioRichiestaDettagli');
     if (noleggioDettagli) noleggioDettagli.style.display = 'none';
     ['clienteNome','clienteCognome','clienteNumero',
-     'contactAppuntamentoSede','contactAppuntamentoLink',
+     'contactAppuntamentoSede',
      'contactAcquistoTipo','contactFonte','contactServiceTipo','contactServiceSede','contactServiceNote',
      'contactMarcaInput','contactMarca','contactModello','contactLinkAuto','contactAcquistoNote',
      'contactAcquistoMarcaInput','contactAcquistoMarca','contactAcquistoModello','contactAcquistoTarga',
+     'contactLeasingMarcaInput','contactLeasingMarca','contactLeasingModello','contactLeasingTarga',
      'contactNoleggioMarcaInput','contactNoleggioMarca','contactNoleggioModello',
      'contactNoleggioTipo','contactNoleggioLink','contactNoleggioRichiesta',
      'contactServiceMarcaInput','contactServiceMarca','contactServiceModello',
      'serviceTarga','serviceTipoCliente']
         .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    selectedLeasingAlert = false;
+    const leasingAlertBtnReset = document.getElementById('contactLeasingAlertBtn');
+    if (leasingAlertBtnReset) leasingAlertBtnReset.classList.remove('btn-sede-active');
+    const leasingAlertHiddenReset = document.getElementById('contactLeasingAlert');
+    if (leasingAlertHiddenReset) leasingAlertHiddenReset.value = 'false';
+    const inviaATuttiEl = document.getElementById('contactAlertInviaATutti');
+    if (inviaATuttiEl) inviaATuttiEl.checked = true;
     const nonComEl = document.getElementById('nonComunicaNominativo');
     if (nonComEl) nonComEl.checked = false;
     document.getElementById('clienteNome').placeholder = 'Nome Cliente *';
@@ -2581,9 +2719,18 @@ function hideNewContactForm() {
 
 function onCategoryChange() {
     const cat = document.getElementById('contactCategory').value;
+    // FIX: la nota universale in fondo al form serve solo per le categorie
+    // che NON hanno già una propria nota dedicata. "Altro" e "Service" hanno
+    // sempre una nota dedicata visibile, quindi qui la nota universale va
+    // nascosta a prescindere dalla tipologia selezionata (per "Info Acquisto
+    // effettuato" ci pensa selectAcquisto(), che dipende dalla sottotipologia).
+    const notaUniversaleRowCat = document.getElementById('contactNotaUniversaleRow');
+    if (notaUniversaleRowCat) notaUniversaleRowCat.style.display = (cat === 'Altro' || cat === 'Service') ? 'none' : 'block';
     document.getElementById('contactOtherNoteRow').style.display = cat === 'Altro' ? 'block' : 'none';
     document.getElementById('contactAppuntamentoRow').style.display = cat === 'Info + Appuntamento' ? 'block' : 'none';
     document.getElementById('contactAcquistoRow').style.display = cat === 'Info Acquisto effettuato' ? 'block' : 'none';
+    const leasingFinRowEl = document.getElementById('contactLeasingFinRow');
+    if (leasingFinRowEl) leasingFinRowEl.style.display = (cat === 'Pratica Leasing' || cat === 'Pratica Finanziamento' || cat === 'Amministrazione') ? 'block' : 'none';
     document.getElementById('contactServiceRow').style.display = cat === 'Service' ? 'block' : 'none';
     // FIX: senza questa riga, se si lasciava Service e poi ci si tornava,
     // la nota restava nascosta per sempre — il codice più sotto la nasconde
@@ -2609,7 +2756,6 @@ function onCategoryChange() {
     if (cat !== 'Info + Appuntamento') {
         selectedSede='';
         const el=document.getElementById('contactAppuntamentoSede'); if(el) el.value='';
-        const l=document.getElementById('contactAppuntamentoLink'); if(l) l.value='';
         SEDI_LIST.forEach(s=>{const b=document.getElementById(`sede-${s}`);if(b)b.classList.remove('btn-sede-active');});
     }
     if (cat !== 'Info Acquisto effettuato') {
@@ -2623,6 +2769,18 @@ function onCategoryChange() {
         ['contactAcquistoMarcaInput','contactAcquistoMarca','contactAcquistoModello','contactAcquistoTarga'].forEach(id=>{const el2=document.getElementById(id);if(el2) el2.value='';});
         ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche','Furto'].forEach(k=>{const b=document.getElementById(`acquisto-${k}`);if(b)b.classList.remove('btn-sede-active');});
     }
+    if (cat !== 'Pratica Leasing' && cat !== 'Pratica Finanziamento' && cat !== 'Amministrazione') {
+        selectedLeasingAlert = false;
+        const leasingAlertBtn = document.getElementById('contactLeasingAlertBtn');
+        if (leasingAlertBtn) leasingAlertBtn.classList.remove('btn-sede-active');
+        const leasingAlertHidden = document.getElementById('contactLeasingAlert');
+        if (leasingAlertHidden) leasingAlertHidden.value = 'false';
+        ['contactLeasingMarcaInput','contactLeasingMarca','contactLeasingModello','contactLeasingTarga'].forEach(id=>{const el2=document.getElementById(id);if(el2) el2.value='';});
+    }
+    // Il selettore destinatari è condiviso da Acquisto/Leasing/Finanziamento:
+    // va richiuso quando nessuna delle due segnalazioni resta attiva (es. si
+    // cambia categoria del tutto).
+    if (typeof updateAlertDestinatariVisibility === 'function') updateAlertDestinatariVisibility();
     if (cat !== 'Service') {
         selectedService=''; selectedServiceSede=''; selectedServiceTipoCliente='';
         const el=document.getElementById('contactServiceTipo'); if(el) el.value='';
@@ -2632,6 +2790,7 @@ function onCategoryChange() {
         ['serviceTarga','serviceTipoCliente','contactServiceSede','contactServiceNote','contactServiceMarcaInput','contactServiceMarca','contactServiceModello'].forEach(id=>{const e=document.getElementById(id);if(e) e.value='';});
         const noteRow = document.getElementById('contactServiceNoteRow'); if (noteRow) noteRow.style.display = 'none';
         const tl = document.getElementById('serviceTargaLabel'); if (tl) tl.textContent = 'TARGA (opzionale)';
+        const notaUniversaleRow = document.getElementById('contactNotaUniversaleRow'); if (notaUniversaleRow) notaUniversaleRow.style.display = 'block';
     }
     if (!isVenditaLike) {
         selectedFonte='';
