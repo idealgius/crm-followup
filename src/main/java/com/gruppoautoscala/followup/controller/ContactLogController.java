@@ -67,6 +67,36 @@ public class ContactLogController {
         "Info Acquisto effettuato", "Pratica Leasing", "Pratica Finanziamento", "Amministrazione"
     );
 
+    // ===== STORICO CLIENTE =====
+    // Usato per l'avviso anti-doppione (stesso nome+cognome o stesso numero
+    // già presente in archivio, in qualsiasi data — non solo nel periodo
+    // attualmente caricato dal frontend) e per il pulsante "Storico" che
+    // mostra tutte le chiamate passate di un cliente. Basta UNA delle due
+    // condizioni (nome+cognome oppure numero) per generare un match.
+    @GetMapping("/customer-history")
+    public ResponseEntity<?> getCustomerHistory(
+            @RequestParam(required = false) String nome,
+            @RequestParam(required = false) String cognome,
+            @RequestParam(required = false) String numero,
+            HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+
+        String nomeParam = (nome != null && !nome.isBlank()) ? nome.trim() : null;
+        String cognomeParam = (cognome != null && !cognome.isBlank()) ? cognome.trim() : null;
+        String numeroParam = (numero != null && !numero.isBlank()) ? numero.trim() : null;
+
+        // Senza nessun criterio valido non c'è nulla da cercare — evita una
+        // query che matcherebbe involontariamente tutto/niente per NULL sparsi.
+        if (numeroParam == null && (nomeParam == null || cognomeParam == null)) {
+            return ResponseEntity.ok(List.of());
+        }
+
+        List<ContactLog> results = contactLogService.getCustomerHistory(nomeParam, cognomeParam, numeroParam);
+        List<Map<String, Object>> result = results.stream().map(this::toMap).collect(Collectors.toList());
+        return ResponseEntity.ok(result);
+    }
+
     @GetMapping
     public ResponseEntity<?> getAll(
             @RequestParam(required = false) String from,

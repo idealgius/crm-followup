@@ -54,4 +54,46 @@ public interface ContactLogRepository extends JpaRepository<ContactLog, Long> {
 
     @Query("SELECT c.category, COUNT(c) FROM ContactLog c WHERE c.contactDate BETWEEN :from AND :to GROUP BY c.category")
     List<Object[]> countByCategoryBetween(LocalDateTime from, LocalDateTime to);
+
+    // ===== STORICO CLIENTE =====
+    // Cerca su TUTTO il database (non solo il periodo attualmente caricato
+    // in memoria dal frontend) qualsiasi contatto dello stesso cliente,
+    // identificato o per nome+cognome (case/spazi insensibile) o per lo
+    // stesso numero di telefono. Usata sia per l'avviso anti-doppione al
+    // salvataggio, sia per il pulsante "Storico" che mostra tutte le
+    // chiamate passate di un cliente.
+    //
+    // FIX: query unica precedente combinava i due criteri con OR e passava
+    // NULL dentro LOWER(TRIM(:nome)) quando si cercava solo per numero (o
+    // viceversa) — PostgreSQL non riesce a determinare il tipo di un
+    // parametro NULL usato dentro una funzione e risponde con errore 500
+    // ("could not determine data type of parameter"). Due query separate,
+    // ciascuna invocata solo quando i suoi parametri sono davvero
+    // valorizzati (vedi ContactLogService), evitano del tutto il problema.
+    @Query("SELECT DISTINCT c FROM ContactLog c " +
+           "LEFT JOIN FETCH c.user " +
+           "LEFT JOIN FETCH c.acquistoAlertInGestioneDa " +
+           "LEFT JOIN FETCH c.acquistoAlertGestitaDa " +
+           "LEFT JOIN FETCH c.acquistoAlertNoteGestioneInseritaDa " +
+           "LEFT JOIN FETCH c.acquistoAlertNoteGestitaInseritaDa " +
+           "LEFT JOIN FETCH c.acquistoAlertNoteGestioneModificataDa " +
+           "LEFT JOIN FETCH c.acquistoAlertNoteGestitaModificataDa " +
+           "LEFT JOIN FETCH c.alertRecipients " +
+           "WHERE c.clienteNumero = :numero " +
+           "ORDER BY c.contactDate DESC")
+    List<ContactLog> findByClienteNumero(String numero);
+
+    @Query("SELECT DISTINCT c FROM ContactLog c " +
+           "LEFT JOIN FETCH c.user " +
+           "LEFT JOIN FETCH c.acquistoAlertInGestioneDa " +
+           "LEFT JOIN FETCH c.acquistoAlertGestitaDa " +
+           "LEFT JOIN FETCH c.acquistoAlertNoteGestioneInseritaDa " +
+           "LEFT JOIN FETCH c.acquistoAlertNoteGestitaInseritaDa " +
+           "LEFT JOIN FETCH c.acquistoAlertNoteGestioneModificataDa " +
+           "LEFT JOIN FETCH c.acquistoAlertNoteGestitaModificataDa " +
+           "LEFT JOIN FETCH c.alertRecipients " +
+           "WHERE LOWER(TRIM(c.clienteNome)) = LOWER(TRIM(:nome)) " +
+           "AND LOWER(TRIM(c.clienteCognome)) = LOWER(TRIM(:cognome)) " +
+           "ORDER BY c.contactDate DESC")
+    List<ContactLog> findByClienteNomeCognome(String nome, String cognome);
 }

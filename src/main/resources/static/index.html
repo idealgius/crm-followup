@@ -548,6 +548,16 @@
             </div>
         </div>
 
+        <!-- MODAL STORICO CLIENTE — mostra tutte le chiamate passate di un
+             cliente (stesso nome+cognome o stesso numero), su tutta la
+             storia del database, aperto dal pulsante 📁 nella tabella. -->
+        <div id="customerHistoryModal" class="modal-overlay" style="display:none" onclick="closeCustomerHistoryModal(event)">
+            <div class="modal-box" onclick="event.stopPropagation()">
+                <div class="modal-header"><h3 id="customerHistoryModalTitle">📁 Storico Cliente</h3><button type="button" class="modal-close" onclick="closeCustomerHistoryModal()">✕</button></div>
+                <div id="customerHistoryModalBody" class="modal-body"></div>
+            </div>
+        </div>
+
         <!-- MODAL MODIFICA CONTATTO — ESTESO: tutti i campi editabili -->
         <div id="editContactModal" class="modal-overlay" style="display:none" onclick="closeEditContactModal(event)">
             <div class="modal-box" onclick="event.stopPropagation()" style="max-width:560px">

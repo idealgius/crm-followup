@@ -606,6 +606,13 @@ function checkAcquistoAlertDaGestire() {
 
     acquistoAlertDaGestireLastShownAt = now;
 
+    // FIX: anche la ripresentazione periodica (ogni 30 min, per allert
+    // ancora non gestiti) deve far scattare suono/titolo/notifica desktop,
+    // non solo la primissima comparsa istantanea — altrimenti il popup
+    // ricompare in silenzio e passa facilmente inosservato se l'operatore
+    // non sta fissando lo schermo in quel preciso momento.
+    notifyNewAcquistoAlert(alertAttivi[0]);
+
     const daGestire = alertAttivi.filter(l => !l.acquistoAlertStatus || l.acquistoAlertStatus === 'DA_GESTIRE');
     const inGestione = alertAttivi.filter(l => l.acquistoAlertStatus === 'IN_GESTIONE');
 
@@ -2153,11 +2160,12 @@ function handleContactWsEvent(event) {
     // corrente (e prima di questo evento non lo era), notifica ISTANTANEA:
     // suono + titolo lampeggiante + notifica desktop + apertura immediata
     // del popup "Da Gestire", senza aspettare il ricontrollo periodico né
-    // un refresh/cambio finestra.
+    // un refresh/cambio finestra. La notifica vera e propria (suono ecc.)
+    // parte dentro checkAcquistoAlertDaGestire stesso — non va duplicata
+    // qui, altrimenti suonerebbe due volte.
     if (type === 'created' || type === 'updated') {
         const nowPending = isAlertPendingForCurrentUser(data);
         if (nowPending && !wasPendingBefore) {
-            notifyNewAcquistoAlert(data);
             acquistoAlertDaGestireLastShownAt = 0; // bypassa il gate dei 30 min: è un allert genuinamente nuovo
             checkAcquistoAlertDaGestire();
         }
@@ -2506,9 +2514,25 @@ function renderContactRow(log) {
     const alert = hasAcquistoAlert(log);
     const alertVisual = alert ? acquistoAlertVisual(log) : null;
     const nomeHtml = alert ? `<span onclick="openAcquistoAlertModal(${log.id})" style="cursor:pointer;color:${alertVisual.color}" title="Gestisci Allert — ${alertVisual.label}">${alertVisual.icon} ${clienteNomeCompleto(log)}</span>` : clienteNomeCompleto(log);
+    // Pulsante "Storico" — mostrato solo se, tra i contatti già caricati in
+    // questa vista, esiste ALMENO un altro contatto dello stesso cliente
+    // (stesso numero, oppure stesso nome+cognome). È solo un'euristica
+    // economica per decidere se mostrare l'icona senza fare una chiamata al
+    // server per ogni riga: il click apre comunque una ricerca completa su
+    // tutto il database (vedi openCustomerHistoryModal), quindi anche se
+    // l'euristica qui sotto non vede un match che esiste solo fuori dal
+    // periodo caricato, non è un problema di correttezza dei dati — solo
+    // l'icona potrebbe non comparire in quel caso limite.
+    const hasHistory = contactLogs.some(l => l.id !== log.id && (
+        (log.clienteNumero && l.clienteNumero === log.clienteNumero) ||
+        (log.clienteNome && log.clienteCognome && l.clienteNome && l.clienteCognome &&
+         normalizeText(l.clienteNome.trim()) === normalizeText(log.clienteNome.trim()) &&
+         normalizeText(l.clienteCognome.trim()) === normalizeText(log.clienteCognome.trim()))
+    ));
+    const storicoBtn = hasHistory ? ` <button type="button" onclick="openCustomerHistoryModal('${(log.clienteNome||'').replace(/'/g,"\\'")}', '${(log.clienteCognome||'').replace(/'/g,"\\'")}', '${(log.clienteNumero||'').replace(/'/g,"\\'")}')" title="Storico cliente" style="background:none;border:none;cursor:pointer;font-size:13px;padding:0;margin-left:4px;vertical-align:middle">📁</button>` : '';
     return `<tr id="contact-row-${log.id}">
         <td style="font-weight:700;color:var(--text-primary)">${time}</td>
-        <td style="font-size:12px;color:var(--text-primary);font-weight:700">${nomeHtml}<br><span style="font-weight:400;color:var(--text-secondary)">📞 ${clienteNumeroDisplay(log)}</span></td>
+        <td style="font-size:12px;color:var(--text-primary);font-weight:700">${nomeHtml}${storicoBtn}<br><span style="font-weight:400;color:var(--text-secondary)">📞 ${clienteNumeroDisplay(log)}</span></td>
         <td>
             <span class="contact-category-badge cat-${catClass}">${log.category}</span>
             ${log.category === 'Info + Appuntamento' && log.otherNote ? `<span style="font-size:11px;background:rgba(233,30,99,0.1);color:#e91e63;padding:2px 8px;border-radius:8px;margin-left:6px">📍 ${log.otherNote}</span>` : ''}
@@ -2822,27 +2846,53 @@ async function createContactLog() {
 
     const contactDate = `${dateVal}T${timeVal}:00`;
 
-    // ANTI-DOPPIONE: se lo stesso cliente (nome+cognome, senza distinguere
-    // maiuscole/minuscole o spazi) è già stato registrato NELLO STESSO GIORNO
-    // scelto in "DATA", avvisa l'operatore con i dettagli della chiamata già
-    // presente e chiede conferma prima di salvare comunque. Controlla solo
-    // tra i contatti già caricati in memoria (il periodo attualmente visibile
-    // nel Registro Contatti) — se il giorno scelto è fuori da quel periodo,
-    // il controllo non può accorgersene.
-    if (!nonComunicaNominativo && clienteNome && clienteCognome) {
-        const nomeNorm = normalizeText(clienteNome.trim());
-        const cognomeNorm = normalizeText(clienteCognome.trim());
-        const giaChiamato = contactLogs.find(l => {
-            if (!l.clienteNome || !l.clienteCognome) return false;
-            if (normalizeText(l.clienteNome.trim()) !== nomeNorm) return false;
-            if (normalizeText(l.clienteCognome.trim()) !== cognomeNorm) return false;
-            return l.contactDate.split('T')[0] === dateVal;
-        });
-        if (giaChiamato) {
-            const oraGia = giaChiamato.contactDate.split('T')[1]?.substring(0, 5) || '';
-            const notaGia = giaChiamato.otherNote || giaChiamato.acquistoNote || giaChiamato.serviceNote || giaChiamato.notaAggiuntiva || '';
-            const messaggio = `Il cliente ${clienteNome} ${clienteCognome} (${clienteNumero || 'numero non specificato'}) ha già chiamato alle ${oraGia} per "${giaChiamato.category}"${notaGia ? ` — nota: ${notaGia}` : ''}.\n\nDesideri inserirlo ugualmente?`;
-            if (!confirm(messaggio)) return;
+    // ANTI-DOPPIONE: cerca su TUTTA la storia del database (non solo i
+    // contatti già caricati in memoria) se lo stesso cliente — identificato
+    // per nome+cognome (senza distinguere maiuscole/minuscole o spazi) OPPURE
+    // per lo stesso numero di telefono, basta una delle due — è già stato
+    // registrato in passato.
+    // - Se il match è nello STESSO GIORNO scelto in "DATA": popup bloccante
+    //   che chiede conferma prima di salvare comunque (come prima).
+    // - Se il match è su GIORNI DIVERSI (anche più di uno): avviso puramente
+    //   informativo, non bloccante, con l'elenco di tutte le chiamate
+    //   passate trovate (data, ora, categoria, tipologia/nota).
+    {
+        const nomeOk = !nonComunicaNominativo && clienteNome && clienteNome.trim() && clienteCognome && clienteCognome.trim();
+        const numeroOk = clienteNumero && clienteNumero.trim();
+        if (nomeOk || numeroOk) {
+            try {
+                const params = new URLSearchParams();
+                if (nomeOk) { params.set('nome', clienteNome.trim()); params.set('cognome', clienteCognome.trim()); }
+                if (numeroOk) params.set('numero', clienteNumero.trim());
+                const storicoRes = await fetch(`/api/contacts/customer-history?${params.toString()}`);
+                if (storicoRes.ok) {
+                    const storico = await storicoRes.json();
+                    const stessoGiorno = storico.filter(l => l.contactDate.split('T')[0] === dateVal);
+                    const altriGiorni = storico.filter(l => l.contactDate.split('T')[0] !== dateVal);
+
+                    if (stessoGiorno.length > 0) {
+                        const l = stessoGiorno[0];
+                        const oraGia = l.contactDate.split('T')[1]?.substring(0, 5) || '';
+                        const notaGia = l.otherNote || l.acquistoNote || l.serviceNote || l.notaAggiuntiva || '';
+                        const messaggio = `Il cliente ${clienteNome || ''} ${clienteCognome || ''} (${clienteNumero || 'numero non specificato'}) ha già chiamato oggi alle ${oraGia} per "${l.category}"${notaGia ? ` — nota: ${notaGia}` : ''}.\n\nDesideri inserirlo ugualmente?`;
+                        if (!confirm(messaggio)) return;
+                    }
+
+                    if (altriGiorni.length > 0) {
+                        const righe = altriGiorni.map(l => {
+                            const [y, m, d] = l.contactDate.split('T')[0].split('-');
+                            const dataFmt = `${d}/${m}/${y}`;
+                            const oraFmt = l.contactDate.split('T')[1]?.substring(0, 5) || '';
+                            const tipo = l.otherNote || l.acquistoNote || l.serviceNote || '';
+                            const notaExtra = l.notaAggiuntiva || '';
+                            return `• ${dataFmt} alle ${oraFmt} — ${l.category}${tipo ? ' / ' + tipo : ''}${notaExtra ? ' — ' + notaExtra : ''}`;
+                        }).join('\n');
+                        alert(`Il cliente ${clienteNome || ''} ${clienteCognome || ''} (${clienteNumero || 'numero non specificato'}) risulta già presente in archivio in date precedenti:\n\n${righe}`);
+                    }
+                }
+            } catch (err) {
+                console.error('Errore controllo storico cliente:', err);
+            }
         }
     }
 
@@ -3151,4 +3201,61 @@ function getWeekKey(dateStr) {
 function formatDateIT(dateStr) {
     const d = parseLocalDate(dateStr);
     return d.toLocaleDateString('it-IT', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+}
+// ===== STORICO CLIENTE =====
+// Apre un modal con TUTTO lo storico di un cliente (nome+cognome e/o
+// numero), interrogando sempre il backend su tutto il database — a
+// differenza dell'anti-doppione al salvataggio, qui non c'è bisogno di
+// distinguere per giorno: è semplicemente l'elenco completo, più recente
+// per primo (il backend ordina già per data DESC).
+async function openCustomerHistoryModal(nome, cognome, numero) {
+    const modal = document.getElementById('customerHistoryModal');
+    const body = document.getElementById('customerHistoryModalBody');
+    const title = document.getElementById('customerHistoryModalTitle');
+    if (!modal || !body) return;
+
+    const nomeCompleto = [nome, cognome].filter(Boolean).join(' ') || (numero || 'Cliente');
+    if (title) title.textContent = `📁 Storico — ${nomeCompleto}`;
+    body.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-secondary)">Caricamento…</div>`;
+    modal.style.display = 'flex';
+
+    try {
+        const params = new URLSearchParams();
+        if (nome && cognome) { params.set('nome', nome); params.set('cognome', cognome); }
+        if (numero) params.set('numero', numero);
+        const res = await fetch(`/api/contacts/customer-history?${params.toString()}`);
+        if (!res.ok) {
+            body.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-secondary)">Errore nel caricamento dello storico.</div>`;
+            return;
+        }
+        const storico = await res.json();
+        if (!storico || storico.length === 0) {
+            body.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-secondary)">Nessuno storico trovato per questo cliente.</div>`;
+            return;
+        }
+        body.innerHTML = storico.map(l => {
+            const [y, m, d] = l.contactDate.split('T')[0].split('-');
+            const dataFmt = `${d}/${m}/${y}`;
+            const oraFmt = l.contactDate.split('T')[1]?.substring(0, 5) || '';
+            const tipo = l.otherNote || l.acquistoNote || l.serviceNote || '';
+            const notaExtra = l.notaAggiuntiva || '';
+            return `<div style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px">
+                <div style="font-weight:700;color:var(--text-primary);margin-bottom:4px">📅 ${dataFmt} · 🕐 ${oraFmt}</div>
+                <div style="font-size:12px;color:var(--text-secondary)">
+                    <span class="contact-category-badge">${l.category}</span>
+                    ${tipo ? `<br>📋 ${tipo}` : ''}
+                    ${notaExtra ? `<br>📝 ${notaExtra}` : ''}
+                    <br>👤 Operatore: ${l.user?.fullName || '—'}
+                </div>
+            </div>`;
+        }).join('');
+    } catch (err) {
+        console.error('Errore caricamento storico cliente:', err);
+        body.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-secondary)">Errore nel caricamento dello storico.</div>`;
+    }
+}
+
+function closeCustomerHistoryModal(event) {
+    if (event && event.target.id !== 'customerHistoryModal') return;
+    document.getElementById('customerHistoryModal').style.display = 'none';
 }

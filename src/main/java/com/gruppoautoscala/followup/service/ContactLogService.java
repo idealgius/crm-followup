@@ -6,7 +6,10 @@ import com.gruppoautoscala.followup.repository.ContactLogRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -66,6 +69,26 @@ public class ContactLogService {
         }
         log.setContactDate(contactDate != null ? contactDate : LocalDateTime.now());
         return contactLogRepository.save(log);
+    }
+
+    public List<ContactLog> getCustomerHistory(String nome, String cognome, String numero) {
+        // Map ordinata per id: un contatto potrebbe soddisfare sia il
+        // criterio numero sia quello nome+cognome (stesso cliente trovato
+        // da entrambe le query) — la Map evita di restituirlo due volte.
+        Map<Long, ContactLog> byId = new LinkedHashMap<>();
+        if (numero != null) {
+            for (ContactLog c : contactLogRepository.findByClienteNumero(numero)) {
+                byId.put(c.getId(), c);
+            }
+        }
+        if (nome != null && cognome != null) {
+            for (ContactLog c : contactLogRepository.findByClienteNomeCognome(nome, cognome)) {
+                byId.put(c.getId(), c);
+            }
+        }
+        List<ContactLog> result = new ArrayList<>(byId.values());
+        result.sort(Comparator.comparing(ContactLog::getContactDate).reversed());
+        return result;
     }
 
     public List<ContactLog> getAll() {
