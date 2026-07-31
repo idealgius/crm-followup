@@ -73,8 +73,12 @@ const ALL_CATEGORIES = [
     'Pratica Leasing', 'Pratica Finanziamento', 'Amministrazione',
     'Info + Appuntamento', 'Info Vendita in Promo', 'Altro'
 ];
-const ACQUISTO_LIST = ['Info Consegna', 'Ritardo Consegna', 'Info Documentazione', 'Seconda chiave', 'Furto', 'Info generiche', 'Saldo'];
-const ACQUISTO_COLORS = ['#4a90d9', '#ff3d3d', '#00bcd4', '#f0c040', '#8a2be2', '#7c4dff', '#00c853'];
+const ACQUISTO_LIST = ['Info Consegna', 'Ritardo Consegna', 'Info Documentazione', 'Seconda chiave', 'Furto', 'Saldo', 'Info generiche'];
+// FIX v3: il rosso di Ritardo Consegna andava bene, il problema era Furto
+// (magenta troppo vicino al rosso). Furto passa a un magenta/orchidea più
+// acceso e distante — 7 tinte: blu, rosso, verde acqua, oro, magenta
+// acceso, verde, viola.
+const ACQUISTO_COLORS = ['#4a90d9', '#ff3d3d', '#009688', '#f0c040', '#e040fb', '#00c853', '#7c4dff'];
 const FONTE_LIST = ['Sito', 'Google ADS', 'Autoscout', 'Facebook', 'Instagram', 'TikTok', 'Richiesta cliente', 'Non ricorda'];
 const FONTE_COLORS = ['#1a4080', '#f0c040', '#e91e63', '#4a90d9', '#7c4dff', '#ff3d3d', '#00c853', '#8a8faa'];
 const SERVICE_LIST = ['Tagliando', 'Dispositivo satellitare', 'Prenotazione', 'Lavorazione in corso', 'Doctor Glass', 'Cambio Gomme', 'Altro'];
