@@ -4,9 +4,18 @@
        quasi nero. Border anche schiarito: con lo sfondo più chiaro, il
        vecchio #2a2d3e (pensato per contrastare su quasi-nero) si perdeva
        quasi del tutto sui bottoni a sfondo trasparente (es. Excel, Stampa). */
-    --bg-main: #2c3448;
-    --bg-card: #14162a;
-    --bg-card2: #1a1d2e;
+    /* FIX: i toni "scuri" (bg-card, bg-card2, step-bg, folder-*) erano
+       tutti ammassati in un range molto stretto (#14-#1e), pensato per
+       distinguersi dal vecchio sfondo quasi nero #0d0f1a. Con la nuova
+       base più chiara e blu (#1e2740), quel cluster stretto si confondeva
+       — in particolare --step-bg era addirittura IDENTICO a --bg-main
+       (le righe "Settimana..." sparivano contro lo sfondo pagina).
+       Ridistribuiti su toni chiaramente distinti, tutti più scuri della
+       pagina (direzione confermata: l'utente preferisce le card più
+       scure, non più chiare). */
+    --bg-main: #1e2740;
+    --bg-card: #10141f;
+    --bg-card2: #161d2f;
     --border: #4a5470;
     --text-primary: #ffffff;
     --text-secondary: #8a8faa;
@@ -16,24 +25,26 @@
     --input-bg: #0d0f1a;
     --input-border: #2a2d3e;
     --input-color: #ffffff;
-    --stat-bg: #14162a;
+    --stat-bg: #10141f;
     --shadow: 0 4px 20px rgba(0,0,0,0.4);
-    --step-bg: #2c3448;
+    --step-bg: #141a2b;
     --form-top: #f0c040;
-    --auth-box-bg: #1a1d2e;
+    --auth-box-bg: #161d2f;
     --auth-box-color: #ffffff;
     --auth-h2: #f0c040;
-    --page-bg: #2c3448;
+    --page-bg: #1e2740;
     --followup-hover: rgba(240,192,64,0.15);
     --badge-in-progress-bg: rgba(33,150,243,0.15);
     --badge-in-progress-color: #4fc3f7;
-    --folder-bg: #1a1d2e;
+    --folder-bg: #171f33;
     --folder-border: #2a2d3e;
-    --folder-tab-bg: #1e2235;
-    --folder-body-bg: #14162a;
+    --folder-tab-bg: #101526;
+    --folder-body-bg: #0d111c;
     /* Colore accento per titoli/testo blu — chiaro su sfondo scuro,
        così non sparisce più (blu su blu) come accadeva con #1a4080 fisso. */
-    --heading-accent: #4a90d9;
+    /* FIX: titoli (grafici, calendario, sezioni) erano azzurri —
+       cambiati in bianco su richiesta. */
+    --heading-accent: #ffffff;
 }
 
 [data-theme="light"] {
@@ -1450,6 +1461,10 @@ select.input-field {
 }
 
 .contact-day-card {
+    /* FIX: prima non c'era nessun background — la card era trasparente e
+       mostrava semplicemente il colore del contenitore cartella dietro,
+       per questo si confondeva con esso. */
+    background: var(--bg-card);
     border-radius: 14px;
     border: 1.5px solid var(--border);
     padding: 16px 12px;
