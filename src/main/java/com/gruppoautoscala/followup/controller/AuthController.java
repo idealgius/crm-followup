@@ -126,6 +126,26 @@ public class AuthController {
         return ResponseEntity.ok(users);
     }
 
+    // Elenco "leggero" (solo id + nome) accessibile a QUALSIASI utente
+    // autenticato, non solo ADMIN/GESTORE. Usato per popolare selettori tipo
+    // "a chi va segnalato l'allert" nel form di creazione contatto, dove
+    // serve poter scegliere uno o più destinatari specifici anche per un
+    // utente con ruolo UTENTE. Non espone email né ruolo (a differenza di
+    // /users sopra, che resta riservato ad ADMIN/GESTORE per la gestione
+    // account).
+    @GetMapping("/users/basic")
+    public ResponseEntity<?> getUsersBasic(HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        List<Map<String, Object>> users = userRepository.findAll().stream().map(u -> {
+            Map<String, Object> m = new HashMap<>();
+            m.put("id", u.getId());
+            m.put("fullName", u.getFullName());
+            return m;
+        }).collect(Collectors.toList());
+        return ResponseEntity.ok(users);
+    }
+
     @PatchMapping("/users/{id}/role")
     public ResponseEntity<?> changeRole(@PathVariable Long id,
                                         @RequestBody Map<String, String> body,

@@ -144,6 +144,124 @@ function clienteNumeroDisplay(log) {
 function downloadFile(url) {
     window.location.href = url;
 }
+// ============================================================
+// NOTIFICA ISTANTANEA NUOVI ALLERT — suono + titolo scheda lampeggiante +
+// notifica desktop del sistema operativo. Si attivano quando un evento
+// WebSocket porta un allert che diventa "da gestire e visibile" per
+// l'utente corrente, senza aspettare refresh, cambio finestra o il
+// ricontrollo periodico (checkAcquistoAlertDaGestire).
+// ============================================================
+
+let notifTitleFlashIntervalId = null;
+const notifOriginalTitle = document.title;
+
+// Beep generato via Web Audio API (nessun file audio da caricare/servire).
+function playAlertSound() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const beep = (freq, startOffset, dur) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(0.0001, ctx.currentTime + startOffset);
+            gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + startOffset + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + startOffset + dur);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(ctx.currentTime + startOffset);
+            osc.stop(ctx.currentTime + startOffset + dur + 0.05);
+        };
+        beep(880, 0, 0.15);
+        beep(1046, 0.18, 0.18);
+    } catch (err) {
+        console.warn('Audio non disponibile per notifica allert:', err);
+    }
+}
+
+// Fa lampeggiare il titolo della scheda del browser finché l'utente non
+// torna sulla finestra/scheda (focus) — visibile anche se il CRM è in una
+// scheda in background o dietro ad altre finestre.
+function flashPageTitle(message) {
+    if (notifTitleFlashIntervalId) return; // già in corso, non sovrapporre
+    let toggled = false;
+    notifTitleFlashIntervalId = setInterval(() => {
+        document.title = toggled ? notifOriginalTitle : message;
+        toggled = !toggled;
+    }, 1000);
+    const stop = () => {
+        if (notifTitleFlashIntervalId) {
+            clearInterval(notifTitleFlashIntervalId);
+            notifTitleFlashIntervalId = null;
+            document.title = notifOriginalTitle;
+        }
+        window.removeEventListener('focus', stop);
+        document.removeEventListener('visibilitychange', onVis);
+    };
+    const onVis = () => { if (!document.hidden) stop(); };
+    window.addEventListener('focus', stop);
+    document.addEventListener('visibilitychange', onVis);
+}
+
+// Chiesto UNA volta (se non già concesso/negato) appena sappiamo che
+// l'utente può gestire allert — deve restare una richiesta "silenziosa" via
+// codice, il browser mostra comunque il proprio popup di conferma nativo.
+function ensureNotificationPermission() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+    }
+}
+
+// Notifica di sistema (fuori dal browser, visibile anche con altre finestre
+// in primo piano) — richiede permesso già concesso, altrimenti non fa nulla
+// silenziosamente (niente popup di richiesta permesso a metà flusso).
+function showDesktopNotification(log) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    try {
+        const n = new Notification('🔔 Nuovo Allert — ' + clienteNomeCompleto(log), {
+            body: `Segnalato da ${log.user?.fullName || '—'}`,
+            tag: 'acquisto-alert-' + log.id // stesso id -> aggiorna invece di accumulare notifiche duplicate
+        });
+        n.onclick = () => {
+            window.focus();
+            closeAcquistoAlertDaGestireModal();
+            openAcquistoAlertModal(log.id);
+            n.close();
+        };
+    } catch (err) {
+        console.warn('Notifica desktop non disponibile:', err);
+    }
+}
+
+function notifyNewAcquistoAlert(log) {
+    playAlertSound();
+    flashPageTitle('🔔 Nuovo Allert!');
+    showDesktopNotification(log);
+}
+
+// Chi vede il popup "Da Gestire" per un dato allert:
+// - se l'allert è "a tutti" (alertNotifyAll true/default) -> comportamento
+//   storico invariato, solo chi ha permessi di gestione lo vede (è la coda
+//   generale di lavoro dei gestori)
+// - se l'allert è mirato a destinatari specifici (alertNotifyAll false) ->
+//   lo vede SOLO chi è nella lista destinatari, qualunque sia il suo ruolo,
+//   perché è stato scelto esplicitamente (anche un semplice UTENTE deve
+//   poterlo vedere, altrimenti la funzione "invia a un utente specifico"
+//   non avrebbe alcun effetto per lui).
+function canSeeAlertPopup(log) {
+    if (log.alertNotifyAll === false) return alertIsVisibleToCurrentUser(log);
+    return canManageAlerts();
+}
+
+// Un log "conta" come allert nuovo/da notificare per l'utente corrente se:
+// ha un allert attivo, non è ancora GESTITA, ed è visibile a lui secondo
+// canSeeAlertPopup (coda generale per i gestori, oppure destinatario
+// specifico per chiunque altro).
+function isAlertPendingForCurrentUser(log) {
+    return !!log && hasAcquistoAlert(log) && log.acquistoAlertStatus !== 'GESTITA' && canSeeAlertPopup(log);
+}
+
 function canManageAlerts() {
     // NUOVO ruolo BACKOFFICE: stesso potere del Moderatore per la gestione
     // allert Info Acquisto — ma NON per l'eliminazione/modifica dei contatti
@@ -471,16 +589,15 @@ function checkAcquistoAlertDaGestire() {
     const modal = document.getElementById('acquistoAlertDaGestireModal');
     const list = document.getElementById('acquistoAlertDaGestireList');
     if (!modal || !list) return;
-    if (!canManageAlerts()) return;
     if (modal.style.display === 'flex') return; // già aperto
 
     const now = Date.now();
     if (acquistoAlertDaGestireLastShownAt !== 0 && (now - acquistoAlertDaGestireLastShownAt) < ACQUISTO_ALERT_REPOPUP_INTERVAL_MS) return;
 
-    // FIX: filtra anche per destinatario — se l'allert non è "per tutti" e
-    // l'utente corrente non è tra i destinatari scelti, non gli viene
-    // proprio mostrato.
-    const alertAttivi = contactLogs.filter(l => hasAcquistoAlert(l) && l.acquistoAlertStatus !== 'GESTITA' && alertIsVisibleToCurrentUser(l));
+    // FIX: filtra con canSeeAlertPopup — i gestori vedono la coda generale
+    // "a tutti", chiunque altro (anche un UTENTE comune) vede il popup SOLO
+    // se è stato scelto come destinatario specifico di quell'allert.
+    const alertAttivi = contactLogs.filter(l => hasAcquistoAlert(l) && l.acquistoAlertStatus !== 'GESTITA' && canSeeAlertPopup(l));
     if (alertAttivi.length === 0) return;
 
     acquistoAlertDaGestireLastShownAt = now;
@@ -801,6 +918,19 @@ function renderGenericContactDetail() {
     if (detailGestioneFilter) {
         items = items.filter(l => hasAcquistoAlert(l) && (l.acquistoAlertStatus || 'DA_GESTIRE') === detailGestioneFilter);
     }
+    // NUOVO: filtro per destinatario — "Tutti" (nessun filtro) oppure un
+    // operatore specifico, che mostra solo gli allert visibili a lui
+    // (invio a tutti, oppure lui esplicitamente tra i destinatari scelti).
+    if (detailOnlyAlert && detailDestinatarioFilter) {
+        const filterId = Number(detailDestinatarioFilter);
+        items = items.filter(l => {
+            if (!hasAcquistoAlert(l)) return true;
+            if (l.alertNotifyAll === false && Array.isArray(l.alertRecipients)) {
+                return l.alertRecipients.some(u => u.id === filterId);
+            }
+            return true; // "invia a tutti" -> visibile a chiunque, incluso il filtro scelto
+        });
+    }
 
     titleEl.textContent = `${lastDetailTitle} (${items.length})`;
 
@@ -822,13 +952,22 @@ function renderGenericContactDetail() {
                 { key: 'IN_GESTIONE', label: '🟡 In gestione' },
                 { key: 'GESTITA', label: '🟢 Gestita' }
             ];
-            html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 14px">
+            html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 10px">
                 ${gestioneOptions.map(o => `
                     <button type="button" onclick="setDetailGestioneFilter('${o.key}')"
                         class="btn-small ${detailGestioneFilter===o.key?'btn-sede-active':'btn-secondary'}"
                         style="padding:5px 12px;font-size:11px">${o.label}</button>
                 `).join('')}
             </div>`;
+
+            // NUOVO: filtro per destinatario — "Tutti" o un operatore specifico
+            html += `<div style="margin-bottom:14px">
+                <select id="detailDestinatarioSelect" class="input-dark" style="font-size:12px;padding:6px 10px" onchange="setDetailDestinatarioFilter(this.value)">
+                    <option value="">👥 Tutti gli operatori</option>
+                    ${(alertDestinatariUsersCache || []).map(u => `<option value="${u.id}" ${detailDestinatarioFilter === String(u.id) ? 'selected' : ''}>🎯 ${u.fullName}</option>`).join('')}
+                </select>
+            </div>`;
+            if (!alertDestinatariUsersCache) loadUsersForDetailDestinatariFilter();
         }
     }
 
@@ -882,7 +1021,7 @@ function toggleDetailNominativoFilter() {
 // altrimenti resterebbe "appeso" un filtro nascosto e invisibile.
 function toggleDetailAlertFilter() {
     detailOnlyAlert = document.getElementById('detailAlertCheck')?.checked || false;
-    if (!detailOnlyAlert) detailGestioneFilter = '';
+    if (!detailOnlyAlert) { detailGestioneFilter = ''; detailDestinatarioFilter = ''; }
     renderGenericContactDetail();
 }
 
@@ -891,6 +1030,26 @@ function toggleDetailAlertFilter() {
 function setDetailGestioneFilter(status) {
     detailGestioneFilter = status;
     renderGenericContactDetail();
+}
+
+// NUOVO: filtro per destinatario nella lista Info Acquisto/Leasing/
+// Finanziamento/Amministrazione — "Tutti gli operatori" (nessun filtro) o
+// un operatore specifico, per vedere solo gli allert visibili a lui.
+let detailDestinatarioFilter = '';
+function setDetailDestinatarioFilter(userId) {
+    detailDestinatarioFilter = userId;
+    renderGenericContactDetail();
+}
+async function loadUsersForDetailDestinatariFilter() {
+    if (alertDestinatariUsersCache) return;
+    try {
+        const res = await fetch('/api/auth/users');
+        if (!res.ok) return;
+        alertDestinatariUsersCache = await res.json();
+        renderGenericContactDetail();
+    } catch (err) {
+        console.error('Errore caricamento utenti per filtro destinatario:', err);
+    }
 }
 
 let contactChart = null;
@@ -1486,7 +1645,10 @@ let alertDestinatariUsersCache = null;
 async function loadUsersForAlertDestinatari() {
     if (alertDestinatariUsersCache) { renderAlertDestinatariList(alertDestinatariUsersCache); return; }
     try {
-        const res = await fetch('/api/auth/users');
+        // /api/auth/users/basic (non /api/auth/users) perché è accessibile a
+        // QUALSIASI utente autenticato, non solo ADMIN/GESTORE — altrimenti
+        // un utente comune riceve 403 e la lista resta vuota.
+        const res = await fetch('/api/auth/users/basic');
         if (!res.ok) return;
         alertDestinatariUsersCache = await res.json();
         renderAlertDestinatariList(alertDestinatariUsersCache);
@@ -1614,6 +1776,72 @@ function refreshAcquistoAlertModalDisplay(log) {
     });
     const readOnlyNote = document.getElementById('acquistoAlertReadOnlyNote');
     if (readOnlyNote) readOnlyNote.style.display = readOnly ? 'block' : 'none';
+
+    // NUOVO: mostra/popola il blocco "a chi è segnalato", modificabile solo
+    // da chi ha i permessi di gestione allert (stessa regola di sopra).
+    const destBlock = document.getElementById('acquistoAlertModalDestinatariBlock');
+    if (destBlock) {
+        destBlock.style.display = readOnly ? 'none' : 'block';
+        if (!readOnly) {
+            const inviaATuttiCheck = document.getElementById('acquistoAlertModalInviaATutti');
+            const listWrapper = document.getElementById('acquistoAlertModalDestinatariListWrapper');
+            const inviaATutti = log.alertNotifyAll !== false;
+            if (inviaATuttiCheck) inviaATuttiCheck.checked = inviaATutti;
+            if (listWrapper) listWrapper.style.display = inviaATutti ? 'none' : 'block';
+            const selectedIds = (log.alertRecipients || []).map(u => u.id);
+            loadUsersForAcquistoAlertModalDestinatari(selectedIds);
+        }
+    }
+}
+
+async function loadUsersForAcquistoAlertModalDestinatari(selectedIds) {
+    const list = document.getElementById('acquistoAlertModalDestinatariList');
+    if (!list) return;
+    try {
+        if (!alertDestinatariUsersCache) {
+            // /api/auth/users/basic: MODERATORE e BACK_OFFICE possono gestire
+            // gli allert (canManageAlerts) ma non hanno accesso a
+            // /api/auth/users, riservato ad ADMIN/GESTORE.
+            const res = await fetch('/api/auth/users/basic');
+            if (res.ok) alertDestinatariUsersCache = await res.json();
+        }
+        list.innerHTML = (alertDestinatariUsersCache || []).map(u => `
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-primary);cursor:pointer;padding:4px 2px">
+                <input type="checkbox" class="acquisto-alert-modal-destinatario-checkbox" value="${u.id}" ${selectedIds.includes(u.id) ? 'checked' : ''} style="width:15px;height:15px;cursor:pointer;accent-color:#f0c040">
+                ${u.fullName}
+            </label>
+        `).join('');
+    } catch (err) {
+        console.error('Errore caricamento utenti per destinatari allert (modal gestione):', err);
+    }
+}
+
+function onAcquistoAlertModalDestinatariChange() {
+    const checked = document.getElementById('acquistoAlertModalInviaATutti')?.checked;
+    const wrapper = document.getElementById('acquistoAlertModalDestinatariListWrapper');
+    if (wrapper) wrapper.style.display = checked ? 'none' : 'block';
+}
+
+// NUOVO: salva a posteriori la modifica dei destinatari di un allert già
+// esistente — usa lo stesso PATCH già supportato dal backend per la
+// creazione, chiamato qui su un contatto già salvato.
+async function saveAcquistoAlertDestinatari() {
+    if (!acquistoAlertModalId) return;
+    const inviaATutti = document.getElementById('acquistoAlertModalInviaATutti')?.checked !== false;
+    const alertRecipientIds = inviaATutti ? [] : Array.from(document.querySelectorAll('.acquisto-alert-modal-destinatario-checkbox:checked')).map(cb => Number(cb.value));
+    try {
+        const res = await fetch(`/api/contacts/${acquistoAlertModalId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ alertNotifyAll: inviaATutti, alertRecipientIds })
+        });
+        if (!res.ok) { alert('Errore nel salvataggio dei destinatari'); return; }
+        const updatedLog = await res.json();
+        applyUpdatedLogEverywhere(updatedLog);
+        alert('Destinatari aggiornati.');
+    } catch (err) {
+        console.error('Errore salvataggio destinatari allert:', err);
+    }
 }
 
 function closeAcquistoAlertModal(event) {
@@ -1777,6 +2005,9 @@ function connectContactWebSocket() {
         onConnect: () => {
             contactWsConnected = true;
             console.log('%c✅ WebSocket contatti CONNESSO', 'color:#00c853;font-weight:bold');
+            // Chiesto a QUALSIASI utente, non solo ai gestori: ora anche un
+            // UTENTE comune può essere destinatario specifico di un allert.
+            ensureNotificationPermission();
             contactStompClient.subscribe('/topic/contacts', (message) => {
                 try {
                     const event = JSON.parse(message.body);
@@ -1825,6 +2056,12 @@ function handleContactWsEvent(event) {
 
     const { type, data } = event;
 
+    // Serve il valore PRIMA della sovrascrittura per capire se l'allert è
+    // "nuovo" per l'utente corrente (creato ora, oppure diventato visibile/
+    // da-gestire ora e non lo era prima di questo evento).
+    const previousLog = contactLogs.find(l => l.id === data.id);
+    const wasPendingBefore = isAlertPendingForCurrentUser(previousLog);
+
     if (type === 'created') {
         if (!contactLogs.some(l => l.id === data.id)) {
             contactLogs.push(data);
@@ -1842,6 +2079,57 @@ function handleContactWsEvent(event) {
     contactLogs.sort((a, b) => (b.contactDate || '').localeCompare(a.contactDate || ''));
     applyContactFilters(currentDayView || undefined);
     loadContactStatsTotaliStorici().then(() => renderChartInfoAcquisto(contactLogsFiltered));
+
+    // FIX: mancava qui lo stesso aggiornamento già fatto per le modifiche
+    // fatte dall'utente stesso — un popup "dettaglio" aperto (da click su
+    // grafico/stat-card, es. "Info Acquisto Effettuato (11)") teneva uno
+    // SNAPSHOT congelato e non si accorgeva di contatti/allert nuovi o
+    // modificati arrivati da un ALTRO utente via WebSocket. Ora si aggiorna
+    // anche lui in tempo reale, non solo la lista principale.
+    if (type === 'created' || type === 'updated') {
+        const detailIdx = lastDetailItems.findIndex(l => l.id === data.id);
+        if (detailIdx !== -1) {
+            lastDetailItems[detailIdx] = data;
+            const detailModal = document.getElementById('sedeDetailModal');
+            if (detailModal && detailModal.style.display === 'flex') renderGenericContactDetail();
+        } else if (type === 'created' && lastDetailItems.length > 0) {
+            // Se il popup aperto sta mostrando "tutti quelli di categoria X"
+            // e arriva un contatto NUOVO di quella stessa categoria, va
+            // aggiunto alla lista aperta, non solo a quella di sfondo.
+            const sampleCategory = lastDetailItems[0]?.category;
+            if (sampleCategory && data.category === sampleCategory) {
+                lastDetailItems.push(data);
+                const detailModal = document.getElementById('sedeDetailModal');
+                if (detailModal && detailModal.style.display === 'flex') renderGenericContactDetail();
+            }
+        }
+    } else if (type === 'deleted') {
+        const detailIdx = lastDetailItems.findIndex(l => l.id === data.id);
+        if (detailIdx !== -1) {
+            lastDetailItems.splice(detailIdx, 1);
+            const detailModal = document.getElementById('sedeDetailModal');
+            if (detailModal && detailModal.style.display === 'flex') renderGenericContactDetail();
+        }
+    }
+
+    // Se l'allert è appena diventato "da gestire e visibile" per l'utente
+    // corrente (e prima di questo evento non lo era), notifica ISTANTANEA:
+    // suono + titolo lampeggiante + notifica desktop + apertura immediata
+    // del popup "Da Gestire", senza aspettare il ricontrollo periodico né
+    // un refresh/cambio finestra.
+    if (type === 'created' || type === 'updated') {
+        const nowPending = isAlertPendingForCurrentUser(data);
+        if (nowPending && !wasPendingBefore) {
+            notifyNewAcquistoAlert(data);
+            acquistoAlertDaGestireLastShownAt = 0; // bypassa il gate dei 30 min: è un allert genuinamente nuovo
+            checkAcquistoAlertDaGestire();
+        }
+    }
+
+    const daGestireModalWs = document.getElementById('acquistoAlertDaGestireModal');
+    if (daGestireModalWs && daGestireModalWs.style.display === 'flex') {
+        refreshAcquistoAlertDaGestireModalLive();
+    }
 
     // Se il modal Allert è aperto sul contatto toccato dall'evento,
     // aggiornalo dal vivo (stesso comportamento del polling).
@@ -2209,7 +2497,17 @@ function renderContactRow(log) {
             return parts.length > 0 ? parts.join(' · ') : '—';
         })()}</td>
         <td style="font-size:12px;color:var(--text-secondary)">${log.user.fullName}</td>
-        <td>${canEdit ? `<button class="btn-contact-action btn-orange" onclick="openEditContactModal(${log.id})" title="Modifica">✏️</button><button class="btn-contact-action btn-red" onclick="deleteContactLog(${log.id})" title="Elimina">🗑️</button>` : ''}</td>
+        <td>${canEdit
+            ? `<button class="btn-contact-action btn-orange" onclick="openEditContactModal(${log.id})" title="Modifica">✏️</button><button class="btn-contact-action btn-red" onclick="deleteContactLog(${log.id})" title="Elimina">🗑️</button>`
+            // FIX: prima qui c'era una stringa vuota '' quando canEdit è
+            // false — la cella restava senza contenuto e la riga risultava
+            // più bassa di quelle con i bottoni, dando l'effetto "a scalini"
+            // (linee non allineate) nella tabella. Ora mettiamo gli STESSI
+            // bottoni (stessa classe = stessa identica altezza/padding) ma
+            // invisibili e non cliccabili, così ogni riga ha sempre
+            // esattamente la stessa altezza, con o senza permessi.
+            : `<button class="btn-contact-action btn-orange" style="visibility:hidden;pointer-events:none" tabindex="-1" aria-hidden="true">✏️</button><button class="btn-contact-action btn-red" style="visibility:hidden;pointer-events:none" tabindex="-1" aria-hidden="true">🗑️</button>`
+        }</td>
     </tr>`;
 }
 
