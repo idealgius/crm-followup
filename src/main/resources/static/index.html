@@ -720,16 +720,27 @@
                     <!-- Scheda cliente completa -->
                     <div id="acquistoAlertModalClientInfo" style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px"></div>
 
-                    <!-- NUOVO: modifica destinatari a posteriori -->
-                    <div id="acquistoAlertModalDestinatariBlock" style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px">
-                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:8px">A CHI È SEGNALATO (modificabile)</label>
-                        <label class="checkbox-label" style="padding:4px 0">
-                            <input type="checkbox" id="acquistoAlertModalInviaATutti" onchange="onAcquistoAlertModalDestinatariChange()"> Invia a tutti
-                        </label>
-                        <div id="acquistoAlertModalDestinatariListWrapper" style="display:none;margin-top:8px">
-                            <div id="acquistoAlertModalDestinatariList" style="max-height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;border:1px solid var(--border);border-radius:8px;padding:8px"></div>
+                    <!-- NUOVO: modifica destinatari a posteriori — collassabile,
+                         chiuso di default. Prima era sempre aperto e occupava
+                         così tanto spazio (checkbox + lista scrollabile) da
+                         spingere le note dell'allert fuori dalla vista senza
+                         scroll, rendendole di fatto illeggibili. Ora è un
+                         piccolo pannello richiudibile, si apre solo se serve
+                         davvero cambiare i destinatari. -->
+                    <div id="acquistoAlertModalDestinatariBlock" style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;margin-bottom:14px;overflow:hidden">
+                        <button type="button" onclick="toggleAcquistoAlertModalDestinatariCollapse()" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;background:none;border:none;cursor:pointer;padding:10px 14px;text-align:left">
+                            <span style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px">🎯 A CHI È SEGNALATO (modificabile)</span>
+                            <span id="acquistoAlertModalDestinatariCollapseIcon" style="font-size:12px;color:var(--text-secondary);transition:transform 0.15s ease">▶</span>
+                        </button>
+                        <div id="acquistoAlertModalDestinatariCollapseBody" style="display:none;padding:0 14px 14px">
+                            <label class="checkbox-label" style="padding:4px 0">
+                                <input type="checkbox" id="acquistoAlertModalInviaATutti" onchange="onAcquistoAlertModalDestinatariChange()"> Invia a tutti
+                            </label>
+                            <div id="acquistoAlertModalDestinatariListWrapper" style="display:none;margin-top:8px">
+                                <div id="acquistoAlertModalDestinatariList" style="max-height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;border:1px solid var(--border);border-radius:8px;padding:8px"></div>
+                            </div>
+                            <button type="button" class="btn-secondary" onclick="saveAcquistoAlertDestinatari()" style="margin-top:10px;font-size:12px;padding:6px 14px">💾 Salva destinatari</button>
                         </div>
-                        <button type="button" class="btn-secondary" onclick="saveAcquistoAlertDestinatari()" style="margin-top:10px;font-size:12px;padding:6px 14px">💾 Salva destinatari</button>
                     </div>
 
                     <div id="acquistoAlertModalInfo" style="display:none"></div>
@@ -946,8 +957,9 @@
                         <button type="button" class="btn-sede" id="acquisto-RitardoConsegna" onclick="selectAcquisto('Ritardo Consegna')">⏰ Ritardo Consegna</button>
                         <button type="button" class="btn-sede" id="acquisto-InfoDocumentazione" onclick="selectAcquisto('Info Documentazione')">📄 Info Documentazione</button>
                         <button type="button" class="btn-sede" id="acquisto-SecondaChiave" onclick="selectAcquisto('Seconda chiave')">🔑 Seconda chiave</button>
-                        <button type="button" class="btn-sede" id="acquisto-InfoGeneriche" onclick="selectAcquisto('Info generiche')">ℹ️ Info generiche</button>
                         <button type="button" class="btn-sede" id="acquisto-Furto" onclick="selectAcquisto('Furto')">🚨 Furto</button>
+                        <button type="button" class="btn-sede" id="acquisto-InfoGeneriche" onclick="selectAcquisto('Info generiche')">ℹ️ Info generiche</button>
+                        <button type="button" class="btn-sede" id="acquisto-Saldo" onclick="selectAcquisto('Saldo')">💰 Saldo</button>
                     </div>
                     <input type="hidden" id="contactAcquistoTipo" value="">
                     <div style="margin-bottom:14px">
