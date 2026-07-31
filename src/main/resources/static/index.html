@@ -720,6 +720,18 @@
                     <!-- Scheda cliente completa -->
                     <div id="acquistoAlertModalClientInfo" style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px"></div>
 
+                    <!-- NUOVO: modifica destinatari a posteriori -->
+                    <div id="acquistoAlertModalDestinatariBlock" style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:8px">A CHI È SEGNALATO (modificabile)</label>
+                        <label class="checkbox-label" style="padding:4px 0">
+                            <input type="checkbox" id="acquistoAlertModalInviaATutti" onchange="onAcquistoAlertModalDestinatariChange()"> Invia a tutti
+                        </label>
+                        <div id="acquistoAlertModalDestinatariListWrapper" style="display:none;margin-top:8px">
+                            <div id="acquistoAlertModalDestinatariList" style="max-height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;border:1px solid var(--border);border-radius:8px;padding:8px"></div>
+                        </div>
+                        <button type="button" class="btn-secondary" onclick="saveAcquistoAlertDestinatari()" style="margin-top:10px;font-size:12px;padding:6px 14px">💾 Salva destinatari</button>
+                    </div>
+
                     <div id="acquistoAlertModalInfo" style="display:none"></div>
 
                     <div id="acquistoAlertReadOnlyNote" style="display:none;background:rgba(255,152,0,0.08);border:1px solid rgba(255,152,0,0.3);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text-secondary);margin-bottom:14px">
