@@ -170,7 +170,10 @@ public class AuthController {
             return ResponseEntity.badRequest().body(Map.of("error", "Non puoi modificare il tuo ruolo"));
 
         String newRole = body.get("role");
-        List<String> validRoles = List.of("UTENTE", "MODERATORE", "GESTORE", "ADMIN", "NOLEGGIO");
+        // FIX: BACK_OFFICE e SERVICE erano selezionabili nel menu a tendina
+        // (admin.js) ma mancavano da questa whitelist — ogni tentativo di
+        // assegnarli falliva con "Ruolo non valido".
+        List<String> validRoles = List.of("UTENTE", "MODERATORE", "GESTORE", "ADMIN", "NOLEGGIO", "BACK_OFFICE", "SERVICE");
         if (!validRoles.contains(newRole))
             return ResponseEntity.badRequest().body(Map.of("error", "Ruolo non valido"));
 
