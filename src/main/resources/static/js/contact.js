@@ -978,7 +978,11 @@ function renderGenericContactDetail() {
             const date = log.contactDate.split('T')[0];
             const time = log.contactDate.split('T')[1].substring(0,5);
             const catClass = log.category.replace(/[\s+]/g, '_');
-            const noteText = (log.category !== 'Info Acquisto effettuato' && log.category !== 'Service') ? (log.otherNote || '') : (log.acquistoNote || log.serviceNote || '');
+            const noteTextParts = [];
+            const notePrimary = (log.category !== 'Info Acquisto effettuato' && log.category !== 'Service') ? log.otherNote : (log.acquistoNote || log.serviceNote);
+            if (notePrimary) noteTextParts.push(notePrimary);
+            if (log.notaAggiuntiva) noteTextParts.push('📝 ' + log.notaAggiuntiva);
+            const noteText = noteTextParts.join(' · ');
             const alert = hasAcquistoAlert(log);
             const alertVisual = alert ? acquistoAlertVisual(log) : null;
             const links = [];
@@ -1001,6 +1005,11 @@ function renderGenericContactDetail() {
                         ${log.serviceSede ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📍 Service ${log.serviceSede}</div>` : ''}
                         ${log.serviceTarga ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">🔖 ${log.serviceTarga}</div>` : ''}
                         ${noteText ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📝 ${noteText}</div>` : ''}
+                        ${alert ? (
+                            log.alertNotifyAll === false && Array.isArray(log.alertRecipients) && log.alertRecipients.length > 0
+                                ? `<div style="font-size:12px;color:#f0c040;font-weight:700;margin-top:2px">🎯 Per: ${log.alertRecipients.map(u => u.fullName).join(', ')}</div>`
+                                : `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">👥 A tutti i gestori</div>`
+                        ) : ''}
                     </div>
                     ${links.length > 0 ? `<div style="display:flex;gap:6px;flex-shrink:0">${links.join('')}</div>` : ''}
                 </div>
@@ -1043,7 +1052,10 @@ function setDetailDestinatarioFilter(userId) {
 async function loadUsersForDetailDestinatariFilter() {
     if (alertDestinatariUsersCache) return;
     try {
-        const res = await fetch('/api/auth/users');
+        // /api/auth/users/basic (non /api/auth/users): questo filtro deve
+        // essere usabile da qualsiasi utente che vede il popup, non solo da
+        // ADMIN/GESTORE, altrimenti la select resta vuota per gli altri.
+        const res = await fetch('/api/auth/users/basic');
         if (!res.ok) return;
         alertDestinatariUsersCache = await res.json();
         renderGenericContactDetail();
@@ -1701,9 +1713,29 @@ function openAcquistoAlertModal(id) {
     acquistoAlertModalId = id;
     acquistoAlertNoteGestioneVisible = log.acquistoAlertStatus === 'IN_GESTIONE' || !!log.acquistoAlertNoteGestione;
     acquistoAlertNoteGestitaVisible = log.acquistoAlertStatus === 'GESTITA' || !!log.acquistoAlertNoteGestita;
+    // Il pannello "a chi è segnalato" riparte sempre chiuso all'apertura,
+    // per lasciare subito spazio e leggibilità alle note dell'allert (il
+    // motivo per cui si apre il modal), invece di occupare tutto lo spazio
+    // sopra di esse.
+    const collapseBody = document.getElementById('acquistoAlertModalDestinatariCollapseBody');
+    const collapseIcon = document.getElementById('acquistoAlertModalDestinatariCollapseIcon');
+    if (collapseBody) collapseBody.style.display = 'none';
+    if (collapseIcon) collapseIcon.style.transform = 'rotate(0deg)';
     refreshAcquistoAlertModalDisplay(log);
     const modal = document.getElementById('acquistoAlertModal');
     if (modal) modal.style.display = 'flex';
+}
+
+// Apre/chiude il pannello di modifica destinatari nel modal di gestione
+// allert — chiuso di default (vedi openAcquistoAlertModal), così le note
+// restano subito leggibili senza dover scrollare.
+function toggleAcquistoAlertModalDestinatariCollapse() {
+    const body = document.getElementById('acquistoAlertModalDestinatariCollapseBody');
+    const icon = document.getElementById('acquistoAlertModalDestinatariCollapseIcon');
+    if (!body) return;
+    const isOpen = body.style.display === 'block';
+    body.style.display = isOpen ? 'none' : 'block';
+    if (icon) icon.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
 }
 
 function refreshAcquistoAlertModalDisplay(log) {
@@ -1726,6 +1758,7 @@ function refreshAcquistoAlertModalDisplay(log) {
                 👤 Operatore: ${log.user?.fullName || '—'}<br>
                 📋 Tipologia: ${log.otherNote || '—'}
                 ${log.acquistoNote ? `<br>📝 Nota: ${log.acquistoNote}` : ''}
+                ${log.notaAggiuntiva ? `<br>📝 Nota aggiuntiva: ${log.notaAggiuntiva}` : ''}
                 ${log.marca ? `<br>🚗 Veicolo: ${log.marca}${log.modello ? ' ' + log.modello : ''}` : ''}
                 ${log.serviceTarga ? `<br>🔖 Targa: ${log.serviceTarga}` : ''}
                 ${linkParts.length ? `<br>${linkParts.join(' · ')}` : ''}
