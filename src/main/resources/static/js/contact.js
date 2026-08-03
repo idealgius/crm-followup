@@ -93,6 +93,19 @@ const ALL_CATEGORIES = [
     'Info + Appuntamento', 'Info Vendita in Promo', 'Altro'
 ];
 const ACQUISTO_LIST = ['Info Consegna', 'Ritardo Consegna', 'Info Documentazione', 'Seconda chiave', 'Furto', 'Saldo', 'Info generiche'];
+
+// FIX: "Altro" è grigio (#8a8faa) — corretto in modalità chiara, ma poco
+// leggibile in modalità scura (sia nella legenda del grafico Distribuzione
+// Categorie, sia nelle celle del calendario). Diventa bianco solo in
+// modalità scura. Funzione condivisa, usata in entrambi i punti così
+// restano sempre coerenti tra loro.
+function getCategoryColor(category) {
+    if (category === 'Altro') {
+        const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+        return isDark ? '#ffffff' : '#8a8faa';
+    }
+    return CATEGORY_COLORS[category] || '#1a4080';
+}
 // FIX v3: il rosso di Ritardo Consegna andava bene, il problema era Furto
 // (magenta troppo vicino al rosso). Furto passa a un magenta/orchidea più
 // acceso e distante — 7 tinte: blu, rosso, verde acqua, oro, magenta
@@ -1202,7 +1215,7 @@ function renderContactChartFromLogs(logs, targetCanvasId) {
     const total = logs.length;
     const labels = Object.keys(byCategory);
     const data = Object.values(byCategory);
-    const colors = labels.map(l => CATEGORY_COLORS[l] || '#8a8faa');
+    const colors = labels.map(l => getCategoryColor(l));
     const legendColor = getLegendColor();
 
     contactChart = new Chart(ctx.getContext('2d'), {
@@ -2606,7 +2619,7 @@ function getDominantColor(items) {
     const counts = {};
     items.forEach(log => { counts[log.category] = (counts[log.category]||0) + 1; });
     const dominant = Object.entries(counts).sort((a,b) => b[1]-a[1])[0][0];
-    return CATEGORY_COLORS[dominant] || '#1a4080';
+    return getCategoryColor(dominant);
 }
 
 function toggleTree(key) {
@@ -2735,7 +2748,7 @@ function renderContactCalendar() {
         let bgStyle = '', borderStyle = '';
         if (items.length > 0) {
             const color = getDominantColor(items);
-            bgStyle = `background:${color}33;`;
+            bgStyle = `background:${color}73;`;
             borderStyle = `border-color:${color};`;
         }
         html += `<button type="button" class="cal-day ${isToday?'cal-day-today':''}" style="${bgStyle}${borderStyle}" onclick="showDayView('${dateStr}')">${day}</button>`;
