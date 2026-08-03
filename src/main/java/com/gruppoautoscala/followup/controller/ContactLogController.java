@@ -484,6 +484,52 @@ public class ContactLogController {
     // filtro (né date né altro) — a differenza di /stats (che rispetta from/to)
     // questo endpoint serve solo per i badge "Totale storico" che non devono
     // mai cambiare in base ai filtri attivi sullo schermo.
+    // NUOVO: tutti i contatti di UNA categoria, su TUTTA la storia (nessun
+    // filtro data) — usato dalla barra "Totale storico" cliccabile sopra i
+    // grafici, che deve poter mostrare gli allert Da gestire/In gestione
+    // anche se più vecchi del periodo attualmente filtrato a schermo.
+    // NUOVO: tutti gli allert, su TUTTA la storia, aggregando TUTTE le
+    // categorie che possono averne (Info Acquisto, Pratica Leasing, Pratica
+    // Finanziamento, Amministrazione) — non solo una alla volta come
+    // /by-category-storico sopra. category e status sono entrambi
+    // opzionali e combinabili: usato dal pulsante 🔔 Allert nel Registro
+    // Contatti, che deve poter ignorare completamente il periodo filtrato
+    // a schermo.
+    @GetMapping("/alerts-storico")
+    public ResponseEntity<?> getAlertsStorico(
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String status,
+            HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+
+        List<Map<String, Object>> result = contactLogService.getAll().stream()
+            .filter(l -> Boolean.TRUE.equals(l.getAcquistoAlert()))
+            .filter(l -> category == null || category.isBlank() || category.equals(l.getCategory()))
+            .filter(l -> {
+                if (status == null || status.isBlank()) return true;
+                String s = l.getAcquistoAlertStatus();
+                if ("DA_GESTIRE".equals(status)) return s == null || "DA_GESTIRE".equals(s);
+                return status.equals(s);
+            })
+            .map(this::toMap)
+            .collect(Collectors.toList());
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/by-category-storico")
+    public ResponseEntity<?> getByCategoryStorico(@RequestParam String category, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        if (!VALID_CATEGORIES.contains(category)) return ResponseEntity.badRequest().body(Map.of("error", "Categoria non valida"));
+
+        List<Map<String, Object>> result = contactLogService.getAll().stream()
+            .filter(l -> category.equals(l.getCategory()))
+            .map(this::toMap)
+            .collect(Collectors.toList());
+        return ResponseEntity.ok(result);
+    }
+
     @GetMapping("/stats-totali-storici")
     public ResponseEntity<?> getStatsTotaliStorici(HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");

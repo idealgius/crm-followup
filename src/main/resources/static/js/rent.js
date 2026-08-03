@@ -912,8 +912,8 @@ function exportRentExcel() {
     downloadFile(url);
 }
 
-function renderChartRentStato(list) {
-    const ctx = document.getElementById('chartRentStato');
+function renderChartRentStato(list, targetCanvasId) {
+    const ctx = document.getElementById(targetCanvasId || 'chartRentStato');
     if (!ctx) return;
     if (chartRentStato) chartRentStato.destroy();
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
@@ -948,8 +948,8 @@ function renderChartRentStato(list) {
     });
 }
 
-function renderChartRentFonte(list) {
-    const ctx = document.getElementById('chartRentFonte');
+function renderChartRentFonte(list, targetCanvasId) {
+    const ctx = document.getElementById(targetCanvasId || 'chartRentFonte');
     if (!ctx) return;
     if (chartRentFonte) chartRentFonte.destroy();
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
@@ -980,8 +980,8 @@ function renderChartRentFonte(list) {
     });
 }
 
-function renderChartRentMarchi(list) {
-    const container = document.getElementById('chartRentMarchiCustom');
+function renderChartRentMarchi(list, targetContainerId) {
+    const container = document.getElementById(targetContainerId || 'chartRentMarchiCustom');
     if (!container) return;
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
     const counts = {};
@@ -1007,8 +1007,8 @@ function renderChartRentMarchi(list) {
     }).join('');
 }
 
-function renderChartRentInfoVsRichiesta(list) {
-    const ctx = document.getElementById('chartRentInfoVsRichiesta');
+function renderChartRentInfoVsRichiesta(list, targetCanvasId) {
+    const ctx = document.getElementById(targetCanvasId || 'chartRentInfoVsRichiesta');
     if (!ctx) return;
     if (chartRentInfoVsRichiesta) chartRentInfoVsRichiesta.destroy();
     const soloInfo = list.filter(c => c.noleggioRichiesta === 'SOLO_INFO').length;

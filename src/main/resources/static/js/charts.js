@@ -421,8 +421,8 @@ function showWaitingDetail(status) {
     modal.style.display = 'flex';
 }
 
-function renderFollowUpChart(stats) {
-    const ctx = document.getElementById('chartFollowUp').getContext('2d');
+function renderFollowUpChart(stats, targetCanvasId) {
+    const ctx = document.getElementById(targetCanvasId || 'chartFollowUp').getContext('2d');
     if (chartFollowUp) chartFollowUp.destroy();
 
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
@@ -473,8 +473,8 @@ function renderFollowUpChart(stats) {
     });
 }
 
-function renderWaitingChart(stats) {
-    const ctx = document.getElementById('chartWaiting').getContext('2d');
+function renderWaitingChart(stats, targetCanvasId) {
+    const ctx = document.getElementById(targetCanvasId || 'chartWaiting').getContext('2d');
     if (chartWaiting) chartWaiting.destroy();
 
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';

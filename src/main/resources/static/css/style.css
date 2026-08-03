@@ -418,11 +418,30 @@ select.input-dark {
     flex-wrap: nowrap;
     min-width: 0;
     overflow-x: auto;
-    scrollbar-width: none;
+    /* FIX: prima la scrollbar era completamente nascosta e il tentativo di
+       ricrearla via JS (drag col mouse) si è rivelato inaffidabile a
+       seconda di browser/sistema operativo. Ora è una scrollbar VERA,
+       sottile e discreta ma trascinabile in modo nativo dal browser
+       stesso — funziona sempre, senza bisogno di alcun JS. */
+    scrollbar-width: thin;
+    scrollbar-color: var(--navbar-border) transparent;
 }
 
 .nav-links::-webkit-scrollbar {
-    display: none;
+    height: 6px;
+}
+
+.nav-links::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.nav-links::-webkit-scrollbar-thumb {
+    background: var(--navbar-border);
+    border-radius: 4px;
+}
+
+.nav-links::-webkit-scrollbar-thumb:hover {
+    background: #f0c040;
 }
 
 .nav-link {
@@ -1607,22 +1626,30 @@ select.input-field {
 }
 
 .contact-chart-categorie {
-    width: 520px;
-    min-width: 520px;
-    max-width: 520px;
+    /* FIX: larghezza fissa (600px sempre, mai meno) costringeva l'intera
+       riga ad andare "a capo" su schermi non abbastanza larghi da
+       contenere 600+380+600px più i margini. Ora può restringersi fino a
+       420px se necessario per restare affiancata al calendario, invece di
+       sparire sotto. */
+    flex: 1 1 480px;
+    min-width: 420px;
+    max-width: 600px;
 }
 
 .contact-chart-calendario {
-    width: 380px;
-    min-width: 380px;
+    flex: 1 1 340px;
+    min-width: 300px;
     max-width: 380px;
     justify-content: space-between;
 }
 
 .contact-chart-acquisto {
-    width: 340px;
-    min-width: 340px;
-    max-width: 340px;
+    /* FIX: stessa logica di .contact-chart-categorie sopra — larghezza
+       flessibile, si restringe quanto serve per restare nella stessa riga
+       invece di andare a capo. */
+    flex: 1 1 480px;
+    min-width: 420px;
+    max-width: 600px;
 }
 
 .contact-chart-service {
@@ -2151,6 +2178,19 @@ select.input-field {
         height: 30px;
     }
 
+    /* NUOVO: menu ☰ più compatto su schermo piccolo, e il pannello a
+       tendina non supera mai la larghezza dello schermo (prima poteva
+       uscire dal bordo destro su telefoni molto stretti). */
+    #hamburgerMenuBtn {
+        font-size: 18px !important;
+        padding: 6px 6px !important;
+    }
+
+    #hamburgerMenuDropdown {
+        min-width: 220px !important;
+        max-width: calc(100vw - 24px);
+    }
+
     #navBrandBadge {
         font-size: 10px !important;
         letter-spacing: 1px !important;
@@ -2198,6 +2238,26 @@ select.input-field {
         padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
         gap: 2px;
         -webkit-overflow-scrolling: touch;
+    }
+
+    /* FIX: background-attachment:fixed su #mainApp (il pattern decorativo
+       di sfondo) è noto per causare glitch di rendering su molti browser
+       mobile, in particolare iOS Safari — spesso proprio a scapito di
+       ALTRI elementi position:fixed nella stessa pagina, come .nav-links
+       qui sopra, che "sparivano" o si comportavano in modo incoerente
+       durante lo scroll. Disattivato solo sotto i 768px: il pattern resta
+       comunque visibile, semplicemente scorre con la pagina invece di
+       restare ancorato (compromesso quasi impercettibile su schermo
+       piccolo, dove il pattern occupa gran parte dell'altezza visibile
+       comunque).
+       */
+    #mainApp {
+        background-attachment: scroll;
+    }
+
+    [data-role-theme="noleggio"] #mainApp,
+    [data-role-theme="service"] #mainApp {
+        background-attachment: scroll;
     }
 
     /* Icona sopra, etichetta sotto — le due metà del link (prima erano
@@ -2263,5 +2323,88 @@ select.input-field {
     }
     .modal-box {
         border-radius: 16px 16px 0 0;
+    }
+}
+/* ===== MATRICE PERMESSI PER RUOLO (pagina Admin) ===== */
+.permission-matrix-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.permission-matrix-table th,
+.permission-matrix-table td {
+    padding: 10px 14px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+}
+
+.permission-matrix-table thead th {
+    color: var(--text-secondary);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 700;
+    border-bottom: 2px solid var(--border);
+}
+
+.permission-matrix-table tbody tr:hover {
+    background: var(--step-bg);
+}
+
+.permission-cell-group {
+    display: inline-flex;
+    gap: 2px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 3px;
+}
+
+.permission-cell-btn {
+    background: none;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 9px;
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: background 0.15s, color 0.15s;
+    line-height: 1;
+}
+
+.permission-cell-btn:hover {
+    background: var(--bg-card2);
+    color: var(--text-primary);
+}
+
+.permission-cell-btn.active.level-NONE {
+    background: rgba(255,61,61,0.22);
+    color: #ff5d5d;
+}
+
+.permission-cell-btn.active.level-READ_ONLY {
+    background: rgba(240,192,64,0.22);
+    color: #f0c040;
+}
+
+.permission-cell-btn.active.level-FULL {
+    background: rgba(0,200,83,0.22);
+    color: #00e065;
+}
+
+/* ===== PAGINA "TUTTI I GRAFICI" (menu ☰) ===== */
+.chart-grid-allcharts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    gap: 20px;
+}
+
+@media print {
+    #allChartsPage .filter-bar button,
+    #allChartsPage .page-header button,
+    #hamburgerMenuWrapper {
+        display: none !important;
     }
 }

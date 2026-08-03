@@ -572,8 +572,8 @@ function renderServicePlanning(list) {
 // arrivano nella Fase 5, insieme all'automazione dei popup)
 // ============================================================
 
-function renderChartServiceStato(list) {
-    const ctx = document.getElementById('chartServiceStato2');
+function renderChartServiceStato(list, targetCanvasId) {
+    const ctx = document.getElementById(targetCanvasId || 'chartServiceStato2');
     if (!ctx) return;
     if (chartServiceStato) chartServiceStato.destroy();
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
@@ -836,8 +836,8 @@ async function renderChartServiceChiamateAppuntamenti() {
 
 // Tra le pratiche che hanno avuto un appuntamento, quante sono arrivate a
 // Conclusa, quante Fallite, quante ancora in corso (in attesa di esito).
-function renderChartServiceLavorazioni(list) {
-    const ctx = document.getElementById('chartServiceLavorazioni');
+function renderChartServiceLavorazioni(list, targetCanvasId) {
+    const ctx = document.getElementById(targetCanvasId || 'chartServiceLavorazioni');
     if (!ctx) return;
     if (chartServiceLavorazioni) chartServiceLavorazioni.destroy();
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';

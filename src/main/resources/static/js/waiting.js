@@ -526,6 +526,7 @@ function toggleWaitingRichiamato() {
 }
 
 async function saveWaitingDetail() {
+    if (isReadOnlySection('WAITING')) { alert('Non hai i permessi per modificare i Recall.'); return; }
     if (!waitingDetailId) return;
 
     const fullName = document.getElementById('wdFullName')?.value.trim() || '';
@@ -567,6 +568,7 @@ async function saveWaitingDetail() {
 }
 
 async function registraNuovoRecall() {
+    if (isReadOnlySection('WAITING')) { alert('Non hai i permessi per gestire i Recall.'); return; }
     if (!waitingDetailId) return;
     const e = waitingEntries.find(x => x.id === waitingDetailId);
     if (!e) return;

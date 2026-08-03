@@ -458,7 +458,7 @@ async function editFollowUp(id, currentName) {
 }
 
 async function createFollowUp() {
-    if (isModerator()) return;
+    if (isReadOnlySection('FOLLOWUPS')) { alert('Non hai i permessi per gestire i Follow-up.'); return; }
     const fullName = document.getElementById('fuFullName').value.trim();
     const email = document.getElementById('fuEmail').value.trim();
     const phone = document.getElementById('fuPhone').value.trim();
@@ -515,7 +515,7 @@ async function createFollowUp() {
 }
 
 function showNewFollowUp() {
-    if (isModerator()) return;
+    if (isReadOnlySection('FOLLOWUPS')) { alert('Non hai i permessi per gestire i Follow-up.'); return; }
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('fuWorkDate').value = today;
     document.getElementById('newFollowUpForm').style.display = 'block';

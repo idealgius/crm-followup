@@ -1,5 +1,69 @@
 let currentUser = null;
 
+// ===== SISTEMA PERMESSI PER RUOLO =====
+// Matrice ruolo × sezione caricata dal server (GET /api/permissions),
+// personalizzabile dall'admin nella pagina Permessi. Finché nessuno la
+// personalizza, i valori di default replicano esattamente il comportamento
+// storico (vedi RolePermissionService.java sul backend).
+let permissionMatrix = {};
+
+const PAGE_TO_SECTION = {
+    dashboard: 'DASHBOARD', followups: 'FOLLOWUPS', waiting: 'WAITING',
+    contacts: 'CONTACTS', promo: 'PROMO', admin: 'ADMIN',
+    rent: 'RENT', service: 'SERVICE'
+};
+
+async function loadPermissionMatrix() {
+    try {
+        const res = await fetch('/api/permissions');
+        if (!res.ok) return;
+        const data = await res.json();
+        permissionMatrix = data.matrix || {};
+    } catch (err) {
+        console.error('Errore caricamento permessi:', err);
+    }
+}
+
+// 'NONE' | 'READ_ONLY' | 'FULL' — per il ruolo dell'utente loggato, a meno
+// che non si passi esplicitamente un altro ruolo (usato dalla pagina
+// Permessi stessa, che deve leggere la matrice per TUTTI i ruoli).
+function getAccess(section, role) {
+    role = role || currentUser?.role || 'UTENTE';
+    return permissionMatrix?.[role]?.[section] || 'NONE';
+}
+
+function hasAccess(section, role) {
+    return getAccess(section, role) !== 'NONE';
+}
+
+function isReadOnlySection(section, role) {
+    return getAccess(section, role) === 'READ_ONLY';
+}
+
+// FIX: la scrollbar di .nav-links era completamente nascosta (solo
+// estetica) — questo lasciava il mouse senza modo nativo di scrollare in
+// orizzontale quando i link non ci stanno tutti. Touch (swipe) e tastiera
+// (focus che si scrolla automaticamente in vista) funzionavano già.
+// Prima si era provato a reimplementare un "trascina per scrollare" via
+// JS (mousedown/mousemove, poi Pointer Events) ma risultava inaffidabile a
+// seconda di browser/sistema operativo. Soluzione finale, più robusta:
+// una scrollbar VERA (sottile, discreta, in tema) invece di nasconderla —
+// vedi style.css — che si trascina in modo nativo col mouse, senza
+// bisogno di alcun JS per il trascinamento stesso. Qui resta solo il
+// supporto alla rotellina (verticale -> orizzontale), che è l'unica cosa
+// che il browser non offre già di suo.
+document.addEventListener('DOMContentLoaded', function() {
+    const navLinks = document.querySelector('.nav-links');
+    if (!navLinks) return;
+
+    navLinks.addEventListener('wheel', function(e) {
+        if (navLinks.scrollWidth <= navLinks.clientWidth) return; // niente da scrollare
+        if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return; // già scroll orizzontale nativo (trackpad), non toccarlo
+        e.preventDefault();
+        navLinks.scrollLeft += e.deltaY;
+    }, { passive: false });
+});
+
 function toggleTheme() {
     const html = document.documentElement;
     const isDark = html.getAttribute('data-theme') !== 'light';
@@ -29,43 +93,32 @@ function refreshChartsOnThemeChange() {
     }
 }
 
-// Ruoli che vedono la dashboard Rent (in aggiunta o in esclusiva)
-const RENT_ROLES = ['NOLEGGIO', 'MODERATORE', 'GESTORE', 'ADMIN'];
-
-// Ruoli che vedono la dashboard Service (in aggiunta o in esclusiva) —
-// stesso pattern di RENT_ROLES.
-const SERVICE_ROLES = ['SERVICE', 'MODERATORE', 'GESTORE', 'ADMIN'];
-
 // Pagine valide riconosciute dal router — usato per validare l'hash dell'URL
 // (evita che un hash sporco o obsoleto mandi l'app in uno stato indefinito)
 const VALID_PAGES = ['dashboard', 'followups', 'waiting', 'contacts', 'promo', 'admin', 'rent', 'service'];
 
+// FIX: prima qui c'erano RENT_ROLES/SERVICE_ROLES (array fissi di nomi
+// ruolo) e un blocco di if/else per ogni singolo link di navbar — ora la
+// visibilità di ognuno segue semplicemente la matrice permessi, che è
+// personalizzabile dall'admin invece di essere scritta nel codice.
+const NAV_ID_BY_SECTION = {
+    DASHBOARD: 'navDashboard', FOLLOWUPS: 'navFollowups', WAITING: 'navWaiting',
+    CONTACTS: 'navContacts', PROMO: 'navPromo', ADMIN: 'adminLink',
+    RENT: 'navRent', SERVICE: 'navService'
+};
+
 function applyRolePermissions(role) {
-    const isAdmin = role === 'ADMIN';
-    const isGestore = role === 'GESTORE';
-    const isModerator = role === 'MODERATORE';
-    const isNoleggio = role === 'NOLEGGIO';
-    const isService = role === 'SERVICE';
-    const canSeeAll = isAdmin || isGestore || isModerator;
-    const canSeeRent = RENT_ROLES.includes(role);
-    const canSeeService = SERVICE_ROLES.includes(role);
+    Object.entries(NAV_ID_BY_SECTION).forEach(([section, navId]) => {
+        const el = document.getElementById(navId);
+        if (!el) return;
+        el.style.display = hasAccess(section, role) ? 'inline-block' : 'none';
+    });
 
-    // I ruoli NOLEGGIO e SERVICE vedono SOLO la propria dashboard dedicata:
-    // tutto il resto (Dashboard, Follow-up, Recall, Registro Contatti, Promo,
-    // Utenti) resta nascosto. Moderatore/Gestore/Admin vedono tutto, incluse
-    // entrambe le dashboard verticali.
-    document.getElementById('navDashboard').style.display = (canSeeAll && !isNoleggio && !isService) ? 'inline-block' : 'none';
-    document.getElementById('navFollowups').style.display = (canSeeAll && !isNoleggio && !isService) ? 'inline-block' : 'none';
-    document.getElementById('navWaiting').style.display = (canSeeAll && !isNoleggio && !isService) ? 'inline-block' : 'none';
-    document.getElementById('navContacts').style.display = (isNoleggio || isService) ? 'none' : 'inline-block';
-    document.getElementById('navPromo').style.display = (canSeeAll && !isNoleggio && !isService) ? 'inline-block' : 'none';
-    document.getElementById('adminLink').style.display = ((isAdmin || isGestore) && !isNoleggio && !isService) ? 'inline-block' : 'none';
-
-    const navRent = document.getElementById('navRent');
-    if (navRent) navRent.style.display = canSeeRent ? 'inline-block' : 'none';
-
-    const navService = document.getElementById('navService');
-    if (navService) navService.style.display = canSeeService ? 'inline-block' : 'none';
+    // NUOVO: menu ☰ (per ora solo "Mostra Grafici") — visibile solo a chi ha
+    // accesso alla sezione GRAFICI (default: Moderatore in su, personalizzabile
+    // da Admin → Permessi).
+    const hamburgerWrapper = document.getElementById('hamburgerMenuWrapper');
+    if (hamburgerWrapper) hamburgerWrapper.style.display = hasAccess('GRAFICI', role) ? 'block' : 'none';
 
     if (role === 'UTENTE') {
         const wrapper = document.getElementById('contactOperatorFilterWrapper');
@@ -109,6 +162,21 @@ function applyPageTheme(page, role) {
     }
 }
 
+// Ordine di priorità con cui scegliere la pagina "di default" per un ruolo,
+// quando quella richiesta non è accessibile. NOLEGGIO/SERVICE restano un
+// caso a parte perché, anche se in teoria avessero accesso ad altro, la loro
+// "casa" naturale resta la propria dashboard dedicata.
+const DEFAULT_PAGE_PRIORITY = ['dashboard', 'contacts', 'followups', 'waiting', 'promo', 'rent', 'service', 'admin'];
+
+function getDefaultPageForRole(role) {
+    if (role === 'NOLEGGIO' && hasAccess('RENT', role)) return 'rent';
+    if (role === 'SERVICE' && hasAccess('SERVICE', role)) return 'service';
+    for (const page of DEFAULT_PAGE_PRIORITY) {
+        if (hasAccess(PAGE_TO_SECTION[page], role)) return page;
+    }
+    return 'contacts';
+}
+
 // updateHash=true (default): scrive la pagina nell'hash dell'URL (#rent, #contacts...),
 // così il tasto destro "apri in nuova scheda" e il refresh (F5) portano davvero
 // alla pagina corretta invece di ripartire sempre dalla dashboard.
@@ -117,17 +185,16 @@ function applyPageTheme(page, role) {
 // showPage all'infinito).
 function showPage(page, updateHash = true) {
     const role = currentUser?.role || 'UTENTE';
-    const canSeeAll = role === 'ADMIN' || role === 'GESTORE' || role === 'MODERATORE';
-    const isNoleggio = role === 'NOLEGGIO';
-    const isService = role === 'SERVICE';
 
     if (!VALID_PAGES.includes(page)) page = 'dashboard';
 
-    // I ruoli NOLEGGIO e SERVICE sono forzati sempre sulla propria pagina,
-    // come UTENTE è forzato su contacts.
-    if (isNoleggio && page !== 'rent') page = 'rent';
-    else if (isService && page !== 'service') page = 'service';
-    else if (!canSeeAll && !isNoleggio && !isService && page !== 'contacts') page = 'contacts';
+    // FIX: prima qui c'erano controlli espliciti isNoleggio/isService/
+    // canSeeAll — ora è la matrice permessi (personalizzabile dall'admin) a
+    // decidere se il ruolo può vedere la pagina richiesta. Se non può, va
+    // alla prima pagina accessibile secondo l'ordine di priorità.
+    if (!hasAccess(PAGE_TO_SECTION[page], role)) {
+        page = getDefaultPageForRole(role);
+    }
 
     sessionStorage.setItem('currentPage', page);
 
@@ -263,9 +330,16 @@ window.onload = function() {
             if (res.ok) return res.json();
             throw new Error('Non autenticato');
         })
-        .then(data => {
+        .then(async data => {
             currentUser = data;
             document.getElementById('navUserName').textContent = data.fullName || data.email;
+
+            // NUOVO: la matrice permessi va caricata prima di
+            // applyRolePermissions/showPage, che ora la usano per decidere
+            // cosa mostrare — senza aspettarla, la navbar si costruirebbe
+            // ancora vuota (nessun permesso trovato = tutto nascosto).
+            await loadPermissionMatrix();
+
             applyRolePermissions(data.role);
             document.getElementById('loginPage').style.display = 'none';
             document.getElementById('mainApp').style.display = 'block';
@@ -273,11 +347,8 @@ window.onload = function() {
             // Priorità alla pagina indicata nell'URL (hash) — così un refresh (F5)
             // o un "apri in nuova scheda" riaprono esattamente dove si era, invece
             // di tornare sempre alla pagina di default del ruolo.
-            const isNoleggio = data.role === 'NOLEGGIO';
-            const isService = data.role === 'SERVICE';
             const hashPage = getPageFromHash();
-            const isBackOffice = data.role === 'BACK_OFFICE';
-            const defaultPage = isNoleggio ? 'rent' : (isService ? 'service' : ((data.role === 'UTENTE' || isBackOffice) ? 'contacts' : 'dashboard'));
+            const defaultPage = getDefaultPageForRole(data.role);
             showPage(hashPage || defaultPage);
 
             // FIX PRESTAZIONI: loadStats() veniva chiamata QUI e poi anche
@@ -285,7 +356,7 @@ window.onload = function() {
             // sopra) — due volte di seguito, raddoppiando le 4 richieste
             // parallele della Dashboard a 8 proprio al primo caricamento.
             // showPage() la richiama già da sola quando serve davvero.
-            if (data.role !== 'UTENTE' && !isNoleggio && !isService && !isBackOffice) {
+            if (hasAccess('PROMO', data.role)) {
                 if (typeof loadPromo === 'function') loadPromo();
             }
 

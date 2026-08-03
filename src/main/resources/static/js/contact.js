@@ -43,6 +43,7 @@ let lastDetailTitle = '';
 let detailOnlyNominativo = false;
 let detailOnlyAlert = false;
 let detailGestioneFilter = '';
+let detailCategoryFilter = '';
 let dayViewSecondaryFilter = '';
 let dayViewTertiaryFilter = '';
 let editingContactId = null;
@@ -335,17 +336,52 @@ function acquistoAlertAuditInfo(log) {
         noteGestitaModificata: build('acquistoAlertNoteGestitaModificataDa', 'acquistoAlertNoteGestitaModificataAt')
     };
 }
+// NUOVO: apre il popup di dettaglio con TUTTI i contatti di una categoria,
+// su tutta la storia (non limitati al periodo attualmente filtrato a
+// schermo) — così un allert "da gestire" creato prima del periodo scelto in
+// "DATA" non sparisce semplicemente perché non è nel giro di date corrente.
+// Riusa showGenericContactDetail, che ha già i filtri "solo con allert" e
+// Da gestire/In gestione/Gestita — qui si parte con "solo con allert" già
+// attivo, dato che è lo scopo per cui si clicca questa barra.
+async function openCategoryStoricoDetail(category, titlePrefix) {
+    try {
+        const res = await fetch(`/api/contacts/by-category-storico?category=${encodeURIComponent(category)}`);
+        if (!res.ok) { alert('Errore nel caricamento dello storico completo'); return; }
+        const items = await res.json();
+        showGenericContactDetail(`${titlePrefix} — Storico completo`, items);
+        detailOnlyAlert = true;
+        renderGenericContactDetail();
+    } catch (err) {
+        console.error('Errore caricamento storico categoria:', err);
+        alert('Errore nel caricamento dello storico completo');
+    }
+}
+
 function findChartTitleElement(canvas) {
     if (!canvas) return null;
-    const parent = canvas.parentElement;
-    let h3 = parent ? parent.querySelector(':scope > h3') : null;
-    if (!h3) {
-        const card = canvas.closest('.chart-card');
-        h3 = card ? card.querySelector('h3') : null;
+    const sizedWrapper = canvas.parentElement;
+    // NUOVO: struttura attuale — l'h3 è fratello del div che dà l'altezza
+    // al grafico (non più suo genitore diretto), entrambi dentro un div
+    // "gruppo" comune. Cercare qui PRIMA evita che il fallback più sotto
+    // prenda il primo h3 di TUTTA la card quando la card contiene più
+    // grafici (es. Info Acquisto + Fonte Vendita nella stessa card) — bug
+    // che faceva sovrascrivere il badge sbagliato al grafico sbagliato.
+    if (sizedWrapper && sizedWrapper.previousElementSibling && sizedWrapper.previousElementSibling.tagName === 'H3') {
+        return sizedWrapper.previousElementSibling;
     }
-    return h3;
+    // Struttura precedente: h3 diretto fratello del canvas stesso.
+    let h3 = sizedWrapper ? sizedWrapper.querySelector(':scope > h3') : null;
+    if (h3) return h3;
+    // Fallback più mirato: h3 dentro lo stesso "gruppo" immediato (il nonno
+    // del canvas), non l'intera .chart-card.
+    const group = sizedWrapper ? sizedWrapper.parentElement : null;
+    h3 = group ? group.querySelector(':scope > h3') : null;
+    if (h3) return h3;
+    // Ultima spiaggia, come prima.
+    const card = canvas.closest('.chart-card');
+    return card ? card.querySelector('h3') : null;
 }
-function setChartCounterBadge(afterElement, count, label) {
+function setChartCounterBadge(afterElement, count, label, onClick) {
     if (!afterElement) return;
     let badge = afterElement.nextElementSibling;
     if (!badge || !badge.classList || !badge.classList.contains('chart-counter-badge')) {
@@ -355,6 +391,18 @@ function setChartCounterBadge(afterElement, count, label) {
         afterElement.insertAdjacentElement('afterend', badge);
     }
     badge.textContent = `${label}: ${count}`;
+    // NUOVO: se viene passato un gestore click, la barra intera diventa
+    // cliccabile — usata per esempio dal badge "Totale storico" di Info
+    // Acquisto, che apre la lista di TUTTI gli allert (anche più vecchi del
+    // periodo filtrato a schermo).
+    if (onClick) {
+        badge.style.cursor = 'pointer';
+        badge.title = 'Clicca per vedere tutti gli allert, su tutta la storia';
+        badge.onclick = onClick;
+    } else {
+        badge.style.cursor = '';
+        badge.onclick = null;
+    }
 }
 function updateServiceCounterBadge() {
     const canvas = document.getElementById('chartServiceAgnano');
@@ -901,7 +949,27 @@ function showGenericContactDetail(title, items) {
     detailOnlyNominativo = false;
     detailOnlyAlert = false;
     detailGestioneFilter = '';
+    detailCategoryFilter = '';
     renderGenericContactDetail();
+}
+
+// NUOVO: apre il popup unificato con TUTTI gli allert, su tutta la storia,
+// aggregando TUTTE le categorie che possono averne (non solo Info Acquisto)
+// — pulsante 🔔 ALLERT nella barra del Registro Contatti. Ignora sempre il
+// periodo filtrato a schermo per costruzione (l'endpoint non riceve mai
+// from/to).
+async function openAllAlertsModal() {
+    try {
+        const res = await fetch('/api/contacts/alerts-storico');
+        if (!res.ok) { alert('Errore nel caricamento degli allert'); return; }
+        const items = await res.json();
+        showGenericContactDetail('🔔 Tutti gli Allert — Storico completo', items);
+        detailOnlyAlert = true;
+        renderGenericContactDetail();
+    } catch (err) {
+        console.error('Errore caricamento tutti gli allert:', err);
+        alert('Errore nel caricamento degli allert');
+    }
 }
 
 // ============================================================
@@ -921,13 +989,20 @@ function renderGenericContactDetail() {
         ? lastDetailItems.filter(l => l.clienteNome || l.clienteCognome || l.serviceNomeCliente || l.noleggioNomeCliente || l.nominativoAppuntamento)
         : lastDetailItems;
 
-    const hasAcquistoItems = lastDetailItems.some(l => l.category === 'Info Acquisto effettuato');
+    const hasAcquistoItems = lastDetailItems.some(l => ALERT_ELIGIBLE_CATEGORIES.includes(l.category));
+    // NUOVO: quante categorie diverse (tra quelle con allert) sono presenti
+    // in questa lista — se più di una, mostra il filtro a tendina per
+    // categoria (usato dal popup 🔔 Tutti gli Allert, che le aggrega tutte).
+    const categoriesPresent = [...new Set(lastDetailItems.filter(l => ALERT_ELIGIBLE_CATEGORIES.includes(l.category)).map(l => l.category))];
 
     if (detailOnlyAlert) {
         items = items.filter(l => hasAcquistoAlert(l));
     }
     if (detailGestioneFilter) {
         items = items.filter(l => hasAcquistoAlert(l) && (l.acquistoAlertStatus || 'DA_GESTIRE') === detailGestioneFilter);
+    }
+    if (detailOnlyAlert && detailCategoryFilter) {
+        items = items.filter(l => l.category === detailCategoryFilter);
     }
     // NUOVO: filtro per destinatario — "Tutti" (nessun filtro) oppure un
     // operatore specifico, che mostra solo gli allert visibili a lui
@@ -970,6 +1045,19 @@ function renderGenericContactDetail() {
                         style="padding:5px 12px;font-size:11px">${o.label}</button>
                 `).join('')}
             </div>`;
+
+            // NUOVO: filtro per categoria — solo se la lista contiene più
+            // di una categoria diversa con allert (es. il popup aggregato
+            // 🔔 Tutti gli Allert). Per una singola categoria (es. aperto
+            // dal badge di un grafico specifico) non ha senso mostrarlo.
+            if (categoriesPresent.length > 1) {
+                html += `<div style="margin-bottom:10px">
+                    <select id="detailCategorySelect" class="input-dark" style="font-size:12px;padding:6px 10px" onchange="setDetailCategoryFilter(this.value)">
+                        <option value="">📁 Tutte le categorie</option>
+                        ${categoriesPresent.map(c => `<option value="${c}" ${detailCategoryFilter === c ? 'selected' : ''}>${c}</option>`).join('')}
+                    </select>
+                </div>`;
+            }
 
             // NUOVO: filtro per destinatario — "Tutti" o un operatore specifico
             html += `<div style="margin-bottom:14px">
@@ -1052,6 +1140,12 @@ function setDetailGestioneFilter(status) {
     renderGenericContactDetail();
 }
 
+// NUOVO: filtro per categoria nel popup aggregato 🔔 Tutti gli Allert.
+function setDetailCategoryFilter(category) {
+    detailCategoryFilter = category;
+    renderGenericContactDetail();
+}
+
 // NUOVO: filtro per destinatario nella lista Info Acquisto/Leasing/
 // Finanziamento/Amministrazione — "Tutti gli operatori" (nessun filtro) o
 // un operatore specifico, per vedere solo gli allert visibili a lui.
@@ -1076,8 +1170,8 @@ async function loadUsersForDetailDestinatariFilter() {
 }
 
 let contactChart = null;
-function renderContactChartFromLogs(logs) {
-    const ctx = document.getElementById('chartContacts');
+function renderContactChartFromLogs(logs, targetCanvasId) {
+    const ctx = document.getElementById(targetCanvasId || 'chartContacts');
     if (!ctx) return;
     if (contactChart) contactChart.destroy();
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
@@ -1097,7 +1191,7 @@ function renderContactChartFromLogs(logs) {
         data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: isDark ? '#0d0f1a' : '#ffffff' }] },
         options: {
             animation: false,
-            responsive: true, maintainAspectRatio: true,
+            responsive: true, maintainAspectRatio: false,
             onClick: (evt, elements) => {
                 if (elements.length === 0) return;
                 const label = labels[elements[0].index];
@@ -1126,8 +1220,8 @@ function renderContactChartFromLogs(logs) {
     });
 }
 
-function renderChartAppuntamentiSede(logs) {
-    const ctx = document.getElementById('chartAppuntamentiSede');
+function renderChartAppuntamentiSede(logs, targetCanvasId) {
+    const ctx = document.getElementById(targetCanvasId || 'chartAppuntamentiSede');
     if (!ctx) return;
     if (contactChartSede) contactChartSede.destroy();
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
@@ -1144,7 +1238,7 @@ function renderChartAppuntamentiSede(logs) {
         data: { labels: SEDI_LIST, datasets: [{ data: SEDI_LIST.map(s => counts[s]), backgroundColor: ['#e91e6399','#1a408099','#00c85399'], borderColor: SEDE_COLORS, borderWidth: 2, borderRadius: 8, borderSkipped: false }] },
         options: {
             animation: false,
-            responsive: true, maintainAspectRatio: true,
+            responsive: true, maintainAspectRatio: false,
             onClick: (evt, elements) => { if (elements.length > 0) showSedeDetail(SEDI_LIST[elements[0].index]); },
             onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
             plugins: {
@@ -1177,8 +1271,8 @@ function closeGenericDetailAndEdit(id) {
     openEditContactModal(id);
 }
 
-function renderChartInfoAcquisto(logs) {
-    const ctx = document.getElementById('chartInfoAcquisto');
+function renderChartInfoAcquisto(logs, targetCanvasId) {
+    const ctx = document.getElementById(targetCanvasId || 'chartInfoAcquisto');
     if (!ctx) return;
     if (contactChartAcquisto) contactChartAcquisto.destroy();
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
@@ -1195,7 +1289,7 @@ function renderChartInfoAcquisto(logs) {
         data: { labels: ACQUISTO_LIST, datasets: [{ data: ACQUISTO_LIST.map(t => counts[t]), backgroundColor: ACQUISTO_COLORS, borderWidth: 2, borderColor: isDark ? '#0d0f1a' : '#ffffff' }] },
         options: {
             animation: false,
-            responsive: true, maintainAspectRatio: true, layout: { padding: { bottom: 10 } },
+            responsive: true, maintainAspectRatio: false,
             onClick: (evt, elements) => {
                 if (elements.length === 0) return;
                 const tipo = ACQUISTO_LIST[elements[0].index];
@@ -1204,7 +1298,7 @@ function renderChartInfoAcquisto(logs) {
             },
             onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
             plugins: {
-                legend: { position: 'bottom', labels: { color: legendColor, font: { size: 10 }, padding: 8, boxWidth: 10,
+                legend: { position: 'right', labels: { color: legendColor, font: { size: 10 }, padding: 6, boxWidth: 10,
                     generateLabels: chart => chart.data.labels.map((label, i) => {
                         const val = chart.data.datasets[0].data[i];
                         const pct = total > 0 ? Math.round(val*1000/total)/10 : 0;
@@ -1231,11 +1325,12 @@ function renderChartInfoAcquisto(logs) {
     if (totalDaGestire > 0) alertBreakdown.push(`🔔 ${totalDaGestire} da gestire`);
     if (totalInGestione > 0) alertBreakdown.push(`🟡 ${totalInGestione} in gestione`);
     if (totalGestita > 0) alertBreakdown.push(`🟢 ${totalGestita} gestite`);
-    setChartCounterBadge(findChartTitleElement(ctx), totalAll, `Totale storico${alertBreakdown.length ? ' · ' + alertBreakdown.join(' · ') : ''}`);
+    setChartCounterBadge(findChartTitleElement(ctx), totalAll, `Totale storico${alertBreakdown.length ? ' · ' + alertBreakdown.join(' · ') : ''}`,
+        () => openCategoryStoricoDetail('Info Acquisto effettuato', 'Info Acquisto Effettuato'));
 }
 
-function renderChartFonteVendita(logs) {
-    const ctx = document.getElementById('chartFonteVendita');
+function renderChartFonteVendita(logs, targetCanvasId) {
+    const ctx = document.getElementById(targetCanvasId || 'chartFonteVendita');
     if (!ctx) return;
     if (contactChartFonte) contactChartFonte.destroy();
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
@@ -1254,7 +1349,7 @@ function renderChartFonteVendita(logs) {
         data: { labels: FONTE_LIST, datasets: [{ data: FONTE_LIST.map(f => counts[f]), backgroundColor: FONTE_COLORS, borderWidth: 2, borderColor: isDark ? '#0d0f1a' : '#ffffff' }] },
         options: {
             animation: false,
-            responsive: true, maintainAspectRatio: true,
+            responsive: true, maintainAspectRatio: false,
             onClick: (evt, elements) => {
                 if (elements.length === 0) return;
                 const fonte = FONTE_LIST[elements[0].index];
@@ -1263,7 +1358,7 @@ function renderChartFonteVendita(logs) {
             },
             onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
             plugins: {
-                legend: { position: 'bottom', labels: { color: legendColor, font: { size: 10 }, padding: 8, boxWidth: 10,
+                legend: { position: 'right', labels: { color: legendColor, font: { size: 10 }, padding: 6, boxWidth: 10,
                     generateLabels: chart => chart.data.labels.map((label, i) => {
                         const val = chart.data.datasets[0].data[i];
                         const pct = total > 0 ? Math.round(val*1000/total)/10 : 0;
@@ -2624,12 +2719,13 @@ function changeContactCalendarMonth(delta) {
     renderContactCalendar();
 }
 
-function renderContactChartByOperator() {
-    const ctx = document.getElementById('chartContactsByOperator');
+function renderContactChartByOperator(targetCanvasId, logsOverride) {
+    const ctx = document.getElementById(targetCanvasId || 'chartContactsByOperator');
     if (!ctx) return;
     if (contactChartByOperator) contactChartByOperator.destroy();
+    const sourceLogs = logsOverride || contactLogs;
     const byOperator = {};
-    contactLogs.forEach(log => { byOperator[log.user.fullName] = (byOperator[log.user.fullName]||0) + 1; });
+    sourceLogs.forEach(log => { byOperator[log.user.fullName] = (byOperator[log.user.fullName]||0) + 1; });
     const total = Object.values(byOperator).reduce((a,b) => a+b, 0);
     const labels = Object.keys(byOperator);
     const data = labels.map(op => byOperator[op]);
@@ -2641,7 +2737,7 @@ function renderContactChartByOperator() {
         data: { labels, datasets: [{ data, backgroundColor: colors.map(c => c+'bb'), borderColor: colors, borderWidth: 2 }] },
         options: {
             animation: false,
-            responsive: true, maintainAspectRatio: true,
+            responsive: true, maintainAspectRatio: false,
             onClick: (evt, elements) => {
                 if (elements.length === 0) return;
                 const op = labels[elements[0].index];
@@ -2650,7 +2746,7 @@ function renderContactChartByOperator() {
             },
             onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
             plugins: {
-                legend: { position: 'right', labels: { color: legendColor, font: { size: 12 }, padding: 14, boxWidth: 14,
+                legend: { position: 'right', labels: { color: legendColor, font: { size: 11 }, padding: 8, boxWidth: 12,
                     generateLabels: chart => chart.data.labels.map((label,i) => {
                         const val = chart.data.datasets[0].data[i];
                         const pct = total > 0 ? Math.round(val*1000/total)/10 : 0;
@@ -2772,6 +2868,7 @@ function toggleNonComunicaNominativo() {
 }
 
 async function createContactLog() {
+    if (typeof isReadOnlySection === 'function' && isReadOnlySection('CONTACTS')) { alert('Non hai i permessi per creare contatti.'); return; }
     const category = document.getElementById('contactCategory').value;
     const clienteNome = document.getElementById('clienteNome')?.value.trim() || '';
     const clienteCognome = document.getElementById('clienteCognome')?.value.trim() || '';
@@ -2962,6 +3059,7 @@ async function createContactLog() {
 }
 
 async function deleteContactLog(id) {
+    if (typeof isReadOnlySection === 'function' && isReadOnlySection('CONTACTS')) { alert('Non hai i permessi per eliminare contatti.'); return; }
     if (!confirm('Eliminare questo contatto?')) return;
     const savedDayView = currentDayView;
     try {
@@ -3006,6 +3104,7 @@ function closeEditContactModal(event) {
     editingContactId = null;
 }
 async function saveEditContactLog() {
+    if (typeof isReadOnlySection === 'function' && isReadOnlySection('CONTACTS')) { alert('Non hai i permessi per modificare contatti.'); return; }
     if (!editingContactId) return;
     const category = document.getElementById('editContactCategory')?.value || '';
     const clienteNome = document.getElementById('editContactNome')?.value.trim() || '';
