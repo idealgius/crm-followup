@@ -83,9 +83,9 @@ function buildGraphCheckboxList() {
     CHART_GROUP_ORDER.forEach(group => {
         const items = CHART_DEFINITIONS.filter(c => c.group === group);
         if (items.length === 0) return;
-        html += `<div style="font-size:10px;font-weight:700;color:var(--text-secondary);letter-spacing:0.5px;text-transform:uppercase;margin:10px 0 4px">${group}</div>`;
+        html += `<div style="font-size:10px;font-weight:700;color:#aab0c0;letter-spacing:0.5px;text-transform:uppercase;margin:10px 0 4px">${group}</div>`;
         items.forEach(c => {
-            html += `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;color:var(--text-primary);cursor:pointer">
+            html += `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;color:#ffffff;cursor:pointer">
                 <input type="checkbox" class="graph-checkbox" value="${c.id}" onchange="updateGraphSelectAllState()"> ${c.label}
             </label>`;
         });
@@ -191,6 +191,8 @@ async function fetchDataForSelection(defs) {
     return data;
 }
 
+const CHART_GROUP_ICON = { 'Registro Contatti': '📞', 'Noleggio': '🚗', 'Service': '🔧', 'Dashboard': '📊' };
+
 async function renderAllChartsSelection() {
     const container = document.getElementById('allChartsContainer');
     if (!container) return;
@@ -199,30 +201,65 @@ async function renderAllChartsSelection() {
 
     const data = await fetchDataForSelection(defs);
 
-    let html = '';
-    CHART_GROUP_ORDER.forEach(group => {
-        const groupDefs = defs.filter(d => d.group === group);
-        if (groupDefs.length === 0) return;
-        html += `<h3 style="margin:24px 0 14px">${group}</h3><div class="chart-grid-allcharts">`;
-        groupDefs.forEach(d => {
-            const targetId = `ac_${d.id}`;
-            const inner = d.type === 'canvas'
-                ? `<canvas id="${targetId}"></canvas>`
-                : `<div id="${targetId}"></div>`;
-            html += `<div class="chart-card">
-                <h3>${d.label}</h3>
-                <div style="height:${d.height === 'auto' ? 'auto' : d.height + 'px'}">${inner}</div>
-            </div>`;
-        });
-        html += `</div>`;
+    // FIX: prima ogni gruppo (Registro Contatti/Noleggio/Service/Dashboard)
+    // aveva la sua griglia separata — se si selezionava un solo grafico per
+    // gruppo, finivano ognuno da solo sulla propria riga anche quando c'era
+    // spazio per stare affiancati. Ora è UN'UNICA griglia per tutti i
+    // grafici selezionati (ordinati per gruppo, ma senza titoli di sezione
+    // che "spezzano" la riga) — il gruppo di appartenenza diventa una
+    // piccola etichetta sulla card stessa, non più un divisore.
+    const orderedDefs = CHART_GROUP_ORDER.flatMap(group => defs.filter(d => d.group === group));
+
+    // FIX: prima la dimensione era sempre la stessa, che se ne scegliesse 1
+    // o 13. Ora, se se ne scelgono pochi (1-3), le card sono un po' più
+    // grandi per sfruttare meglio lo spazio libero — da 4 in su (compreso
+    // "tutti") resta la dimensione standard di sempre, che già funzionava
+    // bene e non va toccata.
+    const n = orderedDefs.length;
+    let colMin = 380, colMax = 520, heightBonus = 0;
+    if (n === 1) { colMin = 600; colMax = 820; heightBonus = 110; }
+    else if (n === 2) { colMin = 480; colMax = 620; heightBonus = 60; }
+    else if (n === 3) { colMin = 420; colMax = 540; heightBonus = 30; }
+
+    let html = `<div class="chart-grid-allcharts" style="grid-template-columns:repeat(auto-fit, minmax(${colMin}px, ${colMax}px))">`;
+    orderedDefs.forEach(d => {
+        const targetId = `ac_${d.id}`;
+        const inner = d.type === 'canvas'
+            ? `<canvas id="${targetId}"></canvas>`
+            : `<div id="${targetId}"></div>`;
+        const cardHeight = d.height === 'auto' ? 'auto' : (d.height + heightBonus) + 'px';
+        html += `<div class="chart-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px">
+                <h3 style="margin-bottom:0">${d.label}</h3>
+                <span style="font-size:10px;font-weight:700;color:var(--text-secondary);background:var(--step-bg);border:1px solid var(--border);border-radius:8px;padding:2px 8px;white-space:nowrap">${CHART_GROUP_ICON[d.group] || ''} ${d.group}</span>
+            </div>
+            <!-- NUOVO: totale voci del periodo — visibile SOLO in questa
+                 pagina (Mostra Grafici), popolato dopo il rendering perché
+                 dipende dai dati appena caricati. -->
+            <div id="total_${d.id}" style="font-size:11px;font-weight:800;color:#f0c040;background:rgba(240,192,64,0.12);display:inline-block;padding:3px 10px;border-radius:10px;margin-bottom:8px"></div>
+            <div style="height:${cardHeight}">${inner}</div>
+        </div>`;
     });
+    html += `</div>`;
     container.innerHTML = html;
 
     // Rendering dopo aver inserito i canvas/div nel DOM (getElementById
-    // deve trovarli già presenti).
+    // deve trovarli già presenti). Ogni funzione ora restituisce la
+    // propria istanza Chart.js (o, per "Performance Marchi" che non usa
+    // Chart.js, direttamente il totale come numero) — da lì si ricava il
+    // totale voci del periodo, mostrato SOLO in questa pagina.
     defs.forEach(d => {
         try {
-            d.render(`ac_${d.id}`, data);
+            const result = d.render(`ac_${d.id}`, data);
+            const totalEl = document.getElementById(`total_${d.id}`);
+            if (!totalEl) return;
+            let total = null;
+            if (typeof result === 'number') {
+                total = result;
+            } else if (result && result.data && result.data.datasets && result.data.datasets[0]) {
+                total = result.data.datasets[0].data.reduce((a, b) => a + (Number(b) || 0), 0);
+            }
+            totalEl.textContent = total !== null ? `Totale periodo: ${total}` : '';
         } catch (err) {
             console.error(`Errore rendering grafico "${d.label}":`, err);
         }

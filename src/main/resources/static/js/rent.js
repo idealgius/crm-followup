@@ -946,6 +946,7 @@ function renderChartRentStato(list, targetCanvasId) {
             }
         }
     });
+    return chartRentStato;
 }
 
 function renderChartRentFonte(list, targetCanvasId) {
@@ -978,6 +979,7 @@ function renderChartRentFonte(list, targetCanvasId) {
             }
         }
     });
+    return chartRentFonte;
 }
 
 function renderChartRentMarchi(list, targetContainerId) {
@@ -1005,6 +1007,7 @@ function renderChartRentMarchi(list, targetContainerId) {
             <div style="width:32px;font-size:12px;font-weight:800;color:${barColor};text-align:right;flex-shrink:0">${val}</div>
         </div>`;
     }).join('');
+    return list.length;
 }
 
 function renderChartRentInfoVsRichiesta(list, targetCanvasId) {
@@ -1040,6 +1043,7 @@ function renderChartRentInfoVsRichiesta(list, targetCanvasId) {
             }
         }
     });
+    return chartRentInfoVsRichiesta;
 }
 
 function refreshRentChartsOnThemeChange() {

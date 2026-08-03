@@ -471,6 +471,7 @@ function renderFollowUpChart(stats, targetCanvasId) {
             }
         }
     });
+    return chartFollowUp;
 }
 
 function renderWaitingChart(stats, targetCanvasId) {
@@ -521,4 +522,5 @@ function renderWaitingChart(stats, targetCanvasId) {
             }
         }
     });
+    return chartWaiting;
 }

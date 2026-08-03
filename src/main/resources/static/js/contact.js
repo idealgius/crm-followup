@@ -1237,6 +1237,7 @@ function renderContactChartFromLogs(logs, targetCanvasId) {
             }
         }
     });
+    return contactChart;
 }
 
 function renderChartAppuntamentiSede(logs, targetCanvasId) {
@@ -1274,6 +1275,7 @@ function renderChartAppuntamentiSede(logs, targetCanvasId) {
             }
         }
     });
+    return contactChartSede;
 }
 function showSedeDetail(sede) {
     const items = contactLogsFiltered.filter(log => log.category === 'Info + Appuntamento' && log.otherNote === sede);
@@ -1346,6 +1348,7 @@ function renderChartInfoAcquisto(logs, targetCanvasId) {
     if (totalGestita > 0) alertBreakdown.push(`🟢 ${totalGestita} gestite`);
     setChartCounterBadge(findChartTitleElement(ctx), totalAll, `Totale storico${alertBreakdown.length ? ' · ' + alertBreakdown.join(' · ') : ''}`,
         () => openCategoryStoricoDetail('Info Acquisto effettuato', 'Info Acquisto Effettuato'));
+    return contactChartAcquisto;
 }
 
 function renderChartFonteVendita(logs, targetCanvasId) {
@@ -1395,6 +1398,7 @@ function renderChartFonteVendita(logs, targetCanvasId) {
 
     const totalVenditaAll = contactStatsTotaliStorici?.infoVendita ?? contactLogs.filter(l => l.category === 'Info Vendita' || l.category === 'Info + Appuntamento' || l.category === 'Info Vendita in Promo').length;
     setChartCounterBadge(findChartTitleElement(ctx), totalVenditaAll, 'Totale storico Info Vendita');
+    return contactChartFonte;
 }
 
 function buildServiceSedeChart(canvasId, existingChart, logs, sede) {
@@ -2787,6 +2791,7 @@ function renderContactChartByOperator(targetCanvasId, logsOverride) {
             }
         }
     });
+    return contactChartByOperator;
 }
 
 function selectSede(sede) {

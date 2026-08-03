@@ -40,13 +40,13 @@
                  del logo, a sinistra, come richiesto. -->
             <div class="hamburger-menu-wrapper" id="hamburgerMenuWrapper" style="position:relative;display:none">
                 <button type="button" id="hamburgerMenuBtn" onclick="toggleHamburgerMenu()" title="Menu" style="background:none;border:none;color:var(--text-primary);font-size:20px;cursor:pointer;padding:6px 10px;line-height:1">☰</button>
-                <div id="hamburgerMenuDropdown" style="display:none;position:absolute;top:130%;left:0;background:var(--bg-card);border:1.5px solid var(--border);border-radius:10px;box-shadow:var(--shadow);min-width:260px;z-index:200;overflow:hidden">
-                    <button type="button" onclick="toggleGraphMenuSection()" style="width:100%;text-align:left;padding:12px 16px;background:none;border:none;color:var(--text-primary);font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px">
+                <div id="hamburgerMenuDropdown" style="display:none;position:absolute;top:130%;left:0;background:#14162a;border:2px solid #f0c040;border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,0.45);min-width:260px;z-index:200;overflow:hidden">
+                    <button type="button" onclick="toggleGraphMenuSection()" style="width:100%;text-align:left;padding:12px 16px;background:none;border:none;color:#ffffff;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px">
                         <span>📊 Mostra Grafici</span>
-                        <span id="graphMenuArrow" style="font-size:11px;color:var(--text-secondary);transition:transform 0.15s ease">▸</span>
+                        <span id="graphMenuArrow" style="font-size:11px;color:#aab0c0;transition:transform 0.15s ease">▸</span>
                     </button>
                     <div id="graphMenuSection" style="display:none;padding:0 16px 14px;max-height:360px;overflow-y:auto">
-                        <label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;font-weight:700;color:var(--text-primary);border-bottom:1px solid var(--border);margin-bottom:6px;cursor:pointer">
+                        <label style="display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;font-weight:700;color:#ffffff;border-bottom:1px solid #2a2d3e;margin-bottom:6px;cursor:pointer">
                             <input type="checkbox" id="graphSelectAll" onchange="toggleSelectAllGraphs()"> Seleziona tutto
                         </label>
                         <div id="graphCheckboxList"></div>

@@ -26,6 +26,10 @@
     --input-border: #2a2d3e;
     --input-color: #ffffff;
     --stat-bg: #10141f;
+    /* FIX: le celle del calendario (Follow-up, Recall, Registro Contatti)
+       usavano --stat-bg, quasi nero — poco visibile. Colore dedicato solo
+       per loro, un grigio più chiaro, solo in modalità scura. */
+    --calendar-day-bg: #4d525c;
     --shadow: 0 4px 20px rgba(0,0,0,0.4);
     --step-bg: #141a2b;
     --form-top: #f0c040;
@@ -64,6 +68,8 @@
     --input-border: #c8d4e4;
     --input-color: #0d1a2e;
     --stat-bg: #ffffff;
+    /* Modalità chiara: nessuna modifica richiesta, stesso colore di prima. */
+    --calendar-day-bg: #ffffff;
     --shadow: 0 4px 20px rgba(13,26,46,0.10);
     --step-bg: #f4f7fb;
     --form-top: #1a4080;
@@ -728,7 +734,7 @@ select.input-dark {
     aspect-ratio: 1;
     border: 1px solid var(--border);
     border-radius: 8px;
-    background: var(--stat-bg);
+    background: var(--calendar-day-bg);
     color: var(--text-primary);
     font-size: 12px;
     font-weight: 700;
@@ -2397,7 +2403,12 @@ select.input-field {
 /* ===== PAGINA "TUTTI I GRAFICI" (menu ☰) ===== */
 .chart-grid-allcharts {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    /* FIX: 1fr faceva allargare le card fino a riempire tutta la riga
+       quando erano poche (es. una sola card che occupa l'intera larghezza
+       dello schermo) — comportamento noto di auto-fit con colonne
+       "elastiche". Un massimo fisso (520px) mantiene le card sempre alla
+       stessa dimensione ragionevole, che siano 1 o 10. */
+    grid-template-columns: repeat(auto-fit, minmax(380px, 520px));
     gap: 20px;
 }
 

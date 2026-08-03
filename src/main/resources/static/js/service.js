@@ -610,6 +610,7 @@ function renderChartServiceStato(list, targetCanvasId) {
             }
         }
     });
+    return chartServiceStato;
 }
 
 // ============================================================
@@ -869,6 +870,7 @@ function renderChartServiceLavorazioni(list, targetCanvasId) {
             }
         }
     });
+    return chartServiceLavorazioni;
 }
 
 function refreshServiceChartsOnThemeChange() {
