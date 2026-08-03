@@ -47,6 +47,18 @@ public interface ContactLogRepository extends JpaRepository<ContactLog, Long> {
            "ORDER BY c.contactDate ASC")
     List<ContactLog> findByContactDateBetweenOrderByContactDateAsc(LocalDateTime from, LocalDateTime to);
 
+    // ===== ICONA STORICO CLIENTE =====
+    // Query leggere: restituiscono solo AGGREGATI (numero/nome+cognome +
+    // quante volte compaiono), non i record interi — usate per decidere,
+    // su TUTTA la storia del database, se mostrare l'icona 📁 accanto a un
+    // cliente (solo se ha davvero più di una registrazione), senza dover
+    // interrogare il database una volta per ogni riga della tabella.
+    @Query("SELECT c.clienteNumero FROM ContactLog c WHERE c.clienteNumero IS NOT NULL AND c.clienteNumero <> '' GROUP BY c.clienteNumero HAVING COUNT(c) > 1")
+    List<String> findNumeriConPiuContatti();
+
+    @Query("SELECT LOWER(TRIM(c.clienteNome)) || '|' || LOWER(TRIM(c.clienteCognome)) FROM ContactLog c WHERE c.clienteNome IS NOT NULL AND c.clienteCognome IS NOT NULL AND c.clienteNome <> '' AND c.clienteCognome <> '' GROUP BY LOWER(TRIM(c.clienteNome)), LOWER(TRIM(c.clienteCognome)) HAVING COUNT(c) > 1")
+    List<String> findNomiConPiuContatti();
+
     List<ContactLog> findByUserOrderByContactDateAsc(User user);
 
     @Query("SELECT c.category, COUNT(c) FROM ContactLog c GROUP BY c.category")

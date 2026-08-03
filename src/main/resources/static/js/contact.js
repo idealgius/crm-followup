@@ -7,6 +7,24 @@ let contactLogs = [];
 // endpoint dedicato che conta su TUTTO il database, senza alcun filtro.
 let contactStatsTotaliStorici = null;
 
+// Per l'icona 📁 Storico Cliente — Set con numeri/nomi che hanno DAVVERO
+// più di una registrazione in tutta la storia (non solo nel periodo
+// caricato). Ricaricati insieme ai contatti, stesso schema di
+// loadContactStatsTotaliStorici sopra.
+let clientiConStoricoNumeri = new Set();
+let clientiConStoricoNomi = new Set();
+async function loadClientiConStorico() {
+    try {
+        const res = await fetch('/api/contacts/clienti-con-storico');
+        if (!res.ok) return;
+        const data = await res.json();
+        clientiConStoricoNumeri = new Set(data.numeri || []);
+        clientiConStoricoNomi = new Set(data.nomi || []);
+    } catch (err) {
+        console.error('Errore caricamento clienti con storico:', err);
+    }
+}
+
 async function loadContactStatsTotaliStorici() {
     try {
         const res = await fetch('/api/contacts/stats-totali-storici');
@@ -620,6 +638,7 @@ async function loadContactLogs(from, to, restoreDayView) {
         populateOperatorFilter();
         applyContactFilters(restoreDayView);
         checkAcquistoAlertDaGestire();
+        loadClientiConStorico();
         loadContactStatsTotaliStorici().then(() => {
             renderChartInfoAcquisto(contactLogsFiltered);
             renderChartFonteVendita(contactLogsFiltered);
@@ -2619,13 +2638,19 @@ function renderContactRow(log) {
     // periodo caricato, non è un problema di correttezza dei dati — solo
     // l'icona potrebbe non comparire in quel caso limite.
     // FIX: prima l'icona compariva SOLO se un altro contatto dello stesso
-    // cliente era già caricato nel periodo corrente — se gli altri suoi
-    // contatti erano fuori da quel periodo, l'icona non compariva affatto,
-    // dando l'impressione che l'archivio storico non funzionasse (nessun
-    // modo di aprirlo). Ora è sempre presente: il click interroga comunque
-    // sempre tutta la storia del database, quindi non c'è ragione di
-    // nasconderla in base a cosa è caricato in memoria in quel momento.
-    const storicoBtn = ` <button type="button" onclick="openCustomerHistoryModal('${(log.clienteNome||'').replace(/'/g,"\\'")}', '${(log.clienteCognome||'').replace(/'/g,"\\'")}', '${(log.clienteNumero||'').replace(/'/g,"\\'")}')" title="Storico cliente" style="background:none;border:none;cursor:pointer;font-size:13px;padding:0;margin-left:4px;vertical-align:middle">📁</button>`;
+    // cliente era già caricato nel periodo corrente (nascosta per chi ha
+    // storico solo fuori da quel periodo), poi era stata resa sempre
+    // visibile (mostrandola anche a chi ha una sola registrazione, inutile
+    // da aprire). Ora usa gli aggregati calcolati dal server su TUTTA la
+    // storia (clientiConStoricoNumeri/Nomi) — compare solo quando c'è
+    // davvero più di una registrazione, indipendentemente dal periodo.
+    const numeroNorm = (log.clienteNumero || '').trim();
+    const nomeNormKey = (log.clienteNome && log.clienteCognome)
+        ? `${log.clienteNome.trim().toLowerCase()}|${log.clienteCognome.trim().toLowerCase()}`
+        : null;
+    const hasHistory = (numeroNorm && clientiConStoricoNumeri.has(numeroNorm))
+        || (nomeNormKey && clientiConStoricoNomi.has(nomeNormKey));
+    const storicoBtn = hasHistory ? ` <button type="button" onclick="openCustomerHistoryModal('${(log.clienteNome||'').replace(/'/g,"\\'")}', '${(log.clienteCognome||'').replace(/'/g,"\\'")}', '${(log.clienteNumero||'').replace(/'/g,"\\'")}')" title="Storico cliente" style="background:none;border:none;cursor:pointer;font-size:13px;padding:0;margin-left:4px;vertical-align:middle">📁</button>` : '';
     return `<tr id="contact-row-${log.id}">
         <td style="font-weight:700;color:var(--text-primary)">${time}</td>
         <td style="font-size:12px;color:var(--text-primary);font-weight:700">${nomeHtml}${storicoBtn}<br><span style="font-weight:400;color:var(--text-secondary)">📞 ${clienteNumeroDisplay(log)}</span></td>

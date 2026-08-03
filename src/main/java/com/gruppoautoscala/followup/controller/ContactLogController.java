@@ -73,6 +73,15 @@ public class ContactLogController {
     // attualmente caricato dal frontend) e per il pulsante "Storico" che
     // mostra tutte le chiamate passate di un cliente. Basta UNA delle due
     // condizioni (nome+cognome oppure numero) per generare un match.
+    // Per l'icona 📁 Storico Cliente nella tabella — solo aggregati
+    // (numeri/nomi con più di una registrazione), non i record interi.
+    @GetMapping("/clienti-con-storico")
+    public ResponseEntity<?> getClientiConStorico(HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        return ResponseEntity.ok(contactLogService.getClientiConStorico());
+    }
+
     @GetMapping("/customer-history")
     public ResponseEntity<?> getCustomerHistory(
             @RequestParam(required = false) String nome,

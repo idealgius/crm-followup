@@ -91,6 +91,16 @@ public class ContactLogService {
         return result;
     }
 
+    // Per l'icona 📁 Storico Cliente — vedi ContactLogRepository per i
+    // dettagli sulle query aggregate sottostanti (solo conteggi, non
+    // record interi).
+    public Map<String, Object> getClientiConStorico() {
+        Map<String, Object> result = new HashMap<>();
+        result.put("numeri", contactLogRepository.findNumeriConPiuContatti());
+        result.put("nomi", contactLogRepository.findNomiConPiuContatti());
+        return result;
+    }
+
     public List<ContactLog> getAll() {
         return contactLogRepository.findByOrderByContactDateAsc();
     }
