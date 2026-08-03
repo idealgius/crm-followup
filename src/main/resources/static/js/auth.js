@@ -29,12 +29,23 @@ async function login() {
         sessionStorage.removeItem('currentPage');
 
         document.getElementById('navUserName').textContent = data.fullName || data.email;
+
+        // FIX CRITICO: qui mancava del tutto il caricamento della matrice
+        // permessi prima di applyRolePermissions() — funzionava solo nel
+        // refresh/riapertura pagina (window.onload in app.js), che la
+        // aspetta correttamente. Il login diretto (questa funzione) la
+        // chiamava con permissionMatrix ancora vuoto {} — con la mappa
+        // vuota, hasAccess() nega tutto, e la navbar (Dashboard, Follow-up,
+        // ecc., compreso Registro Contatti) spariva subito dopo il login,
+        // finché non si ricaricava la pagina (che passa dal percorso
+        // corretto in app.js).
+        if (typeof loadPermissionMatrix === 'function') await loadPermissionMatrix();
         applyRolePermissions(data.role);
 
         document.getElementById('loginPage').style.display = 'none';
         document.getElementById('mainApp').style.display = 'block';
 
-        const defaultPage = data.role === 'UTENTE' ? 'contacts' : 'dashboard';
+        const defaultPage = typeof getDefaultPageForRole === 'function' ? getDefaultPageForRole(data.role) : (data.role === 'UTENTE' ? 'contacts' : 'dashboard');
         showPage(defaultPage);
 
         if (data.role !== 'UTENTE') loadStats();

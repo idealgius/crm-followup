@@ -13,14 +13,33 @@ const PAGE_TO_SECTION = {
     rent: 'RENT', service: 'SERVICE'
 };
 
+// FIX: se il caricamento della matrice permessi fallisce (endpoint non
+// ancora deployato sul server, problema di rete temporaneo, ecc.),
+// permissionMatrix restava vuoto {} — e con la mappa vuota, hasAccess()
+// nega TUTTO per chiunque, navbar compresa (anche il link della pagina su
+// cui ci si trova già). Ora, in caso di fallimento, si usa questa mappa di
+// riserva — identica al comportamento storico dell'app prima del sistema
+// di permessi — così un problema di rete/deploy non blocca mai la
+// navigazione, nel peggiore dei casi si torna al comportamento di sempre.
+const PERMISSION_MATRIX_FALLBACK = {
+    UTENTE: { CONTACTS: 'FULL' },
+    BACK_OFFICE: { CONTACTS: 'FULL' },
+    MODERATORE: { DASHBOARD: 'FULL', FOLLOWUPS: 'FULL', WAITING: 'FULL', CONTACTS: 'FULL', PROMO: 'FULL', RENT: 'FULL', SERVICE: 'FULL', GRAFICI: 'FULL' },
+    GESTORE: { DASHBOARD: 'FULL', FOLLOWUPS: 'FULL', WAITING: 'FULL', CONTACTS: 'FULL', PROMO: 'FULL', RENT: 'FULL', SERVICE: 'FULL', GRAFICI: 'FULL', ADMIN: 'FULL' },
+    ADMIN: { DASHBOARD: 'FULL', FOLLOWUPS: 'FULL', WAITING: 'FULL', CONTACTS: 'FULL', PROMO: 'FULL', RENT: 'FULL', SERVICE: 'FULL', GRAFICI: 'FULL', ADMIN: 'FULL' },
+    NOLEGGIO: { RENT: 'FULL' },
+    SERVICE: { SERVICE: 'FULL' }
+};
+
 async function loadPermissionMatrix() {
     try {
         const res = await fetch('/api/permissions');
-        if (!res.ok) return;
+        if (!res.ok) { permissionMatrix = PERMISSION_MATRIX_FALLBACK; return; }
         const data = await res.json();
-        permissionMatrix = data.matrix || {};
+        permissionMatrix = (data.matrix && Object.keys(data.matrix).length > 0) ? data.matrix : PERMISSION_MATRIX_FALLBACK;
     } catch (err) {
-        console.error('Errore caricamento permessi:', err);
+        console.error('Errore caricamento permessi, uso la mappa di riserva:', err);
+        permissionMatrix = PERMISSION_MATRIX_FALLBACK;
     }
 }
 
