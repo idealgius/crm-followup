@@ -2695,8 +2695,8 @@ function renderContactRow(log) {
             if (log.notaAggiuntiva) parts.push('📝 ' + log.notaAggiuntiva);
             return parts.length > 0 ? parts.join(' · ') : '—';
         })()}</td>
-        <td style="font-size:12px;color:var(--text-secondary)">${log.user.fullName}</td>
-        <td>${canEdit
+        <td style="font-size:12px;color:var(--text-secondary);white-space:nowrap">${log.user.fullName}</td>
+        <td><div style="display:flex;align-items:center;gap:6px">${canEdit
             ? `<button class="btn-contact-action btn-orange" onclick="openEditContactModal(${log.id})" title="Modifica">✏️</button><button class="btn-contact-action btn-red" onclick="deleteContactLog(${log.id})" title="Elimina">🗑️</button>`
             // FIX: prima qui c'era una stringa vuota '' quando canEdit è
             // false — la cella restava senza contenuto e la riga risultava
@@ -2706,7 +2706,7 @@ function renderContactRow(log) {
             // invisibili e non cliccabili, così ogni riga ha sempre
             // esattamente la stessa altezza, con o senza permessi.
             : `<button class="btn-contact-action btn-orange" style="visibility:hidden;pointer-events:none" tabindex="-1" aria-hidden="true">✏️</button><button class="btn-contact-action btn-red" style="visibility:hidden;pointer-events:none" tabindex="-1" aria-hidden="true">🗑️</button>`
-        }</td>
+        }</div></td>
     </tr>`;
 }
 

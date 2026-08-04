@@ -1287,7 +1287,14 @@ select.input-field {
 .contact-table {
     table-layout: fixed;
     width: 100%;
-    border-collapse: collapse;
+    /* FIX: border-collapse:collapse ha edge-case noti di rendering quando
+       le celle di una riga hanno contenuto di altezza diversa (note lunghe,
+       badge multipli, bottoni) — il bordo tra due celle può apparire
+       leggermente disallineato. border-collapse:separate con spaziatura 0
+       evita interamente questa classe di problemi, mantenendo lo stesso
+       aspetto visivo (nessuno spazio tra le celle). */
+    border-collapse: separate;
+    border-spacing: 0;
     font-size: 13px;
 }
 
@@ -1347,12 +1354,13 @@ select.input-field {
     background: rgba(26,64,128,0.04);
 }
 
-/* Colonna azioni: pulsanti allineati in riga, mai a capo */
+/* Colonna azioni: il flex per allineare i pulsanti è su un div interno
+   (vedi contact.js), non sulla cella <td> stessa — display:flex
+   direttamente su una cella di tabella è causa nota di bordi disallineati.
+   Contenuto centrato verticalmente (non in alto come le altre colonne),
+   così i bottoni restano staccati dal bordo anche su righe più alte. */
 .contact-table td:last-child {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    white-space: nowrap;
+    vertical-align: middle;
 }
 
 .contact-category-badge {

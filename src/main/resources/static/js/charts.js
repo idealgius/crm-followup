@@ -19,7 +19,8 @@ const WAITING_STATUS_TITLES = {
     CALLED: 'Richiamati',
     APPOINTMENT: 'Appuntamento',
     INTERESTED: 'Interessati',
-    CLOSED: 'Chiusi'
+    CLOSED: 'Chiusi',
+    FAILED: 'Falliti'
 };
 
 const MONTH_NAMES = [
@@ -62,6 +63,15 @@ async function loadStats() {
             renderFollowUpChart(fuStats);
         }
 
+        // FIX: recallEntries deve essere popolato PRIMA di renderWaitingChart,
+        // che ora lo usa per calcolare "Falliti" — prima veniva assegnato
+        // dopo, quindi al primo caricamento pagina risultava sempre vuoto e
+        // "Falliti" mostrava sempre 0.
+        if (recallRes.ok) {
+            recallEntries = await recallRes.json();
+            renderRecallCalendar();
+        }
+
         if (wRes.ok) {
             const wStats = await wRes.json();
             renderWaitingChart(wStats);
@@ -71,11 +81,6 @@ async function loadStats() {
             const calData = await calRes.json();
             calendarDays = calData.days || {};
             renderCalendar();
-        }
-
-        if (recallRes.ok) {
-            recallEntries = await recallRes.json();
-            renderRecallCalendar();
         }
 
     } catch (err) {
@@ -411,7 +416,7 @@ function showWaitingDetail(status) {
                             </div>
                         </div>
                         <div>
-                            <span class="status-badge status-${e.status}">${formatWaitingStatus ? formatWaitingStatus(e.status) : e.status}</span>
+                            <span class="status-badge status-${e.status}">${WAITING_STATUS_LABELS[e.status] || e.status}</span>
                         </div>
                     </div>
                 </div>
@@ -481,10 +486,15 @@ function renderWaitingChart(stats, targetCanvasId) {
     const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
     const legendColor = isDark ? '#8a8faa' : '#555';
 
-    const labels = ['In Attesa', 'Richiamati', 'Appuntamento', 'Interessati', 'Chiusi'];
-    const statuses = ['WAITING', 'CALLED', 'APPOINTMENT', 'INTERESTED', 'CLOSED'];
-    const dataValues = [stats.waiting, stats.called, stats.appointments, stats.interested, stats.closed];
-    const colors = ['#2196f3','#ff9800','#f0c040','#00c853','#9c27b0'];
+    const labels = ['In Attesa', 'Richiamati', 'Appuntamento', 'Interessati', 'Chiusi', 'Falliti'];
+    const statuses = ['WAITING', 'CALLED', 'APPOINTMENT', 'INTERESTED', 'CLOSED', 'FAILED'];
+    // FIX: stats.failed potrebbe non essere calcolato lato server (endpoint
+    // /api/stats/waiting non verificato) — lo calcolo qui direttamente da
+    // recallEntries, già caricato e sicuramente coerente con quello che il
+    // click sulla fetta mostrerà (stessa fonte dati).
+    const failedCount = stats.failed || recallEntries.filter(e => e.status === 'FAILED').length;
+    const dataValues = [stats.waiting, stats.called, stats.appointments, stats.interested, stats.closed, failedCount];
+    const colors = ['#2196f3','#ff9800','#f0c040','#00c853','#9c27b0','#ff3d3d'];
     const total = dataValues.reduce((a,b) => a+b, 0);
 
     chartWaiting = new Chart(ctx, {
