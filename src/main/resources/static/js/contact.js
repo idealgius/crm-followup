@@ -92,7 +92,7 @@ const ALL_CATEGORIES = [
     'Pratica Leasing', 'Pratica Finanziamento', 'Amministrazione',
     'Info + Appuntamento', 'Info Vendita in Promo', 'Altro'
 ];
-const ACQUISTO_LIST = ['Info Consegna', 'Ritardo Consegna', 'Info Documentazione', 'Seconda chiave', 'Furto', 'Saldo', 'Info generiche'];
+const ACQUISTO_LIST = ['Info Consegna', 'Ritardo Consegna', 'Info Documentazione', 'Seconda chiave', 'Credenziali Lojack', 'Saldo', 'Furto', 'Info generiche', 'Altro'];
 
 // FIX: "Altro" è grigio (#8a8faa) — corretto in modalità chiara, ma poco
 // leggibile in modalità scura (sia nella legenda del grafico Distribuzione
@@ -110,7 +110,7 @@ function getCategoryColor(category) {
 // (magenta troppo vicino al rosso). Furto passa a un magenta/orchidea più
 // acceso e distante — 7 tinte: blu, rosso, verde acqua, oro, magenta
 // acceso, verde, viola.
-const ACQUISTO_COLORS = ['#4a90d9', '#ff3d3d', '#009688', '#f0c040', '#e040fb', '#00c853', '#7c4dff'];
+const ACQUISTO_COLORS = ['#4a90d9', '#ff3d3d', '#009688', '#f0c040', '#8d6e63', '#00c853', '#e040fb', '#7c4dff', '#8a8faa'];
 const FONTE_LIST = ['Sito', 'Google ADS', 'Autoscout', 'Facebook', 'Instagram', 'TikTok', 'Richiesta cliente', 'Non ricorda'];
 const FONTE_COLORS = ['#1a4080', '#f0c040', '#e91e63', '#4a90d9', '#7c4dff', '#ff3d3d', '#00c853', '#8a8faa'];
 const SERVICE_LIST = ['Tagliando', 'Dispositivo satellitare', 'Prenotazione', 'Lavorazione in corso', 'Doctor Glass', 'Cambio Gomme', 'Altro'];
@@ -2845,17 +2845,21 @@ function selectNoleggioTipo(tipo) {
 function selectAcquisto(tipo) {
     selectedAcquisto = tipo;
     document.getElementById('contactAcquistoTipo').value = tipo;
-    ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche','Furto','Saldo'].forEach(k => { const btn = document.getElementById(`acquisto-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
-    const keyMap = { 'Info Consegna':'InfoConsegna','Ritardo Consegna':'RitardoConsegna','Info Documentazione':'InfoDocumentazione','Seconda chiave':'SecondaChiave','Info generiche':'InfoGeneriche','Furto':'Furto','Saldo':'Saldo' };
+    ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche','Furto','Saldo','CredenzialiLojack','AltroAcquisto'].forEach(k => { const btn = document.getElementById(`acquisto-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
+    const keyMap = { 'Info Consegna':'InfoConsegna','Ritardo Consegna':'RitardoConsegna','Info Documentazione':'InfoDocumentazione','Seconda chiave':'SecondaChiave','Info generiche':'InfoGeneriche','Furto':'Furto','Saldo':'Saldo','Credenziali Lojack':'CredenzialiLojack','Altro':'AltroAcquisto' };
     const btn = document.getElementById(`acquisto-${keyMap[tipo]}`);
     if (btn) btn.classList.add('btn-sede-active');
+    // FIX: "Info generiche" e "Altro" hanno una nota dedicata -> nasconde la
+    // nota universale per evitare il doppione. "Altro" la rende OBBLIGATORIA
+    // (a differenza di "Info generiche", che resta opzionale) — non avrebbe
+    // senso selezionare "Altro" senza specificare di cosa si tratta.
     const noteRow = document.getElementById('contactAcquistoNoteRow');
-    if (noteRow) noteRow.style.display = tipo === 'Info generiche' ? 'block' : 'none';
-    // FIX: "Info generiche" ha una nota dedicata -> nasconde la nota universale
-    // per evitare il doppione. Le altre sottotipologie di Acquisto non hanno
-    // nota propria, quindi la nota universale resta visibile.
+    const showNote = tipo === 'Info generiche' || tipo === 'Altro';
+    if (noteRow) noteRow.style.display = showNote ? 'block' : 'none';
+    const noteLabelAcq = document.getElementById('contactAcquistoNoteLabel');
+    if (noteLabelAcq) noteLabelAcq.textContent = tipo === 'Altro' ? 'NOTA *' : 'NOTA (opzionale)';
     const notaUniversaleRowAcq = document.getElementById('contactNotaUniversaleRow');
-    if (notaUniversaleRowAcq) notaUniversaleRowAcq.style.display = tipo === 'Info generiche' ? 'none' : 'block';
+    if (notaUniversaleRowAcq) notaUniversaleRowAcq.style.display = showNote ? 'none' : 'block';
 }
 function selectService(tipo) {
     selectedService = tipo;
@@ -2963,6 +2967,7 @@ async function createContactLog() {
     if (category === 'Info + Appuntamento' && !sede) { alert('Seleziona la sede'); return; }
     if (category === 'Info + Appuntamento' && !fonte) { alert('Seleziona la fonte'); return; }
     if (category === 'Info Acquisto effettuato' && !acquistoTipo) { alert('Seleziona la tipologia acquisto'); return; }
+    if (category === 'Info Acquisto effettuato' && acquistoTipo === 'Altro' && !acquistoNote) { alert('Inserisci la nota per la tipologia "Altro"'); return; }
     if (category === 'Info Vendita' && !fonte) { alert('Seleziona la fonte'); return; }
     if (category === 'Service' && !serviceSede) { alert('Seleziona la sede Service'); return; }
     if (category === 'Service' && !serviceTipo) { alert('Seleziona la tipologia service'); return; }
@@ -3190,12 +3195,27 @@ function showNewContactForm() {
     document.getElementById('newContactForm').style.display = 'block';
     document.getElementById('newContactForm').scrollIntoView({ behavior: 'smooth' });
     updatePromoModelloField();
+    // FIX: mancava questa chiamata — se il menu a tendina CATEGORIA aveva
+    // già un valore selezionato (es. rimasto da un uso precedente, tipo
+    // "Altro"), i campi corretti da mostrare/nascondere per quella
+    // categoria non venivano mai applicati, perché onCategoryChange scatta
+    // solo quando l'utente TOCCA il menu, non quando il form si apre.
+    // Risultato: sia "MOTIVAZIONE" sia "NOTA" restavano visibili insieme.
+    onCategoryChange();
 }
 
 function hideNewContactForm() {
     document.getElementById('newContactForm').style.display = 'none';
     document.getElementById('contactCategory').value = '';
     document.getElementById('contactOtherNote').value = '';
+    // FIX: oltre a svuotare i campi, riporto anche le righe MOTIVAZIONE/
+    // NOTA allo stato neutro di partenza, così la prossima apertura del
+    // form (prima che onCategoryChange() rigiri tutto) non parte da uno
+    // stato "sporco" lasciato dall'ultima categoria usata.
+    const otherNoteRowReset = document.getElementById('contactOtherNoteRow');
+    if (otherNoteRowReset) otherNoteRowReset.style.display = 'none';
+    const notaUniversaleRowResetOpen = document.getElementById('contactNotaUniversaleRow');
+    if (notaUniversaleRowResetOpen) notaUniversaleRowResetOpen.style.display = 'block';
     const notaAggiuntivaEl = document.getElementById('contactNotaAggiuntiva');
     if (notaAggiuntivaEl) notaAggiuntivaEl.value = '';
     const notaUniversaleRowReset = document.getElementById('contactNotaUniversaleRow');
@@ -3238,7 +3258,7 @@ function hideNewContactForm() {
     if (acquistoAlertHidden) acquistoAlertHidden.value = 'false';
     SEDI_LIST.forEach(s => { const btn = document.getElementById(`sede-${s}`); if (btn) btn.classList.remove('btn-sede-active'); });
     SERVICE_SEDI_LIST.forEach(s => { const btn = document.getElementById(`serviceSede-${s}`); if (btn) btn.classList.remove('btn-sede-active'); });
-    ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche','Furto','Saldo'].forEach(k => { const btn = document.getElementById(`acquisto-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
+    ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche','Furto','Saldo','CredenzialiLojack','AltroAcquisto'].forEach(k => { const btn = document.getElementById(`acquisto-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['Sito','GoogleADS','Autoscout','Facebook','Instagram','TikTok','RichiestaCliente','NonRicorda'].forEach(k => { const btn = document.getElementById(`fonte-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['Tagliando','DispositivoSatellitare','Prenotazione','LavorazioneInCorso','DoctorGlass','CambioGomme','Altro'].forEach(k => { const btn = document.getElementById(`service-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['Privato','PIVA','Aziende'].forEach(k => { const btn = document.getElementById(`noleggio-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
@@ -3300,7 +3320,7 @@ function onCategoryChange() {
         const acquistoAlertHidden = document.getElementById('contactAcquistoAlert');
         if (acquistoAlertHidden) acquistoAlertHidden.value = 'false';
         ['contactAcquistoMarcaInput','contactAcquistoMarca','contactAcquistoModello','contactAcquistoTarga'].forEach(id=>{const el2=document.getElementById(id);if(el2) el2.value='';});
-        ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche','Furto','Saldo'].forEach(k=>{const b=document.getElementById(`acquisto-${k}`);if(b)b.classList.remove('btn-sede-active');});
+        ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche','Furto','Saldo','CredenzialiLojack','AltroAcquisto'].forEach(k=>{const b=document.getElementById(`acquisto-${k}`);if(b)b.classList.remove('btn-sede-active');});
     }
     if (cat !== 'Pratica Leasing' && cat !== 'Pratica Finanziamento' && cat !== 'Amministrazione') {
         selectedLeasingAlert = false;

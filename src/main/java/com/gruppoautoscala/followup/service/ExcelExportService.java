@@ -18,10 +18,11 @@ import java.util.*;
 public class ExcelExportService {
 
     private static final String[] SEDI = {"Agnano", "Casamarciano", "Salerno"};
-    // FIX: mancava "Furto" (scartato dal conteggio da sempre, bug preesistente
-    // indipendente dalla nuova tipologia) — ora presente insieme alla nuova
-    // "Saldo", nello stesso ordine dei pulsanti nel form.
-    private static final String[] ACQUISTO_TIPI = {"Info Consegna", "Ritardo Consegna", "Info Documentazione", "Seconda chiave", "Furto", "Saldo", "Info generiche"};
+    // FIX: aggiunte "Credenziali Lojack" e "Altro" (nuove tipologie), stesso
+    // ordine esatto dei pulsanti nel form (Info Consegna, Ritardo Consegna,
+    // Info Documentazione, Seconda chiave, Credenziali Lojack, Saldo,
+    // Furto, Info generiche, Altro).
+    private static final String[] ACQUISTO_TIPI = {"Info Consegna", "Ritardo Consegna", "Info Documentazione", "Seconda chiave", "Credenziali Lojack", "Saldo", "Furto", "Info generiche", "Altro"};
     private static final String[] FONTE_LIST = {"Sito", "Google ADS", "Autoscout", "Facebook", "Instagram", "TikTok", "Richiesta cliente", "Non ricorda"};
     private static final String[] SERVICE_LIST = {"Tagliando", "Dispositivo satellitare", "Prenotazione", "Lavorazione in corso", "Doctor Glass", "Cambio Gomme", "Altro"};
     private static final String[] SERVICE_SEDI = {"Agnano", "Salerno"};
