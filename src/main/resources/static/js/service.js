@@ -588,7 +588,7 @@ function renderChartServiceStato(list, targetCanvasId) {
         type: 'doughnut',
         data: {
             labels: SERVICE_STATO_LIST.map(s => SERVICE_STATO_LABELS[s]),
-            datasets: [{ data: SERVICE_STATO_LIST.map(s => counts[s]), backgroundColor: colors, borderWidth: 2, borderColor: isDark ? '#0d0f1a' : '#ffffff' }]
+            datasets: [{ data: SERVICE_STATO_LIST.map(s => counts[s]), backgroundColor: colors.map(c => c+'bb'), borderWidth: 2, borderColor: colors }]
         },
         options: {
             // FIX: con maintainAspectRatio:true Chart.js ignora l'altezza del
@@ -855,7 +855,7 @@ function renderChartServiceLavorazioni(list, targetCanvasId) {
         type: 'doughnut',
         data: {
             labels: ['Concluse', 'Fallite', 'In corso'],
-            datasets: [{ data: [concluse, fallite, inCorso], backgroundColor: colors, borderWidth: 2, borderColor: isDark ? '#0d0f1a' : '#ffffff' }]
+            datasets: [{ data: [concluse, fallite, inCorso], backgroundColor: colors.map(c => c+'bb'), borderWidth: 2, borderColor: colors }]
         },
         options: {
             responsive: true, maintainAspectRatio: false,

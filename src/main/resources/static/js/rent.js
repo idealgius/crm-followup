@@ -928,7 +928,7 @@ function renderChartRentStato(list, targetCanvasId) {
         type: 'doughnut',
         data: {
             labels: RENT_STATO_LIST.map(s => RENT_STATO_LABELS[s]),
-            datasets: [{ data: RENT_STATO_LIST.map(s => counts[s]), backgroundColor: colors, borderWidth: 2, borderColor: isDark ? '#0d0f1a' : '#ffffff' }]
+            datasets: [{ data: RENT_STATO_LIST.map(s => counts[s]), backgroundColor: colors.map(c => c+'bb'), borderWidth: 2, borderColor: colors }]
         },
         options: {
             responsive: true, maintainAspectRatio: true,
@@ -962,7 +962,7 @@ function renderChartRentFonte(list, targetCanvasId) {
 
     chartRentFonte = new Chart(ctx.getContext('2d'), {
         type: 'doughnut',
-        data: { labels: RENT_FONTE_LIST, datasets: [{ data: RENT_FONTE_LIST.map(f => counts[f]), backgroundColor: RENT_FONTE_COLORS, borderWidth: 2, borderColor: isDark ? '#0d0f1a' : '#ffffff' }] },
+        data: { labels: RENT_FONTE_LIST, datasets: [{ data: RENT_FONTE_LIST.map(f => counts[f]), backgroundColor: RENT_FONTE_COLORS.map(c => c+'bb'), borderWidth: 2, borderColor: RENT_FONTE_COLORS }] },
         options: {
             responsive: true, maintainAspectRatio: true,
             onClick: (evt, elements) => { if (elements.length > 0) showRentTrattativeDetail('fonte', RENT_FONTE_LIST[elements[0].index]); },

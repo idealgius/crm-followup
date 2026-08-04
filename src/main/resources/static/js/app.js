@@ -98,6 +98,8 @@ function refreshChartsOnThemeChange() {
         if (typeof renderChartAppuntamentiSede === 'function') renderChartAppuntamentiSede(contactLogsFiltered);
         if (typeof renderChartInfoAcquisto === 'function') renderChartInfoAcquisto(contactLogsFiltered);
         if (typeof renderChartFonteVendita === 'function') renderChartFonteVendita(contactLogsFiltered);
+        if (typeof renderChartServiceAgnano === 'function') renderChartServiceAgnano(contactLogsFiltered);
+        if (typeof renderChartServiceSalerno === 'function') renderChartServiceSalerno(contactLogsFiltered);
         if (typeof renderChartService === 'function') renderChartService(contactLogsFiltered);
         if (typeof renderChartMarche === 'function') renderChartMarche(contactLogsFiltered);
     }

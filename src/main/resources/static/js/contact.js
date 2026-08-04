@@ -1220,7 +1220,7 @@ function renderContactChartFromLogs(logs, targetCanvasId) {
 
     contactChart = new Chart(ctx.getContext('2d'), {
         type: 'doughnut',
-        data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: isDark ? '#0d0f1a' : '#ffffff' }] },
+        data: { labels, datasets: [{ data, backgroundColor: colors.map(c => c+'bb'), borderWidth: 2, borderColor: colors }] },
         options: {
             animation: false,
             responsive: true, maintainAspectRatio: false,
@@ -1320,7 +1320,7 @@ function renderChartInfoAcquisto(logs, targetCanvasId) {
 
     contactChartAcquisto = new Chart(ctx.getContext('2d'), {
         type: 'doughnut',
-        data: { labels: ACQUISTO_LIST, datasets: [{ data: ACQUISTO_LIST.map(t => counts[t]), backgroundColor: ACQUISTO_COLORS, borderWidth: 2, borderColor: isDark ? '#0d0f1a' : '#ffffff' }] },
+        data: { labels: ACQUISTO_LIST, datasets: [{ data: ACQUISTO_LIST.map(t => counts[t]), backgroundColor: ACQUISTO_COLORS.map(c => c+'bb'), borderWidth: 2, borderColor: ACQUISTO_COLORS }] },
         options: {
             animation: false,
             responsive: true, maintainAspectRatio: false,
@@ -1381,7 +1381,7 @@ function renderChartFonteVendita(logs, targetCanvasId) {
 
     contactChartFonte = new Chart(ctx.getContext('2d'), {
         type: 'doughnut',
-        data: { labels: FONTE_LIST, datasets: [{ data: FONTE_LIST.map(f => counts[f]), backgroundColor: FONTE_COLORS, borderWidth: 2, borderColor: isDark ? '#0d0f1a' : '#ffffff' }] },
+        data: { labels: FONTE_LIST, datasets: [{ data: FONTE_LIST.map(f => counts[f]), backgroundColor: FONTE_COLORS.map(c => c+'bb'), borderWidth: 2, borderColor: FONTE_COLORS }] },
         options: {
             animation: false,
             responsive: true, maintainAspectRatio: false,
@@ -1429,7 +1429,7 @@ function buildServiceSedeChart(canvasId, existingChart, logs, sede) {
 
     const chart = new Chart(ctx.getContext('2d'), {
         type: 'doughnut',
-        data: { labels: SERVICE_LIST, datasets: [{ data: SERVICE_LIST.map(s => counts[s]), backgroundColor: SERVICE_COLORS, borderWidth: 2, borderColor: isDark ? '#0d0f1a' : '#ffffff' }] },
+        data: { labels: SERVICE_LIST, datasets: [{ data: SERVICE_LIST.map(s => counts[s]), backgroundColor: SERVICE_COLORS.map(c => c+'bb'), borderWidth: 2, borderColor: SERVICE_COLORS }] },
         options: {
             animation: false,
             responsive: true, maintainAspectRatio: true,
@@ -2748,7 +2748,7 @@ function renderContactCalendar() {
         let bgStyle = '', borderStyle = '';
         if (items.length > 0) {
             const color = getDominantColor(items);
-            bgStyle = `background:${color}73;`;
+            bgStyle = `background:${color}8c;`;
             borderStyle = `border-color:${color};`;
         }
         html += `<button type="button" class="cal-day ${isToday?'cal-day-today':''}" style="${bgStyle}${borderStyle}" onclick="showDayView('${dateStr}')">${day}</button>`;
