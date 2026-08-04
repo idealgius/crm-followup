@@ -102,9 +102,15 @@ function refreshChartsOnThemeChange() {
         if (typeof renderChartServiceSalerno === 'function') renderChartServiceSalerno(contactLogsFiltered);
         if (typeof renderChartService === 'function') renderChartService(contactLogsFiltered);
         if (typeof renderChartMarche === 'function') renderChartMarche(contactLogsFiltered);
+        if (typeof renderContactCalendar === 'function') renderContactCalendar();
+        if (typeof renderContactLogs === 'function') renderContactLogs(contactLogsFiltered);
     }
     if (typeof loadStats === 'function' && document.getElementById('dashboardPage')?.style.display === 'block') {
         loadStats();
+    }
+    if (document.getElementById('dashboardPage')?.style.display === 'block') {
+        if (typeof renderCalendar === 'function') renderCalendar();
+        if (typeof renderRecallCalendar === 'function') renderRecallCalendar();
     }
     if (typeof refreshRentChartsOnThemeChange === 'function' && document.getElementById('rentPage')?.style.display === 'block') {
         refreshRentChartsOnThemeChange();
