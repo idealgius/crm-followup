@@ -2428,17 +2428,25 @@ select.input-field {
     }
 }
 
-/* ===== ICONA CALENDARIO NEI CAMPI DATA ===== */
+/* ===== ICONA CALENDARIO/OROLOGIO NEI CAMPI DATA ===== */
 /* FIX: l'icona nativa del browser per <input type="date"> è sempre scura
    di default — invisibile su sfondo scuro (i campi data hanno sempre
    --input-bg scuro in modalità notte). La "inverto" (diventa chiara) solo
    in modalità scura; in modalità chiara resta come il browser la mostra
-   di suo (già visibile, nessuna modifica necessaria). */
-input[type="date"]::-webkit-calendar-picker-indicator {
+   di suo (già visibile, nessuna modifica necessaria).
+   FIX: la regola copriva solo type="date" — i campi type="month" (filtro
+   periodo di Vetture in Consegna) e type="time" (orario appuntamento di
+   consegna) hanno la stessa icona nativa scura e restavano fuori, quindi
+   invisibili in modalità scura come i date prima del fix originale. */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="month"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
     filter: invert(1);
     cursor: pointer;
 }
 
-[data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator {
+[data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator,
+[data-theme="light"] input[type="month"]::-webkit-calendar-picker-indicator,
+[data-theme="light"] input[type="time"]::-webkit-calendar-picker-indicator {
     filter: none;
 }

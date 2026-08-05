@@ -7,10 +7,17 @@ let currentUser = null;
 // storico (vedi RolePermissionService.java sul backend).
 let permissionMatrix = {};
 
+// NUOVO: permesso EFFETTIVO (ruolo + eventuale override personale) per
+// l'utente attualmente loggato, sezione per sezione — a differenza di
+// permissionMatrix (tabella per-ruolo intera, usata solo dalla pagina
+// "Permessi per Ruolo"), tiene conto anche di un'eventuale eccezione
+// impostata su questo specifico utente da "Permessi per Operatore".
+let myEffectivePermissions = {};
+
 const PAGE_TO_SECTION = {
     dashboard: 'DASHBOARD', followups: 'FOLLOWUPS', waiting: 'WAITING',
     contacts: 'CONTACTS', promo: 'PROMO', admin: 'ADMIN',
-    rent: 'RENT', service: 'SERVICE'
+    rent: 'RENT', service: 'SERVICE', veicoli: 'VEICOLI'
 };
 
 // FIX: se il caricamento della matrice permessi fallisce (endpoint non
@@ -25,8 +32,8 @@ const PERMISSION_MATRIX_FALLBACK = {
     UTENTE: { CONTACTS: 'FULL' },
     BACK_OFFICE: { CONTACTS: 'FULL' },
     MODERATORE: { DASHBOARD: 'FULL', FOLLOWUPS: 'FULL', WAITING: 'FULL', CONTACTS: 'FULL', PROMO: 'FULL', RENT: 'FULL', SERVICE: 'FULL', GRAFICI: 'FULL' },
-    GESTORE: { DASHBOARD: 'FULL', FOLLOWUPS: 'FULL', WAITING: 'FULL', CONTACTS: 'FULL', PROMO: 'FULL', RENT: 'FULL', SERVICE: 'FULL', GRAFICI: 'FULL', ADMIN: 'FULL' },
-    ADMIN: { DASHBOARD: 'FULL', FOLLOWUPS: 'FULL', WAITING: 'FULL', CONTACTS: 'FULL', PROMO: 'FULL', RENT: 'FULL', SERVICE: 'FULL', GRAFICI: 'FULL', ADMIN: 'FULL' },
+    GESTORE: { DASHBOARD: 'ADMIN_FULL', FOLLOWUPS: 'ADMIN_FULL', WAITING: 'ADMIN_FULL', CONTACTS: 'ADMIN_FULL', PROMO: 'ADMIN_FULL', RENT: 'ADMIN_FULL', SERVICE: 'ADMIN_FULL', GRAFICI: 'ADMIN_FULL', ADMIN: 'ADMIN_FULL' },
+    ADMIN: { DASHBOARD: 'ADMIN_FULL', FOLLOWUPS: 'ADMIN_FULL', WAITING: 'ADMIN_FULL', CONTACTS: 'ADMIN_FULL', PROMO: 'ADMIN_FULL', RENT: 'ADMIN_FULL', SERVICE: 'ADMIN_FULL', GRAFICI: 'ADMIN_FULL', ADMIN: 'ADMIN_FULL', VEICOLI: 'ADMIN_FULL' },
     NOLEGGIO: { RENT: 'FULL' },
     SERVICE: { SERVICE: 'FULL' }
 };
@@ -34,19 +41,25 @@ const PERMISSION_MATRIX_FALLBACK = {
 async function loadPermissionMatrix() {
     try {
         const res = await fetch('/api/permissions');
-        if (!res.ok) { permissionMatrix = PERMISSION_MATRIX_FALLBACK; return; }
+        if (!res.ok) { permissionMatrix = PERMISSION_MATRIX_FALLBACK; myEffectivePermissions = {}; return; }
         const data = await res.json();
         permissionMatrix = (data.matrix && Object.keys(data.matrix).length > 0) ? data.matrix : PERMISSION_MATRIX_FALLBACK;
+        myEffectivePermissions = data.myEffective || {};
     } catch (err) {
         console.error('Errore caricamento permessi, uso la mappa di riserva:', err);
         permissionMatrix = PERMISSION_MATRIX_FALLBACK;
+        myEffectivePermissions = {};
     }
 }
 
-// 'NONE' | 'READ_ONLY' | 'FULL' — per il ruolo dell'utente loggato, a meno
-// che non si passi esplicitamente un altro ruolo (usato dalla pagina
-// Permessi stessa, che deve leggere la matrice per TUTTI i ruoli).
+// 'NONE' | 'READ_ONLY' | 'FULL' | 'ADMIN_FULL' — per il ruolo dell'utente
+// loggato, a meno che non si passi esplicitamente un altro ruolo (usato
+// dalla pagina Permessi per Ruolo, che deve leggere la matrice per TUTTI i
+// ruoli, ignorando gli override personali di chiunque).
 function getAccess(section, role) {
+    if ((!role || role === currentUser?.role) && Object.keys(myEffectivePermissions).length > 0) {
+        return myEffectivePermissions[section] || 'NONE';
+    }
     role = role || currentUser?.role || 'UTENTE';
     return permissionMatrix?.[role]?.[section] || 'NONE';
 }
@@ -57,6 +70,18 @@ function hasAccess(section, role) {
 
 function isReadOnlySection(section, role) {
     return getAccess(section, role) === 'READ_ONLY';
+}
+
+// Può creare/modificare/eliminare in questa sezione (qualunque contenuto
+// tranne quello creato da un ADMIN) — corrisponde a FULL o ADMIN_FULL.
+function canWrite(section, role) {
+    const access = getAccess(section, role);
+    return access === 'FULL' || access === 'ADMIN_FULL';
+}
+
+// Può toccare ANCHE i contenuti creati da un utente ADMIN — solo ADMIN_FULL.
+function canWriteAdminOwned(section, role) {
+    return getAccess(section, role) === 'ADMIN_FULL';
 }
 
 // FIX: la scrollbar di .nav-links era completamente nascosta (solo
@@ -122,7 +147,7 @@ function refreshChartsOnThemeChange() {
 
 // Pagine valide riconosciute dal router — usato per validare l'hash dell'URL
 // (evita che un hash sporco o obsoleto mandi l'app in uno stato indefinito)
-const VALID_PAGES = ['dashboard', 'followups', 'waiting', 'contacts', 'promo', 'admin', 'rent', 'service'];
+const VALID_PAGES = ['dashboard', 'followups', 'waiting', 'contacts', 'promo', 'admin', 'rent', 'service', 'veicoli'];
 
 // FIX: prima qui c'erano RENT_ROLES/SERVICE_ROLES (array fissi di nomi
 // ruolo) e un blocco di if/else per ogni singolo link di navbar — ora la
@@ -131,7 +156,7 @@ const VALID_PAGES = ['dashboard', 'followups', 'waiting', 'contacts', 'promo', '
 const NAV_ID_BY_SECTION = {
     DASHBOARD: 'navDashboard', FOLLOWUPS: 'navFollowups', WAITING: 'navWaiting',
     CONTACTS: 'navContacts', PROMO: 'navPromo', ADMIN: 'adminLink',
-    RENT: 'navRent', SERVICE: 'navService'
+    RENT: 'navRent', SERVICE: 'navService', VEICOLI: 'navVeicoli'
 };
 
 function applyRolePermissions(role) {
@@ -193,7 +218,7 @@ function applyPageTheme(page, role) {
 // quando quella richiesta non è accessibile. NOLEGGIO/SERVICE restano un
 // caso a parte perché, anche se in teoria avessero accesso ad altro, la loro
 // "casa" naturale resta la propria dashboard dedicata.
-const DEFAULT_PAGE_PRIORITY = ['dashboard', 'contacts', 'followups', 'waiting', 'promo', 'rent', 'service', 'admin'];
+const DEFAULT_PAGE_PRIORITY = ['dashboard', 'contacts', 'followups', 'waiting', 'promo', 'rent', 'service', 'veicoli', 'admin'];
 
 function getDefaultPageForRole(role) {
     if (role === 'NOLEGGIO' && hasAccess('RENT', role)) return 'rent';
@@ -258,6 +283,8 @@ function showPage(page, updateHash = true) {
     if (rentPageEl) rentPageEl.style.display = 'none';
     const servicePageEl = document.getElementById('servicePage');
     if (servicePageEl) servicePageEl.style.display = 'none';
+    const veicoliPageEl = document.getElementById('veicoliPage');
+    if (veicoliPageEl) veicoliPageEl.style.display = 'none';
 
     document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
 
@@ -316,6 +343,11 @@ function showPage(page, updateHash = true) {
         const navService = document.getElementById('navService');
         if (navService) navService.classList.add('active');
         if (typeof loadServiceDashboard === 'function') loadServiceDashboard();
+    } else if (page === 'veicoli') {
+        if (veicoliPageEl) veicoliPageEl.style.display = 'block';
+        const navVeicoli = document.getElementById('navVeicoli');
+        if (navVeicoli) navVeicoli.classList.add('active');
+        if (typeof loadVeicoliDashboard === 'function') loadVeicoliDashboard();
     }
 
     applyPageTheme(page, role);

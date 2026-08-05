@@ -65,6 +65,7 @@
             <a href="#promo" class="nav-link" id="navPromo" style="display:none" onclick="showPage('promo');return false"><span class="nav-link-icon">🎯</span><span class="nav-link-label">PROMO</span></a>
             <a href="#rent" class="nav-link" id="navRent" style="display:none" onclick="showPage('rent');return false"><span class="nav-link-icon">🚗</span><span class="nav-link-label">RENT</span></a>
             <a href="#service" class="nav-link" id="navService" style="display:none" onclick="showPage('service');return false"><span class="nav-link-icon">🔧</span><span class="nav-link-label">SERVICE</span></a>
+            <a href="#veicoli" class="nav-link" id="navVeicoli" style="display:none" onclick="showPage('veicoli');return false"><span class="nav-link-icon">🚙</span><span class="nav-link-label">VETTURE IN CONSEGNA</span></a>
             <a href="#admin" class="nav-link" id="adminLink" style="display:none" onclick="showPage('admin');return false"><span class="nav-link-icon">⚙️</span><span class="nav-link-label">UTENTI</span></a>
         </div>
         <div class="nav-user">
@@ -1233,6 +1234,7 @@
         <div style="display:flex;gap:10px;margin-bottom:20px">
             <button type="button" class="btn-sede btn-sede-active" id="adminTabUtentiBtn" onclick="switchAdminTab('utenti')">👤 Utenti</button>
             <button type="button" class="btn-sede" id="adminTabPermessiBtn" onclick="switchAdminTab('permessi')">🔐 Permessi per Ruolo</button>
+            <button type="button" class="btn-sede" id="adminTabOperatoriBtn" onclick="switchAdminTab('operatori')">🛡️ Permessi per Operatore</button>
         </div>
 
         <div id="adminTabUtenti">
@@ -1264,10 +1266,153 @@
              admin.js (renderPermissionMatrix / setPermission) -->
         <div id="adminTabPermessi" style="display:none">
             <div style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:18px;font-size:13px;color:var(--text-secondary)">
-                💡 Per ogni ruolo e sezione, scegli il livello di accesso: <strong style="color:var(--text-primary)">🚫 Nessuno</strong> (sezione non visibile), <strong style="color:var(--text-primary)">👁 Solo lettura</strong> (visibile ma senza poter creare/modificare/eliminare) oppure <strong style="color:var(--text-primary)">✏️ Completo</strong>. Le modifiche si salvano subito, una per una.
+                💡 Per ogni ruolo e sezione, scegli il livello di accesso: <strong style="color:var(--text-primary)">🚫 Nessuno</strong> (sezione non visibile), <strong style="color:var(--text-primary)">👁 Solo lettura</strong> (visibile ma senza poter creare/modificare/eliminare), <strong style="color:var(--text-primary)">✏️ Completo</strong> (può creare/modificare/eliminare tutto tranne i contenuti di un Admin) oppure <strong style="color:var(--text-primary)">🛡️ Accesso Admin</strong> (come Completo, ma può toccare anche i contenuti creati da un Admin). Le modifiche si salvano subito, una per una.
             </div>
             <div id="permissionMatrixContainer" style="overflow-x:auto"></div>
         </div>
+
+        <!-- NUOVO: permessi personalizzati per singolo operatore — override
+             totale sopra il permesso di ruolo, gestito da admin.js
+             (renderOperatorPermissions / setOperatorPermission) -->
+        <div id="adminTabOperatori" style="display:none">
+            <div style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:18px;font-size:13px;color:var(--text-secondary)">
+                💡 Qui puoi impostare un'eccezione personale per un singolo operatore su una sezione: se la imposti, <strong style="color:var(--text-primary)">vince sempre</strong> sul permesso del suo ruolo. Scegli <strong style="color:var(--text-primary)">Eredita da ruolo</strong> per rimuovere l'eccezione e tornare al permesso normale.
+            </div>
+            <input type="text" id="operatorSearchInput" placeholder="Cerca operatore per nome o email..." class="input-field" style="max-width:400px;margin-bottom:16px" oninput="filterOperatorPermissions(this.value)">
+            <div id="operatorPermissionsContainer" style="overflow-x:auto"></div>
+        </div>
+    </div>
+
+    <!-- VETTURE IN CONSEGNA PAGE -->
+    <div id="veicoliPage" class="page" style="display:none">
+        <div class="page-header">
+            <h2>VETTURE IN CONSEGNA</h2>
+            <button id="veicoliNewBtn" onclick="showNewVeicoloForm()" class="btn-primary" style="width:auto;padding:10px 20px">+ NUOVA SCHEDA</button>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap">
+            <button type="button" class="btn-sede btn-sede-active" id="veicoliTabIN_CORSOBtn" onclick="switchVeicoliTab('IN_CORSO')">🔧 Lavorazioni in corso</button>
+            <button type="button" class="btn-sede" id="veicoliTabCONSEGNATABtn" onclick="switchVeicoliTab('CONSEGNATA')">✅ Consegnate</button>
+            <button type="button" class="btn-sede" id="veicoliTabANNULLATABtn" onclick="switchVeicoliTab('ANNULLATA')">🚫 Annullate</button>
+            <button type="button" class="btn-sede" id="veicoliTabCALENDARIOBtn" onclick="switchVeicoliTab('CALENDARIO')">📅 Calendario Consegne</button>
+        </div>
+
+        <!-- FILTRI -->
+        <div class="waiting-card" style="margin-bottom:20px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
+            <div id="veicoliSearchWrapper" style="flex:1;min-width:240px">
+                <label style="font-size:11px;font-weight:700;color:var(--text-secondary)">CERCA (INTESTATARIO, TARGA, N. CLIENTE)</label>
+                <input type="text" id="veicoliSearchInput" class="input-field" placeholder="Cerca..." oninput="loadVeicoliDashboard()">
+            </div>
+            <div id="veicoliSedeFilterWrapper">
+                <label style="font-size:11px;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:6px">SEDE</label>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <button type="button" class="btn-sede btn-sede-active" id="veicoliSedeBtn-TUTTE" onclick="toggleVeicoliSede('TUTTE')">Tutte</button>
+                    <button type="button" class="btn-sede" id="veicoliSedeBtn-AGNANO" onclick="toggleVeicoliSede('AGNANO')">Agnano</button>
+                    <button type="button" class="btn-sede" id="veicoliSedeBtn-CASAMARCIANO" onclick="toggleVeicoliSede('CASAMARCIANO')">Casamarciano</button>
+                    <button type="button" class="btn-sede" id="veicoliSedeBtn-SALERNO" onclick="toggleVeicoliSede('SALERNO')">Salerno</button>
+                </div>
+            </div>
+            <div id="veicoliPeriodoFilterWrapper" style="display:none">
+                <label style="font-size:11px;font-weight:700;color:var(--text-secondary);display:block;margin-bottom:6px">PERIODO</label>
+                <div style="display:flex;gap:6px;align-items:center">
+                    <select id="veicoliPeriodoModo" class="input-dark" style="padding:9px" onchange="onVeicoliPeriodoModoChange()">
+                        <option value="MESE">Mese</option>
+                        <option value="ANNO">Anno intero</option>
+                    </select>
+                    <input type="month" id="veicoliPeriodoMese" class="input-dark" style="padding:9px" onchange="loadVeicoliDashboard()">
+                    <input type="number" id="veicoliPeriodoAnno" class="input-dark" style="padding:9px;display:none;width:100px" placeholder="2026" onchange="loadVeicoliDashboard()">
+                </div>
+            </div>
+        </div>
+
+        <!-- FORM NUOVA / MODIFICA SCHEDA -->
+        <div id="newVeicoloForm" class="waiting-card" style="display:none;margin-bottom:20px;flex-direction:column;align-items:stretch;gap:16px">
+            <input type="hidden" id="veicoloEditId" value="">
+            <h3 id="veicoloFormTitle" style="margin:0">NUOVA SCHEDA</h3>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+                <div><label>TARGA *</label><input type="text" id="vTarga" class="input-field" placeholder="AB123CD"></div>
+                <div><label>MARCHIO *</label><input type="text" id="vMarchio" class="input-field"></div>
+                <div><label>MODELLO *</label><input type="text" id="vModello" class="input-field"></div>
+                <div><label>INTESTATARIO *</label><input type="text" id="vIntestatario" class="input-field"></div>
+                <div><label>NUMERO CLIENTE (opzionale)</label><input type="text" id="vNumeroCliente" class="input-field"></div>
+                <div><label>CONSULENTE DI RIFERIMENTO</label><input type="text" id="vConsulente" class="input-field"></div>
+            </div>
+
+            <div>
+                <h4 style="margin:0 0 10px">LAVORAZIONI DA EFFETTUARE</h4>
+                <div id="vLavorazioniContainer" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px"></div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+                <div>
+                    <label>PERMUTA / ROTTAMAZIONE</label>
+                    <select id="vTipoPermuta" class="input-dark" style="width:100%;padding:10px" onchange="onVeicoloPermutaChange()">
+                        <option value="NESSUNA">Nessuna</option>
+                        <option value="PERMUTA">Permuta</option>
+                        <option value="ROTTAMAZIONE">Rottamazione</option>
+                    </select>
+                </div>
+                <div id="vPermutaMarchioWrap" style="display:none"><label>MARCHIO</label><input type="text" id="vPermutaMarchio" class="input-field"></div>
+                <div id="vPermutaModelloWrap" style="display:none"><label>MODELLO</label><input type="text" id="vPermutaModello" class="input-field"></div>
+                <div id="vPermutaValoreWrap" style="display:none"><label>VALORE (€)</label><input type="number" id="vPermutaValore" class="input-field"></div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+                <div>
+                    <label>SEDE DI CONSEGNA *</label>
+                    <select id="vSedeConsegna" class="input-dark" style="width:100%;padding:10px">
+                        <option value="AGNANO">Agnano</option>
+                        <option value="CASAMARCIANO">Casamarciano</option>
+                        <option value="SALERNO">Salerno</option>
+                        <option value="CONSEGNA_CLIENTE">Consegna presso cliente</option>
+                    </select>
+                </div>
+                <div>
+                    <label>UBICAZIONE INIZIALE VEICOLO *</label>
+                    <select id="vUbicazioneIniziale" class="input-dark" style="width:100%;padding:10px" onchange="onVeicoloUbicazioneChange()">
+                        <option value="AGNANO">Agnano</option>
+                        <option value="CASAMARCIANO">Casamarciano</option>
+                        <option value="SALERNO">Salerno</option>
+                        <option value="ALTRO">Altro</option>
+                    </select>
+                </div>
+                <div id="vUbicazioneAltroWrap" style="display:none"><label>ALTRA UBICAZIONE</label><input type="text" id="vUbicazioneAltroNote" class="input-field"></div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+                <div>
+                    <label>METODO DI PAGAMENTO *</label>
+                    <select id="vMetodoPagamento" class="input-dark" style="width:100%;padding:10px" onchange="onVeicoloMetodoPagamentoChange()">
+                        <option value="UNICA_SOLUZIONE">Unica soluzione</option>
+                        <option value="FINANZIAMENTO_ANTICIPO">Finanziamento con Anticipo</option>
+                        <option value="FINANZIAMENTO_MAXIRATA">Finanziamento con Maxi Rata</option>
+                        <option value="FINANZIAMENTO_ANTICIPO_MAXIRATA">Finanziamento con Anticipo e Maxi Rata</option>
+                        <option value="LEASING">Pratica Leasing</option>
+                    </select>
+                </div>
+                <div id="vAnticipoPresenteWrap" style="display:none">
+                    <label>ANTICIPO</label>
+                    <select id="vAnticipoPresente" class="input-dark" style="width:100%;padding:10px" onchange="onVeicoloAnticipoChange()">
+                        <option value="false">Nessun anticipo</option>
+                        <option value="true">Con anticipo</option>
+                    </select>
+                </div>
+                <div id="vImportoAnticipoWrap" style="display:none"><label>IMPORTO ANTICIPO (€)</label><input type="number" id="vImportoAnticipo" class="input-field"></div>
+                <div id="vFinanziariaWrap" style="display:none">
+                    <label>FINANZIARIA</label>
+                    <select id="vFinanziaria" class="input-dark" style="width:100%;padding:10px"></select>
+                </div>
+            </div>
+
+            <div style="display:flex;gap:10px">
+                <button class="btn-primary" style="width:auto;padding:10px 24px" onclick="saveVeicolo()">SALVA SCHEDA</button>
+                <button class="btn-secondary" style="width:auto;padding:10px 24px" onclick="hideNewVeicoloForm()">ANNULLA</button>
+            </div>
+        </div>
+
+        <div id="veicoliListContainer"></div>
+        <div id="veicoliCalendarioContainer" style="display:none"></div>
     </div>
 
     <!-- RENT PAGE (Dashboard Noleggio) -->
@@ -1956,6 +2101,7 @@
 <script src="/js/admin.js"></script>
 <script src="/js/rent.js"></script>
 <script src="/js/service.js"></script>
+<script src="/js/veicoli.js"></script>
 <script src="/js/app.js"></script>
 <script src="/js/graphmenu.js"></script>
 <script src="/js/multiselect.js"></script>

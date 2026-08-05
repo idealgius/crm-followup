@@ -16,14 +16,23 @@ function renderUsers(users) {
         return;
     }
 
+    // NUOVO: isAdmin resta un controllo di RUOLO letterale (non di
+    // permesso) — serve SOLO a decidere se mostrare l'opzione "Admin" nel
+    // menu a tendina qui sotto. Il ruolo Admin non passa mai dal sistema
+    // di permessi, nemmeno con "Accesso Admin" sulla sezione Utenti/
+    // Permessi: quel livello riguarda i dati (contatti, follow-up, ecc.),
+    // non il ruolo di sistema più alto. Il permesso vero (canWrite) decide
+    // solo se puoi aprire il menu di modifica/eliminazione in generale.
     const isAdmin = currentUser?.role === 'ADMIN';
-    const isGestore = currentUser?.role === 'GESTORE';
+    const canManage = typeof canWrite === 'function' && canWrite('ADMIN');
 
     container.innerHTML = users.map(u => {
         const isCurrentUser = u.id === currentUser?.id;
         const targetIsAdmin = u.role === 'ADMIN';
-        const canChangeRole = (isAdmin || isGestore) && !targetIsAdmin && !isCurrentUser;
-        const canDelete = (isAdmin || isGestore) && !targetIsAdmin && !isCurrentUser;
+        // Toccare un account già Admin richiede essere REALMENTE Admin,
+        // indipendentemente dal permesso concesso sulla sezione.
+        const canChangeRole = canManage && (!targetIsAdmin || isAdmin) && !isCurrentUser;
+        const canDelete = canManage && (!targetIsAdmin || isAdmin) && !isCurrentUser;
 
         return `
         <div class="waiting-card">
@@ -132,6 +141,11 @@ async function deleteUser(id) {
 }
 
 function showNewUserForm() {
+    // L'opzione "Admin" nel form è nascosta a runtime per chi non è
+    // REALMENTE Admin (stesso criterio del menu a tendina qui sopra). Il
+    // backend blocca comunque il tentativo anche aggirando questo controllo.
+    const adminOption = document.querySelector('#newUserRole option[value="ADMIN"]');
+    if (adminOption) adminOption.style.display = (currentUser?.role === 'ADMIN') ? '' : 'none';
     document.getElementById('newUserForm').style.display = 'block';
 }
 
@@ -155,13 +169,15 @@ const PERMISSION_SECTIONS = [
     { key: 'RENT', icon: '🚗', label: 'Rent' },
     { key: 'SERVICE', icon: '🔧', label: 'Service' },
     { key: 'GRAFICI', icon: '☰', label: 'Menu Grafici' },
-    { key: 'ADMIN', icon: '⚙️', label: 'Utenti/Permessi' }
+    { key: 'ADMIN', icon: '⚙️', label: 'Utenti/Permessi' },
+    { key: 'VEICOLI', icon: '🚙', label: 'Vetture in Consegna' }
 ];
 
 const ACCESS_LEVEL_META = {
     NONE: { icon: '🚫', label: 'Nessuno' },
     READ_ONLY: { icon: '👁', label: 'Solo lettura' },
-    FULL: { icon: '✏️', label: 'Completo' }
+    FULL: { icon: '✏️', label: 'Completo' },
+    ADMIN_FULL: { icon: '🛡️', label: 'Accesso Admin' }
 };
 
 let permissionMatrixCache = null;
@@ -170,19 +186,23 @@ let permissionRolesCache = [];
 function switchAdminTab(tab) {
     const utentiTab = document.getElementById('adminTabUtenti');
     const permessiTab = document.getElementById('adminTabPermessi');
+    const operatoriTab = document.getElementById('adminTabOperatori');
     const utentiBtn = document.getElementById('adminTabUtentiBtn');
     const permessiBtn = document.getElementById('adminTabPermessiBtn');
+    const operatoriBtn = document.getElementById('adminTabOperatoriBtn');
     const newUserBtn = document.getElementById('adminNewUserBtn');
     if (!utentiTab || !permessiTab) return;
 
-    const showPermessi = tab === 'permessi';
-    utentiTab.style.display = showPermessi ? 'none' : 'block';
-    permessiTab.style.display = showPermessi ? 'block' : 'none';
-    utentiBtn?.classList.toggle('btn-sede-active', !showPermessi);
-    permessiBtn?.classList.toggle('btn-sede-active', showPermessi);
-    if (newUserBtn) newUserBtn.style.display = showPermessi ? 'none' : 'inline-block';
+    utentiTab.style.display = tab === 'utenti' ? 'block' : 'none';
+    permessiTab.style.display = tab === 'permessi' ? 'block' : 'none';
+    if (operatoriTab) operatoriTab.style.display = tab === 'operatori' ? 'block' : 'none';
+    utentiBtn?.classList.toggle('btn-sede-active', tab === 'utenti');
+    permessiBtn?.classList.toggle('btn-sede-active', tab === 'permessi');
+    operatoriBtn?.classList.toggle('btn-sede-active', tab === 'operatori');
+    if (newUserBtn) newUserBtn.style.display = tab === 'utenti' ? 'inline-block' : 'none';
 
-    if (showPermessi) loadPermissionMatrixUI();
+    if (tab === 'permessi') loadPermissionMatrixUI();
+    if (tab === 'operatori') loadOperatorPermissionsUI();
 }
 
 async function loadPermissionMatrixUI() {
@@ -202,15 +222,11 @@ async function loadPermissionMatrixUI() {
     }
 }
 
-// "Intelligente" come richiesto: per una coppia ruolo/sezione dove il ruolo
-// ha già di base accesso Completo per definizione (es. ADMIN vede sempre
-// tutto), non ha senso offrire la scelta — mostriamo un'indicazione fissa
-// invece di un controllo cliccabile che non cambierebbe nulla di sensato.
-// ADMIN è l'unico caso così assoluto: per tutti gli altri ruoli (compresi
-// Moderatore/Gestore, che oggi vedono già tutto ma potrebbero comunque
-// essere limitati in futuro) il controllo resta sempre modificabile.
+// PRIMA: ADMIN era "bloccato" (accesso completo fisso, non modificabile).
+// Ora quei controlli sono sostituiti dal permesso vero: ADMIN è un ruolo
+// come gli altri e va reso modificabile come tutti.
 function isPermissionLocked(role) {
-    return role === 'ADMIN';
+    return false;
 }
 
 function renderPermissionMatrix() {
@@ -233,10 +249,6 @@ function renderPermissionMatrix() {
             <td style="text-align:left;font-weight:700;white-space:nowrap">${section.icon} ${section.label}</td>
             ${permissionRolesCache.map(role => {
                 const current = permissionMatrixCache[role]?.[section.key] || 'NONE';
-                if (isPermissionLocked(role)) {
-                    const meta = ACCESS_LEVEL_META[current];
-                    return `<td><span title="Admin ha sempre accesso completo a tutto" style="opacity:0.6;font-size:12px">${meta.icon} ${meta.label}</span></td>`;
-                }
                 return `<td>
                     <div class="permission-cell-group" data-role="${role}" data-section="${section.key}">
                         ${Object.entries(ACCESS_LEVEL_META).map(([level, meta]) => `
@@ -280,6 +292,116 @@ async function setPermission(role, section, access, btnEl) {
         }
     } catch (err) {
         console.error('Errore salvataggio permesso:', err);
+        alert('Errore di connessione nel salvataggio del permesso');
+    }
+}
+
+// ===== GESTIONE PERMESSI PER OPERATORE =====
+let operatorPermissionsCache = [];
+let operatorSectionsCache = [];
+let operatorSearchFilter = '';
+
+async function loadOperatorPermissionsUI() {
+    const container = document.getElementById('operatorPermissionsContainer');
+    if (!container) return;
+    container.innerHTML = `<div class="empty-state"><p>Caricamento operatori…</p></div>`;
+    try {
+        const res = await fetch('/api/permissions/operators');
+        if (!res.ok) {
+            const data = await res.json().catch(() => null);
+            container.innerHTML = `<div class="empty-state"><p>${data?.error || 'Errore nel caricamento'}</p></div>`;
+            return;
+        }
+        const data = await res.json();
+        operatorPermissionsCache = data.users || [];
+        operatorSectionsCache = data.sections || [];
+        renderOperatorPermissions();
+    } catch (err) {
+        console.error('Errore caricamento permessi operatore:', err);
+        container.innerHTML = `<div class="empty-state"><p>Errore nel caricamento dei permessi</p></div>`;
+    }
+}
+
+function filterOperatorPermissions(query) {
+    operatorSearchFilter = (query || '').trim().toLowerCase();
+    renderOperatorPermissions();
+}
+
+function renderOperatorPermissions() {
+    const container = document.getElementById('operatorPermissionsContainer');
+    if (!container) return;
+
+    const sectionMeta = key => PERMISSION_SECTIONS.find(s => s.key === key) || { icon: '', label: key };
+
+    const filtered = operatorSearchFilter
+        ? operatorPermissionsCache.filter(u =>
+            u.fullName.toLowerCase().includes(operatorSearchFilter) ||
+            u.email.toLowerCase().includes(operatorSearchFilter))
+        : operatorPermissionsCache;
+
+    if (filtered.length === 0) {
+        container.innerHTML = `<div class="empty-state"><h3>🛡️</h3><p>Nessun operatore trovato</p></div>`;
+        return;
+    }
+
+    container.innerHTML = filtered.map(u => {
+        const overrideCount = Object.keys(u.overrides || {}).length;
+        return `
+        <div class="waiting-card" style="flex-direction:column;align-items:stretch">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+                <div>
+                    <div class="waiting-name">${u.fullName}</div>
+                    <div class="waiting-details" style="margin-top:4px">${u.email} · <span class="status-badge status-${u.role}">${formatRole(u.role)}</span></div>
+                </div>
+                ${overrideCount > 0 ? `<span style="font-size:12px;color:var(--text-secondary)">🛡️ ${overrideCount} eccezion${overrideCount === 1 ? 'e' : 'i'} personalizzat${overrideCount === 1 ? 'a' : 'e'}</span>` : ''}
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+                ${operatorSectionsCache.map(sectionKey => {
+                    const meta = sectionMeta(sectionKey);
+                    const currentOverride = (u.overrides || {})[sectionKey] || 'INHERIT';
+                    return `
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--border)">
+                        <span style="font-size:13px;font-weight:600;white-space:nowrap">${meta.icon} ${meta.label}</span>
+                        <div class="permission-cell-group" data-user="${u.id}" data-section="${sectionKey}">
+                            <button type="button" class="permission-cell-btn ${currentOverride === 'INHERIT' ? 'active' : ''}"
+                                title="Eredita da ruolo" onclick="setOperatorPermission(${u.id},'${sectionKey}','INHERIT', this)">↩️</button>
+                            ${Object.entries(ACCESS_LEVEL_META).map(([level, lm]) => `
+                                <button type="button" class="permission-cell-btn ${currentOverride === level ? 'active' : ''} level-${level}"
+                                    title="${lm.label}" onclick="setOperatorPermission(${u.id},'${sectionKey}','${level}', this)">${lm.icon}</button>
+                            `).join('')}
+                        </div>
+                    </div>`;
+                }).join('')}
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function setOperatorPermission(userId, section, access, btnEl) {
+    const group = btnEl?.closest('.permission-cell-group');
+    try {
+        const res = await fetch('/api/permissions/operators', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, section, access })
+        });
+        if (!res.ok) {
+            const data = await res.json().catch(() => null);
+            alert(data?.error || 'Errore nel salvataggio del permesso');
+            return;
+        }
+        if (group) {
+            group.querySelectorAll('.permission-cell-btn').forEach(b => b.classList.remove('active'));
+            btnEl.classList.add('active');
+        }
+        const user = operatorPermissionsCache.find(u => u.id === userId);
+        if (user) {
+            if (!user.overrides) user.overrides = {};
+            if (access === 'INHERIT') delete user.overrides[section];
+            else user.overrides[section] = access;
+        }
+    } catch (err) {
+        console.error('Errore salvataggio permesso operatore:', err);
         alert('Errore di connessione nel salvataggio del permesso');
     }
 }
