@@ -174,19 +174,6 @@
                 </div>
                 <div id="fuCalendar" class="fu-calendar"></div>
             </div>
-            <div class="dashboard-cell" style="background:var(--bg-card);border:1.5px solid var(--border);border-radius:14px;padding:20px;box-shadow:var(--shadow);max-width:420px;flex:1;min-width:340px">
-                <div class="calendar-header">
-                    <button type="button" class="cal-nav-btn" onclick="changeRecallCalendarMonth(-1)">‹</button>
-                    <h3 id="recallCalendarTitle">Calendario Recall</h3>
-                    <button type="button" class="cal-nav-btn" onclick="changeRecallCalendarMonth(1)">›</button>
-                </div>
-                <div class="calendar-legend">
-                    <span class="cal-legend-item"><span class="cal-dot" style="background:#f0c040"></span> Recall oggi</span>
-                    <span class="cal-legend-item"><span class="cal-dot" style="background:#ff3d3d"></span> Scaduto</span>
-                    <span class="cal-legend-item"><span class="cal-dot" style="background:#4a90d9"></span> Futuro</span>
-                </div>
-                <div id="recallCalendar" class="fu-calendar"></div>
-            </div>
             <!-- NUOVO: Calendario Recall Follow-up — cicli di ricontatto per
                  follow-up abbandonati, calcolati automaticamente da
                  RecallFollowUpService. Click sul giorno -> lista clienti. -->
@@ -200,6 +187,19 @@
                     <span class="cal-legend-item"><span class="cal-dot" style="background:#9b59b6"></span> Da ricontattare</span>
                 </div>
                 <div id="recallFollowUpCalendar" class="fu-calendar"></div>
+            </div>
+            <div class="dashboard-cell" style="background:var(--bg-card);border:1.5px solid var(--border);border-radius:14px;padding:20px;box-shadow:var(--shadow);max-width:420px;flex:1;min-width:340px">
+                <div class="calendar-header">
+                    <button type="button" class="cal-nav-btn" onclick="changeRecallCalendarMonth(-1)">‹</button>
+                    <h3 id="recallCalendarTitle">Calendario Recall</h3>
+                    <button type="button" class="cal-nav-btn" onclick="changeRecallCalendarMonth(1)">›</button>
+                </div>
+                <div class="calendar-legend">
+                    <span class="cal-legend-item"><span class="cal-dot" style="background:#f0c040"></span> Recall oggi</span>
+                    <span class="cal-legend-item"><span class="cal-dot" style="background:#ff3d3d"></span> Scaduto</span>
+                    <span class="cal-legend-item"><span class="cal-dot" style="background:#4a90d9"></span> Futuro</span>
+                </div>
+                <div id="recallCalendar" class="fu-calendar"></div>
             </div>
         </div>
         <div class="dashboard-grid-2x2">
