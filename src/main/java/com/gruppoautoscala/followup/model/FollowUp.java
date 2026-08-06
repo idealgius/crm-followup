@@ -39,4 +39,21 @@ public class FollowUp {
 
     @Column(name = "closed_at")
     private LocalDateTime closedAt;
+
+    // NUOVO: chi ha modificato l'ultima volta il follow-up (stato,
+    // consulente, nome cliente, appuntamento) e quando — "user" sopra resta
+    // il CREATORE (non cambia mai dopo la creazione), questi due campi
+    // invece si aggiornano ad ogni PATCH. Valorizzati dal controller.
+    @ManyToOne
+    @JoinColumn(name = "last_modified_by_id")
+    private User lastModifiedBy;
+
+    @Column(name = "last_modified_at")
+    private LocalDateTime lastModifiedAt;
+
+    // NUOVO: link alla trattativa (icona 📎 nel form di creazione),
+    // riportato anche nelle schede Recall Follow-up derivate da questo
+    // follow-up.
+    @Column(name = "trattativa_link", length = 500)
+    private String trattativaLink;
 }

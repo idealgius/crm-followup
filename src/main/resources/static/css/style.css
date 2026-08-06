@@ -338,6 +338,41 @@ select.input-dark {
     opacity: 0.85;
 }
 
+/* ===== STEP 3 FOLLOW-UP: pulsanti WhatsApp/Mail al posto di "Invia" ===== */
+.btn-whatsapp {
+    background: #25D366;
+    color: #fff;
+}
+
+.btn-mail {
+    background: #1a4080;
+    color: #fff;
+}
+
+/* Stato "inviato" — stesso principio del bordo illuminato già usato per
+   .btn-sent-active, ma un colore per canale: azzurro/verde per WhatsApp,
+   giallo per Mail, così si distingue a colpo d'occhio quale canale è
+   stato usato senza dover leggere il testo. */
+.btn-sent-whatsapp {
+    background: var(--step-bg);
+    color: #00c853;
+    border: 2px solid #4a90d9 !important;
+    box-shadow: 0 0 12px rgba(74,144,217,0.6);
+    padding: 4px 12px;
+}
+
+.btn-sent-mail {
+    background: var(--step-bg);
+    color: var(--text-primary);
+    border: 2px solid #ffd54f !important;
+    box-shadow: 0 0 12px rgba(255,213,79,0.6);
+    padding: 4px 12px;
+}
+
+.btn-sent-whatsapp:hover, .btn-sent-mail:hover {
+    opacity: 0.85;
+}
+
 /* ===== THEME SWITCH ===== */
 .theme-switch {
     display: flex;

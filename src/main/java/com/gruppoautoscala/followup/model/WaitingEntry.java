@@ -43,11 +43,6 @@ public class WaitingEntry {
     @Column(name = "recall_date")
     private LocalDate recallDate;
 
-    // NUOVO: flag che indica se il recall corrente è stato effettuato.
-    // Deve avere un valore di default esplicito (false) e non essere
-    // nullable, altrimenti righe già esistenti nel database avrebbero
-    // NULL e alcuni controlli booleani lato frontend (!e.richiamato)
-    // si comporterebbero in modo incoerente tra record vecchi e nuovi.
     @Column(name = "richiamato", nullable = false)
     private boolean richiamato = false;
 
@@ -56,4 +51,11 @@ public class WaitingEntry {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt = LocalDateTime.now();
+
+    // NUOVO: chi ha fatto l'ultima modifica (usato dal report giornaliero
+    // come "operatore/consulente" per le righe Recall — questo modulo non
+    // ha un campo consulente proprio come i Follow-up).
+    @ManyToOne
+    @JoinColumn(name = "last_modified_by_id")
+    private User lastModifiedBy;
 }

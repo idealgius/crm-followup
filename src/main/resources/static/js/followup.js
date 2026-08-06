@@ -160,6 +160,11 @@ function renderFollowUpCard(fu, steps) {
                         ${fu.customer.phone ? (fu.customer.email ? ' · ' : '') + '📞 ' + fu.customer.phone : ''}
                         ${fu.customer.emailOnly ? ' · <span style="color:#f0c040;font-weight:800">SOLO EMAIL</span>' : ''}
                     </div>
+                    <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">
+                        Creato da <strong>${fu.user?.fullName || 'N/D'}</strong>
+                        ${fu.lastModifiedBy ? ` · ultima modifica di <strong>${fu.lastModifiedBy.fullName}</strong>${fu.lastModifiedAt ? ' (' + formatDateTime(fu.lastModifiedAt) + ')' : ''}` : ''}
+                        ${fu.trattativaLink ? ` · <a href="${fu.trattativaLink}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#4a90d9">📎 Trattativa</a>` : ''}
+                    </div>
                     <div style="margin-top:8px;display:flex;align-items:center;gap:8px">
                         <span style="font-size:10px;font-weight:700;color:var(--text-secondary);letter-spacing:1px">👤</span>
                         ${readOnly
@@ -209,7 +214,16 @@ function renderStepCard(step, followUpId, emailOnly) {
     // niente Risponde/Non Risponde (che avrebbe senso solo per le chiamate).
     const isContact3 = step.stepNumber === 3;
     const isSendOnly = isContact3 || emailOnly;
-    const isSent = step.outcome === 'SENT' || (isSendOnly && step.outcome === 'ANSWERED');
+    // NUOVO: la scelta WhatsApp/Mail vale SOLO per il vero Step 3 del
+    // flusso normale (dove il contatto è davvero o WhatsApp o mail). Per
+    // un cliente "Solo Email" ogni step è comunque solo email — niente
+    // scelta di canale, resta l'unico tasto INVIA/INVIATO di sempre.
+    const isChannelChoice = isContact3 && !emailOnly;
+    // NUOVO: 'SENT_WHATSAPP'/'SENT_MAIL' sostituiscono il generico 'SENT'
+    // per distinguere il canale usato — 'SENT'/'ANSWERED' restano
+    // riconosciuti per compatibilità con gli step già salvati prima di
+    // questa modifica.
+    const isSent = ['SENT', 'SENT_WHATSAPP', 'SENT_MAIL'].includes(step.outcome) || (isSendOnly && step.outcome === 'ANSWERED');
     const outcomeClass = isSent ? 'SENT' : step.outcome;
     const executedAt = formatDateTime(step.executedAt);
     const slotLabel = formatSlot(step.scheduledSlot);
@@ -223,15 +237,15 @@ function renderStepCard(step, followUpId, emailOnly) {
         <div class="step-outcome outcome-${outcomeClass}">
             ${formatOutcome(step.outcome, step.stepNumber, isSendOnly)}
         </div>
-        ${executedAt ? `<div class="step-timestamp">🕐 ${executedAt}</div>` : ''}
+        ${executedAt ? `<div class="step-timestamp">🕐 ${executedAt}${step.executedBy ? ' · 👤 ' + step.executedBy.fullName : ''}</div>` : ''}
         ${readOnly ? '' : `
         <div style="display:flex;gap:5px;margin-bottom:8px">
-            ${isSendOnly ? `
+            ${isSendOnly ? (isChannelChoice ? renderSendButtons(step, followUpId, isSent) : `
                 <button class="btn-small btn-sent ${isSent ? 'btn-sent-active' : ''}"
                     onclick="updateStep(${step.id}, '${isSent ? 'PENDING' : 'SENT'}', ${followUpId})">
                     ${isSent ? '✓ INVIATO' : '📤 INVIA'}
                 </button>
-            ` : `
+            `) : `
                 <button class="btn-small btn-green" onclick="updateStep(${step.id}, '${step.outcome === 'ANSWERED' ? 'PENDING' : 'ANSWERED'}', ${followUpId})">
                     ${step.outcome === 'ANSWERED' ? '↩️' : '✅'}
                 </button>
@@ -248,6 +262,29 @@ function renderStepCard(step, followUpId, emailOnly) {
         ${readOnly && step.notes ? `<div style="font-size:12px;color:var(--text-secondary);padding:6px 0">${step.notes}</div>` : ''}
     </div>
     `;
+}
+
+// NUOVO: al posto del singolo tasto "📤 INVIA" generico, mostra due
+// pulsanti — WhatsApp (verde, icona WhatsApp) e Mail (blu, icona busta) —
+// finché non è stato inviato. Una volta inviato, il canale scelto diventa
+// un unico pulsante "acceso" (bordo colorato per canale) che permette di
+// annullare tornando a PENDING, cliccandolo di nuovo.
+function renderSendButtons(step, followUpId, isSent) {
+    if (!isSent) {
+        return `
+            <button class="btn-small btn-whatsapp" onclick="updateStep(${step.id}, 'SENT_WHATSAPP', ${followUpId})"><svg width="12" height="12" viewBox="0 0 24 24" fill="#fff" style="vertical-align:-1px;margin-right:3px"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.48 1.32 4.99L2 22l5.25-1.38a9.9 9.9 0 0 0 4.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm5.8 14.06c-.24.68-1.4 1.31-1.93 1.39-.5.08-1.12.11-1.81-.11-.42-.13-.96-.31-1.65-.61-2.9-1.25-4.79-4.17-4.94-4.36-.14-.19-1.18-1.57-1.18-3 0-1.42.75-2.12 1.02-2.41.27-.29.58-.36.78-.36.19 0 .39 0 .56.01.18.01.42-.07.66.5.24.58.83 2 .9 2.15.07.15.12.32.02.51-.09.19-.14.31-.28.48-.14.16-.29.36-.42.49-.14.14-.28.29-.12.57.16.28.72 1.19 1.55 1.93 1.06.95 1.96 1.24 2.24 1.38.28.14.44.12.6-.07.16-.19.68-.79.87-1.06.18-.27.37-.22.62-.13.25.09 1.6.75 1.87.89.28.14.46.21.53.33.07.12.07.68-.17 1.36z"/></svg>WhatsApp</button>
+            <button class="btn-small btn-mail" onclick="updateStep(${step.id}, 'SENT_MAIL', ${followUpId})">✉️ Mail</button>
+        `;
+    }
+    if (step.outcome === 'SENT_WHATSAPP') {
+        return `<button class="btn-small btn-sent-whatsapp" onclick="updateStep(${step.id}, 'PENDING', ${followUpId})">✓ Inviato Whatsapp</button>`;
+    }
+    if (step.outcome === 'SENT_MAIL') {
+        return `<button class="btn-small btn-sent-mail" onclick="updateStep(${step.id}, 'PENDING', ${followUpId})">✓ Inviata mail</button>`;
+    }
+    // Compatibilità con step salvati prima di questa modifica ('SENT' o
+    // 'ANSWERED' generico, senza sapere quale canale fu usato).
+    return `<button class="btn-small btn-sent btn-sent-active" onclick="updateStep(${step.id}, 'PENDING', ${followUpId})">✓ INVIATO</button>`;
 }
 
 async function updateConsultant(followUpId, consultantName) {
@@ -465,6 +502,7 @@ async function createFollowUp() {
     const workDate = document.getElementById('fuWorkDate').value;
     const consultant = document.getElementById('fuConsultant').value;
     const emailOnly = document.getElementById('fuEmailOnly').checked;
+    const trattativaLink = document.getElementById('fuTrattativaLink')?.value?.trim() || '';
 
     if (!fullName || !workDate || !consultant) {
         alert('Nome cliente, data e consulente sono obbligatori');
@@ -497,7 +535,7 @@ async function createFollowUp() {
         const res = await fetch('/api/followups', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fullName, email, phone, workDate, emailOnly, consultantName: consultant })
+            body: JSON.stringify({ fullName, email, phone, workDate, emailOnly, consultantName: consultant, trattativaLink })
         });
 
         if (!res.ok) {
@@ -529,6 +567,15 @@ function hideNewFollowUp() {
     document.getElementById('fuPhone').value = '';
     document.getElementById('fuEmailOnly').checked = false;
     document.getElementById('fuConsultant').value = '';
+    const linkInput = document.getElementById('fuTrattativaLink');
+    if (linkInput) { linkInput.value = ''; linkInput.style.display = 'none'; }
+}
+
+function toggleTrattativaLinkInput() {
+    const input = document.getElementById('fuTrattativaLink');
+    if (!input) return;
+    input.style.display = input.style.display === 'none' ? 'block' : 'none';
+    if (input.style.display === 'block') input.focus();
 }
 
 function formatStatus(status) {
@@ -565,6 +612,8 @@ function formatSlot(slot) {
 // telefonica ma solo l'invio di un'email/messaggio.
 function formatOutcome(outcome, stepNumber, isSendOnly) {
     const sendOnly = isSendOnly !== undefined ? isSendOnly : (stepNumber === 3);
+    if (outcome === 'SENT_WHATSAPP') return '📤 Inviato Whatsapp';
+    if (outcome === 'SENT_MAIL') return '📤 Inviata mail';
     if (sendOnly && (outcome === 'SENT' || outcome === 'ANSWERED')) {
         return '📤 Inviato';
     }
@@ -633,7 +682,8 @@ async function printFollowUpsByConsultant() {
             if (!step) return '';
             if (n === 3) {
                 // Step 3 = invio — si stampa solo se è stato davvero inviato
-                const isSent = step.outcome === 'SENT' || step.outcome === 'ANSWERED';
+                // (include i due nuovi esiti per canale, SENT_WHATSAPP/SENT_MAIL)
+                const isSent = ['SENT', 'ANSWERED', 'SENT_WHATSAPP', 'SENT_MAIL'].includes(step.outcome);
                 return isSent ? '<span class="print-step">✉️</span>' : '';
             }
             // Step 1, 2, 4 = chiamate — si stampa solo se risposto o non

@@ -161,8 +161,8 @@
             <div class="stat-card pink"><div class="stat-label">TASSO RISPOSTA</div><div class="stat-value" id="statResponseRate">0%</div></div>
             <div class="stat-card purple"><div class="stat-label">TASSO APPUNTAMENTI</div><div class="stat-value" id="statAppointmentRate">0%</div></div>
         </div>
-        <div class="dashboard-grid-2x2">
-            <div class="dashboard-cell" style="background:var(--bg-card);border:1.5px solid var(--border);border-radius:14px;padding:20px;box-shadow:var(--shadow);max-width:420px">
+        <div class="dashboard-calendars-row" style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:20px">
+            <div class="dashboard-cell" style="background:var(--bg-card);border:1.5px solid var(--border);border-radius:14px;padding:20px;box-shadow:var(--shadow);max-width:420px;flex:1;min-width:340px">
                 <div class="calendar-header">
                     <button type="button" class="cal-nav-btn" onclick="changeCalendarMonth(-1)">‹</button>
                     <h3 id="calendarTitle">Calendario Follow Up</h3>
@@ -174,7 +174,7 @@
                 </div>
                 <div id="fuCalendar" class="fu-calendar"></div>
             </div>
-            <div class="dashboard-cell" style="background:var(--bg-card);border:1.5px solid var(--border);border-radius:14px;padding:20px;box-shadow:var(--shadow);max-width:420px">
+            <div class="dashboard-cell" style="background:var(--bg-card);border:1.5px solid var(--border);border-radius:14px;padding:20px;box-shadow:var(--shadow);max-width:420px;flex:1;min-width:340px">
                 <div class="calendar-header">
                     <button type="button" class="cal-nav-btn" onclick="changeRecallCalendarMonth(-1)">‹</button>
                     <h3 id="recallCalendarTitle">Calendario Recall</h3>
@@ -187,8 +187,59 @@
                 </div>
                 <div id="recallCalendar" class="fu-calendar"></div>
             </div>
+            <!-- NUOVO: Calendario Recall Follow-up — cicli di ricontatto per
+                 follow-up abbandonati, calcolati automaticamente da
+                 RecallFollowUpService. Click sul giorno -> lista clienti. -->
+            <div class="dashboard-cell" style="background:var(--bg-card);border:1.5px solid var(--border);border-radius:14px;padding:20px;box-shadow:var(--shadow);max-width:420px;flex:1;min-width:340px">
+                <div class="calendar-header">
+                    <button type="button" class="cal-nav-btn" onclick="changeRecallFollowUpCalendarMonth(-1)">‹</button>
+                    <h3 id="recallFollowUpCalendarTitle">Calendario Recall Follow Up</h3>
+                    <button type="button" class="cal-nav-btn" onclick="changeRecallFollowUpCalendarMonth(1)">›</button>
+                </div>
+                <div class="calendar-legend">
+                    <span class="cal-legend-item"><span class="cal-dot" style="background:#9b59b6"></span> Da ricontattare</span>
+                </div>
+                <div id="recallFollowUpCalendar" class="fu-calendar"></div>
+            </div>
+        </div>
+        <div class="dashboard-grid-2x2">
             <div class="chart-card dashboard-cell"><h3>FOLLOW-UP vs RISPOSTE vs APPUNTAMENTI</h3><canvas id="chartFollowUp"></canvas></div>
             <div class="chart-card dashboard-cell"><h3>LISTA RECALL</h3><canvas id="chartWaiting"></canvas></div>
+        </div>
+
+        <!-- NUOVO: REPORT GIORNALIERO — combina Follow-up, Recall e Recall
+             Follow-up in un'unica lista ordinata per orario dell'azione.
+             Default: solo oggi, nessun filtro impostato. -->
+        <div class="dashboard-cell" style="background:var(--bg-card);border:1.5px solid var(--border);border-radius:14px;padding:20px;box-shadow:var(--shadow);margin-top:20px">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+                <h3 style="margin:0">REPORT LAVORO GIORNALIERO</h3>
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                    <div class="stat-card blue" style="padding:8px 18px;min-width:auto">
+                        <div class="stat-label" style="font-size:10px">TOTALE OPERAZIONI</div>
+                        <div class="stat-value" id="reportTotal" style="font-size:22px">0</div>
+                    </div>
+                    <input type="date" id="reportFrom" class="input-dark" onchange="loadDailyReport()">
+                    <span style="color:var(--text-secondary)">→</span>
+                    <input type="date" id="reportTo" class="input-dark" onchange="loadDailyReport()">
+                    <button class="btn-small btn-blue" onclick="resetDailyReport()">Oggi</button>
+                </div>
+            </div>
+            <div id="reportSummary" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px"></div>
+            <div style="overflow-x:auto">
+                <table class="permission-matrix-table" id="reportTable" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left">Tipo</th>
+                            <th style="text-align:left">Cliente</th>
+                            <th style="text-align:left">Consulente</th>
+                            <th style="text-align:left">Esito</th>
+                            <th style="text-align:left">Operatore</th>
+                            <th style="text-align:left">Orario</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reportTableBody"></tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -261,6 +312,10 @@
                     <option>Zuppa Mattia</option>
                 </select>
                 <label class="checkbox-label"><input type="checkbox" id="fuEmailOnly"> Solo Email (nessun telefono)</label>
+                <div style="display:flex;align-items:center;gap:8px;grid-column:1/-1">
+                    <button type="button" class="btn-small btn-blue" onclick="toggleTrattativaLinkInput()" title="Allega link trattativa">📎 Link trattativa</button>
+                    <input type="url" id="fuTrattativaLink" placeholder="Incolla qui il link della trattativa..." class="input-field" style="display:none;flex:1">
+                </div>
             </div>
             <div class="form-actions">
                 <button onclick="createFollowUp()" class="btn-gold">CREA FOLLOW-UP</button>

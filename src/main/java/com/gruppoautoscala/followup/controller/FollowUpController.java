@@ -9,6 +9,7 @@ import com.gruppoautoscala.followup.repository.FollowUpRepository;
 import com.gruppoautoscala.followup.repository.FollowUpStepRepository;
 import com.gruppoautoscala.followup.repository.UserRepository;
 import com.gruppoautoscala.followup.service.FollowUpService;
+import com.gruppoautoscala.followup.service.RecallFollowUpService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -30,6 +31,7 @@ public class FollowUpController {
     @Autowired private UserRepository userRepository;
     @Autowired private FollowUpStepRepository followUpStepRepository;
     @Autowired private FollowUpRepository followUpRepository;
+    @Autowired private RecallFollowUpService recallFollowUpService;
 
     @GetMapping
     public ResponseEntity<?> getByDate(@RequestParam String date, HttpSession session) {
@@ -61,6 +63,8 @@ public class FollowUpController {
             m.put("status", fu.getStatus());
             m.put("hasAppointment", fu.getHasAppointment());
             m.put("consultantName", fu.getConsultantName());
+            // NUOVO: link trattativa (icona 📎 nel form).
+            m.put("trattativaLink", fu.getTrattativaLink());
 
             Map<String, Object> customer = new LinkedHashMap<>();
             customer.put("id", fu.getCustomer().getId());
@@ -74,6 +78,15 @@ public class FollowUpController {
             user.put("id", fu.getUser().getId());
             user.put("fullName", fu.getUser().getFullName());
             m.put("user", user);
+
+            // NUOVO: chi ha modificato l'ultima volta il follow-up e quando.
+            if (fu.getLastModifiedBy() != null) {
+                Map<String, Object> lastMod = new LinkedHashMap<>();
+                lastMod.put("id", fu.getLastModifiedBy().getId());
+                lastMod.put("fullName", fu.getLastModifiedBy().getFullName());
+                m.put("lastModifiedBy", lastMod);
+            }
+            m.put("lastModifiedAt", fu.getLastModifiedAt() != null ? fu.getLastModifiedAt().toString() : null);
 
             List<Map<String, Object>> steps = stepsByFollowUp
                 .getOrDefault(fu.getId(), List.of())
@@ -89,6 +102,13 @@ public class FollowUpController {
                     sm.put("outcome", s.getOutcome());
                     sm.put("notes", s.getNotes());
                     sm.put("executedAt", s.getExecutedAt() != null ? s.getExecutedAt().toString() : null);
+                    // NUOVO: chi ha segnato l'ultima volta questo step.
+                    if (s.getExecutedBy() != null) {
+                        Map<String, Object> execBy = new LinkedHashMap<>();
+                        execBy.put("id", s.getExecutedBy().getId());
+                        execBy.put("fullName", s.getExecutedBy().getFullName());
+                        sm.put("executedBy", execBy);
+                    }
                     return sm;
                 }).collect(Collectors.toList());
             m.put("steps", steps);
@@ -132,6 +152,15 @@ public class FollowUpController {
 
         LocalDate workDate = LocalDate.parse((String) body.get("workDate"));
         FollowUp followUp = followUpService.createFollowUp(customer, userOpt.get(), workDate, consultantName.trim());
+
+        // NUOVO: link trattativa opzionale, salvato subito dopo la
+        // creazione (createFollowUp non lo conosce, resta invariata).
+        String trattativaLink = (String) body.get("trattativaLink");
+        if (trattativaLink != null && !trattativaLink.isBlank()) {
+            followUp.setTrattativaLink(trattativaLink.trim());
+            followUp = followUpService.save(followUp);
+        }
+
         return ResponseEntity.ok(followUp);
     }
 
@@ -160,6 +189,9 @@ public class FollowUpController {
         Optional<FollowUp> followUpOpt = followUpService.getById(id);
         if (followUpOpt.isEmpty()) return ResponseEntity.notFound().build();
         FollowUp followUp = followUpOpt.get();
+
+        String previousStatus = followUp.getStatus();
+
         if (body.containsKey("status")) followUp.setStatus((String) body.get("status"));
         if (body.containsKey("hasAppointment"))
             followUp.setHasAppointment(Boolean.TRUE.equals(body.get("hasAppointment")));
@@ -169,7 +201,23 @@ public class FollowUpController {
         }
         if (body.containsKey("consultantName"))
             followUp.setConsultantName((String) body.get("consultantName"));
-        return ResponseEntity.ok(followUpService.save(followUp));
+        if (body.containsKey("trattativaLink"))
+            followUp.setTrattativaLink((String) body.get("trattativaLink"));
+
+        // NUOVO: traccia chi ha fatto l'ultima modifica e quando.
+        userRepository.findById(userId).ifPresent(followUp::setLastModifiedBy);
+        followUp.setLastModifiedAt(LocalDateTime.now(ITALY_ZONE));
+
+        FollowUp saved = followUpService.save(followUp);
+
+        // NUOVO: se il follow-up è appena diventato ABANDONED (non lo era
+        // già prima — evita doppioni se il PATCH viene rimandato con lo
+        // stesso stato), avvia il ciclo Recall Follow-up.
+        if ("ABANDONED".equals(saved.getStatus()) && !"ABANDONED".equals(previousStatus)) {
+            recallFollowUpService.maybeCreateRecallFollowUp(saved);
+        }
+
+        return ResponseEntity.ok(saved);
     }
 
     @DeleteMapping("/{id}")
@@ -194,7 +242,10 @@ public class FollowUpController {
         FollowUpStep step = stepOpt.get();
         if (body.containsKey("outcome")) step.setOutcome((String) body.get("outcome"));
         if (body.containsKey("notes")) step.setNotes((String) body.get("notes"));
-        if (body.containsKey("executedAt")) step.setExecutedAt(LocalDateTime.now(ITALY_ZONE));
+        if (body.containsKey("executedAt")) {
+            step.setExecutedAt(LocalDateTime.now(ITALY_ZONE));
+            userRepository.findById(userId).ifPresent(step::setExecutedBy);
+        }
         return ResponseEntity.ok(followUpStepRepository.save(step));
     }
 }

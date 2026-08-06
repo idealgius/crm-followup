@@ -37,4 +37,11 @@ public class FollowUpStep {
 
     @Column(name = "executed_at")
     private LocalDateTime executedAt;
+
+    // NUOVO: chi ha segnato l'ultima volta questo step (esito, note, o
+    // canale scelto per l'invio) — mostrato in UI accanto a data/ora,
+    // valorizzato dal controller ad ogni PATCH che tocca lo step.
+    @ManyToOne
+    @JoinColumn(name = "executed_by_id")
+    private User executedBy;
 }

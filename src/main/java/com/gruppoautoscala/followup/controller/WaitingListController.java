@@ -96,6 +96,9 @@ public class WaitingListController {
             entry.setRichiamato((Boolean) body.get("richiamato"));
         }
         entry.setUpdatedAt(java.time.LocalDateTime.now());
+        // NUOVO: traccia chi ha fatto questa modifica — usato dal report
+        // giornaliero come "operatore" per le righe Recall.
+        userRepository.findById(userId).ifPresent(entry::setLastModifiedBy);
         return ResponseEntity.ok(waitingListService.update(entry));
     }
 
