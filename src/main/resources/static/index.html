@@ -436,9 +436,21 @@
 
                     <div class="form-actions" style="margin-bottom:16px">
                         <button onclick="saveWaitingDetail()" class="btn-gold">SALVA MODIFICHE</button>
-                        <button onclick="registraNuovoRecall()" class="btn-secondary" style="color:#f0c040;border-color:#f0c040">🔄 Registra Nuovo Recall</button>
+                        <button onclick="mostraNuovoRecallForm()" class="btn-secondary" style="color:#f0c040;border-color:#f0c040">🔄 Registra Nuovo Recall</button>
                         <button onclick="deleteWaitingFromDetail()" class="btn-secondary" style="color:#ff3d3d;border-color:#ff3d3d">🗑️ ELIMINA</button>
                         <button onclick="closeWaitingDetailModal()" class="btn-secondary">CHIUDI</button>
+                    </div>
+
+                    <!-- NUOVO: form inline per la nuova data di recall — prima
+                         era un prompt() nativo del browser, brutto e slegato
+                         dal resto dell'app. -->
+                    <div id="wdNuovoRecallForm" style="display:none;background:var(--step-bg);border:1.5px solid #f0c040;border-radius:10px;padding:14px;margin-bottom:16px">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NUOVA DATA DI RECALL</label>
+                        <input type="date" id="wdNuovaDataRecall" class="input-field" style="margin-bottom:10px">
+                        <div style="display:flex;gap:8px">
+                            <button type="button" onclick="confermaNuovoRecall()" class="btn-gold" style="flex:1">CONFERMA</button>
+                            <button type="button" onclick="annullaNuovoRecall()" class="btn-secondary" style="flex:1">ANNULLA</button>
+                        </div>
                     </div>
 
                     <div style="border-top:1px solid var(--border);padding-top:14px">

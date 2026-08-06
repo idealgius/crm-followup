@@ -44,10 +44,10 @@ public class ReportController {
 
         List<Map<String, Object>> rows = new ArrayList<>();
 
-        // ===== FOLLOW-UP =====
-        for (FollowUpStep s : followUpStepRepository.findAll()) {
-            if (s.getExecutedAt() == null) continue;
-            if (s.getExecutedAt().isBefore(start) || s.getExecutedAt().isAfter(end)) continue;
+        // NUOVO: query mirate sulla data (fatte fare al database, non più
+        // findAll() + filtro in Java) — prima scaricavano l'INTERA tabella
+        // ad ogni richiesta, il vero motivo del rallentamento notato.
+        for (FollowUpStep s : followUpStepRepository.findByExecutedAtBetween(start, end)) {
             FollowUp fu = s.getFollowUp();
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("tipo", "FOLLOW_UP");
@@ -60,9 +60,7 @@ public class ReportController {
         }
 
         // ===== RECALL (Waiting List) =====
-        for (WaitingEntry e : waitingEntryRepository.findAll()) {
-            if (e.getUpdatedAt() == null) continue;
-            if (e.getUpdatedAt().isBefore(start) || e.getUpdatedAt().isAfter(end)) continue;
+        for (WaitingEntry e : waitingEntryRepository.findByUpdatedAtBetween(start, end)) {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("tipo", "RECALL");
             row.put("cliente", e.getFullName());
@@ -76,9 +74,7 @@ public class ReportController {
         }
 
         // ===== RECALL FOLLOW-UP =====
-        for (RecallFollowUpStep s : recallFollowUpStepRepository.findAll()) {
-            if (s.getExecutedAt() == null) continue;
-            if (s.getExecutedAt().isBefore(start) || s.getExecutedAt().isAfter(end)) continue;
+        for (RecallFollowUpStep s : recallFollowUpStepRepository.findByExecutedAtBetween(start, end)) {
             FollowUp fu = s.getRecallFollowUp().getOriginalFollowUp();
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("tipo", "RECALL_FOLLOW_UP");

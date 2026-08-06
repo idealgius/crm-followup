@@ -5,6 +5,8 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 @Entity
@@ -58,4 +60,10 @@ public class WaitingEntry {
     @ManyToOne
     @JoinColumn(name = "last_modified_by_id")
     private User lastModifiedBy;
+
+    // NUOVO: storico dei cicli di recall precedenti, popolato da
+    // WaitingListService.registraNuovoRecall(). Ordine di visualizzazione
+    // (più recente prima) gestito lato frontend.
+    @OneToMany(mappedBy = "waitingEntry", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<WaitingRecallHistory> recallHistory = new ArrayList<>();
 }

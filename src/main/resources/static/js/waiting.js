@@ -472,6 +472,7 @@ function openWaitingDetailModal(id) {
     if (createdInfo) createdInfo.textContent = e.createdAt ? formatDateTimeWaiting(e.createdAt) : '—';
 
     renderWaitingHistory(e);
+    annullaNuovoRecall();
 
     const modal = document.getElementById('waitingDetailModal');
     if (modal) modal.style.display = 'flex';
@@ -567,7 +568,11 @@ async function saveWaitingDetail() {
     }
 }
 
-async function registraNuovoRecall() {
+// PRIMA: usava prompt() nativo del browser (brutto, non coerente col resto
+// dell'app) e chiamava un endpoint che non esisteva affatto sul backend
+// ("Not Found" ad ogni click). Ora apre un piccolo form inline nel modal
+// con un vero campo data.
+function mostraNuovoRecallForm() {
     if (isReadOnlySection('WAITING')) { alert('Non hai i permessi per gestire i Recall.'); return; }
     if (!waitingDetailId) return;
     const e = waitingEntries.find(x => x.id === waitingDetailId);
@@ -578,8 +583,21 @@ async function registraNuovoRecall() {
         return;
     }
 
-    const nuovaData = prompt('Inserisci la nuova data di recall (AAAA-MM-GG):', '');
-    if (!nuovaData) return;
+    const form = document.getElementById('wdNuovoRecallForm');
+    const input = document.getElementById('wdNuovaDataRecall');
+    if (input) input.value = '';
+    if (form) form.style.display = 'block';
+}
+
+function annullaNuovoRecall() {
+    const form = document.getElementById('wdNuovoRecallForm');
+    if (form) form.style.display = 'none';
+}
+
+async function confermaNuovoRecall() {
+    if (!waitingDetailId) return;
+    const nuovaData = document.getElementById('wdNuovaDataRecall')?.value;
+    if (!nuovaData) { alert('Inserisci la nuova data di recall.'); return; }
 
     const notaPrecedente = document.getElementById('wdNotes')?.value.trim() || '';
 
@@ -600,6 +618,7 @@ async function registraNuovoRecall() {
         const updated = await res.json();
         const idx = waitingEntries.findIndex(x => x.id === updated.id);
         if (idx !== -1) waitingEntries[idx] = updated;
+        annullaNuovoRecall();
         openWaitingDetailModal(updated.id);
         applyWaitingFilters();
     } catch (err) {

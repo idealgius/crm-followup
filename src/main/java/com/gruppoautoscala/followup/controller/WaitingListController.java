@@ -110,6 +110,39 @@ public class WaitingListController {
         return ResponseEntity.ok(Map.of("message", "Eliminato con successo"));
     }
 
+    // NUOVO: endpoint che mancava del tutto — il frontend lo chiamava già
+    // ("Registra Nuovo Recall") ma senza nessun @PatchMapping corrispondente,
+    // da qui il "Not Found". Archivia il ciclo attuale nello storico e apre
+    // un nuovo ciclo con la data passata dal frontend.
+    @PatchMapping("/{id}/nuovo-recall")
+    public ResponseEntity<?> nuovoRecall(@PathVariable Long id, @RequestBody Map<String, Object> body, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        Optional<WaitingEntry> entryOpt = waitingListService.getById(id);
+        if (entryOpt.isEmpty()) return ResponseEntity.notFound().build();
+        WaitingEntry entry = entryOpt.get();
+
+        if (entry.getRecallDate() == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Non c'è nessuna data di recall attiva da archiviare"));
+        }
+
+        String nuovaDataStr = (String) body.get("nuovaDataRecall");
+        if (nuovaDataStr == null || nuovaDataStr.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "La nuova data di recall è obbligatoria"));
+        }
+        LocalDate nuovaData;
+        try {
+            nuovaData = LocalDate.parse(nuovaDataStr);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Data non valida"));
+        }
+        String nota = (String) body.get("notaRecallPrecedente");
+
+        userRepository.findById(userId).ifPresent(entry::setLastModifiedBy);
+        WaitingEntry updated = waitingListService.registraNuovoRecall(entry, nuovaData, nota);
+        return ResponseEntity.ok(updated);
+    }
+
     @GetMapping("/search")
     public ResponseEntity<?> search(@RequestParam String name, HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");
