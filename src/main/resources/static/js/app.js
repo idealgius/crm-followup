@@ -235,7 +235,24 @@ function getDefaultPageForRole(role) {
 // updateHash=false: usato dal listener hashchange per evitare un loop infinito
 // (altrimenti ogni cambio pagina riscriverebbe l'hash, che a sua volta rilancia
 // showPage all'infinito).
-function showPage(page, updateHash = true) {
+// ===== OVERLAY DI CARICAMENTO =====
+// Copre l'intervallo tra "la pagina è visibile" e "i dati sono arrivati",
+// invece di lasciare vedere lo sfondo vuoto in quel momento. Parte già
+// visibile via HTML/CSS (niente flash "al contrario" prima che questo
+// script venga eseguito) — va solo nascosto quando i dati sono pronti.
+function showLoadingOverlay() {
+    const el = document.getElementById('loadingOverlay');
+    if (el) { el.style.display = 'flex'; el.classList.remove('fade-out'); }
+}
+function hideLoadingOverlay() {
+    const el = document.getElementById('loadingOverlay');
+    if (!el) return;
+    el.classList.add('fade-out');
+    setTimeout(() => { el.style.display = 'none'; }, 150);
+}
+
+async function showPage(page, updateHash = true) {
+    showLoadingOverlay();
     const role = currentUser?.role || 'UTENTE';
 
     if (!VALID_PAGES.includes(page)) page = 'dashboard';
@@ -288,10 +305,16 @@ function showPage(page, updateHash = true) {
 
     document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
 
+    // NUOVO: ogni ramo valorizza loadPromise con la Promise del suo
+    // caricamento dati (avvolta in Promise.resolve() così funziona sia
+    // per funzioni async sia sincrone) — l'overlay resta visibile finché
+    // questa non si risolve, poi sparisce con la pagina già pronta.
+    let loadPromise = Promise.resolve();
+
     if (page === 'dashboard') {
         document.getElementById('dashboardPage').style.display = 'block';
         document.getElementById('navDashboard').classList.add('active');
-        loadStats();
+        loadPromise = Promise.resolve(loadStats());
     } else if (page === 'followups') {
         document.getElementById('followupsPage').style.display = 'block';
         document.getElementById('navFollowups').classList.add('active');
@@ -299,11 +322,11 @@ function showPage(page, updateHash = true) {
         if (!document.getElementById('workDateFilter').value) {
             document.getElementById('workDateFilter').value = today;
         }
-        loadFollowUps();
+        loadPromise = Promise.resolve(loadFollowUps());
     } else if (page === 'waiting') {
         document.getElementById('waitingPage').style.display = 'block';
         document.getElementById('navWaiting').classList.add('active');
-        loadWaitingList();
+        loadPromise = Promise.resolve(loadWaitingList());
     } else if (page === 'contacts') {
         document.getElementById('contactsPage').style.display = 'block';
         document.getElementById('navContacts').classList.add('active');
@@ -314,43 +337,54 @@ function showPage(page, updateHash = true) {
             document.getElementById('contactFrom').value = firstDay;
             document.getElementById('contactTo').value = today;
         }
-        setTimeout(() => {
-            loadContactLogs(
-                document.getElementById('contactFrom').value,
-                document.getElementById('contactTo').value
-            );
-            // Avvia la connessione WebSocket per gli aggiornamenti istantanei
-            // (con il polling ogni 15s come rete di sicurezza in parallelo,
-            // già gestito da startContactPolling stesso).
-            if (typeof startContactPolling === 'function') startContactPolling();
-        }, 0);
+        loadPromise = new Promise(resolve => {
+            setTimeout(async () => {
+                await Promise.resolve(loadContactLogs(
+                    document.getElementById('contactFrom').value,
+                    document.getElementById('contactTo').value
+                ));
+                // Avvia la connessione WebSocket per gli aggiornamenti istantanei
+                // (con il polling ogni 15s come rete di sicurezza in parallelo,
+                // già gestito da startContactPolling stesso).
+                if (typeof startContactPolling === 'function') startContactPolling();
+                resolve();
+            }, 0);
+        });
     } else if (page === 'promo') {
         document.getElementById('promoPage').style.display = 'block';
         document.getElementById('navPromo').classList.add('active');
-        if (typeof loadPromo === 'function') loadPromo();
+        if (typeof loadPromo === 'function') loadPromise = Promise.resolve(loadPromo());
         if (typeof renderPromoMarchiButtons === 'function') renderPromoMarchiButtons();
     } else if (page === 'admin') {
         document.getElementById('adminPage').style.display = 'block';
         document.getElementById('adminLink').classList.add('active');
-        loadUsers();
+        loadPromise = Promise.resolve(loadUsers());
     } else if (page === 'rent') {
         if (rentPageEl) rentPageEl.style.display = 'block';
         const navRent = document.getElementById('navRent');
         if (navRent) navRent.classList.add('active');
-        if (typeof loadRentDashboard === 'function') loadRentDashboard();
+        if (typeof loadRentDashboard === 'function') loadPromise = Promise.resolve(loadRentDashboard());
     } else if (page === 'service') {
         if (servicePageEl) servicePageEl.style.display = 'block';
         const navService = document.getElementById('navService');
         if (navService) navService.classList.add('active');
-        if (typeof loadServiceDashboard === 'function') loadServiceDashboard();
+        if (typeof loadServiceDashboard === 'function') loadPromise = Promise.resolve(loadServiceDashboard());
     } else if (page === 'veicoli') {
         if (veicoliPageEl) veicoliPageEl.style.display = 'block';
         const navVeicoli = document.getElementById('navVeicoli');
         if (navVeicoli) navVeicoli.classList.add('active');
-        if (typeof loadVeicoliDashboard === 'function') loadVeicoliDashboard();
+        if (typeof loadVeicoliDashboard === 'function') loadPromise = Promise.resolve(loadVeicoliDashboard());
     }
 
     applyPageTheme(page, role);
+
+    try {
+        await loadPromise;
+    } catch (err) {
+        console.error('Errore caricamento pagina:', err);
+    } finally {
+        hideLoadingOverlay();
+    }
 }
 
 // Legge la pagina corrente dall'hash dell'URL (es. "#rent" -> "rent").
@@ -408,7 +442,10 @@ window.onload = function() {
             // di tornare sempre alla pagina di default del ruolo.
             const hashPage = getPageFromHash();
             const defaultPage = getDefaultPageForRole(data.role);
-            showPage(hashPage || defaultPage);
+            // NUOVO: await — l'overlay di caricamento (già visibile di
+            // default) resta su finché anche i dati della prima pagina
+            // non sono pronti, non solo finché il layout è disegnato.
+            await showPage(hashPage || defaultPage);
 
             // FIX PRESTAZIONI: loadStats() veniva chiamata QUI e poi anche
             // dentro showPage() quando la pagina è "dashboard" (poche righe
@@ -429,6 +466,10 @@ window.onload = function() {
         .catch(() => {
             document.getElementById('loginPage').style.display = 'flex';
             document.getElementById('mainApp').style.display = 'none';
+            // NUOVO: showPage() non viene mai chiamata su questo ramo (non
+            // autenticato), quindi qui va nascosto esplicitamente — altrimenti
+            // resterebbe visibile per sempre sopra la pagina di login.
+            hideLoadingOverlay();
         });
 };
 

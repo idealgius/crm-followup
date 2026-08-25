@@ -108,4 +108,24 @@ public interface ContactLogRepository extends JpaRepository<ContactLog, Long> {
            "AND LOWER(TRIM(c.clienteCognome)) = LOWER(TRIM(:cognome)) " +
            "ORDER BY c.contactDate DESC")
     List<ContactLog> findByClienteNomeCognome(String nome, String cognome);
+
+    // ===== RICERCA LIBERA (barra di ricerca) =====
+    // Come customer-history, cerca su TUTTO il database, non solo il
+    // periodo attualmente caricato — la barra di ricerca del Registro
+    // Contatti prima cercava solo dentro contactLogs (in memoria, quindi
+    // solo il periodo filtrato), qui invece interroga sempre tutto.
+    @Query("SELECT DISTINCT c FROM ContactLog c " +
+           "LEFT JOIN FETCH c.user " +
+           "LEFT JOIN FETCH c.acquistoAlertInGestioneDa " +
+           "LEFT JOIN FETCH c.acquistoAlertGestitaDa " +
+           "LEFT JOIN FETCH c.acquistoAlertNoteGestioneInseritaDa " +
+           "LEFT JOIN FETCH c.acquistoAlertNoteGestitaInseritaDa " +
+           "LEFT JOIN FETCH c.acquistoAlertNoteGestioneModificataDa " +
+           "LEFT JOIN FETCH c.acquistoAlertNoteGestitaModificataDa " +
+           "LEFT JOIN FETCH c.alertRecipients " +
+           "WHERE LOWER(c.clienteNome) LIKE LOWER(CONCAT('%', :q, '%')) " +
+           "OR LOWER(c.clienteCognome) LIKE LOWER(CONCAT('%', :q, '%')) " +
+           "OR c.clienteNumero LIKE CONCAT('%', :q, '%') " +
+           "ORDER BY c.contactDate DESC")
+    List<ContactLog> searchByClienteQuery(String q);
 }

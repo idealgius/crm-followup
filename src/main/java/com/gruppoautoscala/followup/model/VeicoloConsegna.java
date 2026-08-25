@@ -2,6 +2,8 @@ package com.gruppoautoscala.followup.model;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import org.hibernate.annotations.Fetch;
+import org.hibernate.annotations.FetchMode;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -127,9 +129,19 @@ public class VeicoloConsegna {
     private LocalDateTime createdAt = LocalDateTime.now();
 
     // ===== CHECKLIST FIGLIE =====
+    // NUOVO (fix performance): @Fetch(SUBSELECT) dice a Hibernate "quando
+    // carichi una LISTA di veicoli, prendi tutte le lavorazioni/stati di
+    // TUTTI quei veicoli con UNA query sola" invece che una query per ogni
+    // singolo veicolo (N+1). Non si può usare JOIN FETCH per queste due
+    // liste insieme nella stessa query del repository (Hibernate lo vieta,
+    // "MultipleBagFetchException") — questa è l'alternativa corretta,
+    // e in più funziona automaticamente su OGNI query, non solo quelle
+    // scritte a mano nel repository.
     @OneToMany(mappedBy = "veicoloConsegna", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Fetch(FetchMode.SUBSELECT)
     private List<VeicoloLavorazione> lavorazioni = new ArrayList<>();
 
     @OneToMany(mappedBy = "veicoloConsegna", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Fetch(FetchMode.SUBSELECT)
     private List<VeicoloStatoLog> statiLog = new ArrayList<>();
 }

@@ -105,6 +105,15 @@ public class ContactLogService {
         return contactLogRepository.findByOrderByContactDateAsc();
     }
 
+    // ===== RICERCA LIBERA (barra di ricerca) =====
+    // Limite di 50 risultati: stessa cautela già presente altrove nel file
+    // (getCustomerHistory non ha limite perché è UN cliente specifico, qui
+    // invece la query può matchare potenzialmente moltissimi contatti).
+    public List<ContactLog> search(String q) {
+        List<ContactLog> results = contactLogRepository.searchByClienteQuery(q);
+        return results.size() > 50 ? results.subList(0, 50) : results;
+    }
+
     public List<ContactLog> getByDateRange(LocalDateTime from, LocalDateTime to) {
         return contactLogRepository.findByContactDateBetweenOrderByContactDateAsc(from, to);
     }

@@ -12,27 +12,34 @@ import java.util.List;
 @Repository
 public interface VeicoloConsegnaRepository extends JpaRepository<VeicoloConsegna, Long> {
 
-    List<VeicoloConsegna> findByStatoPratica(String statoPratica);
+    // NUOVO (fix performance): JOIN FETCH sull'operatore (relazione singola,
+    // nessun conflitto con le due liste — quelle sono gestite dal
+    // @Fetch(SUBSELECT) direttamente sull'entità VeicoloConsegna).
+    @Query("SELECT v FROM VeicoloConsegna v JOIN FETCH v.user WHERE v.statoPratica = :statoPratica")
+    List<VeicoloConsegna> findByStatoPratica(@Param("statoPratica") String statoPratica);
 
-    List<VeicoloConsegna> findByStatoPraticaAndSedeConsegnaIn(String statoPratica, List<String> sedi);
+    @Query("SELECT v FROM VeicoloConsegna v JOIN FETCH v.user WHERE v.statoPratica = :statoPratica AND v.sedeConsegna IN :sedi")
+    List<VeicoloConsegna> findByStatoPraticaAndSedeConsegnaIn(@Param("statoPratica") String statoPratica, @Param("sedi") List<String> sedi);
 
     // CONSEGNATE: filtro temporale "intelligente" per mese o anno intero,
     // basato sulla data di consegna EFFETTIVA (non sull'appuntamento).
+    @Query("SELECT v FROM VeicoloConsegna v JOIN FETCH v.user WHERE v.statoPratica = :statoPratica AND v.dataConsegnaEffettiva BETWEEN :from AND :to")
     List<VeicoloConsegna> findByStatoPraticaAndDataConsegnaEffettivaBetween(
-            String statoPratica, LocalDateTime from, LocalDateTime to);
+            @Param("statoPratica") String statoPratica, @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
+    @Query("SELECT v FROM VeicoloConsegna v JOIN FETCH v.user WHERE v.statoPratica = :statoPratica AND v.sedeConsegna IN :sedi AND v.dataConsegnaEffettiva BETWEEN :from AND :to")
     List<VeicoloConsegna> findByStatoPraticaAndSedeConsegnaInAndDataConsegnaEffettivaBetween(
-            String statoPratica, List<String> sedi, LocalDateTime from, LocalDateTime to);
+            @Param("statoPratica") String statoPratica, @Param("sedi") List<String> sedi, @Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
     // CALENDARIO: tutte le pratiche IN_CORSO con un appuntamento fissato
     // nell'intervallo richiesto.
-    @Query("SELECT v FROM VeicoloConsegna v WHERE v.statoPratica = 'IN_CORSO' " +
+    @Query("SELECT v FROM VeicoloConsegna v JOIN FETCH v.user WHERE v.statoPratica = 'IN_CORSO' " +
            "AND v.dataAppuntamentoConsegna BETWEEN :from AND :to")
     List<VeicoloConsegna> findAppuntamentiTraLeDate(@Param("from") LocalDate from, @Param("to") LocalDate to);
 
     // Ricerca libera per intestatario, targa o numero cliente (usata in
     // ogni scheda, come richiesto).
-    @Query("SELECT v FROM VeicoloConsegna v WHERE " +
+    @Query("SELECT v FROM VeicoloConsegna v JOIN FETCH v.user WHERE " +
            "LOWER(v.intestatario) LIKE LOWER(CONCAT('%', :q, '%')) OR " +
            "LOWER(v.targa) LIKE LOWER(CONCAT('%', :q, '%')) OR " +
            "LOWER(v.numeroCliente) LIKE LOWER(CONCAT('%', :q, '%'))")

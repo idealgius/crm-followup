@@ -10,6 +10,16 @@
 </head>
 <body>
 
+<!-- NUOVO: overlay di caricamento — copre il momento (login, refresh,
+     cambio sezione) in cui la pagina è già visibile ma i dati non sono
+     ancora arrivati, invece di mostrare lo sfondo vuoto ("lampo blu").
+     Mostrato/nascosto da showLoadingOverlay()/hideLoadingOverlay() in
+     app.js. Parte già visibile (niente flash "al contrario" prima che il
+     JS carichi) e si nasconde da solo appena i dati sono pronti. -->
+<div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+</div>
+
 <!-- LOGIN PAGE -->
 <div id="loginPage" class="auth-page">
     <div class="auth-container">

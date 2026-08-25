@@ -882,45 +882,104 @@ function resetContactFilters() {
     loadContactLogs(firstDay, today);
 }
 
+// NUOVO: prima cercava solo dentro contactLogs (in memoria, quindi solo il
+// periodo filtrato) — ora interroga sempre il server su tutto il database,
+// con un piccolo ritardo (debounce) per non fare una richiesta ad ogni
+// singola lettera digitata.
+let contactSearchDebounceTimer = null;
 function searchContactLogs(query) {
+    clearTimeout(contactSearchDebounceTimer);
     const resultsWrapper = document.getElementById('contactSearchResults');
     const resultsList = document.getElementById('contactSearchResultsList');
     if (!resultsWrapper || !resultsList) return;
     const q = query.trim();
     if (!q) { resultsWrapper.style.display = 'none'; return; }
-    const qNorm = normalizeText(q);
-    const matches = contactLogs.filter(l => {
-        const nomeCompleto = normalizeText(clienteNomeCompleto(l));
-        const numero = clienteNumeroDisplay(l).toLowerCase();
-        return nomeCompleto.includes(qNorm) || numero.includes(q.toLowerCase());
-    }).slice(0, 50);
+    if (q.length < 2) return;
 
-    if (matches.length === 0) {
-        resultsList.innerHTML = `<div class="empty-state" style="padding:20px"><p>Nessun cliente trovato</p></div>`;
-    } else {
-        resultsList.innerHTML = matches.map(l => {
-            const date = l.contactDate.split('T')[0];
-            const time = l.contactDate.split('T')[1]?.substring(0,5) || '';
-            return `<div class="followup-card" style="margin-bottom:8px;cursor:pointer" onclick="goToContactSearchResult('${date}')">
-                <div style="display:flex;justify-content:space-between;align-items:center">
-                    <div>
-                        <div style="font-weight:800;color:var(--text-primary);font-size:14px">${clienteNomeCompleto(l)}</div>
-                        <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
-                            📞 ${clienteNumeroDisplay(l)} ·
-                            <span class="contact-category-badge cat-${l.category.replace(/[\s+]/g,'_')}">${l.category}</span> ·
-                            📅 ${formatDateIT(date)} ${time} · 👤 ${l.user.fullName}
-                        </div>
-                    </div>
-                    <span style="color:#f0c040;font-size:16px">→</span>
-                </div>
-            </div>`;
-        }).join('');
-    }
-    resultsWrapper.style.display = 'block';
+    contactSearchDebounceTimer = setTimeout(async () => {
+        resultsList.innerHTML = `<div class="empty-state" style="padding:20px"><p>Ricerca in corso…</p></div>`;
+        resultsWrapper.style.display = 'block';
+        try {
+            const res = await fetch(`/api/contacts/search?q=${encodeURIComponent(q)}`);
+            if (!res.ok) {
+                resultsList.innerHTML = `<div class="empty-state" style="padding:20px"><p>Errore nella ricerca</p></div>`;
+                return;
+            }
+            const matches = await res.json();
+            renderContactSearchResults(matches);
+        } catch (err) {
+            console.error('Errore ricerca contatti:', err);
+            resultsList.innerHTML = `<div class="empty-state" style="padding:20px"><p>Errore nella ricerca</p></div>`;
+        }
+    }, 300);
 }
-function goToContactSearchResult(date) {
+
+function renderContactSearchResults(matches) {
+    const resultsList = document.getElementById('contactSearchResultsList');
+    if (!resultsList) return;
+    if (!matches || matches.length === 0) {
+        resultsList.innerHTML = `<div class="empty-state" style="padding:20px"><p>Nessun cliente trovato</p></div>`;
+        return;
+    }
+    resultsList.innerHTML = matches.map(l => {
+        const date = l.contactDate.split('T')[0];
+        const time = l.contactDate.split('T')[1]?.substring(0,5) || '';
+        return `<div class="followup-card" style="margin-bottom:8px;cursor:pointer" onclick="goToContactSearchResult('${date}', ${l.id})">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+                <div>
+                    <div style="font-weight:800;color:var(--text-primary);font-size:14px">${clienteNomeCompleto(l)}</div>
+                    <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">
+                        📞 ${clienteNumeroDisplay(l)} ·
+                        <span class="contact-category-badge cat-${l.category.replace(/[\s+]/g,'_')}">${l.category}</span> ·
+                        📅 ${formatDateIT(date)} ${time} · 👤 ${l.user.fullName}
+                    </div>
+                </div>
+                <span style="color:#f0c040;font-size:16px">→</span>
+            </div>
+        </div>`;
+    }).join('');
+}
+// NUOVO: dopo aver cercato e cliccato un cliente, prima bisognava
+// "ricercarselo" a occhio nella tabella del giorno usando solo l'orario
+// come riferimento. Ora scorre automaticamente fino alla riga esatta e la
+// evidenzia per un paio di secondi, poi torna normale.
+//
+// FIX: se il giorno del risultato non è tra quelli già caricati (fuori dal
+// periodo filtrato corrente), showDayView() da sola non trovava nulla —
+// dipende interamente da contactLogs, che copre solo il periodo filtrato.
+// Ora, se manca, lo scarica al volo e lo AGGIUNGE (non sovrascrive) a
+// contactLogs, così il periodo filtrato originale resta intatto per
+// quando si torna indietro con "← INDIETRO".
+async function goToContactSearchResult(date, id) {
     closeContactSearch();
+    const alreadyLoaded = contactLogs.some(l => l.contactDate.startsWith(date));
+    if (!alreadyLoaded) {
+        try {
+            const res = await fetch(`/api/contacts?from=${date}&to=${date}`);
+            if (res.ok) {
+                const dayLogs = await res.json();
+                const existingIds = new Set(contactLogs.map(l => l.id));
+                dayLogs.forEach(l => { if (!existingIds.has(l.id)) contactLogs.push(l); });
+                contactLogs.sort((a, b) => (b.contactDate || '').localeCompare(a.contactDate || ''));
+            }
+        } catch (err) {
+            console.error('Errore caricamento contatti del giorno:', err);
+        }
+    }
     showDayView(date);
+    // Piccolo ritardo: showDayView ridisegna la tabella subito, ma il
+    // browser ha bisogno di un attimo per calcolare le posizioni prima che
+    // scrollIntoView funzioni in modo affidabile.
+    setTimeout(() => highlightContactRow(id), 100);
+}
+
+function highlightContactRow(id) {
+    const row = document.getElementById(`contact-row-${id}`);
+    if (!row) return;
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    row.style.transition = 'background-color 0.6s ease';
+    row.style.backgroundColor = 'rgba(240,192,64,0.35)';
+    setTimeout(() => { row.style.backgroundColor = ''; }, 2200);
 }
 function closeContactSearch() {
     const resultsWrapper = document.getElementById('contactSearchResults');
@@ -2634,11 +2693,12 @@ function toggleTree(key) {
 
 function renderContactRow(log) {
     const time = log.contactDate.split('T')[1].substring(0, 5);
-    const isOwner = currentUser && log.user.id === currentUser.id;
-    const isAdmin = currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'GESTORE');
-    const isMod = currentUser && currentUser.role === 'MODERATORE';
-    const targetIsAdmin = log.user.role === 'ADMIN' || log.user.role === 'GESTORE';
-    const canEdit = isAdmin || isOwner || (isMod && !targetIsAdmin);
+    // PRIMA: qui c'era un controllo hardcoded (isOwner/isAdmin/isMod) che
+    // ignorava del tutto la pagina Permessi. Ora si usa il permesso vero:
+    // FULL può editare qualunque contatto TRANNE quelli creati da un
+    // ADMIN (che richiedono ADMIN_FULL) — stesso criterio del backend.
+    const targetIsAdmin = log.user.role === 'ADMIN';
+    const canEdit = targetIsAdmin ? canWriteAdminOwned('CONTACTS') : canWrite('CONTACTS');
     const catClass = log.category.replace(/[\s+]/g, '_');
     const marca = log.marca || log.noleggioMarca;
     const modello = log.modello || log.noleggioModello;
@@ -3108,11 +3168,20 @@ async function createContactLog() {
 }
 
 async function deleteContactLog(id) {
-    if (typeof isReadOnlySection === 'function' && isReadOnlySection('CONTACTS')) { alert('Non hai i permessi per eliminare contatti.'); return; }
+    // Stesso criterio di canEdit in renderContactRow.
+    const log = contactLogs.find(l => l.id === id);
+    const targetIsAdmin = log && log.user.role === 'ADMIN';
+    const allowed = targetIsAdmin ? canWriteAdminOwned('CONTACTS') : canWrite('CONTACTS');
+    if (!allowed) { alert('Non hai i permessi per eliminare questo contatto.'); return; }
     if (!confirm('Eliminare questo contatto?')) return;
     const savedDayView = currentDayView;
     try {
-        await fetch(`/api/contacts/${id}`, { method: 'DELETE' });
+        const res = await fetch(`/api/contacts/${id}`, { method: 'DELETE' });
+        if (!res.ok) {
+            const data = await res.json().catch(() => null);
+            alert(data?.error || 'Non autorizzato');
+            return;
+        }
         const from = document.getElementById('contactFrom')?.value;
         const to = document.getElementById('contactTo')?.value;
         await loadContactLogs(from, to, savedDayView);
@@ -3153,8 +3222,11 @@ function closeEditContactModal(event) {
     editingContactId = null;
 }
 async function saveEditContactLog() {
-    if (typeof isReadOnlySection === 'function' && isReadOnlySection('CONTACTS')) { alert('Non hai i permessi per modificare contatti.'); return; }
     if (!editingContactId) return;
+    const editingLog = contactLogs.find(l => l.id === editingContactId);
+    const targetIsAdmin = editingLog && editingLog.user.role === 'ADMIN';
+    const allowedToEdit = targetIsAdmin ? canWriteAdminOwned('CONTACTS') : canWrite('CONTACTS');
+    if (!allowedToEdit) { alert('Non hai i permessi per modificare questo contatto.'); return; }
     const category = document.getElementById('editContactCategory')?.value || '';
     const clienteNome = document.getElementById('editContactNome')?.value.trim() || '';
     const clienteCognome = document.getElementById('editContactCognome')?.value.trim() || '';
@@ -3384,9 +3456,17 @@ let customerHistoryCache = [];
 // nella vista corrente del Registro Contatti.
 function openHistoryCardDetail(id) {
     const log = customerHistoryCache.find(l => l.id === id);
-    if (!log) return;
+    if (!log) {
+        console.error('openHistoryCardDetail: nessun log trovato in customerHistoryCache per id', id, customerHistoryCache);
+        return;
+    }
     closeCustomerHistoryModal();
-    openEditContactModal(id, log);
+    // Piccolo ritardo: dà tempo al browser di completare la chiusura del
+    // modal Storico (display:none) PRIMA di aprire quello di modifica —
+    // se i due modal condividono uno stacking context o vengono aggiornati
+    // nello stesso ciclo di rendering, aprire il secondo troppo a ridosso
+    // della chiusura del primo può fargli "perdere" la visibilità.
+    setTimeout(() => openEditContactModal(id, log), 50);
 }
 
 async function openCustomerHistoryModal(nome, cognome, numero) {
@@ -3424,7 +3504,7 @@ async function openCustomerHistoryModal(nome, cognome, numero) {
             const oraFmt = l.contactDate.split('T')[1]?.substring(0, 5) || '';
             const tipo = l.otherNote || l.acquistoNote || l.serviceNote || '';
             const notaExtra = l.notaAggiuntiva || '';
-            return `<div onclick="openHistoryCardDetail(${l.id})" style="cursor:pointer;background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px" onmouseover="this.style.borderColor='var(--accent, #4a90d9)'" onmouseout="this.style.borderColor='var(--border)'">
+            return `<div onclick="event.stopPropagation();openHistoryCardDetail(${l.id})" style="cursor:pointer;background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px" onmouseover="this.style.border='1.5px solid var(--accent, #4a90d9)'" onmouseout="this.style.border='1.5px solid var(--border)'">
                 <div style="font-weight:700;color:var(--text-primary);margin-bottom:4px">📅 ${dataFmt} · 🕐 ${oraFmt}</div>
                 <div style="font-size:12px;color:var(--text-secondary)">
                     <span class="contact-category-badge">${l.category}</span>

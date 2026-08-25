@@ -106,6 +106,20 @@ public class ContactLogController {
         return ResponseEntity.ok(result);
     }
 
+    // ===== RICERCA LIBERA (barra di ricerca) =====
+    // Cerca su TUTTO il database, non solo il periodo attualmente caricato
+    // dal frontend — a differenza di getAll() qui sotto, che invece resta
+    // scoped a from/to per il caricamento normale della pagina.
+    @GetMapping("/search")
+    public ResponseEntity<?> search(@RequestParam String q, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        if (q == null || q.trim().length() < 2) return ResponseEntity.ok(List.of());
+        List<ContactLog> results = contactLogService.search(q.trim());
+        List<Map<String, Object>> result = results.stream().map(this::toMap).collect(Collectors.toList());
+        return ResponseEntity.ok(result);
+    }
+
     @GetMapping
     public ResponseEntity<?> getAll(
             @RequestParam(required = false) String from,
