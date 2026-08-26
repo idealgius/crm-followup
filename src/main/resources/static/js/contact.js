@@ -2288,6 +2288,13 @@ function handleContactWsEvent(event) {
     const isTypingNote = activeEl && (activeEl.id === 'acquistoAlertNoteGestione' || activeEl.id === 'acquistoAlertNoteGestita');
     if (isTypingNote) return;
 
+    // NUOVO: stessa protezione, estesa allo Storico Cliente e alla scheda
+    // di modifica — un ricalcolo in background mentre uno di questi due è
+    // aperto non deve interferire con quello che l'operatore sta guardando
+    // o sta per cliccare.
+    if (document.getElementById('customerHistoryModal')?.style.display === 'flex') return;
+    if (document.getElementById('editContactModal')?.style.display === 'flex') return;
+
     const { type, data } = event;
 
     // Serve il valore PRIMA della sovrascrittura per capire se l'allert è
@@ -3456,17 +3463,22 @@ let customerHistoryCache = [];
 // nella vista corrente del Registro Contatti.
 function openHistoryCardDetail(id) {
     const log = customerHistoryCache.find(l => l.id === id);
-    if (!log) {
-        console.error('openHistoryCardDetail: nessun log trovato in customerHistoryCache per id', id, customerHistoryCache);
-        return;
-    }
+    if (!log) return;
+    // FIX: prima si chiudeva lo Storico e SOLO DOPO (con 50ms di attesa in
+    // mezzo) si apriva la scheda di modifica — quel buco di tempo lasciava
+    // spazio a qualunque altro meccanismo della pagina per richiudere il
+    // modal appena aperto prima che diventasse visibile. Ora si apre PRIMA
+    // la scheda (sincrono, subito), e solo dopo si chiude lo Storico —
+    // nessuna finestra temporale in mezzo in cui possa succedere altro.
+    openEditContactModal(id, log);
     closeCustomerHistoryModal();
-    // Piccolo ritardo: dà tempo al browser di completare la chiusura del
-    // modal Storico (display:none) PRIMA di aprire quello di modifica —
-    // se i due modal condividono uno stacking context o vengono aggiornati
-    // nello stesso ciclo di rendering, aprire il secondo troppo a ridosso
-    // della chiusura del primo può fargli "perdere" la visibilità.
-    setTimeout(() => openEditContactModal(id, log), 50);
+    // Rete di sicurezza: se qualcos'altro nella pagina dovesse comunque
+    // richiudere il modal appena aperto, lo forza di nuovo visibile poco
+    // dopo (invisibile all'utente, la finestra resta comunque aperta).
+    setTimeout(() => {
+        const modal = document.getElementById('editContactModal');
+        if (modal && modal.style.display !== 'flex') modal.style.display = 'flex';
+    }, 100);
 }
 
 async function openCustomerHistoryModal(nome, cognome, numero) {
