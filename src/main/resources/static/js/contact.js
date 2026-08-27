@@ -2251,6 +2251,21 @@ function connectContactWebSocket() {
                     console.error('Errore parsing evento WebSocket contatti:', err);
                 }
             });
+            // NUOVO: stessa connessione, un canale in più — avvisi di
+            // chiamata in arrivo dai telefoni Yealink (vedi TelefoniaController).
+            // Il backend manda l'evento a TUTTI i client connessi; ogni
+            // client mostra il popup SOLO se l'avviso è per l'utente
+            // corrente (userId coincide).
+            contactStompClient.subscribe('/topic/calls', (message) => {
+                try {
+                    const event = JSON.parse(message.body);
+                    if (currentUser && event.userId === currentUser.id) {
+                        showIncomingCallPopup(event.numero);
+                    }
+                } catch (err) {
+                    console.error('Errore parsing evento chiamata in arrivo:', err);
+                }
+            });
         },
         onDisconnect: () => {
             contactWsConnected = false;
@@ -3535,4 +3550,58 @@ async function openCustomerHistoryModal(nome, cognome, numero) {
 function closeCustomerHistoryModal(event) {
     if (event && event.target.id !== 'customerHistoryModal') return;
     document.getElementById('customerHistoryModal').style.display = 'none';
+}
+
+// ===== CHIAMATA IN ARRIVO (integrazione telefoni Yealink) =====
+// Il modal è costruito via JS al primo utilizzo (non serve toccare
+// index.html): appena arriva una chiamata sul telefono dell'operatore
+// giusto, questo popup compare sopra a qualunque pagina stia guardando.
+let incomingCallNumeroPending = null;
+
+function showIncomingCallPopup(numero) {
+    let modal = document.getElementById('incomingCallModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'incomingCallModal';
+        modal.className = 'modal-overlay';
+        modal.style.display = 'none';
+        modal.innerHTML = `
+            <div class="modal-box" style="max-width:380px;text-align:center">
+                <div class="modal-header" style="justify-content:center">
+                    <h3 style="margin:0">📞 Chiamata in arrivo</h3>
+                </div>
+                <div class="modal-body">
+                    <div id="incomingCallNumero" style="font-size:24px;font-weight:800;margin-bottom:6px"></div>
+                    <div style="font-size:13px;color:var(--text-secondary);margin-bottom:20px">Vuoi registrare questo contatto?</div>
+                    <div style="display:flex;gap:10px;justify-content:center">
+                        <button class="btn-gold" style="flex:1" onclick="confermaRegistraChiamata()">✅ Sì, registra</button>
+                        <button class="btn-secondary" style="flex:1" onclick="closeIncomingCallPopup()">No</button>
+                    </div>
+                </div>
+            </div>`;
+        document.body.appendChild(modal);
+    }
+    document.getElementById('incomingCallNumero').textContent = numero;
+    incomingCallNumeroPending = numero;
+    modal.style.display = 'flex';
+}
+
+function closeIncomingCallPopup() {
+    const modal = document.getElementById('incomingCallModal');
+    if (modal) modal.style.display = 'none';
+    incomingCallNumeroPending = null;
+}
+
+function confermaRegistraChiamata() {
+    const numero = incomingCallNumeroPending;
+    closeIncomingCallPopup();
+    if (typeof showPage === 'function') showPage('contacts');
+    // Piccolo ritardo: dà tempo alla pagina Registro Contatti di finire di
+    // caricarsi (se l'operatore non era già lì) prima di aprire il form e
+    // scrivere il numero.
+    setTimeout(() => {
+        showNewContactForm();
+        const numEl = document.getElementById('clienteNumero');
+        if (numEl) numEl.value = numero || '';
+    }, 200);
 }
