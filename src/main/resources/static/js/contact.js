@@ -60,6 +60,15 @@ let lastDetailItems = [];
 let lastDetailTitle = '';
 let detailOnlyNominativo = false;
 let detailOnlyAlert = false;
+// NUOVO: filtro "senza duplicati" — raggruppa per numero di telefono,
+// mostra solo l'ultimo contatto registrato per ciascun numero, recuperando
+// nome/cognome/marca/modello/targa da un contatto precedente dello stesso
+// numero se l'ultimo li ha vuoti.
+let detailOnlyDedup = false;
+// NUOVO: stessa cosa, versione per la tabella principale del Registro
+// Contatti (vista giorno) — stato separato dal filtro del popup di
+// dettaglio qui sopra, i due si attivano indipendentemente.
+let contactMainDedupActive = false;
 let detailGestioneFilter = '';
 let detailCategoryFilter = '';
 let dayViewSecondaryFilter = '';
@@ -1080,6 +1089,11 @@ function renderGenericContactDetail() {
         ? lastDetailItems.filter(l => l.clienteNome || l.clienteCognome || l.serviceNomeCliente || l.noleggioNomeCliente || l.nominativoAppuntamento)
         : lastDetailItems;
 
+    // NUOVO: applicato dopo il filtro nominativo, prima di tutto il resto
+    // (allert, categoria, destinatario) — così la deduplica lavora sempre
+    // sull'insieme più ampio possibile prima che si restringa ulteriormente.
+    if (detailOnlyDedup) items = dedupContactsByNumber(items);
+
     const hasAcquistoItems = lastDetailItems.some(l => ALERT_ELIGIBLE_CATEGORIES.includes(l.category));
     // NUOVO: quante categorie diverse (tra quelle con allert) sono presenti
     // in questa lista — se più di una, mostra il filtro a tendina per
@@ -1114,6 +1128,10 @@ function renderGenericContactDetail() {
     let html = `<div class="detail-filter-bar">
         <input type="checkbox" id="detailNominativoCheck" ${detailOnlyNominativo?'checked':''} onchange="toggleDetailNominativoFilter()">
         <label for="detailNominativoCheck" style="cursor:pointer">Mostra solo contatti con nome o cognome</label>
+    </div>
+    <div class="detail-filter-bar" style="margin-top:6px">
+        <input type="checkbox" id="detailDedupCheck" ${detailOnlyDedup?'checked':''} onchange="toggleDetailDedupFilter()">
+        <label for="detailDedupCheck" style="cursor:pointer">🧹 Nascondi duplicati (stesso numero, mostra solo l'ultimo)</label>
     </div>`;
 
     if (hasAcquistoItems) {
@@ -1180,6 +1198,12 @@ function renderGenericContactDetail() {
             if (log.linkAppuntamento) links.push(`<a href="${log.linkAppuntamento}" target="_blank" rel="noopener" title="Link appuntamento" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(74,144,217,0.15);color:#4a90d9;text-decoration:none;font-size:13px">🔗</a>`);
             if (log.noleggioLink) links.push(`<a href="${log.noleggioLink}" target="_blank" rel="noopener" title="Lead noleggio" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(0,200,83,0.15);color:#00c853;text-decoration:none;font-size:13px">🔗</a>`);
             if (alert) links.push(`<button onclick="event.stopPropagation();openAcquistoAlertModal(${log.id})" title="Gestisci Allert — ${alertVisual.label}" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:${alertVisual.bg};color:${alertVisual.color};border:none;cursor:pointer;font-size:13px">${alertVisual.icon}</button>`);
+            // NUOVO: cartella Storico Cliente — sempre visibile quando la
+            // riga è il risultato di una deduplica (più chiamate riunite in
+            // una), oltre al caso già esistente altrove nell'app.
+            if (log._dedupCount > 1) {
+                links.push(`<button onclick="event.stopPropagation();openCustomerHistoryModal('${(log.clienteNome||'').replace(/'/g,"\\'")}','${(log.clienteCognome||'').replace(/'/g,"\\'")}','${(log.clienteNumero||'').replace(/'/g,"\\'")}')" title="Storico Cliente" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(240,192,64,0.15);color:#f0c040;border:none;cursor:pointer;font-size:13px">📁</button>`);
+            }
             return `<div class="followup-card" style="margin-bottom:10px;cursor:pointer" onclick="closeGenericDetailAndEdit(${log.id})">
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
                     <div>
@@ -1195,6 +1219,7 @@ function renderGenericContactDetail() {
                         ${log.serviceSede ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📍 Service ${log.serviceSede}</div>` : ''}
                         ${log.serviceTarga ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">🔖 ${log.serviceTarga}</div>` : ''}
                         ${noteText ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📝 ${noteText}</div>` : ''}
+                        ${log._prevHistory && log._prevHistory.length > 0 ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:6px;padding-top:6px;border-top:1px dashed var(--border)">🕐 Chiamate precedenti (${log._prevHistory.length}): ${log._prevHistory.map(d => formatDateTimeIT(d)).join(' · ')}</div>` : ''}
                         ${alert ? (
                             log.alertNotifyAll === false && Array.isArray(log.alertRecipients) && log.alertRecipients.length > 0
                                 ? `<div style="font-size:12px;color:#f0c040;font-weight:700;margin-top:2px">🎯 Per: ${log.alertRecipients.map(u => u.fullName).join(', ')}</div>`
@@ -1213,6 +1238,66 @@ function renderGenericContactDetail() {
 function toggleDetailNominativoFilter() {
     detailOnlyNominativo = document.getElementById('detailNominativoCheck')?.checked || false;
     renderGenericContactDetail();
+}
+
+// NUOVO: attiva/disattiva il filtro "senza duplicati".
+function toggleDetailDedupFilter() {
+    detailOnlyDedup = document.getElementById('detailDedupCheck')?.checked || false;
+    renderGenericContactDetail();
+}
+
+// NUOVO: raggruppa i contatti per numero di telefono (clienteNumero) e
+// restituisce UNA sola riga per numero — quella più recente — completando
+// i campi vuoti (nome, cognome, marca, modello, targa) pescandoli da un
+// contatto precedente dello stesso numero che li avesse valorizzati.
+// I contatti SENZA numero non vengono raggruppati (non c'è modo di sapere
+// se sono la stessa persona), passano invariati.
+function dedupContactsByNumber(items) {
+    const byNumero = new Map();
+    const senzaNumero = [];
+
+    items.forEach(l => {
+        const numero = (l.clienteNumero || '').trim();
+        if (!numero) { senzaNumero.push(l); return; }
+        if (!byNumero.has(numero)) byNumero.set(numero, []);
+        byNumero.get(numero).push(l);
+    });
+
+    const risultato = [...senzaNumero];
+
+    byNumero.forEach(gruppo => {
+        const ordinato = [...gruppo].sort((a, b) => (b.contactDate || '').localeCompare(a.contactDate || ''));
+        const piuRecente = ordinato[0];
+
+        if (ordinato.length === 1) {
+            risultato.push(piuRecente);
+            return;
+        }
+
+        // Copia (non modifica l'originale in contactLogs/lastDetailItems),
+        // completata con i campi mancanti presi dai precedenti dello stesso numero.
+        const rappresentante = { ...piuRecente };
+        const trovaValore = (campo) => {
+            if (rappresentante[campo]) return;
+            const conValore = ordinato.find(l => l[campo]);
+            if (conValore) rappresentante[campo] = conValore[campo];
+        };
+        trovaValore('clienteNome');
+        trovaValore('clienteCognome');
+        trovaValore('marca');
+        trovaValore('modello');
+        trovaValore('serviceTarga');
+
+        // Le date/orari di TUTTE le chiamate precedenti (escluso quella
+        // scelta come rappresentante), per mostrarle sotto la riga.
+        rappresentante._prevHistory = ordinato.slice(1).map(l => l.contactDate);
+        rappresentante._dedupCount = ordinato.length;
+
+        risultato.push(rappresentante);
+    });
+
+    risultato.sort((a, b) => (b.contactDate || '').localeCompare(a.contactDate || ''));
+    return risultato;
 }
 
 // FIX: nuova funzione — attiva/disattiva il filtro "solo con allert".
@@ -2469,7 +2554,16 @@ function getDayViewFilteredItems(date) {
         }
     }
     const sorted = [...items].sort((a, b) => (b.contactDate || '').localeCompare(a.contactDate || ''));
-    return contactSortDir === 'desc' ? sorted : sorted.reverse();
+    const finalItems = contactSortDir === 'desc' ? sorted : sorted.reverse();
+    if (!contactMainDedupActive) return finalItems;
+    // dedupContactsByNumber ordina sempre dal più recente — se l'utente ha
+    // scelto "meno recenti prima", va invertito di nuovo dopo.
+    const deduped = dedupContactsByNumber(finalItems);
+    return contactSortDir === 'desc' ? deduped : deduped.reverse();
+}
+function toggleContactMainDedupFilter() {
+    contactMainDedupActive = document.getElementById('contactMainDedupCheck')?.checked || false;
+    renderDayView();
 }
 function toggleContactSortDir() {
     contactSortDir = contactSortDir === 'desc' ? 'asc' : 'desc';
@@ -2536,6 +2630,10 @@ function renderDayView() {
             </select>` : ''}
             ${filtersActive ? `<button class="btn-secondary" onclick="resetDayViewFilters()" style="padding:8px 16px;font-size:12px">↺ RESET</button>` : ''}
             <button class="btn-sort-toggle" onclick="toggleContactSortDir()">${contactSortDir === 'desc' ? '⬇️ Più recenti prima' : '⬆️ Meno recenti prima'}</button>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;background:var(--step-bg);border:1px solid var(--border);border-radius:8px;padding:8px 12px">
+                <input type="checkbox" id="contactMainDedupCheck" ${contactMainDedupActive?'checked':''} onchange="toggleContactMainDedupFilter()">
+                🧹 Nascondi duplicati
+            </label>
             <span style="font-size:12px;color:var(--text-secondary);font-weight:700">${items.length} contatt${items.length===1?'o':'i'}</span>
             <button class="btn-small btn-secondary" onclick="printDay('${date}')" style="margin-left:auto">🖨️ STAMPA</button>
         </div>
@@ -2748,11 +2846,17 @@ function renderContactRow(log) {
         ? `${log.clienteNome.trim().toLowerCase()}|${log.clienteCognome.trim().toLowerCase()}`
         : null;
     const hasHistory = (numeroNorm && clientiConStoricoNumeri.has(numeroNorm))
-        || (nomeNormKey && clientiConStoricoNomi.has(nomeNormKey));
+        || (nomeNormKey && clientiConStoricoNomi.has(nomeNormKey))
+        || log._dedupCount > 1;
     const storicoBtn = hasHistory ? ` <button type="button" onclick="openCustomerHistoryModal('${(log.clienteNome||'').replace(/'/g,"\\'")}', '${(log.clienteCognome||'').replace(/'/g,"\\'")}', '${(log.clienteNumero||'').replace(/'/g,"\\'")}')" title="Storico cliente" style="background:none;border:none;cursor:pointer;font-size:13px;padding:0;margin-left:4px;vertical-align:middle">📁</button>` : '';
+    // NUOVO: quando questa riga è il risultato di una deduplica, mostra
+    // sotto il numero anche le date/orari delle chiamate raggruppate.
+    const prevHistoryHtml = (log._prevHistory && log._prevHistory.length > 0)
+        ? `<br><span style="font-weight:400;color:var(--text-secondary);font-size:10px">🕐 ${log._prevHistory.map(d => formatDateTimeIT(d)).join(' · ')}</span>`
+        : '';
     return `<tr id="contact-row-${log.id}">
         <td style="font-weight:700;color:var(--text-primary)">${time}</td>
-        <td style="font-size:12px;color:var(--text-primary);font-weight:700">${nomeHtml}${storicoBtn}<br><span style="font-weight:400;color:var(--text-secondary)">📞 ${clienteNumeroDisplay(log)}</span></td>
+        <td style="font-size:12px;color:var(--text-primary);font-weight:700">${nomeHtml}${storicoBtn}<br><span style="font-weight:400;color:var(--text-secondary)">📞 ${clienteNumeroDisplay(log)}</span>${prevHistoryHtml}</td>
         <td>
             <span class="contact-category-badge cat-${catClass}">${log.category}</span>
             ${log.category === 'Info + Appuntamento' && log.otherNote ? `<span style="font-size:11px;background:rgba(233,30,99,0.1);color:#e91e63;padding:2px 8px;border-radius:8px;margin-left:6px">📍 ${log.otherNote}</span>` : ''}
