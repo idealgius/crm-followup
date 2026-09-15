@@ -1443,10 +1443,29 @@ function closeSedeDetail(event) {
     document.getElementById('sedeDetailModal').style.display = 'none';
 }
 
+// FIX (parte 1): chiamava openEditContactModal(id) senza dati — se il
+// cliente veniva da un popup di dettaglio con record fuori dal periodo
+// caricato (es. 🔔 Tutti gli Allert, o una categoria aperta da grafico), il
+// log non veniva trovato in contactLogs e la scheda non si apriva mai,
+// senza errori. Ora cerca prima in lastDetailItems (dove il popup ha già i
+// dati) e lo passa direttamente, stesso schema già usato per lo Storico
+// Cliente.
+// FIX (parte 2): mancava ancora lo stesso identico fix già applicato a
+// openHistoryCardDetail — si chiudeva PRIMA il popup 🔔 Tutti gli Allert e
+// SOLO DOPO si apriva la scheda di modifica, lasciando un buco di tempo in
+// cui qualunque altro meccanismo della pagina poteva richiudere la scheda
+// appena aperta prima che diventasse visibile. Ora si apre PRIMA la scheda
+// (sincrono, subito) e solo dopo si chiude il popup allert, con la stessa
+// rete di sicurezza (setTimeout) a riforzare la visibilità poco dopo.
 function closeGenericDetailAndEdit(id) {
+    const log = lastDetailItems.find(l => l.id === id) || contactLogs.find(l => l.id === id);
+    openEditContactModal(id, log);
     const modal = document.getElementById('sedeDetailModal');
     if (modal) modal.style.display = 'none';
-    openEditContactModal(id);
+    setTimeout(() => {
+        const editModal = document.getElementById('editContactModal');
+        if (editModal && editModal.style.display !== 'flex') editModal.style.display = 'flex';
+    }, 100);
 }
 
 function renderChartInfoAcquisto(logs, targetCanvasId) {
@@ -1993,8 +2012,17 @@ function alertIsVisibleToCurrentUser(log) {
     return true; // default: invia a tutti (compatibilità con allert vecchi)
 }
 
+// FIX: cercava SOLO in contactLogs (il periodo attualmente caricato) — se
+// il pallino/nome veniva cliccato su un risultato arrivato da Storico
+// Cliente, dal popup 🔔 Tutti gli Allert o da un grafico/categoria storica
+// (tutti endpoint che possono restituire contatti fuori dal periodo
+// filtrato), il log non veniva mai trovato e la finestra non si apriva,
+// senza nessun errore visibile. Ora cerca anche negli altri due posti dove
+// questi contatti "fuori periodo" finiscono davvero.
 function openAcquistoAlertModal(id) {
-    const log = contactLogs.find(l => l.id === id);
+    const log = contactLogs.find(l => l.id === id)
+        || lastDetailItems.find(l => l.id === id)
+        || customerHistoryCache.find(l => l.id === id);
     if (!log || !log.acquistoAlert) return;
     acquistoAlertModalId = id;
     acquistoAlertNoteGestioneVisible = log.acquistoAlertStatus === 'IN_GESTIONE' || !!log.acquistoAlertNoteGestione;
@@ -3333,13 +3361,69 @@ function openEditContactModal(id, logData) {
     setVal('editContactNome', log.clienteNome);
     setVal('editContactCognome', log.clienteCognome);
     setVal('editContactNumero', log.clienteNumero || (clienteNumeroDisplay(log) !== '—' ? clienteNumeroDisplay(log) : ''));
-    setVal('editContactTarga', log.serviceTarga);
+    setVal('editContactTarga', log.category === 'Service' ? log.serviceTarga : '');
     setVal('editContactServiceMarcaInput', log.marca);
     setVal('editContactServiceMarca', log.marca);
     setVal('editContactServiceModello', log.modello);
     setVal('editContactServiceNote', log.serviceNote);
+    // NUOVO: campi dedicati "Info Acquisto effettuato" — prima non
+    // esistevano nel modal, quindi non venivano mai popolati né salvati.
+    setVal('editContactAcquistoTipo', log.otherNote);
+    setVal('editContactAcquistoNote', log.acquistoNote);
+    setVal('editContactAcquistoMarca', log.category === 'Info Acquisto effettuato' ? log.marca : '');
+    setVal('editContactAcquistoModello', log.category === 'Info Acquisto effettuato' ? log.modello : '');
+    setVal('editContactAcquistoTarga', log.category === 'Info Acquisto effettuato' ? log.serviceTarga : '');
+    // NUOVO: Pratica Leasing/Finanziamento/Amministrazione.
+    const isLeasingFinCat = log.category === 'Pratica Leasing' || log.category === 'Pratica Finanziamento' || log.category === 'Amministrazione';
+    setVal('editContactLeasingMarcaInput', isLeasingFinCat ? log.marca : '');
+    setVal('editContactLeasingMarca', isLeasingFinCat ? log.marca : '');
+    setVal('editContactLeasingModello', isLeasingFinCat ? log.modello : '');
+    setVal('editContactLeasingTarga', isLeasingFinCat ? log.serviceTarga : '');
+    // NUOVO: nota universale — prima non era MAI editabile dopo la
+    // creazione, per nessuna categoria.
+    setVal('editContactNotaAggiuntiva', log.notaAggiuntiva);
+    // Campi generici marca/modello (Info Vendita e simili)
+    setVal('editContactMarcaInput', isVenditaLikeCategory(log.category) ? log.marca : '');
+    setVal('editContactMarca', isVenditaLikeCategory(log.category) ? log.marca : '');
+    setVal('editContactModello', isVenditaLikeCategory(log.category) ? log.modello : '');
+    setVal('editContactLinkAuto', log.linkAuto);
+    setVal('editContactFonte', log.fonte);
+    // NUOVO: mostra/nasconde le righe giuste per la categoria di QUESTO
+    // contatto all'apertura — prima nessuna riga specifica veniva mai
+    // mostrata (onEditCategoryChange non esisteva).
+    onEditCategoryChange();
     const modal = document.getElementById('editContactModal');
     if (modal) modal.style.display = 'flex';
+}
+// Stessa definizione di "categoria simile a Info Vendita" usata dal form di
+// creazione (vedi onCategoryChange), riusata qui per coerenza.
+function isVenditaLikeCategory(cat) {
+    return cat === 'Info Vendita' || cat === 'Info + Appuntamento' || cat === 'Info Vendita in Promo';
+}
+// NUOVO: mancava del tutto — la tendina CATEGORIA nel modal di modifica
+// chiamava questa funzione (onchange="onEditCategoryChange()" in index.html)
+// ma non esisteva da nessuna parte nel codice. Risultato: cambiare
+// categoria non mostrava/nascondeva MAI le righe giuste, e — per "Info
+// Acquisto effettuato" in particolare — marca/modello/targa restavano
+// invisibili anche se il dato era salvato, perché quella riga non aveva
+// nemmeno i campi (aggiunti ora in index.html).
+function onEditCategoryChange() {
+    const cat = document.getElementById('editContactCategory')?.value || '';
+    const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? 'block' : 'none'; };
+
+    show('editContactOtherRow', cat === 'Altro');
+    show('editContactAppuntamentoRow', cat === 'Info + Appuntamento');
+    show('editContactAcquistoRow', cat === 'Info Acquisto effettuato');
+    show('editContactServiceRow', cat === 'Service');
+    show('editContactNoleggioRow', cat === 'Info Noleggio');
+    // NUOVO: Pratica Leasing/Finanziamento/Amministrazione — prima non
+    // avevano NESSUNA riga dedicata nel modal di modifica.
+    show('editContactLeasingFinRow', cat === 'Pratica Leasing' || cat === 'Pratica Finanziamento' || cat === 'Amministrazione');
+    const isVenditaLike = isVenditaLikeCategory(cat);
+    show('editContactFonteRow', isVenditaLike);
+    show('editContactMarcaModelloRow', isVenditaLike);
+    show('editContactLinkAutoRow', isVenditaLike);
+    show('editContactPromoRow', cat === 'Info Vendita in Promo');
 }
 function closeEditContactModal(event) {
     if (event && event.target.id !== 'editContactModal') return;
@@ -3357,19 +3441,52 @@ async function saveEditContactLog() {
     const clienteNome = document.getElementById('editContactNome')?.value.trim() || '';
     const clienteCognome = document.getElementById('editContactCognome')?.value.trim() || '';
     const clienteNumero = document.getElementById('editContactNumero')?.value.trim() || '';
-    const serviceTarga = document.getElementById('editContactTarga')?.value.trim() || '';
     const editServiceMarca = document.getElementById('editContactServiceMarca')?.value.trim() || '';
     const editServiceModello = document.getElementById('editContactServiceModello')?.value.trim() || '';
     const editServiceNote = document.getElementById('editContactServiceNote')?.value.trim() || '';
+    const editServiceTarga = document.getElementById('editContactTarga')?.value.trim() || '';
+    // NUOVO: campi dedicati Info Acquisto — prima non venivano letti affatto.
+    const editAcquistoMarca = document.getElementById('editContactAcquistoMarca')?.value.trim() || '';
+    const editAcquistoModello = document.getElementById('editContactAcquistoModello')?.value.trim() || '';
+    const editAcquistoTarga = document.getElementById('editContactAcquistoTarga')?.value.trim() || '';
+    const editAcquistoNote = document.getElementById('editContactAcquistoNote')?.value.trim() || '';
+    const editMarca = document.getElementById('editContactMarca')?.value.trim() || '';
+    const editModello = document.getElementById('editContactModello')?.value.trim() || '';
+    const editLinkAuto = document.getElementById('editContactLinkAuto')?.value.trim() || '';
+    const editLeasingMarca = document.getElementById('editContactLeasingMarca')?.value.trim() || '';
+    const editLeasingModello = document.getElementById('editContactLeasingModello')?.value.trim() || '';
+    const editLeasingTarga = document.getElementById('editContactLeasingTarga')?.value.trim() || '';
+    const editNotaAggiuntiva = document.getElementById('editContactNotaAggiuntiva')?.value.trim() || '';
     if (!category) { alert('Seleziona una categoria'); return; }
     if (!clienteNumero) { alert('Il numero cliente è obbligatorio'); return; }
     const savedDayView = currentDayView;
     try {
-        const payload = { category, clienteNome: clienteNome || null, clienteCognome: clienteCognome || null, clienteNumero, serviceTarga: serviceTarga || null };
+        const payload = { category, clienteNome: clienteNome || null, clienteCognome: clienteCognome || null, clienteNumero, notaAggiuntiva: editNotaAggiuntiva || null };
         if (category === 'Service') {
             payload.marca = editServiceMarca || null;
             payload.modello = editServiceModello || null;
             payload.serviceNote = editServiceNote || null;
+            payload.serviceTarga = editServiceTarga || null;
+        } else if (category === 'Info Acquisto effettuato') {
+            // FIX PRINCIPALE: prima questi tre campi non venivano mandati
+            // affatto per questa categoria — modificare un contatto "Info
+            // Acquisto effettuato" non poteva mai salvare marca/modello/targa,
+            // anche se il campo esisteva ed era stato valorizzato in creazione.
+            payload.marca = editAcquistoMarca || null;
+            payload.modello = editAcquistoModello || null;
+            payload.serviceTarga = editAcquistoTarga || null;
+            payload.acquistoNote = editAcquistoNote || null;
+        } else if (category === 'Pratica Leasing' || category === 'Pratica Finanziamento' || category === 'Amministrazione') {
+            // NUOVO: prima questa categoria non aveva NESSUN campo dedicato
+            // nel modal di modifica — marca/modello/targa non erano mai
+            // modificabili dopo la creazione.
+            payload.marca = editLeasingMarca || null;
+            payload.modello = editLeasingModello || null;
+            payload.serviceTarga = editLeasingTarga || null;
+        } else if (isVenditaLikeCategory(category)) {
+            payload.marca = editMarca || null;
+            payload.modello = editModello || null;
+            payload.linkAuto = editLinkAuto || null;
         }
         const res = await fetch(`/api/contacts/${editingContactId}`, {
             method: 'PATCH', headers: { 'Content-Type': 'application/json' },

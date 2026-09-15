@@ -379,7 +379,7 @@
                     <div id="waitingMarcaDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1.5px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;box-shadow:var(--shadow)"></div>
                     <input type="hidden" id="wBrand" value="">
                 </div>
-                <input type="text" id="wModel" placeholder="Modello (es. 208) *" class="input-field">
+                <input type="text" id="wModel" placeholder="Modello (es. 208)" class="input-field">
                 <input type="number" id="wPrice" placeholder="Prezzo (opzionale)" class="input-field">
                 <div>
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">DATA RECALL (opzionale)</label>
@@ -821,8 +821,29 @@
                             <option>Info Consegna</option><option>Ritardo Consegna</option><option>Info Documentazione</option>
                             <option>Seconda chiave</option><option>Info generiche</option><option>Furto</option>
                         </select>
+                        <!-- NUOVO: mancavano del tutto — creando un contatto
+                             "Info Acquisto effettuato" marca/modello/targa si
+                             potevano inserire, ma modificandolo dopo sparivano
+                             e rischiavano di azzerarsi al salvataggio. -->
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MARCA VEICOLO (opzionale)</label>
+                        <input type="text" id="editContactAcquistoMarca" placeholder="Es. Peugeot" class="input-field">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLO VEICOLO (opzionale)</label>
+                        <input type="text" id="editContactAcquistoModello" placeholder="Es. 208 1.2 PureTech 100cv" class="input-field">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TARGA (opzionale)</label>
+                        <input type="text" id="editContactAcquistoTarga" placeholder="Es. AB123CD" class="input-field" style="text-transform:uppercase">
                         <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA ACQUISTO</label>
                         <input type="text" id="editContactAcquistoNote" placeholder="Inserisci nota..." class="input-field">
+                    </div>
+
+                    <!-- PRATICA LEASING / FINANZIAMENTO / AMMINISTRAZIONE — NUOVO, mancava del tutto -->
+                    <div id="editContactLeasingFinRow" style="display:none">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MARCA VEICOLO (opzionale)</label>
+                        <input type="text" id="editContactLeasingMarcaInput" placeholder="Es. Peugeot" class="input-field">
+                        <input type="hidden" id="editContactLeasingMarca" value="">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLO VEICOLO (opzionale)</label>
+                        <input type="text" id="editContactLeasingModello" placeholder="Es. 208 1.2 PureTech 100cv" class="input-field">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TARGA (opzionale)</label>
+                        <input type="text" id="editContactLeasingTarga" placeholder="Es. AB123CD" class="input-field" style="text-transform:uppercase">
                     </div>
 
                     <!-- PROMO -->
@@ -836,6 +857,10 @@
                         <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MOTIVAZIONE</label>
                         <input type="text" id="editContactOtherNote" placeholder="Descrivi il motivo..." class="input-field">
                     </div>
+
+                    <!-- NOTA UNIVERSALE — NUOVO, non era mai modificabile dopo la creazione -->
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA (opzionale)</label>
+                    <textarea id="editContactNotaAggiuntiva" placeholder="Note aggiuntive libere..." class="input-field" style="margin-bottom:15px"></textarea>
 
                     <div class="form-actions" style="margin-top:10px">
                         <button onclick="saveEditContactLog()" class="btn-gold">SALVA MODIFICHE</button>
