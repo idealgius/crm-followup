@@ -24,7 +24,7 @@ public class RolePermissionService {
         "UTENTE", "BACK_OFFICE", "MODERATORE", "GESTORE", "ADMIN", "NOLEGGIO", "SERVICE"
     );
     public static final List<String> SECTIONS = List.of(
-        "DASHBOARD", "FOLLOWUPS", "WAITING", "CONTACTS", "PROMO", "ADMIN", "RENT", "SERVICE", "GRAFICI", "VEICOLI"
+        "DASHBOARD", "FOLLOWUPS", "WAITING", "CONTACTS", "PROMO", "ADMIN", "RENT", "SERVICE", "GRAFICI", "VEICOLI", "PREVENTIVI"
     );
     // 4° livello "ADMIN_FULL" — come FULL ma può toccare anche i record
     // creati da un utente ADMIN. L'ordine della lista è anche l'ordine di
@@ -53,12 +53,12 @@ public class RolePermissionService {
         DEFAULTS.put("MODERATORE", Map.of(
             "DASHBOARD", "FULL", "FOLLOWUPS", "FULL", "WAITING", "FULL",
             "CONTACTS", "FULL", "PROMO", "FULL", "RENT", "FULL", "SERVICE", "FULL",
-            "GRAFICI", "FULL"
+            "GRAFICI", "FULL", "PREVENTIVI", "FULL"
         ));
         DEFAULTS.put("GESTORE", Map.of(
             "DASHBOARD", "ADMIN_FULL", "FOLLOWUPS", "ADMIN_FULL", "WAITING", "ADMIN_FULL",
             "CONTACTS", "ADMIN_FULL", "PROMO", "ADMIN_FULL", "RENT", "ADMIN_FULL", "SERVICE", "ADMIN_FULL",
-            "ADMIN", "ADMIN_FULL", "GRAFICI", "ADMIN_FULL"
+            "ADMIN", "ADMIN_FULL", "GRAFICI", "ADMIN_FULL", "PREVENTIVI", "ADMIN_FULL"
         ));
         Map<String, String> adminDefaults = new HashMap<>();
         adminDefaults.put("DASHBOARD", "ADMIN_FULL");
@@ -71,6 +71,7 @@ public class RolePermissionService {
         adminDefaults.put("ADMIN", "ADMIN_FULL");
         adminDefaults.put("GRAFICI", "ADMIN_FULL");
         adminDefaults.put("VEICOLI", "ADMIN_FULL");
+        adminDefaults.put("PREVENTIVI", "ADMIN_FULL");
         DEFAULTS.put("ADMIN", adminDefaults);
         DEFAULTS.put("NOLEGGIO", Map.of("RENT", "FULL"));
         DEFAULTS.put("SERVICE", Map.of("SERVICE", "FULL"));

@@ -17,7 +17,8 @@ let myEffectivePermissions = {};
 const PAGE_TO_SECTION = {
     dashboard: 'DASHBOARD', followups: 'FOLLOWUPS', waiting: 'WAITING',
     contacts: 'CONTACTS', promo: 'PROMO', admin: 'ADMIN',
-    rent: 'RENT', service: 'SERVICE', veicoli: 'VEICOLI'
+    rent: 'RENT', service: 'SERVICE', veicoli: 'VEICOLI',
+    preventivi: 'PREVENTIVI'
 };
 
 // FIX: se il caricamento della matrice permessi fallisce (endpoint non
@@ -31,9 +32,9 @@ const PAGE_TO_SECTION = {
 const PERMISSION_MATRIX_FALLBACK = {
     UTENTE: { CONTACTS: 'FULL' },
     BACK_OFFICE: { CONTACTS: 'FULL' },
-    MODERATORE: { DASHBOARD: 'FULL', FOLLOWUPS: 'FULL', WAITING: 'FULL', CONTACTS: 'FULL', PROMO: 'FULL', RENT: 'FULL', SERVICE: 'FULL', GRAFICI: 'FULL' },
-    GESTORE: { DASHBOARD: 'ADMIN_FULL', FOLLOWUPS: 'ADMIN_FULL', WAITING: 'ADMIN_FULL', CONTACTS: 'ADMIN_FULL', PROMO: 'ADMIN_FULL', RENT: 'ADMIN_FULL', SERVICE: 'ADMIN_FULL', GRAFICI: 'ADMIN_FULL', ADMIN: 'ADMIN_FULL' },
-    ADMIN: { DASHBOARD: 'ADMIN_FULL', FOLLOWUPS: 'ADMIN_FULL', WAITING: 'ADMIN_FULL', CONTACTS: 'ADMIN_FULL', PROMO: 'ADMIN_FULL', RENT: 'ADMIN_FULL', SERVICE: 'ADMIN_FULL', GRAFICI: 'ADMIN_FULL', ADMIN: 'ADMIN_FULL', VEICOLI: 'ADMIN_FULL' },
+    MODERATORE: { DASHBOARD: 'FULL', FOLLOWUPS: 'FULL', WAITING: 'FULL', CONTACTS: 'FULL', PROMO: 'FULL', RENT: 'FULL', SERVICE: 'FULL', GRAFICI: 'FULL', PREVENTIVI: 'FULL' },
+    GESTORE: { DASHBOARD: 'ADMIN_FULL', FOLLOWUPS: 'ADMIN_FULL', WAITING: 'ADMIN_FULL', CONTACTS: 'ADMIN_FULL', PROMO: 'ADMIN_FULL', RENT: 'ADMIN_FULL', SERVICE: 'ADMIN_FULL', GRAFICI: 'ADMIN_FULL', ADMIN: 'ADMIN_FULL', PREVENTIVI: 'ADMIN_FULL' },
+    ADMIN: { DASHBOARD: 'ADMIN_FULL', FOLLOWUPS: 'ADMIN_FULL', WAITING: 'ADMIN_FULL', CONTACTS: 'ADMIN_FULL', PROMO: 'ADMIN_FULL', RENT: 'ADMIN_FULL', SERVICE: 'ADMIN_FULL', GRAFICI: 'ADMIN_FULL', ADMIN: 'ADMIN_FULL', VEICOLI: 'ADMIN_FULL', PREVENTIVI: 'ADMIN_FULL' },
     NOLEGGIO: { RENT: 'FULL' },
     SERVICE: { SERVICE: 'FULL' }
 };
@@ -147,7 +148,7 @@ function refreshChartsOnThemeChange() {
 
 // Pagine valide riconosciute dal router — usato per validare l'hash dell'URL
 // (evita che un hash sporco o obsoleto mandi l'app in uno stato indefinito)
-const VALID_PAGES = ['dashboard', 'followups', 'waiting', 'contacts', 'promo', 'admin', 'rent', 'service', 'veicoli'];
+const VALID_PAGES = ['dashboard', 'followups', 'waiting', 'contacts', 'promo', 'admin', 'rent', 'service', 'veicoli', 'preventivi'];
 
 // FIX: prima qui c'erano RENT_ROLES/SERVICE_ROLES (array fissi di nomi
 // ruolo) e un blocco di if/else per ogni singolo link di navbar — ora la
@@ -156,7 +157,8 @@ const VALID_PAGES = ['dashboard', 'followups', 'waiting', 'contacts', 'promo', '
 const NAV_ID_BY_SECTION = {
     DASHBOARD: 'navDashboard', FOLLOWUPS: 'navFollowups', WAITING: 'navWaiting',
     CONTACTS: 'navContacts', PROMO: 'navPromo', ADMIN: 'adminLink',
-    RENT: 'navRent', SERVICE: 'navService', VEICOLI: 'navVeicoli'
+    RENT: 'navRent', SERVICE: 'navService', VEICOLI: 'navVeicoli',
+    PREVENTIVI: 'navPreventivi'
 };
 
 function applyRolePermissions(role) {
@@ -218,7 +220,7 @@ function applyPageTheme(page, role) {
 // quando quella richiesta non è accessibile. NOLEGGIO/SERVICE restano un
 // caso a parte perché, anche se in teoria avessero accesso ad altro, la loro
 // "casa" naturale resta la propria dashboard dedicata.
-const DEFAULT_PAGE_PRIORITY = ['dashboard', 'contacts', 'followups', 'waiting', 'promo', 'rent', 'service', 'veicoli', 'admin'];
+const DEFAULT_PAGE_PRIORITY = ['dashboard', 'contacts', 'preventivi', 'followups', 'waiting', 'promo', 'rent', 'service', 'veicoli', 'admin'];
 
 function getDefaultPageForRole(role) {
     if (role === 'NOLEGGIO' && hasAccess('RENT', role)) return 'rent';
@@ -302,6 +304,8 @@ async function showPage(page, updateHash = true) {
     if (servicePageEl) servicePageEl.style.display = 'none';
     const veicoliPageEl = document.getElementById('veicoliPage');
     if (veicoliPageEl) veicoliPageEl.style.display = 'none';
+    const preventiviPageEl = document.getElementById('preventiviPage');
+    if (preventiviPageEl) preventiviPageEl.style.display = 'none';
 
     document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
 
@@ -374,6 +378,11 @@ async function showPage(page, updateHash = true) {
         const navVeicoli = document.getElementById('navVeicoli');
         if (navVeicoli) navVeicoli.classList.add('active');
         if (typeof loadVeicoliDashboard === 'function') loadPromise = Promise.resolve(loadVeicoliDashboard());
+    } else if (page === 'preventivi') {
+        if (preventiviPageEl) preventiviPageEl.style.display = 'block';
+        const navPreventivi = document.getElementById('navPreventivi');
+        if (navPreventivi) navPreventivi.classList.add('active');
+        if (typeof loadPreventivi === 'function') loadPromise = Promise.resolve(loadPreventivi());
     }
 
     applyPageTheme(page, role);

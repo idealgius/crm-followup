@@ -72,6 +72,7 @@
             <a href="#followups" class="nav-link" id="navFollowups" onclick="showPage('followups');return false"><span class="nav-link-icon">📋</span><span class="nav-link-label">FOLLOW-UP</span></a>
             <a href="#waiting" class="nav-link" id="navWaiting" onclick="showPage('waiting');return false"><span class="nav-link-icon">🔔</span><span class="nav-link-label">RECALL</span></a>
             <a href="#contacts" class="nav-link" id="navContacts" onclick="showPage('contacts');return false"><span class="nav-link-icon">📞</span><span class="nav-link-label">REGISTRO CONTATTI</span></a>
+            <a href="#preventivi" class="nav-link" id="navPreventivi" style="display:none" onclick="showPage('preventivi');return false"><span class="nav-link-icon">📝</span><span class="nav-link-label">PREVENTIVI TELEFONICI</span></a>
             <a href="#promo" class="nav-link" id="navPromo" style="display:none" onclick="showPage('promo');return false"><span class="nav-link-icon">🎯</span><span class="nav-link-label">PROMO</span></a>
             <a href="#rent" class="nav-link" id="navRent" style="display:none" onclick="showPage('rent');return false"><span class="nav-link-icon">🚗</span><span class="nav-link-label">RENT</span></a>
             <a href="#service" class="nav-link" id="navService" style="display:none" onclick="showPage('service');return false"><span class="nav-link-icon">🔧</span><span class="nav-link-label">SERVICE</span></a>
@@ -1272,6 +1273,69 @@
         <div id="contactLogsList"></div>
     </div>
 
+    <!-- PREVENTIVI TELEFONICI PAGE -->
+    <div id="preventiviPage" class="page page-wide" style="display:none">
+        <div class="page-header">
+            <h2>📝 PREVENTIVI TELEFONICI</h2>
+            <div class="filter-bar">
+                <input type="date" id="pvFrom" class="input-dark" onchange="loadPreventivi()">
+                <input type="date" id="pvTo" class="input-dark" onchange="loadPreventivi()">
+                <button onclick="loadPreventivi()" class="btn-gold">AGGIORNA</button>
+                <button onclick="showNewPreventivoForm()" class="btn-gold" style="margin-left:auto">+ NUOVO PREVENTIVO TELEFONICO</button>
+            </div>
+        </div>
+
+        <div id="newPreventivoForm" class="form-card" style="display:none">
+            <h3>NUOVO PREVENTIVO TELEFONICO</h3>
+            <div class="form-grid">
+                <select id="pvTipo" class="input-field">
+                    <option value="">Tipo *</option>
+                    <option value="VENDITA">Vendita</option>
+                    <option value="NOLEGGIO">Noleggio</option>
+                </select>
+                <input type="text" id="pvNome" placeholder="Nome Cliente *" class="input-field">
+                <input type="text" id="pvCognome" placeholder="Cognome Cliente *" class="input-field">
+                <div style="position:relative">
+                    <input type="text" id="pvMarcaInput" placeholder="Marchio * (clicca o cerca)" class="input-field" style="cursor:pointer" onclick="showPreventivoMarcheDropdown()" oninput="filterPreventivoMarche(this.value)" autocomplete="off">
+                    <div id="pvMarcaDropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--bg-card);border:1.5px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;box-shadow:var(--shadow)"></div>
+                    <input type="hidden" id="pvMarca" value="">
+                </div>
+                <input type="text" id="pvModello" placeholder="Modello *" class="input-field">
+                <input type="text" id="pvTargaTelaio" placeholder="Targa o Telaio (opzionale)" class="input-field" style="text-transform:uppercase">
+                <input type="url" id="pvLinkLead" placeholder="Link Lead *" class="input-field">
+                <select id="pvConsultant" class="input-field">
+                    <option value="">Seleziona Consulente *</option>
+                    <option>Ambrosino Luca</option><option>Capitelli Silvio</option><option>Castaldo Marco</option>
+                    <option>Castaldo Roberto</option><option>Crispo Raffaele</option><option>Filosa Claudio</option>
+                    <option>Fiore Guido</option><option>Gerardi Claudio</option><option>Giordano Luca</option>
+                    <option>Imperato Ciro</option><option>Montuori Francesco</option><option>Palumbo Enrico</option>
+                    <option>Scala Rosario</option><option>Sementa Francesco</option><option>Zaritto Davide</option>
+                    <option>Zuppa Mattia</option>
+                </select>
+            </div>
+            <div class="form-actions">
+                <button onclick="createPreventivo()" class="btn-gold">CREA PREVENTIVO</button>
+                <button onclick="hideNewPreventivoForm()" class="btn-secondary">ANNULLA</button>
+            </div>
+        </div>
+
+        <div style="margin-bottom:28px">
+            <div class="preventivo-section-header vendita">
+                <span>🔴 Preventivi Vendita</span>
+                <span class="preventivo-section-count" id="preventiviVenditaCount">0</span>
+            </div>
+            <div id="preventiviVenditaList"></div>
+        </div>
+
+        <div>
+            <div class="preventivo-section-header noleggio">
+                <span>🟢 Preventivi Noleggio</span>
+                <span class="preventivo-section-count" id="preventiviNoleggioCount">0</span>
+            </div>
+            <div id="preventiviNoleggioList"></div>
+        </div>
+    </div>
+
     <!-- PROMO PAGE -->
     <div id="promoPage" class="page" style="display:none">
         <div class="page-header">
@@ -2204,6 +2268,7 @@
 <script src="/js/rent.js"></script>
 <script src="/js/service.js"></script>
 <script src="/js/veicoli.js"></script>
+<script src="/js/preventivi.js"></script>
 <script src="/js/app.js"></script>
 <script src="/js/graphmenu.js"></script>
 <script src="/js/multiselect.js"></script>
