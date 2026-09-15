@@ -1319,6 +1319,55 @@
             </div>
         </div>
 
+        <div class="calendar-card" style="max-width:480px;margin-bottom:24px">
+            <div class="calendar-header">
+                <button class="cal-nav-btn" onclick="changePreventiviCalendarMonth(-1)">‹</button>
+                <h3 id="pvCalendarTitle">Calendario Preventivi</h3>
+                <button class="cal-nav-btn" onclick="changePreventiviCalendarMonth(1)">›</button>
+            </div>
+            <div class="calendar-legend">
+                <div class="cal-legend-item"><span class="cal-dot" style="background:#00c853"></span>Almeno una chiusa</div>
+                <div class="cal-legend-item"><span class="cal-dot" style="background:#f0c040"></span>In corso, nessun esito</div>
+                <div class="cal-legend-item"><span class="cal-dot" style="background:#ff3d3d"></span>Nessun esito positivo</div>
+            </div>
+            <div id="pvCalendar" class="fu-calendar"></div>
+        </div>
+
+        <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));margin-bottom:24px">
+            <div class="calendar-card" style="max-width:100%">
+                <div class="calendar-header"><h3>Performance Marchi</h3></div>
+                <div id="pvChartMarche"></div>
+            </div>
+            <div class="calendar-card" style="max-width:100%">
+                <div class="calendar-header"><h3>Preventivi per Operatore</h3></div>
+                <div id="pvChartOperatore"></div>
+            </div>
+            <div class="calendar-card" style="max-width:100%">
+                <div class="calendar-header"><h3>Preventivi per Consulente</h3></div>
+                <div id="pvChartConsulente"></div>
+            </div>
+            <div class="calendar-card" style="max-width:100%">
+                <div class="calendar-header"><h3>Trattative Generate</h3></div>
+                <canvas id="pvChartTrattative" height="200"></canvas>
+            </div>
+            <div class="calendar-card" style="max-width:100%">
+                <div class="calendar-header"><h3>Esito Trattative</h3></div>
+                <canvas id="pvChartEsito" height="200"></canvas>
+            </div>
+        </div>
+
+        <div class="calendar-card" style="max-width:100%;margin-bottom:24px">
+            <div class="calendar-header"><h3>Riepilogo per Consulente</h3></div>
+            <div id="pvChartPerConsulente"></div>
+        </div>
+
+        <div id="preventivoDrilldownModal" class="modal-overlay" style="display:none" onclick="closePreventivoDrilldown(event)">
+            <div class="modal-box" onclick="event.stopPropagation()">
+                <div class="modal-header"><h3 id="preventivoDrilldownTitle"></h3><button type="button" class="modal-close" onclick="closePreventivoDrilldown()">✕</button></div>
+                <div id="preventivoDrilldownList" class="modal-body"></div>
+            </div>
+        </div>
+
         <div style="margin-bottom:28px">
             <div class="preventivo-section-header vendita">
                 <span>🔴 Preventivi Vendita</span>

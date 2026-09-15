@@ -25,6 +25,8 @@ async function loadPreventivi() {
     }
     renderPreventiviList('VENDITA', 'preventiviVenditaList', 'preventiviVenditaCount');
     renderPreventiviList('NOLEGGIO', 'preventiviNoleggioList', 'preventiviNoleggioCount');
+    renderPreventiviCalendar();
+    renderPreventiviCharts();
 }
 
 // --- FORM DI CREAZIONE ---
@@ -304,4 +306,310 @@ async function changePreventivoStatus(id, newStatus) {
         console.error('Errore cambio stato preventivo telefonico:', err);
         alert('Errore di rete nel cambio di stato');
     }
+}
+
+// ============================================================
+// CALENDARIO — un giorno per data di creazione (createdAt), colorato in
+// base all'esito dei preventivi generati quel giorno. Naviga i mesi
+// cambiando direttamente il filtro periodo (pvFrom/pvTo) e ricaricando,
+// cosi' calendario, grafici e liste restano sempre sincronizzati sulla
+// stessa fonte dati — stesso principio del calendario Follow-up.
+function getPreventiviCalendarFocus() {
+    const fromVal = document.getElementById('pvFrom')?.value;
+    if (fromVal) {
+        const d = new Date(fromVal + 'T00:00:00');
+        return { year: d.getFullYear(), month: d.getMonth() + 1 };
+    }
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() + 1 };
+}
+
+function changePreventiviCalendarMonth(delta) {
+    const { year, month } = getPreventiviCalendarFocus();
+    let newMonth = month + delta, newYear = year;
+    if (newMonth > 12) { newMonth = 1; newYear++; }
+    else if (newMonth < 1) { newMonth = 12; newYear--; }
+    const first = new Date(newYear, newMonth - 1, 1).toISOString().split('T')[0];
+    const last = new Date(newYear, newMonth, 0).toISOString().split('T')[0];
+    document.getElementById('pvFrom').value = first;
+    document.getElementById('pvTo').value = last;
+    loadPreventivi();
+}
+
+function renderPreventiviCalendar() {
+    const container = document.getElementById('pvCalendar');
+    const title = document.getElementById('pvCalendarTitle');
+    if (!container || !title) return;
+
+    const { year, month } = getPreventiviCalendarFocus();
+    title.textContent = `Calendario Preventivi — ${MONTH_NAMES[month - 1]} ${year}`;
+
+    const firstDay = new Date(year, month - 1, 1);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    let startWeekday = firstDay.getDay();
+    startWeekday = startWeekday === 0 ? 6 : startWeekday - 1;
+
+    const byDay = {};
+    preventiviData.forEach(p => {
+        if (!p.createdAt) return;
+        const dateStr = p.createdAt.split('T')[0];
+        if (!byDay[dateStr]) byDay[dateStr] = [];
+        byDay[dateStr].push(p);
+    });
+
+    const weekdays = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+    let html = weekdays.map(d => `<div class="cal-weekday">${d}</div>`).join('');
+
+    for (let i = 0; i < startWeekday; i++) {
+        html += '<div class="cal-day cal-day-empty"></div>';
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const items = byDay[dateStr] || [];
+        let dayClass = 'cal-day';
+        let bgStyle = '', borderStyle = '';
+
+        if (items.length > 0) {
+            const hasChiusa = items.some(p => p.status === 'CHIUSA');
+            const hasAperto = items.some(p => p.status === 'GENERATO' || p.status === 'TRATTATIVA_GENERATA');
+            if (hasChiusa) { bgStyle = 'background:rgba(0,200,83,0.28);'; borderStyle = 'border-color:#00c853;'; }
+            else if (hasAperto) { bgStyle = 'background:rgba(240,192,64,0.35);'; borderStyle = 'border-color:#f0c040;'; }
+            else { bgStyle = 'background:rgba(255,61,61,0.2);'; borderStyle = 'border-color:#ff3d3d;'; }
+        }
+        if (dateStr === today) dayClass += ' cal-day-today';
+
+        const clickable = items.length > 0 ? ` onclick="openPreventiviCalendarDay('${dateStr}')" style="cursor:pointer;${bgStyle}${borderStyle}"` : ` style="${bgStyle}${borderStyle}"`;
+        html += `<button type="button" class="${dayClass}"${clickable}>${day}${items.length > 0 ? `<span style="display:block;font-size:9px;font-weight:900">${items.length}</span>` : ''}</button>`;
+    }
+
+    container.innerHTML = html;
+}
+
+function openPreventiviCalendarDay(dateStr) {
+    document.getElementById('pvFrom').value = dateStr;
+    document.getElementById('pvTo').value = dateStr;
+    loadPreventivi();
+    document.getElementById('preventiviVenditaList')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ============================================================
+// GRAFICI — tutti calcolati da preventiviData (il periodo attualmente
+// filtrato), nessuna chiamata backend dedicata.
+function renderPreventiviCharts() {
+    renderPreventivoBarChart('pvChartMarche', groupCount(preventiviData, p => p.marca), '#4a90d9', 'marca');
+    renderPreventivoBarChart('pvChartOperatore', groupCount(preventiviData, p => p.user?.fullName || '—'), '#7c4dff', 'operatore');
+    renderPreventivoBarChart('pvChartConsulente', groupCount(preventiviData, p => p.consultantName || '—'), '#00bcd4', 'consulente');
+    renderPreventivoTrattativeDoughnut();
+    renderPreventivoEsitoDoughnut();
+    renderPreventivoPerConsulente();
+}
+
+function groupCount(items, keyFn) {
+    const counts = {};
+    items.forEach(p => {
+        const key = keyFn(p);
+        if (!key) return;
+        counts[key] = (counts[key] || 0) + 1;
+    });
+    return counts;
+}
+
+// Barra orizzontale cliccabile — stesso stile di renderChartMarcheCustom
+// in contact.js (Registro Contatti), per restare visivamente coerenti.
+function renderPreventivoBarChart(containerId, counts, barColor, drillKey) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    if (entries.length === 0) {
+        container.innerHTML = `<div style="color:var(--text-secondary);font-size:13px;padding:12px 0">Nessun dato disponibile</div>`;
+        return;
+    }
+    const maxVal = entries[0][1];
+    const total = entries.reduce((a, b) => a + b[1], 0);
+    container.innerHTML = entries.map(([label, val]) => {
+        const pct = Math.round(val / maxVal * 100);
+        const pctTot = total > 0 ? Math.round(val * 1000 / total) / 10 : 0;
+        return `<div onclick="showPreventivoDrilldown('${drillKey}','${label.replace(/'/g, "\\'")}')" style="display:flex;align-items:center;gap:12px;padding:4px 0;cursor:pointer" title="${label}: ${val} (${pctTot}%)">
+            <div style="width:110px;font-size:12px;font-weight:700;color:var(--text-primary);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0">${label}</div>
+            <div style="flex:1;background:var(--border);border-radius:4px;height:10px;overflow:hidden">
+                <div style="width:${pct}%;height:100%;background:${barColor};border-radius:4px;transition:width 0.4s ease"></div>
+            </div>
+            <div style="width:32px;font-size:12px;font-weight:800;color:${barColor};text-align:right;flex-shrink:0">${val}</div>
+        </div>`;
+    }).join('');
+}
+
+let pvChartTrattativeInstance = null;
+function renderPreventivoTrattativeDoughnut() {
+    const ctx = document.getElementById('pvChartTrattative');
+    if (!ctx || typeof Chart === 'undefined') return;
+    const generata = preventiviData.filter(p => ['TRATTATIVA_GENERATA', 'CHIUSA', 'FALLITA'].includes(p.status)).length;
+    const nonGenerata = preventiviData.length - generata;
+    const total = preventiviData.length;
+    if (pvChartTrattativeInstance) { pvChartTrattativeInstance.destroy(); pvChartTrattativeInstance = null; }
+    const colors = ['#00c853', '#8a8faa'];
+    pvChartTrattativeInstance = new Chart(ctx.getContext('2d'), {
+        type: 'doughnut',
+        data: { labels: ['Generata', 'Non generata'], datasets: [{ data: [generata, nonGenerata], backgroundColor: colors.map(c => c + '99'), borderColor: colors, borderWidth: 2 }] },
+        options: {
+            animation: false, responsive: true, maintainAspectRatio: true,
+            onClick: (evt, elements) => {
+                if (elements.length === 0) return;
+                const isGenerata = elements[0].index === 0;
+                const items = preventiviData.filter(p => isGenerata
+                    ? ['TRATTATIVA_GENERATA', 'CHIUSA', 'FALLITA'].includes(p.status)
+                    : !['TRATTATIVA_GENERATA', 'CHIUSA', 'FALLITA'].includes(p.status));
+                showPreventivoDrilldownItems(isGenerata ? 'Trattativa generata' : 'Trattativa non generata', items);
+            },
+            onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
+            plugins: {
+                legend: { position: 'bottom', labels: { color: getLegendColor(), font: { size: 11 }, padding: 10, boxWidth: 12,
+                    generateLabels: chart => chart.data.labels.map((label, i) => {
+                        const val = chart.data.datasets[0].data[i];
+                        const pct = total > 0 ? Math.round(val * 1000 / total) / 10 : 0;
+                        return { text: `${label}: ${val} (${pct}%)`, fillStyle: colors[i], strokeStyle: colors[i], lineWidth: 0, index: i };
+                    })
+                } },
+                tooltip: { callbacks: { label: ctx2 => {
+                    const val = ctx2.raw;
+                    const pct = total > 0 ? Math.round(val * 1000 / total) / 10 : 0;
+                    return ` Valore: ${val} — ${pct}%`;
+                } } }
+            }
+        }
+    });
+}
+
+let pvChartEsitoInstance = null;
+function renderPreventivoEsitoDoughnut() {
+    const ctx = document.getElementById('pvChartEsito');
+    if (!ctx || typeof Chart === 'undefined') return;
+    const chiuse = preventiviData.filter(p => p.status === 'CHIUSA').length;
+    const fallite = preventiviData.filter(p => p.status === 'FALLITA').length;
+    const total = chiuse + fallite;
+    if (pvChartEsitoInstance) { pvChartEsitoInstance.destroy(); pvChartEsitoInstance = null; }
+    const colors = ['#00c853', '#ff3d3d'];
+    pvChartEsitoInstance = new Chart(ctx.getContext('2d'), {
+        type: 'doughnut',
+        data: { labels: ['Chiuse', 'Fallite'], datasets: [{ data: [chiuse, fallite], backgroundColor: colors.map(c => c + '99'), borderColor: colors, borderWidth: 2 }] },
+        options: {
+            animation: false, responsive: true, maintainAspectRatio: true,
+            onClick: (evt, elements) => {
+                if (elements.length === 0) return;
+                const status = elements[0].index === 0 ? 'CHIUSA' : 'FALLITA';
+                const items = preventiviData.filter(p => p.status === status);
+                showPreventivoDrilldownItems(PREVENTIVO_STATUS_LABELS[status], items);
+            },
+            onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
+            plugins: {
+                legend: { position: 'bottom', labels: { color: getLegendColor(), font: { size: 11 }, padding: 10, boxWidth: 12,
+                    generateLabels: chart => chart.data.labels.map((label, i) => {
+                        const val = chart.data.datasets[0].data[i];
+                        const pct = total > 0 ? Math.round(val * 1000 / total) / 10 : 0;
+                        return { text: `${label}: ${val} (${pct}%)`, fillStyle: colors[i], strokeStyle: colors[i], lineWidth: 0, index: i };
+                    })
+                } },
+                tooltip: { callbacks: { label: ctx2 => {
+                    const val = ctx2.raw;
+                    const pct = total > 0 ? Math.round(val * 1000 / total) / 10 : 0;
+                    return ` Valore: ${val} — ${pct}%`;
+                } } }
+            }
+        }
+    });
+}
+
+// Riepilogo per consulente — barra orizzontale impilata, una riga per
+// consulente: in un colpo d'occhio mostra sia il volume (lunghezza totale)
+// sia la qualita' (quanto verde/chiuse ha) di ognuno, senza un grafico
+// separato per persona.
+const PV_CONSULENTE_SEGMENT_COLORS = {
+    GENERATO: '#4a90d9',
+    NON_RISPONDE: '#8a8faa',
+    TRATTATIVA_GENERATA: '#ff9800',
+    CHIUSA: '#00c853',
+    FALLITA: '#ff3d3d'
+};
+
+function renderPreventivoPerConsulente() {
+    const container = document.getElementById('pvChartPerConsulente');
+    if (!container) return;
+
+    const byConsulente = {};
+    preventiviData.forEach(p => {
+        const key = p.consultantName || '—';
+        if (!byConsulente[key]) byConsulente[key] = { GENERATO: 0, NON_RISPONDE: 0, TRATTATIVA_GENERATA: 0, CHIUSA: 0, FALLITA: 0 };
+        byConsulente[key][p.status] = (byConsulente[key][p.status] || 0) + 1;
+    });
+
+    const rows = Object.entries(byConsulente)
+        .map(([nome, counts]) => ({ nome, counts, total: Object.values(counts).reduce((a, b) => a + b, 0) }))
+        .sort((a, b) => b.total - a.total);
+
+    if (rows.length === 0) {
+        container.innerHTML = `<div style="color:var(--text-secondary);font-size:13px;padding:12px 0">Nessun dato disponibile</div>`;
+        return;
+    }
+
+    const maxTotal = rows[0].total;
+
+    container.innerHTML = rows.map(row => {
+        const segments = Object.entries(row.counts)
+            .filter(([, val]) => val > 0)
+            .map(([status, val]) => {
+                const widthPct = maxTotal > 0 ? (val / maxTotal * 100) : 0;
+                return `<div onclick="showPreventivoDrilldownItems('${row.nome.replace(/'/g, "\\'")} — ${PREVENTIVO_STATUS_LABELS[status]}', preventiviData.filter(p=>p.consultantName==='${row.nome.replace(/'/g, "\\'")}'&&p.status==='${status}'))" style="width:${widthPct}%;height:100%;background:${PV_CONSULENTE_SEGMENT_COLORS[status]};cursor:pointer" title="${PREVENTIVO_STATUS_LABELS[status]}: ${val}"></div>`;
+            }).join('');
+        return `<div style="display:flex;align-items:center;gap:12px;padding:6px 0">
+            <div style="width:130px;font-size:12px;font-weight:700;color:var(--text-primary);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0">${row.nome}</div>
+            <div style="flex:1;display:flex;height:16px;border-radius:4px;overflow:hidden;background:var(--border)">${segments}</div>
+            <div style="width:28px;font-size:12px;font-weight:800;color:var(--text-primary);text-align:right;flex-shrink:0">${row.total}</div>
+        </div>`;
+    }).join('') + `
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:14px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--text-secondary)">
+            ${Object.entries(PREVENTIVO_STATUS_LABELS).map(([status, label]) => `<span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:3px;background:${PV_CONSULENTE_SEGMENT_COLORS[status]};display:inline-block"></span>${label}</span>`).join('')}
+        </div>`;
+}
+
+// ============================================================
+// DRILL-DOWN — popup con l'elenco delle lead dietro a un click su
+// qualunque grafico (barra, torta, segmento del riepilogo consulenti).
+function showPreventivoDrilldown(kind, value) {
+    let items = [];
+    let title = '';
+    if (kind === 'marca') { items = preventiviData.filter(p => p.marca === value); title = `Marca — ${value}`; }
+    else if (kind === 'operatore') { items = preventiviData.filter(p => (p.user?.fullName || '—') === value); title = `Operatore — ${value}`; }
+    else if (kind === 'consulente') { items = preventiviData.filter(p => (p.consultantName || '—') === value); title = `Consulente — ${value}`; }
+    showPreventivoDrilldownItems(title, items);
+}
+
+function showPreventivoDrilldownItems(title, items) {
+    const modal = document.getElementById('preventivoDrilldownModal');
+    const titleEl = document.getElementById('preventivoDrilldownTitle');
+    const list = document.getElementById('preventivoDrilldownList');
+    if (!modal || !titleEl || !list) return;
+
+    titleEl.textContent = `${title} (${items.length})`;
+    if (items.length === 0) {
+        list.innerHTML = `<div style="color:var(--text-secondary);font-size:13px;padding:20px 0">Nessun risultato</div>`;
+    } else {
+        list.innerHTML = items.map(p => `
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+                <div>
+                    <div style="font-weight:700;font-size:13px;color:var(--text-primary)">${p.clienteNome} ${p.clienteCognome}</div>
+                    <div style="font-size:12px;color:var(--text-secondary)">${p.marca} — ${p.modello} · ${p.consultantName}</div>
+                </div>
+                <span class="status-badge status-${p.status}">${PREVENTIVO_STATUS_LABELS[p.status] || p.status}</span>
+            </div>`).join('');
+    }
+    modal.style.display = 'flex';
+}
+
+function closePreventivoDrilldown(event) {
+    if (event && event.target.id !== 'preventivoDrilldownModal') return;
+    const modal = document.getElementById('preventivoDrilldownModal');
+    if (modal) modal.style.display = 'none';
 }
