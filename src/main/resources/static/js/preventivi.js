@@ -25,8 +25,21 @@ async function loadPreventivi() {
     }
     renderPreventiviList('VENDITA', 'preventiviVenditaList', 'preventiviVenditaCount');
     renderPreventiviList('NOLEGGIO', 'preventiviNoleggioList', 'preventiviNoleggioCount');
+    renderPreventiviStatCards();
     renderPreventiviCalendar();
     renderPreventiviCharts();
+}
+
+function renderPreventiviStatCards() {
+    const totale = preventiviData.length;
+    const vendita = preventiviData.filter(p => p.tipo === 'VENDITA').length;
+    const noleggio = preventiviData.filter(p => p.tipo === 'NOLEGGIO').length;
+    const pctVendita = totale > 0 ? Math.round(vendita * 1000 / totale) / 10 : 0;
+    const pctNoleggio = totale > 0 ? Math.round(noleggio * 1000 / totale) / 10 : 0;
+    const statVendita = document.getElementById('pvStatVendita');
+    const statNoleggio = document.getElementById('pvStatNoleggio');
+    if (statVendita) statVendita.textContent = `${vendita} (${pctVendita}%)`;
+    if (statNoleggio) statNoleggio.textContent = `${noleggio} (${pctNoleggio}%)`;
 }
 
 // --- FORM DI CREAZIONE ---
@@ -188,8 +201,9 @@ function renderPreventiviList(tipo, containerId, countId) {
             </div>`).join('');
 
         const utilityButtons = `
-            <a href="${p.linkLead}" target="_blank" onclick="event.stopPropagation()" class="preventivo-icon-btn" title="Link lead">🔗</a>
+            ${p.linkLead ? `<a href="${p.linkLead}" target="_blank" onclick="event.stopPropagation()" class="preventivo-icon-btn" title="Link lead">🔗</a>` : ''}
             <button onclick="event.stopPropagation();togglePreventivoDetail(${p.id})" class="preventivo-icon-btn" title="Storico">🕓</button>
+            <button onclick="event.stopPropagation();openEditPreventivoModal(${p.id})" class="preventivo-icon-btn" title="Modifica">✏️</button>
             <button onclick="event.stopPropagation();deletePreventivo(${p.id})" class="preventivo-icon-btn danger" title="Elimina">🗑️</button>`;
 
         if (isTerminal) {
@@ -400,7 +414,7 @@ function openPreventiviCalendarDay(dateStr) {
 // filtrato), nessuna chiamata backend dedicata.
 function renderPreventiviCharts() {
     renderPreventivoBarChart('pvChartMarche', groupCount(preventiviData, p => p.marca), '#4a90d9', 'marca');
-    renderPreventivoBarChart('pvChartOperatore', groupCount(preventiviData, p => p.user?.fullName || '—'), '#7c4dff', 'operatore');
+    renderPreventivoOperatoreDoughnut();
     renderPreventivoBarChart('pvChartConsulente', groupCount(preventiviData, p => p.consultantName || '—'), '#00bcd4', 'consulente');
     renderPreventivoTrattativeDoughnut();
     renderPreventivoEsitoDoughnut();
@@ -437,9 +451,50 @@ function renderPreventivoBarChart(containerId, counts, barColor, drillKey) {
             <div style="flex:1;background:var(--border);border-radius:4px;height:10px;overflow:hidden">
                 <div style="width:${pct}%;height:100%;background:${barColor};border-radius:4px;transition:width 0.4s ease"></div>
             </div>
-            <div style="width:32px;font-size:12px;font-weight:800;color:${barColor};text-align:right;flex-shrink:0">${val}</div>
+            <div style="min-width:70px;font-size:12px;font-weight:800;color:${barColor};text-align:right;flex-shrink:0">${val} <span style="font-weight:600;opacity:0.75">(${pctTot}%)</span></div>
         </div>`;
     }).join('');
+}
+
+let pvChartOperatoreInstance = null;
+function renderPreventivoOperatoreDoughnut() {
+    const ctx = document.getElementById('pvChartOperatore');
+    if (!ctx || typeof Chart === 'undefined') return;
+    const counts = groupCount(preventiviData, p => p.user?.fullName || '—');
+    const labels = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    const values = labels.map(l => counts[l]);
+    const total = values.reduce((a, b) => a + b, 0);
+    const colors = labels.map((_, i) => OPERATOR_COLORS[i % OPERATOR_COLORS.length]);
+
+    if (pvChartOperatoreInstance) { pvChartOperatoreInstance.destroy(); pvChartOperatoreInstance = null; }
+    if (labels.length === 0) return;
+
+    pvChartOperatoreInstance = new Chart(ctx.getContext('2d'), {
+        type: 'doughnut',
+        data: { labels, datasets: [{ data: values, backgroundColor: colors.map(c => c + '99'), borderColor: colors, borderWidth: 2 }] },
+        options: {
+            animation: false, responsive: true, maintainAspectRatio: true,
+            onClick: (evt, elements) => {
+                if (elements.length === 0) return;
+                showPreventivoDrilldown('operatore', labels[elements[0].index]);
+            },
+            onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
+            plugins: {
+                legend: { position: 'bottom', labels: { color: getLegendColor(), font: { size: 11 }, padding: 10, boxWidth: 12,
+                    generateLabels: chart => chart.data.labels.map((label, i) => {
+                        const val = chart.data.datasets[0].data[i];
+                        const pct = total > 0 ? Math.round(val * 1000 / total) / 10 : 0;
+                        return { text: `${label}: ${val} (${pct}%)`, fillStyle: colors[i], strokeStyle: colors[i], fontColor: getLegendColor(), lineWidth: 0, index: i };
+                    })
+                } },
+                tooltip: { callbacks: { label: ctx2 => {
+                    const val = ctx2.raw;
+                    const pct = total > 0 ? Math.round(val * 1000 / total) / 10 : 0;
+                    return ` Valore: ${val} — ${pct}%`;
+                } } }
+            }
+        }
+    });
 }
 
 let pvChartTrattativeInstance = null;
@@ -470,7 +525,7 @@ function renderPreventivoTrattativeDoughnut() {
                     generateLabels: chart => chart.data.labels.map((label, i) => {
                         const val = chart.data.datasets[0].data[i];
                         const pct = total > 0 ? Math.round(val * 1000 / total) / 10 : 0;
-                        return { text: `${label}: ${val} (${pct}%)`, fillStyle: colors[i], strokeStyle: colors[i], lineWidth: 0, index: i };
+                        return { text: `${label}: ${val} (${pct}%)`, fillStyle: colors[i], strokeStyle: colors[i], fontColor: getLegendColor(), lineWidth: 0, index: i };
                     })
                 } },
                 tooltip: { callbacks: { label: ctx2 => {
@@ -509,7 +564,7 @@ function renderPreventivoEsitoDoughnut() {
                     generateLabels: chart => chart.data.labels.map((label, i) => {
                         const val = chart.data.datasets[0].data[i];
                         const pct = total > 0 ? Math.round(val * 1000 / total) / 10 : 0;
-                        return { text: `${label}: ${val} (${pct}%)`, fillStyle: colors[i], strokeStyle: colors[i], lineWidth: 0, index: i };
+                        return { text: `${label}: ${val} (${pct}%)`, fillStyle: colors[i], strokeStyle: colors[i], fontColor: getLegendColor(), lineWidth: 0, index: i };
                     })
                 } },
                 tooltip: { callbacks: { label: ctx2 => {
@@ -612,4 +667,158 @@ function closePreventivoDrilldown(event) {
     if (event && event.target.id !== 'preventivoDrilldownModal') return;
     const modal = document.getElementById('preventivoDrilldownModal');
     if (modal) modal.style.display = 'none';
+}
+
+// ============================================================
+// IMPORT LEAD DA CSV — carica il file, mostra un riepilogo
+// (creati/duplicati/errori riga per riga) nello stesso modal usato per i
+// drill-down dei grafici, poi ricarica la lista.
+async function importPreventiviLeadCsv(file) {
+    if (!file) return;
+    const input = document.getElementById('pvImportLeadInput');
+    if (!confirm(`Importare i lead dal file "${file.name}"? I lead già importati in precedenza (stesso ID) verranno aggiornati con lo stato e i dati più recenti, non duplicati.`)) {
+        if (input) input.value = '';
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const res = await fetch('/api/preventivi-telefonici/import-lead', { method: 'POST', body: formData });
+        const data = await res.json().catch(() => ({}));
+        if (input) input.value = '';
+
+        if (!res.ok) {
+            alert(data.error || 'Errore durante l\'import');
+            return;
+        }
+
+        const modal = document.getElementById('preventivoDrilldownModal');
+        const titleEl = document.getElementById('preventivoDrilldownTitle');
+        const list = document.getElementById('preventivoDrilldownList');
+        titleEl.textContent = 'Risultato Import Lead';
+        list.innerHTML = `
+            <div style="display:flex;gap:20px;margin-bottom:16px">
+                <div><div style="font-size:22px;font-weight:800;color:#00c853">${data.creati || 0}</div><div style="font-size:12px;color:var(--text-secondary)">Creati</div></div>
+                <div><div style="font-size:22px;font-weight:800;color:#ff9800">${data.aggiornati || 0}</div><div style="font-size:12px;color:var(--text-secondary)">Aggiornati</div></div>
+                <div><div style="font-size:22px;font-weight:800;color:var(--text-secondary)">${data.invariati || 0}</div><div style="font-size:12px;color:var(--text-secondary)">Invariati</div></div>
+                <div><div style="font-size:22px;font-weight:800;color:#ff3d3d">${(data.errori || []).length}</div><div style="font-size:12px;color:var(--text-secondary)">Errori</div></div>
+            </div>
+            ${(data.errori || []).length > 0 ? `<div style="border-top:1px solid var(--border);padding-top:10px">${data.errori.map(e => `<div style="font-size:12px;color:var(--text-secondary);padding:3px 0">⚠️ ${e}</div>`).join('')}</div>` : ''}
+        `;
+        modal.style.display = 'flex';
+        await loadPreventivi();
+    } catch (err) {
+        console.error('Errore import lead CSV:', err);
+        alert('Errore di rete durante l\'import');
+        if (input) input.value = '';
+    }
+}
+
+// Aggancio al cambio tema (☾/☀ in navbar) — stesso pattern di
+// refreshRentChartsOnThemeChange/refreshServiceChartsOnThemeChange in
+// app.js. Senza questo, i grafici Chart.js gia' disegnati restano col
+// colore legenda "congelato" a quello del tema precedente finche' non
+// arriva un nuovo caricamento dati.
+function refreshPreventiviChartsOnThemeChange() {
+    if (typeof preventiviData !== 'undefined') renderPreventiviCharts();
+}
+
+// ============================================================
+// MODIFICA — nome, cognome, marca, modello, targa/telaio, link lead.
+// Non tocca lo stato (quello resta su changePreventivoStatus). Pensato
+// soprattutto per completare i record creati da import (aggiungere il
+// link lead mancante), ma utilizzabile anche per correggere dati.
+function openEditPreventivoModal(id) {
+    const p = preventiviData.find(x => x.id === id);
+    if (!p) return;
+    document.getElementById('editPvId').value = p.id;
+    document.getElementById('editPvNome').value = p.clienteNome || '';
+    document.getElementById('editPvCognome').value = p.clienteCognome || '';
+    document.getElementById('editPvMarcaInput').value = p.marca || '';
+    document.getElementById('editPvMarca').value = p.marca || '';
+    document.getElementById('editPvModello').value = p.modello || '';
+    document.getElementById('editPvTargaTelaio').value = p.targaTelaio || '';
+    document.getElementById('editPvLinkLead').value = p.linkLead || '';
+    document.getElementById('editPreventivoModal').style.display = 'flex';
+}
+
+function closeEditPreventivoModal(event) {
+    if (event && event.target.id !== 'editPreventivoModal') return;
+    document.getElementById('editPreventivoModal').style.display = 'none';
+}
+
+// Tendina marca del modal di modifica — stessa logica di
+// filterPreventivoMarche/selectPreventivoMarca usata nel form di
+// creazione, puntata sui campi del modal di modifica.
+function showEditPreventivoMarcheDropdown() { filterEditPreventivoMarche('', true); }
+
+function filterEditPreventivoMarche(query, showAll) {
+    const dropdown = document.getElementById('editPvMarcaDropdown');
+    if (!dropdown) return;
+    const q = (query || '').toLowerCase().trim();
+    let matches = MARCHE_NORMALIZED;
+    if (q && !showAll) matches = MARCHE_NORMALIZED.filter(m => m.normalized.includes(q));
+    if (matches.length === 0) {
+        dropdown.innerHTML = `<div style="padding:10px 12px;color:var(--text-secondary);font-size:13px">Nessuna marca trovata</div>`;
+        dropdown.style.display = 'block';
+        return;
+    }
+    dropdown.innerHTML = matches.map(m =>
+        `<div onclick="selectEditPreventivoMarca('${m.original.replace(/'/g, "\\'")}')" style="padding:8px 12px;cursor:pointer;font-size:13px" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background='transparent'">${m.original}</div>`
+    ).join('');
+    dropdown.style.display = 'block';
+}
+
+function selectEditPreventivoMarca(marca) {
+    document.getElementById('editPvMarcaInput').value = marca;
+    document.getElementById('editPvMarca').value = marca;
+    document.getElementById('editPvMarcaDropdown').style.display = 'none';
+}
+
+document.addEventListener('click', (e) => {
+    const dropdown = document.getElementById('editPvMarcaDropdown');
+    const input = document.getElementById('editPvMarcaInput');
+    if (dropdown && input && !input.contains(e.target) && !dropdown.contains(e.target)) {
+        dropdown.style.display = 'none';
+    }
+});
+
+async function saveEditPreventivo() {
+    const id = document.getElementById('editPvId').value;
+    const clienteNome = document.getElementById('editPvNome').value.trim();
+    const clienteCognome = document.getElementById('editPvCognome').value.trim();
+    const marca = document.getElementById('editPvMarca').value.trim();
+    const modello = document.getElementById('editPvModello').value.trim();
+    const targaTelaio = document.getElementById('editPvTargaTelaio').value.trim();
+    const linkLead = document.getElementById('editPvLinkLead').value.trim();
+
+    const mancanti = [];
+    if (!clienteNome) mancanti.push('Nome');
+    if (!clienteCognome) mancanti.push('Cognome');
+    if (!marca) mancanti.push('Marchio');
+    if (!modello) mancanti.push('Modello');
+    if (mancanti.length > 0) {
+        alert('Campi obbligatori mancanti: ' + mancanti.join(', '));
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/preventivi-telefonici/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ clienteNome, clienteCognome, marca, modello, targaTelaio: targaTelaio || null, linkLead: linkLead || null })
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert(err.error || 'Errore nel salvataggio delle modifiche');
+            return;
+        }
+        closeEditPreventivoModal();
+        await loadPreventivi();
+    } catch (err) {
+        console.error('Errore modifica preventivo telefonico:', err);
+        alert('Errore di rete nel salvataggio delle modifiche');
+    }
 }

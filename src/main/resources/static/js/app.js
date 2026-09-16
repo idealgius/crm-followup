@@ -144,6 +144,9 @@ function refreshChartsOnThemeChange() {
     if (typeof refreshServiceChartsOnThemeChange === 'function' && document.getElementById('servicePage')?.style.display === 'block') {
         refreshServiceChartsOnThemeChange();
     }
+    if (typeof refreshPreventiviChartsOnThemeChange === 'function' && document.getElementById('preventiviPage')?.style.display === 'block') {
+        refreshPreventiviChartsOnThemeChange();
+    }
 }
 
 // Pagine valide riconosciute dal router — usato per validare l'hash dell'URL

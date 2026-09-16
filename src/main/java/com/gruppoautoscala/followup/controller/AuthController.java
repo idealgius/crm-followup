@@ -186,6 +186,32 @@ public class AuthController {
         return ResponseEntity.ok(Map.of("message", "Ruolo aggiornato", "role", newRole));
     }
 
+    @PatchMapping("/users/{id}/name")
+    public ResponseEntity<?> changeName(@PathVariable Long id,
+                                        @RequestBody Map<String, String> body,
+                                        HttpSession session) {
+        String sessionRole = (String) session.getAttribute("userRole");
+        if (sessionRole == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        if (!"ADMIN".equals(sessionRole) && !"GESTORE".equals(sessionRole))
+            return ResponseEntity.status(403).body(Map.of("error", "Non autorizzato"));
+
+        Optional<User> userOpt = userRepository.findById(id);
+        if (userOpt.isEmpty()) return ResponseEntity.notFound().build();
+        User target = userOpt.get();
+
+        // Gestore non può modificare Admin (stessa regola di changeRole).
+        if ("GESTORE".equals(sessionRole) && "ADMIN".equals(target.getRole()))
+            return ResponseEntity.status(403).body(Map.of("error", "Non puoi modificare un Admin"));
+
+        String newName = body.get("fullName");
+        if (newName == null || newName.isBlank())
+            return ResponseEntity.badRequest().body(Map.of("error", "Nome obbligatorio"));
+
+        target.setFullName(newName.trim());
+        userRepository.save(target);
+        return ResponseEntity.ok(Map.of("message", "Nome aggiornato", "fullName", target.getFullName()));
+    }
+
     @DeleteMapping("/users/{id}")
     public ResponseEntity<?> deleteUser(@PathVariable Long id, HttpSession session) {
         String role = (String) session.getAttribute("userRole");

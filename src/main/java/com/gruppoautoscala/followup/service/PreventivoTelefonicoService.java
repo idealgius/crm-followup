@@ -74,6 +74,17 @@ public class PreventivoTelefonicoService {
         preventivoRepository.delete(p);
     }
 
+    // Modifica i campi anagrafici/veicolo (non lo stato, quello resta
+    // gestito da changeStatus). Pensato principalmente per completare un
+    // record creato da import (aggiungere il link lead mancante), ma
+    // utilizzabile anche per correggere nome/cognome/marca/modello se la
+    // trattativa viene generata per un'altra persona o un altro veicolo.
+    public PreventivoTelefonico update(PreventivoTelefonico p, User editor) {
+        p.setLastModifiedBy(editor);
+        p.setLastModifiedAt(LocalDateTime.now(ITALY_ZONE));
+        return preventivoRepository.save(p);
+    }
+
     // Cambia stato validando la transizione. Lancia IllegalArgumentException
     // (gestita dal controller come 400) se il cambio richiesto non e'
     // ammesso dallo stato attuale.

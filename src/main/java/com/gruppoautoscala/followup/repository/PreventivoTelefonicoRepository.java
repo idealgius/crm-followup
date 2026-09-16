@@ -28,4 +28,8 @@ public interface PreventivoTelefonicoRepository extends JpaRepository<Preventivo
            "LEFT JOIN FETCH p.lastModifiedBy " +
            "ORDER BY p.createdAt DESC")
     List<PreventivoTelefonico> findAllWithUser();
+
+    // Deduplica import: controlla se esiste gia' un preventivo per questo
+    // identificativo lead prima di crearne uno nuovo.
+    java.util.Optional<PreventivoTelefonico> findBySourceLeadId(String sourceLeadId);
 }

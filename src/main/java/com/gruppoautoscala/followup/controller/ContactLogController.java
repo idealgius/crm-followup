@@ -45,6 +45,11 @@ public class ContactLogController {
         "Info + Appuntamento", "Info Vendita in Promo", "Altro"
     );
 
+    // Categoria per cui la tendina Consulente è attualmente disponibile —
+    // isolata in una costante cosi' e' facile estenderla ad altre categorie
+    // in futuro senza toccare la logica sotto in piu' punti.
+    private static final String CONSULENTE_CATEGORY = "Info Acquisto effettuato";
+
     // Pubblica l'evento sul canale /topic/contacts — payload {type, data},
     // esattamente la forma che handleContactWsEvent() si aspetta lato
     // frontend (contact.js). "type" è "created" | "updated" | "deleted".
@@ -212,6 +217,11 @@ public class ContactLogController {
         String serviceNote = (String) body.get("serviceNote");
         String serviceSede = (String) body.get("serviceSede");
         String acquistoNote = (String) body.get("acquistoNote");
+        // NUOVO: consulente di riferimento — per ora solo per "Info Acquisto
+        // effettuato". Stesso schema di notaAggiuntiva/acquistoAlert qui
+        // sotto: create() non conosce ancora questo campo, quindi lo
+        // impostiamo dopo con update(), senza toccare la firma di create().
+        String consultantName = (String) body.get("consultantName");
         Boolean acquistoAlert = (Boolean) body.get("acquistoAlert");
         // NUOVO: a chi mostrare l'allert. notifyAll di default true (nessun
         // cambiamento per chi non usa la nuova funzione). recipientIds arriva
@@ -305,6 +315,13 @@ public class ContactLogController {
             log = contactLogService.update(log);
         }
 
+        // NUOVO: stessa tecnica per il consulente — solo per la categoria
+        // abilitata (per ora "Info Acquisto effettuato").
+        if (CONSULENTE_CATEGORY.equals(category) && consultantName != null && !consultantName.isBlank()) {
+            log.setConsultantName(consultantName);
+            log = contactLogService.update(log);
+        }
+
         Map<String, Object> logMap = toMap(log);
         // Trasmette l'evento in tempo reale a tutti i browser connessi (Registro
         // Contatti aperto altrove) — sostituisce, per questa entità, il polling
@@ -366,6 +383,8 @@ public class ContactLogController {
         if (body.containsKey("serviceNote")) log.setServiceNote((String) body.get("serviceNote"));
         if (body.containsKey("serviceSede")) log.setServiceSede((String) body.get("serviceSede"));
         if (body.containsKey("acquistoNote")) log.setAcquistoNote((String) body.get("acquistoNote"));
+        // NUOVO: consulente — patchabile indipendentemente dal resto.
+        if (body.containsKey("consultantName")) log.setConsultantName((String) body.get("consultantName"));
         if (body.containsKey("acquistoAlert")) log.setAcquistoAlert((Boolean) body.get("acquistoAlert"));
         if (body.containsKey("alertNotifyAll")) {
             Boolean notifyAll = (Boolean) body.get("alertNotifyAll");
@@ -385,10 +404,10 @@ public class ContactLogController {
 
         // ===== ALLERT — cambio stato: valorizza automaticamente "chi" e "quando" =====
         // Quando lo stato passa a IN_GESTIONE o GESTITA, registriamo l'utente corrente
-        // e il timestamp SOLO se non era già presente, così riaprire/toccare lo stesso
+        // e il timestamp SOLO se non era già presente, cosi riaprire/toccare lo stesso
         // stato più volte non sovrascrive la prima presa in carico. Quando lo stato
         // viene rimosso (status == null, "Rimuovi Gestione"), azzeriamo entrambe le
-        // coppie chi/quando così la scheda torna pulita per una nuova gestione.
+        // coppie chi/quando cosi la scheda torna pulita per una nuova gestione.
         if (body.containsKey("acquistoAlertStatus")) {
             Object statusVal = body.get("acquistoAlertStatus");
             String status = statusVal == null ? null : (String) statusVal;
@@ -601,6 +620,8 @@ public class ContactLogController {
         m.put("serviceNote", log.getServiceNote());
         m.put("serviceSede", log.getServiceSede());
         m.put("acquistoNote", log.getAcquistoNote());
+        // NUOVO: consulente di riferimento.
+        m.put("consultantName", log.getConsultantName());
         m.put("acquistoAlert", log.getAcquistoAlert());
         m.put("acquistoAlertStatus", log.getAcquistoAlertStatus());
         m.put("acquistoAlertNoteGestione", log.getAcquistoAlertNoteGestione());

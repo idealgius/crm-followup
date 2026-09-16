@@ -46,9 +46,20 @@ public class PreventivoTelefonico {
     @Column(name = "targa_telaio", length = 50)
     private String targaTelaio;
 
-    // Obbligatorio: link alla lead di origine.
-    @Column(name = "link_lead", nullable = false, length = 500)
+    // Obbligatorio SOLO per la creazione manuale dal form (validato nel
+    // controller) — opzionale a livello di entita'/DB perche' i record
+    // creati da import Excel/CSV quasi mai lo hanno in origine. Aggiungibile
+    // in un secondo momento da chi ha almeno accesso FULL alla sezione
+    // (MODERATORE in su), tramite l'endpoint di modifica.
+    @Column(name = "link_lead", length = 500)
     private String linkLead;
+
+    // Identificativo del lead nel sistema di origine (colonna "ID"
+    // dell'export CSV) — valorizzato SOLO sui record creati da import.
+    // Chiave di deduplica: prima di creare un nuovo preventivo da import,
+    // si controlla se esiste gia' un record con questo stesso identificativo.
+    @Column(name = "source_lead_id", unique = true, length = 50)
+    private String sourceLeadId;
 
     // Come consultantName in FollowUp: stringa semplice, non FK, valorizzata
     // dalla stessa tendina consulenti usata nei Follow-up.

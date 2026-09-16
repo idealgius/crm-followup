@@ -72,6 +72,14 @@ public class ContactLog {
     @Column(name = "acquisto_note", length = 500)
     private String acquistoNote;
 
+    // NUOVO: consulente di riferimento — per ora usato solo dalla categoria
+    // "Info Acquisto effettuato" (tendina in creazione/modifica), ma il
+    // campo resta generico (stesso schema di consultantName in FollowUp:
+    // stringa semplice, non FK) cosi' e' riusabile da altre categorie in
+    // futuro senza bisogno di una nuova colonna.
+    @Column(name = "consultant_name", length = 150)
+    private String consultantName;
+
     // ===== ALLERT — Info Acquisto effettuato =====
     // acquistoAlert: true se l'operatore ha segnalato una problematica in fase di inserimento
     @Column(name = "acquisto_alert")

@@ -5,11 +5,14 @@ import com.gruppoautoscala.followup.model.PreventivoTelefonicoStatusHistory;
 import com.gruppoautoscala.followup.model.User;
 import com.gruppoautoscala.followup.repository.UserRepository;
 import com.gruppoautoscala.followup.service.PreventivoTelefonicoService;
+import com.gruppoautoscala.followup.service.PreventivoImportService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -24,6 +27,7 @@ public class PreventivoTelefonicoController {
     private static final Set<String> TIPI_AMMESSI = Set.of("VENDITA", "NOLEGGIO");
 
     @Autowired private PreventivoTelefonicoService preventivoService;
+    @Autowired private PreventivoImportService preventivoImportService;
     @Autowired private UserRepository userRepository;
 
     @GetMapping
@@ -59,6 +63,28 @@ public class PreventivoTelefonicoController {
         Optional<PreventivoTelefonico> p = preventivoService.getById(id);
         if (p.isEmpty()) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(buildListResponse(List.of(p.get())).get(0));
+    }
+
+    @PostMapping("/import-lead")
+    public ResponseEntity<?> importLead(@RequestParam("file") MultipartFile file, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        if (file.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "File vuoto"));
+
+        Optional<User> userOpt = userRepository.findById(userId);
+        if (userOpt.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "Utente non trovato"));
+
+        try {
+            PreventivoImportService.ImportResult result = preventivoImportService.importLeadCsv(file, userOpt.get());
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("creati", result.created);
+            response.put("aggiornati", result.updated);
+            response.put("invariati", result.unchanged);
+            response.put("errori", result.errori);
+            return ResponseEntity.ok(response);
+        } catch (IOException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Errore nella lettura del file: " + e.getMessage()));
+        }
     }
 
     @PostMapping
@@ -130,6 +156,46 @@ public class PreventivoTelefonicoController {
         }
     }
 
+    @PatchMapping("/{id}")
+    public ResponseEntity<?> update(@PathVariable Long id,
+                                    @RequestBody Map<String, Object> body,
+                                    HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+
+        Optional<PreventivoTelefonico> pOpt = preventivoService.getById(id);
+        if (pOpt.isEmpty()) return ResponseEntity.notFound().build();
+        Optional<User> userOpt = userRepository.findById(userId);
+        if (userOpt.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "Utente non trovato"));
+
+        PreventivoTelefonico p = pOpt.get();
+        if (body.containsKey("clienteNome")) {
+            String v = trimOrNull(body.get("clienteNome"));
+            if (v == null) return ResponseEntity.badRequest().body(Map.of("error", "Nome obbligatorio"));
+            p.setClienteNome(v);
+        }
+        if (body.containsKey("clienteCognome")) {
+            String v = trimOrNull(body.get("clienteCognome"));
+            if (v == null) return ResponseEntity.badRequest().body(Map.of("error", "Cognome obbligatorio"));
+            p.setClienteCognome(v);
+        }
+        if (body.containsKey("marca")) {
+            String v = trimOrNull(body.get("marca"));
+            if (v == null) return ResponseEntity.badRequest().body(Map.of("error", "Marchio obbligatorio"));
+            p.setMarca(v);
+        }
+        if (body.containsKey("modello")) {
+            String v = trimOrNull(body.get("modello"));
+            if (v == null) return ResponseEntity.badRequest().body(Map.of("error", "Modello obbligatorio"));
+            p.setModello(v);
+        }
+        if (body.containsKey("targaTelaio")) p.setTargaTelaio(trimOrNull(body.get("targaTelaio")));
+        if (body.containsKey("linkLead")) p.setLinkLead(trimOrNull(body.get("linkLead")));
+
+        PreventivoTelefonico saved = preventivoService.update(p, userOpt.get());
+        return ResponseEntity.ok(buildListResponse(List.of(saved)).get(0));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id, HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");
@@ -160,6 +226,7 @@ public class PreventivoTelefonicoController {
             m.put("modello", p.getModello());
             m.put("targaTelaio", p.getTargaTelaio());
             m.put("linkLead", p.getLinkLead());
+            m.put("sourceLeadId", p.getSourceLeadId());
             m.put("consultantName", p.getConsultantName());
             m.put("status", p.getStatus());
             m.put("createdAt", p.getCreatedAt() != null ? p.getCreatedAt().toString() : null);

@@ -1,3 +1,13 @@
+// Il login avviene tramite submit del <form id="loginForm"> (vedi
+// index.html) invece che tramite onclick sul bottone: e' l'unico modo
+// affidabile perche' Chrome/Edge riconoscano il login e offrano di
+// salvare la password, specialmente su un browser/profilo che non ha
+// gia' una "memoria" pregressa del sito.
+document.getElementById('loginForm')?.addEventListener('submit', function (e) {
+    e.preventDefault();
+    login();
+});
+
 async function login() {
     const email = document.getElementById('loginEmail').value;
     const password = document.getElementById('loginPassword').value;
@@ -23,6 +33,23 @@ async function login() {
             errorDiv.textContent = data.error || 'Errore di accesso';
             errorDiv.style.display = 'block';
             return;
+        }
+
+        // NUOVO: salva esplicitamente la credenziale tramite la Credential
+        // Management API. Con un login gestito via fetch/AJAX (come questo)
+        // invece che con un submit di form a pagina intera, Chrome spesso
+        // non capisce da solo che il login e' andato a buon fine e non
+        // offre mai di salvare la password — questa chiamata glielo dice
+        // esplicitamente. Non fa nulla nei browser che non supportano
+        // l'API (fallisce silenziosamente, il login prosegue comunque).
+        if (window.PasswordCredential) {
+            try {
+                const cred = new PasswordCredential({ id: email, password: password, name: data.fullName || email });
+                navigator.credentials.store(cred);
+            } catch (credErr) {
+                // Non bloccante: il salvataggio della credenziale è solo un
+                // "bonus", non deve mai impedire il login vero e proprio.
+            }
         }
 
         currentUser = data;

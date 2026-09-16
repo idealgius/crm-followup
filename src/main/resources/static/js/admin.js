@@ -37,7 +37,15 @@ function renderUsers(users) {
         return `
         <div class="waiting-card">
             <div>
-                <div class="waiting-name">${u.fullName}</div>
+                <div class="waiting-name" id="userNameDisplay-${u.id}">
+                    ${u.fullName}
+                    ${canManage ? `<span onclick="startEditUserName(${u.id})" style="cursor:pointer;margin-left:8px;font-size:12px" title="Modifica nome">✏️</span>` : ''}
+                </div>
+                <div id="userNameEdit-${u.id}" style="display:none;margin-top:6px">
+                    <input type="text" id="userNameInput-${u.id}" class="input-dark" style="font-size:13px;padding:4px 10px;margin-right:6px" value="${u.fullName}">
+                    <button onclick="saveUserName(${u.id})" class="btn-small btn-green">✓ Salva</button>
+                    <button onclick="cancelEditUserName(${u.id})" class="btn-small btn-secondary">✕</button>
+                </div>
                 <div class="waiting-details" style="margin-top:6px">
                     ${u.email}
                 </div>
@@ -77,6 +85,37 @@ function formatRole(role) {
         'SERVICE': 'Service'
     };
     return map[role] || role;
+}
+
+function startEditUserName(id) {
+    document.getElementById(`userNameDisplay-${id}`).style.display = 'none';
+    document.getElementById(`userNameEdit-${id}`).style.display = 'block';
+}
+
+function cancelEditUserName(id) {
+    document.getElementById(`userNameDisplay-${id}`).style.display = 'block';
+    document.getElementById(`userNameEdit-${id}`).style.display = 'none';
+}
+
+async function saveUserName(id) {
+    const newName = document.getElementById(`userNameInput-${id}`).value.trim();
+    if (!newName) { alert('Il nome non può essere vuoto'); return; }
+    try {
+        const res = await fetch(`/api/auth/users/${id}/name`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fullName: newName })
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert(err.error || 'Errore nel salvataggio del nome');
+            return;
+        }
+        loadUsers();
+    } catch (err) {
+        console.error('Errore modifica nome utente:', err);
+        alert('Errore di rete nel salvataggio del nome');
+    }
 }
 
 async function changeUserRole(userId, newRole) {

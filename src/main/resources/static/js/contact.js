@@ -1218,6 +1218,7 @@ function renderGenericContactDetail() {
                         ${log.marca ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">🚗 ${log.marca}${log.modello?' · '+log.modello:''}</div>` : ''}
                         ${log.serviceSede ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📍 Service ${log.serviceSede}</div>` : ''}
                         ${log.serviceTarga ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">🔖 ${log.serviceTarga}</div>` : ''}
+                        ${log.consultantName ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">🧑‍💼 ${log.consultantName}</div>` : ''}
                         ${noteText ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📝 ${noteText}</div>` : ''}
                         ${log._prevHistory && log._prevHistory.length > 0 ? `<div style="font-size:11px;color:var(--text-secondary);margin-top:6px;padding-top:6px;border-top:1px dashed var(--border)">🕐 Chiamate precedenti (${log._prevHistory.length}): ${log._prevHistory.map(d => formatDateTimeIT(d)).join(' · ')}</div>` : ''}
                         ${alert ? (
@@ -2075,6 +2076,7 @@ function refreshAcquistoAlertModalDisplay(log) {
                 ${log.notaAggiuntiva ? `<br>📝 Nota aggiuntiva: ${log.notaAggiuntiva}` : ''}
                 ${log.marca ? `<br>🚗 Veicolo: ${log.marca}${log.modello ? ' ' + log.modello : ''}` : ''}
                 ${log.serviceTarga ? `<br>🔖 Targa: ${log.serviceTarga}` : ''}
+                ${log.consultantName ? `<br>🧑‍💼 Consulente: ${log.consultantName}` : ''}
                 ${linkParts.length ? `<br>${linkParts.join(' · ')}` : ''}
                 ${log.alertNotifyAll === false && Array.isArray(log.alertRecipients) && log.alertRecipients.length > 0
                     ? `<br><span style="color:#f0c040;font-weight:700">🎯 Destinatario/i: ${log.alertRecipients.map(u => u.fullName).join(', ')}</span>`
@@ -2900,6 +2902,7 @@ function renderContactRow(log) {
             ${log.category === 'Info Vendita in Promo' ? `<span style="font-size:11px;background:rgba(240,192,64,0.15);color:#f0c040;padding:2px 8px;border-radius:8px;margin-left:6px">🎯 PROMO</span>` : ''}
             ${marca ? `<span style="font-size:11px;background:rgba(0,200,83,0.1);color:#00c853;padding:2px 8px;border-radius:8px;margin-left:6px">🚗 ${marca}${modello?' '+modello:''}</span>` : ''}
             ${log.serviceTarga ? `<span style="font-size:11px;background:rgba(240,192,64,0.08);color:#f0c040;padding:2px 8px;border-radius:8px;margin-left:6px">🔖 ${log.serviceTarga}</span>` : ''}
+            ${log.consultantName ? `<span style="font-size:11px;background:rgba(0,188,212,0.1);color:#00bcd4;padding:2px 8px;border-radius:8px;margin-left:6px">🧑‍💼 ${log.consultantName}</span>` : ''}
             ${log.linkAuto ? `<a href="${log.linkAuto}" target="_blank" rel="noopener" style="font-size:11px;background:rgba(124,77,255,0.1);color:#7c4dff;padding:2px 8px;border-radius:8px;margin-left:6px;text-decoration:none">🔗 Lead</a>` : ''}
         </td>
         <td style="font-size:12px;color:var(--text-secondary)">${(() => {
@@ -3147,6 +3150,7 @@ async function createContactLog() {
     const acquistoMarca = document.getElementById('contactAcquistoMarca')?.value.trim() || '';
     const acquistoModello = document.getElementById('contactAcquistoModello')?.value.trim() || '';
     const acquistoTarga = document.getElementById('contactAcquistoTarga')?.value.trim() || '';
+    const acquistoConsulente = document.getElementById('contactAcquistoConsulente')?.value || '';
     // NUOVO: campi Pratica Leasing/Pratica Finanziamento — stesso schema
     // di Info Acquisto (marca/modello/targa opzionali + allert)
     const leasingMarca = document.getElementById('contactLeasingMarca')?.value.trim() || '';
@@ -3291,6 +3295,7 @@ async function createContactLog() {
         serviceNote: isService ? (serviceNote || null) : null,
         serviceSede: isService ? (serviceSede || null) : null,
         acquistoNote: acquistoNote||null,
+        consultantName: isAcquisto ? (acquistoConsulente || null) : null,
         acquistoAlert: isAcquisto ? acquistoAlert : (isLeasingFin ? leasingAlert : false),
         alertNotifyAll: destinatariPayload.alertNotifyAll,
         alertRecipientIds: destinatariPayload.alertRecipientIds,
@@ -3373,6 +3378,7 @@ function openEditContactModal(id, logData) {
     setVal('editContactAcquistoMarca', log.category === 'Info Acquisto effettuato' ? log.marca : '');
     setVal('editContactAcquistoModello', log.category === 'Info Acquisto effettuato' ? log.modello : '');
     setVal('editContactAcquistoTarga', log.category === 'Info Acquisto effettuato' ? log.serviceTarga : '');
+    setVal('editContactAcquistoConsulente', log.category === 'Info Acquisto effettuato' ? log.consultantName : '');
     // NUOVO: Pratica Leasing/Finanziamento/Amministrazione.
     const isLeasingFinCat = log.category === 'Pratica Leasing' || log.category === 'Pratica Finanziamento' || log.category === 'Amministrazione';
     setVal('editContactLeasingMarcaInput', isLeasingFinCat ? log.marca : '');
@@ -3450,6 +3456,7 @@ async function saveEditContactLog() {
     const editAcquistoModello = document.getElementById('editContactAcquistoModello')?.value.trim() || '';
     const editAcquistoTarga = document.getElementById('editContactAcquistoTarga')?.value.trim() || '';
     const editAcquistoNote = document.getElementById('editContactAcquistoNote')?.value.trim() || '';
+    const editAcquistoConsulente = document.getElementById('editContactAcquistoConsulente')?.value || '';
     const editMarca = document.getElementById('editContactMarca')?.value.trim() || '';
     const editModello = document.getElementById('editContactModello')?.value.trim() || '';
     const editLinkAuto = document.getElementById('editContactLinkAuto')?.value.trim() || '';
@@ -3476,6 +3483,7 @@ async function saveEditContactLog() {
             payload.modello = editAcquistoModello || null;
             payload.serviceTarga = editAcquistoTarga || null;
             payload.acquistoNote = editAcquistoNote || null;
+            payload.consultantName = editAcquistoConsulente || null;
         } else if (category === 'Pratica Leasing' || category === 'Pratica Finanziamento' || category === 'Amministrazione') {
             // NUOVO: prima questa categoria non aveva NESSUN campo dedicato
             // nel modal di modifica — marca/modello/targa non erano mai
@@ -3546,7 +3554,7 @@ function hideNewContactForm() {
      'contactAppuntamentoSede',
      'contactAcquistoTipo','contactFonte','contactServiceTipo','contactServiceSede','contactServiceNote',
      'contactMarcaInput','contactMarca','contactModello','contactLinkAuto','contactAcquistoNote',
-     'contactAcquistoMarcaInput','contactAcquistoMarca','contactAcquistoModello','contactAcquistoTarga',
+     'contactAcquistoMarcaInput','contactAcquistoMarca','contactAcquistoModello','contactAcquistoTarga','contactAcquistoConsulente',
      'contactLeasingMarcaInput','contactLeasingMarca','contactLeasingModello','contactLeasingTarga',
      'contactNoleggioMarcaInput','contactNoleggioMarca','contactNoleggioModello',
      'contactNoleggioTipo','contactNoleggioLink','contactNoleggioRichiesta',
@@ -3634,7 +3642,7 @@ function onCategoryChange() {
         if (acquistoAlertBtn) acquistoAlertBtn.classList.remove('btn-sede-active');
         const acquistoAlertHidden = document.getElementById('contactAcquistoAlert');
         if (acquistoAlertHidden) acquistoAlertHidden.value = 'false';
-        ['contactAcquistoMarcaInput','contactAcquistoMarca','contactAcquistoModello','contactAcquistoTarga'].forEach(id=>{const el2=document.getElementById(id);if(el2) el2.value='';});
+        ['contactAcquistoMarcaInput','contactAcquistoMarca','contactAcquistoModello','contactAcquistoTarga','contactAcquistoConsulente'].forEach(id=>{const el2=document.getElementById(id);if(el2) el2.value='';});
         ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche','Furto','Saldo','CredenzialiLojack','AltroAcquisto'].forEach(k=>{const b=document.getElementById(`acquisto-${k}`);if(b)b.classList.remove('btn-sede-active');});
     }
     if (cat !== 'Pratica Leasing' && cat !== 'Pratica Finanziamento' && cat !== 'Amministrazione') {
