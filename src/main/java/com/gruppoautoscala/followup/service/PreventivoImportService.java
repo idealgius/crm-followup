@@ -115,6 +115,26 @@ public class PreventivoImportService {
 
         String clienteNome = get(record, "Nome");
         String clienteCognome = get(record, "Cognome");
+        boolean nomeMancante = isBlank(clienteNome);
+        boolean cognomeMancante = isBlank(clienteCognome);
+
+        if (nomeMancante && cognomeMancante) {
+            // SALVA VITA 4: entrambi mancanti -> probabile lead aziendale,
+            // si usa la Ragione Sociale al posto del nominativo persona
+            // fisica invece di scartare la riga.
+            String ragioneSociale = get(record, "Ragione sociale");
+            if (!isBlank(ragioneSociale)) {
+                clienteNome = ragioneSociale;
+                clienteCognome = "—";
+            }
+        } else if (nomeMancante) {
+            // Manca solo il nome: si tiene comunque il cognome gia'
+            // presente, invece di scartare la riga per un solo campo.
+            clienteNome = "—";
+        } else if (cognomeMancante) {
+            clienteCognome = "—";
+        }
+
         if (isBlank(clienteNome) || isBlank(clienteCognome)) {
             result.errori.add("Lead " + sourceLeadId + ": nome o cognome mancante");
             return;
@@ -123,16 +143,33 @@ public class PreventivoImportService {
         String callerRaw = get(record, "Caller");
         String callerName = extractNameBeforeParenthesis(callerRaw);
         User caller = callerName != null ? usersByName.get(nameKey(callerName)) : null;
+
+        // SALVA VITA 1: se il Caller manca (lead mai presa in carico), usa
+        // "Inserito da" come riferimento operatore al suo posto — sappiamo
+        // comunque chi l'ha caricata a sistema.
+        String insertedByRaw = null;
         if (caller == null) {
-            result.errori.add("Lead " + sourceLeadId + ": operatore non riconosciuto (\"" + callerRaw + "\")");
+            insertedByRaw = get(record, "Inserito da");
+            if (insertedByRaw != null) caller = usersByName.get(nameKey(insertedByRaw));
+        }
+        if (caller == null) {
+            result.errori.add("Lead " + sourceLeadId + ": operatore non riconosciuto (Caller: \"" + callerRaw + "\", Inserito da: \"" + insertedByRaw + "\")");
             return;
         }
 
         String tipoRichiesta = get(record, "Tipo richiesta");
         String tipo = mapTipo(tipoRichiesta);
+        String venditoreRaw = get(record, "Venditore");
         if (tipo == null) {
-            result.errori.add("Lead " + sourceLeadId + ": tipo richiesta non riconosciuto (\"" + tipoRichiesta + "\")");
-            return;
+            // SALVA VITA 2: tipo richiesta non specificato/non riconosciuto
+            // ("Varie", vuoto, ecc.) -> dedotto dal consulente. Sementa,
+            // Crispo e Imperato sono i tre consulenti dedicati al Noleggio,
+            // tutti gli altri di default Vendita.
+            String venditoreKey = nameKey(venditoreRaw);
+            boolean isNoleggioConsulente = venditoreKey.equals(nameKey("Sementa Francesco"))
+                    || venditoreKey.equals(nameKey("Crispo Raffaele"))
+                    || venditoreKey.equals(nameKey("Imperato Ciro"));
+            tipo = isNoleggioConsulente ? "NOLEGGIO" : "VENDITA";
         }
 
         String marca = normalizeMarca(get(record, "Marca"));
@@ -142,19 +179,29 @@ public class PreventivoImportService {
             return;
         }
 
-        String consultantName = normalizeConsulente(get(record, "Venditore"));
+        String consultantName = normalizeConsulente(venditoreRaw);
         if (isBlank(consultantName)) {
             result.errori.add("Lead " + sourceLeadId + ": venditore mancante");
             return;
         }
 
         String dataRicontatto = get(record, "Data ricontatto");
-        LocalDateTime ricontattoAt;
+        LocalDateTime ricontattoAt = null;
         try {
             ricontattoAt = LocalDateTime.parse(dataRicontatto, DATA_RICONTATTO_FORMAT);
         } catch (Exception e) {
-            result.errori.add("Lead " + sourceLeadId + ": data ricontatto non valida (\"" + dataRicontatto + "\")");
-            return;
+            // SALVA VITA 3: se manca/non e' valida la data di ricontatto
+            // (lead mai richiamata), usa la data di inserimento al suo
+            // posto — stesso formato, sempre valorizzata.
+        }
+        if (ricontattoAt == null) {
+            String dataInserimento = get(record, "Data inserimento");
+            try {
+                ricontattoAt = LocalDateTime.parse(dataInserimento, DATA_RICONTATTO_FORMAT);
+            } catch (Exception e2) {
+                result.errori.add("Lead " + sourceLeadId + ": nessuna data valida (ricontatto: \"" + dataRicontatto + "\", inserimento: \"" + dataInserimento + "\")");
+                return;
+            }
         }
 
         String statusRaw = get(record, "Status");

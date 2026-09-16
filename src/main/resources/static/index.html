@@ -1307,6 +1307,34 @@
                 <button onclick="document.getElementById('pvImportLeadInput').click()" class="btn-secondary" style="margin-left:auto">📥 IMPORTA LEAD DA CSV</button>
                 <button onclick="showNewPreventivoForm()" class="btn-gold">+ NUOVO PREVENTIVO TELEFONICO</button>
             </div>
+            <div class="filter-bar" style="margin-top:10px">
+                <select id="pvFilterOperatore" class="input-dark" onchange="applyPreventiviFilters()">
+                    <option value="">Tutti gli operatori</option>
+                </select>
+                <select id="pvFilterConsulente" class="input-dark" onchange="applyPreventiviFilters()">
+                    <option value="">Tutti i consulenti</option>
+                    <option>Ambrosino Luca</option><option>Capitelli Silvio</option><option>Castaldo Marco</option>
+                    <option>Castaldo Roberto</option><option>Crispo Raffaele</option><option>Filosa Claudio</option>
+                    <option>Fiore Guido</option><option>Gerardi Claudio</option><option>Giordano Luca</option>
+                    <option>Imperato Ciro</option><option>Montuori Francesco</option><option>Palumbo Enrico</option>
+                    <option>Scala Rosario</option><option>Sementa Francesco</option><option>Zaritto Davide</option>
+                    <option>Zuppa Mattia</option>
+                </select>
+                <select id="pvFilterTipo" class="input-dark" onchange="applyPreventiviFilters()">
+                    <option value="">Vendita e Noleggio</option>
+                    <option value="VENDITA">Solo Vendita</option>
+                    <option value="NOLEGGIO">Solo Noleggio</option>
+                </select>
+                <select id="pvFilterStatus" class="input-dark" onchange="applyPreventiviFilters()">
+                    <option value="">Tutti gli stati</option>
+                    <option value="GENERATO">Preventivo generato</option>
+                    <option value="TRATTATIVA_GENERATA">Trattativa generata</option>
+                    <option value="CHIUSA">Chiusa</option>
+                    <option value="FALLITA">Fallita</option>
+                    <option value="NON_RISPONDE">Cliente non risponde</option>
+                </select>
+                <button onclick="resetPreventiviFilters()" class="btn-secondary">Azzera filtri</button>
+            </div>
         </div>
 
         <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,260px));margin-bottom:24px">

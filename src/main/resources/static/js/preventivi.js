@@ -5,6 +5,7 @@
 // ============================================================
 
 let preventiviData = [];
+let preventiviFiltered = [];
 
 async function loadPreventivi() {
     const from = document.getElementById('pvFrom')?.value;
@@ -23,6 +24,38 @@ async function loadPreventivi() {
         console.error('Errore caricamento preventivi telefonici:', err);
         preventiviData = [];
     }
+    populatePreventiviOperatoreFilter();
+    applyPreventiviFilters();
+}
+
+// Popola la tendina operatore con gli operatori davvero presenti nel
+// periodo caricato (non un elenco fisso) — mantiene la selezione corrente
+// se ancora valida dopo il ricaricamento.
+function populatePreventiviOperatoreFilter() {
+    const select = document.getElementById('pvFilterOperatore');
+    if (!select) return;
+    const current = select.value;
+    const nomi = [...new Set(preventiviData.map(p => p.user?.fullName).filter(Boolean))].sort();
+    select.innerHTML = '<option value="">Tutti gli operatori</option>' + nomi.map(n => `<option>${n}</option>`).join('');
+    if (nomi.includes(current)) select.value = current;
+}
+
+// Applica i 4 filtri (operatore/consulente/tipo/status) sui dati già
+// caricati (preventiviData, gia' filtrato per periodo dal backend) e
+// ridisegna tutto — nessuna nuova chiamata al server.
+function applyPreventiviFilters() {
+    const operatore = document.getElementById('pvFilterOperatore')?.value || '';
+    const consulente = document.getElementById('pvFilterConsulente')?.value || '';
+    const tipo = document.getElementById('pvFilterTipo')?.value || '';
+    const status = document.getElementById('pvFilterStatus')?.value || '';
+
+    preventiviFiltered = preventiviData.filter(p =>
+        (!operatore || p.user?.fullName === operatore) &&
+        (!consulente || p.consultantName === consulente) &&
+        (!tipo || p.tipo === tipo) &&
+        (!status || p.status === status)
+    );
+
     renderPreventiviList('VENDITA', 'preventiviVenditaList', 'preventiviVenditaCount');
     renderPreventiviList('NOLEGGIO', 'preventiviNoleggioList', 'preventiviNoleggioCount');
     renderPreventiviStatCards();
@@ -30,10 +63,18 @@ async function loadPreventivi() {
     renderPreventiviCharts();
 }
 
+function resetPreventiviFilters() {
+    ['pvFilterOperatore', 'pvFilterConsulente', 'pvFilterTipo', 'pvFilterStatus'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    applyPreventiviFilters();
+}
+
 function renderPreventiviStatCards() {
-    const totale = preventiviData.length;
-    const vendita = preventiviData.filter(p => p.tipo === 'VENDITA').length;
-    const noleggio = preventiviData.filter(p => p.tipo === 'NOLEGGIO').length;
+    const totale = preventiviFiltered.length;
+    const vendita = preventiviFiltered.filter(p => p.tipo === 'VENDITA').length;
+    const noleggio = preventiviFiltered.filter(p => p.tipo === 'NOLEGGIO').length;
     const pctVendita = totale > 0 ? Math.round(vendita * 1000 / totale) / 10 : 0;
     const pctNoleggio = totale > 0 ? Math.round(noleggio * 1000 / totale) / 10 : 0;
     const statVendita = document.getElementById('pvStatVendita');
@@ -176,7 +217,7 @@ function renderPreventiviList(tipo, containerId, countId) {
     const countEl = document.getElementById(countId);
     if (!container) return;
 
-    const items = preventiviData.filter(p => p.tipo === tipo);
+    const items = preventiviFiltered.filter(p => p.tipo === tipo);
     if (countEl) countEl.textContent = items.length;
 
     if (items.length === 0) {
@@ -364,7 +405,7 @@ function renderPreventiviCalendar() {
     startWeekday = startWeekday === 0 ? 6 : startWeekday - 1;
 
     const byDay = {};
-    preventiviData.forEach(p => {
+    preventiviFiltered.forEach(p => {
         if (!p.createdAt) return;
         const dateStr = p.createdAt.split('T')[0];
         if (!byDay[dateStr]) byDay[dateStr] = [];
@@ -410,12 +451,12 @@ function openPreventiviCalendarDay(dateStr) {
 }
 
 // ============================================================
-// GRAFICI — tutti calcolati da preventiviData (il periodo attualmente
+// GRAFICI — tutti calcolati da preventiviFiltered (il periodo attualmente
 // filtrato), nessuna chiamata backend dedicata.
 function renderPreventiviCharts() {
-    renderPreventivoBarChart('pvChartMarche', groupCount(preventiviData, p => p.marca), '#4a90d9', 'marca');
+    renderPreventivoBarChart('pvChartMarche', groupCount(preventiviFiltered, p => p.marca), '#4a90d9', 'marca');
     renderPreventivoOperatoreDoughnut();
-    renderPreventivoBarChart('pvChartConsulente', groupCount(preventiviData, p => p.consultantName || '—'), '#00bcd4', 'consulente');
+    renderPreventivoBarChart('pvChartConsulente', groupCount(preventiviFiltered, p => p.consultantName || '—'), '#00bcd4', 'consulente');
     renderPreventivoTrattativeDoughnut();
     renderPreventivoEsitoDoughnut();
     renderPreventivoPerConsulente();
@@ -460,7 +501,7 @@ let pvChartOperatoreInstance = null;
 function renderPreventivoOperatoreDoughnut() {
     const ctx = document.getElementById('pvChartOperatore');
     if (!ctx || typeof Chart === 'undefined') return;
-    const counts = groupCount(preventiviData, p => p.user?.fullName || '—');
+    const counts = groupCount(preventiviFiltered, p => p.user?.fullName || '—');
     const labels = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
     const values = labels.map(l => counts[l]);
     const total = values.reduce((a, b) => a + b, 0);
@@ -501,9 +542,9 @@ let pvChartTrattativeInstance = null;
 function renderPreventivoTrattativeDoughnut() {
     const ctx = document.getElementById('pvChartTrattative');
     if (!ctx || typeof Chart === 'undefined') return;
-    const generata = preventiviData.filter(p => ['TRATTATIVA_GENERATA', 'CHIUSA', 'FALLITA'].includes(p.status)).length;
-    const nonGenerata = preventiviData.length - generata;
-    const total = preventiviData.length;
+    const generata = preventiviFiltered.filter(p => ['TRATTATIVA_GENERATA', 'CHIUSA', 'FALLITA'].includes(p.status)).length;
+    const nonGenerata = preventiviFiltered.length - generata;
+    const total = preventiviFiltered.length;
     if (pvChartTrattativeInstance) { pvChartTrattativeInstance.destroy(); pvChartTrattativeInstance = null; }
     const colors = ['#00c853', '#8a8faa'];
     pvChartTrattativeInstance = new Chart(ctx.getContext('2d'), {
@@ -514,7 +555,7 @@ function renderPreventivoTrattativeDoughnut() {
             onClick: (evt, elements) => {
                 if (elements.length === 0) return;
                 const isGenerata = elements[0].index === 0;
-                const items = preventiviData.filter(p => isGenerata
+                const items = preventiviFiltered.filter(p => isGenerata
                     ? ['TRATTATIVA_GENERATA', 'CHIUSA', 'FALLITA'].includes(p.status)
                     : !['TRATTATIVA_GENERATA', 'CHIUSA', 'FALLITA'].includes(p.status));
                 showPreventivoDrilldownItems(isGenerata ? 'Trattativa generata' : 'Trattativa non generata', items);
@@ -542,8 +583,8 @@ let pvChartEsitoInstance = null;
 function renderPreventivoEsitoDoughnut() {
     const ctx = document.getElementById('pvChartEsito');
     if (!ctx || typeof Chart === 'undefined') return;
-    const chiuse = preventiviData.filter(p => p.status === 'CHIUSA').length;
-    const fallite = preventiviData.filter(p => p.status === 'FALLITA').length;
+    const chiuse = preventiviFiltered.filter(p => p.status === 'CHIUSA').length;
+    const fallite = preventiviFiltered.filter(p => p.status === 'FALLITA').length;
     const total = chiuse + fallite;
     if (pvChartEsitoInstance) { pvChartEsitoInstance.destroy(); pvChartEsitoInstance = null; }
     const colors = ['#00c853', '#ff3d3d'];
@@ -555,7 +596,7 @@ function renderPreventivoEsitoDoughnut() {
             onClick: (evt, elements) => {
                 if (elements.length === 0) return;
                 const status = elements[0].index === 0 ? 'CHIUSA' : 'FALLITA';
-                const items = preventiviData.filter(p => p.status === status);
+                const items = preventiviFiltered.filter(p => p.status === status);
                 showPreventivoDrilldownItems(PREVENTIVO_STATUS_LABELS[status], items);
             },
             onHover: (evt, elements) => { evt.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default'; },
@@ -594,7 +635,7 @@ function renderPreventivoPerConsulente() {
     if (!container) return;
 
     const byConsulente = {};
-    preventiviData.forEach(p => {
+    preventiviFiltered.forEach(p => {
         const key = p.consultantName || '—';
         if (!byConsulente[key]) byConsulente[key] = { GENERATO: 0, NON_RISPONDE: 0, TRATTATIVA_GENERATA: 0, CHIUSA: 0, FALLITA: 0 };
         byConsulente[key][p.status] = (byConsulente[key][p.status] || 0) + 1;
@@ -616,7 +657,7 @@ function renderPreventivoPerConsulente() {
             .filter(([, val]) => val > 0)
             .map(([status, val]) => {
                 const widthPct = maxTotal > 0 ? (val / maxTotal * 100) : 0;
-                return `<div onclick="showPreventivoDrilldownItems('${row.nome.replace(/'/g, "\\'")} — ${PREVENTIVO_STATUS_LABELS[status]}', preventiviData.filter(p=>p.consultantName==='${row.nome.replace(/'/g, "\\'")}'&&p.status==='${status}'))" style="width:${widthPct}%;height:100%;background:${PV_CONSULENTE_SEGMENT_COLORS[status]};cursor:pointer" title="${PREVENTIVO_STATUS_LABELS[status]}: ${val}"></div>`;
+                return `<div onclick="showPreventivoDrilldownItems('${row.nome.replace(/'/g, "\\'")} — ${PREVENTIVO_STATUS_LABELS[status]}', preventiviFiltered.filter(p=>p.consultantName==='${row.nome.replace(/'/g, "\\'")}'&&p.status==='${status}'))" style="width:${widthPct}%;height:100%;background:${PV_CONSULENTE_SEGMENT_COLORS[status]};cursor:pointer" title="${PREVENTIVO_STATUS_LABELS[status]}: ${val}"></div>`;
             }).join('');
         return `<div style="display:flex;align-items:center;gap:12px;padding:6px 0">
             <div style="width:130px;font-size:12px;font-weight:700;color:var(--text-primary);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0">${row.nome}</div>
@@ -635,9 +676,9 @@ function renderPreventivoPerConsulente() {
 function showPreventivoDrilldown(kind, value) {
     let items = [];
     let title = '';
-    if (kind === 'marca') { items = preventiviData.filter(p => p.marca === value); title = `Marca — ${value}`; }
-    else if (kind === 'operatore') { items = preventiviData.filter(p => (p.user?.fullName || '—') === value); title = `Operatore — ${value}`; }
-    else if (kind === 'consulente') { items = preventiviData.filter(p => (p.consultantName || '—') === value); title = `Consulente — ${value}`; }
+    if (kind === 'marca') { items = preventiviFiltered.filter(p => p.marca === value); title = `Marca — ${value}`; }
+    else if (kind === 'operatore') { items = preventiviFiltered.filter(p => (p.user?.fullName || '—') === value); title = `Operatore — ${value}`; }
+    else if (kind === 'consulente') { items = preventiviFiltered.filter(p => (p.consultantName || '—') === value); title = `Consulente — ${value}`; }
     showPreventivoDrilldownItems(title, items);
 }
 
@@ -722,7 +763,7 @@ async function importPreventiviLeadCsv(file) {
 // colore legenda "congelato" a quello del tema precedente finche' non
 // arriva un nuovo caricamento dati.
 function refreshPreventiviChartsOnThemeChange() {
-    if (typeof preventiviData !== 'undefined') renderPreventiviCharts();
+    if (typeof preventiviFiltered !== 'undefined') renderPreventiviCharts();
 }
 
 // ============================================================
