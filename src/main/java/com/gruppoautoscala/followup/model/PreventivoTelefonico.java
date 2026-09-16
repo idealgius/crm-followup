@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
 // Valori ammessi per tipo: "VENDITA", "NOLEGGIO"
 // Valori ammessi per status:
 //   GENERATO             -> stato iniziale, appena creato
-//   NON_RISPONDE         -> cliente non risponde (fallito, terminale)
+//   NON_INTERESSATO      -> cliente non interessato (fallito, terminale)
 //   TRATTATIVA_GENERATA  -> passato in trattativa
 //   CHIUSA               -> trattativa chiusa (terminale)
 //   FALLITA               -> trattativa fallita (terminale)
@@ -65,6 +65,13 @@ public class PreventivoTelefonico {
     // dalla stessa tendina consulenti usata nei Follow-up.
     @Column(name = "consultant_name", nullable = false, length = 150)
     private String consultantName;
+
+    // true SOLO quando il consulente e' stato cambiato a mano dal modal
+    // "Modifica" (mai quando arriva/si aggiorna da import). Usato durante
+    // l'import per capire quando un conflitto va chiesto all'utente invece
+    // di sovrascrivere in automatico.
+    @Column(name = "consultant_manually_edited", nullable = false)
+    private Boolean consultantManuallyEdited = false;
 
     @Column(nullable = false, length = 30)
     private String status = "GENERATO";

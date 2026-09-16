@@ -1305,6 +1305,7 @@
                 <button onclick="loadPreventivi()" class="btn-gold">AGGIORNA</button>
                 <input type="file" id="pvImportLeadInput" accept=".csv" style="display:none" onchange="importPreventiviLeadCsv(this.files[0])">
                 <button onclick="document.getElementById('pvImportLeadInput').click()" class="btn-secondary" style="margin-left:auto">📥 IMPORTA LEAD DA CSV</button>
+                <button onclick="showPreventiviImportLog()" class="btn-secondary">🕓 Storico Import</button>
                 <button onclick="showNewPreventivoForm()" class="btn-gold">+ NUOVO PREVENTIVO TELEFONICO</button>
             </div>
             <div class="filter-bar" style="margin-top:10px">
@@ -1331,7 +1332,7 @@
                     <option value="TRATTATIVA_GENERATA">Trattativa generata</option>
                     <option value="CHIUSA">Chiusa</option>
                     <option value="FALLITA">Fallita</option>
-                    <option value="NON_RISPONDE">Cliente non risponde</option>
+                    <option value="NON_INTERESSATO">Non interessato</option>
                 </select>
                 <button onclick="resetPreventiviFilters()" class="btn-secondary">Azzera filtri</button>
             </div>
@@ -1441,10 +1442,38 @@
                         <input type="text" id="editPvModello" placeholder="Modello *" class="input-field">
                         <input type="text" id="editPvTargaTelaio" placeholder="Targa o Telaio (opzionale)" class="input-field" style="text-transform:uppercase">
                         <input type="url" id="editPvLinkLead" placeholder="Link Lead" class="input-field">
+                        <select id="editPvConsulente" class="input-field">
+                            <option value="">Seleziona consulente *</option>
+                            <option>Ambrosino Luca</option><option>Capitelli Silvio</option><option>Castaldo Marco</option>
+                            <option>Castaldo Roberto</option><option>Crispo Raffaele</option><option>Filosa Claudio</option>
+                            <option>Fiore Guido</option><option>Gerardi Claudio</option><option>Giordano Luca</option>
+                            <option>Imperato Ciro</option><option>Montuori Francesco</option><option>Palumbo Enrico</option>
+                            <option>Scala Rosario</option><option>Sementa Francesco</option><option>Zaritto Davide</option>
+                            <option>Zuppa Mattia</option>
+                        </select>
                     </div>
                     <div class="form-actions">
                         <button onclick="saveEditPreventivo()" class="btn-gold">SALVA MODIFICHE</button>
                         <button onclick="closeEditPreventivoModal()" class="btn-secondary">ANNULLA</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="consulenteConflictModal" class="modal-overlay" style="display:none" onclick="closeConsulenteConflictModal(event)">
+            <div class="modal-box" onclick="event.stopPropagation()" style="max-width:640px">
+                <div class="modal-header">
+                    <h3>⚠️ Consulente diverso da quello importato</h3>
+                    <button type="button" class="modal-close" onclick="closeConsulenteConflictModal()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:14px">
+                        Per questi preventivi il consulente era stato corretto a mano, ed è diverso da quello indicato nel file appena importato. Scegli per ognuno se mantenere quello attuale o sostituirlo con quello del file.
+                    </div>
+                    <div id="consulenteConflictList"></div>
+                    <div class="form-actions">
+                        <button onclick="applyConsulenteConflictDecisions()" class="btn-gold">APPLICA SCELTE</button>
+                        <button onclick="closeConsulenteConflictModal()" class="btn-secondary">CHIUDI</button>
                     </div>
                 </div>
             </div>

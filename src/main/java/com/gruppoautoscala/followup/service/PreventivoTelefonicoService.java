@@ -21,10 +21,10 @@ public class PreventivoTelefonicoService {
     private static final ZoneId ITALY_ZONE = ZoneId.of("Europe/Rome");
 
     // Transizioni ammesse: chiave = stato attuale, valore = stati in cui
-    // puo' passare. Gli stati assenti come chiave (NON_RISPONDE, CHIUSA,
+    // puo' passare. Gli stati assenti come chiave (NON_INTERESSATO, CHIUSA,
     // FALLITA) sono terminali: nessuna transizione ulteriore ammessa.
     private static final Map<String, Set<String>> ALLOWED_TRANSITIONS = Map.of(
-        "GENERATO", Set.of("NON_RISPONDE", "TRATTATIVA_GENERATA"),
+        "GENERATO", Set.of("NON_INTERESSATO", "TRATTATIVA_GENERATA"),
         "TRATTATIVA_GENERATA", Set.of("CHIUSA", "FALLITA")
     );
 

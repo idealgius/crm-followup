@@ -1,8 +1,10 @@
 package com.gruppoautoscala.followup.service;
 
+import com.gruppoautoscala.followup.model.PreventivoImportLog;
 import com.gruppoautoscala.followup.model.PreventivoTelefonico;
 import com.gruppoautoscala.followup.model.PreventivoTelefonicoStatusHistory;
 import com.gruppoautoscala.followup.model.User;
+import com.gruppoautoscala.followup.repository.PreventivoImportLogRepository;
 import com.gruppoautoscala.followup.repository.PreventivoTelefonicoRepository;
 import com.gruppoautoscala.followup.repository.PreventivoTelefonicoStatusHistoryRepository;
 import com.gruppoautoscala.followup.repository.UserRepository;
@@ -58,12 +60,17 @@ public class PreventivoImportService {
     @Autowired private PreventivoTelefonicoRepository preventivoRepository;
     @Autowired private PreventivoTelefonicoStatusHistoryRepository historyRepository;
     @Autowired private UserRepository userRepository;
+    @Autowired private PreventivoImportLogRepository importLogRepository;
 
     public static class ImportResult {
         public int created = 0;
         public int updated = 0;
         public int unchanged = 0;
         public List<String> errori = new ArrayList<>();
+        // Preventivi dove il consulente nel file differisce da quello gia'
+        // salvato A MANO — non sovrascritti in automatico, in attesa di
+        // decisione dell'utente nel popup dedicato.
+        public List<Map<String, Object>> conflittiConsulente = new ArrayList<>();
     }
 
     public ImportResult importLeadCsv(MultipartFile file, User importer) throws IOException {
@@ -103,7 +110,21 @@ public class PreventivoImportService {
             }
         }
 
+        PreventivoImportLog log = new PreventivoImportLog();
+        log.setFileName(file.getOriginalFilename());
+        log.setImportedBy(importer);
+        log.setImportedAt(LocalDateTime.now());
+        log.setCreati(result.created);
+        log.setAggiornati(result.updated);
+        log.setInvariati(result.unchanged);
+        log.setNumErrori(result.errori.size());
+        importLogRepository.save(log);
+
         return result;
+    }
+
+    public List<PreventivoImportLog> getImportHistory() {
+        return importLogRepository.findAllWithUser();
     }
 
     private void processRow(CSVRecord record, Map<String, User> usersByName, User importer, ImportResult result) {
@@ -249,6 +270,27 @@ public class PreventivoImportService {
         if (!Objects.equals(p.getMarca(), marca)) { p.setMarca(marca); changed = true; }
         if (!Objects.equals(p.getModello(), modello)) { p.setModello(modello); changed = true; }
 
+        if (!Objects.equals(p.getConsultantName(), consultantName)) {
+            if (Boolean.TRUE.equals(p.getConsultantManuallyEdited())) {
+                // Consulente modificato a mano in precedenza: non si
+                // sovrascrive in automatico, si chiede conferma nel popup
+                // dedicato dopo l'import.
+                Map<String, Object> conflict = new LinkedHashMap<>();
+                conflict.put("id", p.getId());
+                conflict.put("sourceLeadId", sourceLeadId);
+                conflict.put("clienteNome", p.getClienteNome());
+                conflict.put("clienteCognome", p.getClienteCognome());
+                conflict.put("marca", p.getMarca());
+                conflict.put("modello", p.getModello());
+                conflict.put("consulenteAttuale", p.getConsultantName());
+                conflict.put("consulenteNuovo", consultantName);
+                result.conflittiConsulente.add(conflict);
+            } else {
+                p.setConsultantName(consultantName);
+                changed = true;
+            }
+        }
+
         boolean statusChanged = !Objects.equals(p.getStatus(), status);
         if (statusChanged) {
             p.setStatus(status);
@@ -326,7 +368,7 @@ public class PreventivoImportService {
 
     // Mappatura Status (colonna del file) -> nostro stato interno:
     //   "In corso"                          -> GENERATO
-    //   "Fallito" (isolato, mai risposto)    -> NON_RISPONDE
+    //   "Fallito" (isolato, contattato ma non interessato) -> NON_INTERESSATO
     //   "Generata Trattativa (In Corso)"     -> TRATTATIVA_GENERATA
     //   "Generata Trattativa (Chiusa)"       -> CHIUSA
     //   "Generata Trattativa (Fallito)"      -> FALLITA
@@ -345,7 +387,7 @@ public class PreventivoImportService {
             if (esito.contains("fallit")) return "FALLITA";
             return null;
         }
-        if (norm.contains("fallit")) return "NON_RISPONDE";
+        if (norm.contains("fallit")) return "NON_INTERESSATO";
         if (norm.contains("in corso")) return "GENERATO";
         return null;
     }

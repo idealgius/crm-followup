@@ -6,6 +6,7 @@
 
 let preventiviData = [];
 let preventiviFiltered = [];
+let pendingConsulenteConflicts = [];
 
 async function loadPreventivi() {
     const from = document.getElementById('pvFrom')?.value;
@@ -186,7 +187,7 @@ async function createPreventivo() {
 
 const PREVENTIVO_STATUS_LABELS = {
     GENERATO: 'Preventivo telefonico generato',
-    NON_RISPONDE: 'Cliente non risponde',
+    NON_INTERESSATO: 'Non interessato',
     TRATTATIVA_GENERATA: 'Trattativa generata',
     CHIUSA: 'Trattativa chiusa',
     FALLITA: 'Trattativa fallita'
@@ -209,8 +210,8 @@ function preventivoRef(p) {
     return prefix + '-' + String(p.id).padStart(4, '0');
 }
 
-const TERMINAL_STATUSES = ['NON_RISPONDE', 'CHIUSA', 'FALLITA'];
-const TERMINAL_ICONS = { NON_RISPONDE: '📵', CHIUSA: '✅', FALLITA: '❌' };
+const TERMINAL_STATUSES = ['NON_INTERESSATO', 'CHIUSA', 'FALLITA'];
+const TERMINAL_ICONS = { NON_INTERESSATO: '🙅', CHIUSA: '✅', FALLITA: '❌' };
 
 function renderPreventiviList(tipo, containerId, countId) {
     const container = document.getElementById(containerId);
@@ -277,7 +278,7 @@ function renderPreventiviList(tipo, containerId, countId) {
         let actionButtons = '';
         if (p.status === 'GENERATO') {
             actionButtons = `
-                <button onclick="event.stopPropagation();changePreventivoStatus(${p.id},'NON_RISPONDE')" class="preventivo-pill-btn">📵 Non risponde</button>
+                <button onclick="event.stopPropagation();changePreventivoStatus(${p.id},'NON_INTERESSATO')" class="preventivo-pill-btn">🙅 Non interessato</button>
                 <button onclick="event.stopPropagation();changePreventivoStatus(${p.id},'TRATTATIVA_GENERATA')" class="preventivo-pill-btn solid-orange">➡️ Trattativa generata</button>`;
         } else if (p.status === 'TRATTATIVA_GENERATA') {
             actionButtons = `
@@ -624,7 +625,7 @@ function renderPreventivoEsitoDoughnut() {
 // separato per persona.
 const PV_CONSULENTE_SEGMENT_COLORS = {
     GENERATO: '#4a90d9',
-    NON_RISPONDE: '#8a8faa',
+    NON_INTERESSATO: '#7c4dff',
     TRATTATIVA_GENERATA: '#ff9800',
     CHIUSA: '#00c853',
     FALLITA: '#ff3d3d'
@@ -637,7 +638,7 @@ function renderPreventivoPerConsulente() {
     const byConsulente = {};
     preventiviFiltered.forEach(p => {
         const key = p.consultantName || '—';
-        if (!byConsulente[key]) byConsulente[key] = { GENERATO: 0, NON_RISPONDE: 0, TRATTATIVA_GENERATA: 0, CHIUSA: 0, FALLITA: 0 };
+        if (!byConsulente[key]) byConsulente[key] = { GENERATO: 0, NON_INTERESSATO: 0, TRATTATIVA_GENERATA: 0, CHIUSA: 0, FALLITA: 0 };
         byConsulente[key][p.status] = (byConsulente[key][p.status] || 0) + 1;
     });
 
@@ -747,13 +748,108 @@ async function importPreventiviLeadCsv(file) {
                 <div><div style="font-size:22px;font-weight:800;color:#ff3d3d">${(data.errori || []).length}</div><div style="font-size:12px;color:var(--text-secondary)">Errori</div></div>
             </div>
             ${(data.errori || []).length > 0 ? `<div style="border-top:1px solid var(--border);padding-top:10px">${data.errori.map(e => `<div style="font-size:12px;color:var(--text-secondary);padding:3px 0">⚠️ ${e}</div>`).join('')}</div>` : ''}
+            ${(data.conflittiConsulente || []).length > 0 ? `<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px">
+                <div style="font-size:13px;color:#ff9800;font-weight:700;margin-bottom:8px">⚠️ ${data.conflittiConsulente.length} preventivi hanno un consulente diverso da quello nel file (modificato a mano in precedenza)</div>
+                <button onclick="showConsulenteConflictModal()" class="btn-small btn-secondary">Rivedi conflitti</button>
+            </div>` : ''}
         `;
+        pendingConsulenteConflicts = data.conflittiConsulente || [];
         modal.style.display = 'flex';
         await loadPreventivi();
     } catch (err) {
         console.error('Errore import lead CSV:', err);
         alert('Errore di rete durante l\'import');
         if (input) input.value = '';
+    }
+}
+
+async function showPreventiviImportLog() {
+    const modal = document.getElementById('preventivoDrilldownModal');
+    const titleEl = document.getElementById('preventivoDrilldownTitle');
+    const list = document.getElementById('preventivoDrilldownList');
+    titleEl.textContent = 'Storico Import Lead';
+    list.innerHTML = `<div style="color:var(--text-secondary);font-size:13px;padding:20px 0">Caricamento...</div>`;
+    modal.style.display = 'flex';
+
+    try {
+        const res = await fetch('/api/preventivi-telefonici/import-log');
+        if (!res.ok) throw new Error('Errore nel caricamento dello storico import');
+        const logs = await res.json();
+
+        if (logs.length === 0) {
+            list.innerHTML = `<div style="color:var(--text-secondary);font-size:13px;padding:20px 0">Nessun import effettuato finora</div>`;
+            return;
+        }
+
+        list.innerHTML = logs.map(l => `
+            <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+                    <div style="font-weight:700;font-size:13px;color:var(--text-primary)">${l.fileName || 'file.csv'}</div>
+                    <div style="font-size:12px;color:var(--text-secondary)">${formatPreventivoDateTime(l.importedAt)}</div>
+                </div>
+                <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">Importato da ${l.importedBy?.fullName || '—'}</div>
+                <div style="display:flex;gap:14px;margin-top:6px;font-size:12px">
+                    <span style="color:#00c853;font-weight:700">${l.creati} creati</span>
+                    <span style="color:#ff9800;font-weight:700">${l.aggiornati} aggiornati</span>
+                    <span style="color:var(--text-secondary);font-weight:700">${l.invariati} invariati</span>
+                    <span style="color:#ff3d3d;font-weight:700">${l.numErrori} errori</span>
+                </div>
+            </div>`).join('');
+    } catch (err) {
+        console.error('Errore caricamento storico import:', err);
+        list.innerHTML = `<div style="color:#ff3d3d;font-size:13px;padding:20px 0">Errore nel caricamento dello storico</div>`;
+    }
+}
+
+// ============================================================
+// CONFLITTI CONSULENTE — quando un preventivo ha il consulente modificato
+// a mano e l'import porta un valore diverso, non si sovrascrive da solo:
+// si mostra questo popup dedicato, con una scelta per riga.
+function showConsulenteConflictModal() {
+    const list = document.getElementById('consulenteConflictList');
+    list.innerHTML = pendingConsulenteConflicts.map((c, i) => `
+        <div style="border-bottom:1px solid var(--border);padding:12px 0">
+            <div style="font-weight:700;font-size:13px;color:var(--text-primary)">${c.clienteNome} ${c.clienteCognome} <span style="font-weight:400;color:var(--text-secondary);font-size:11px">(Lead ${c.sourceLeadId})</span></div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">🚘 ${c.marca} — ${c.modello}</div>
+            <div style="font-size:12px;margin-top:6px">
+                Attuale: <b>${c.consulenteAttuale}</b> → Nel file: <b>${c.consulenteNuovo}</b>
+            </div>
+            <select id="conflictChoice-${i}" class="input-dark" style="margin-top:6px">
+                <option value="keep">Mantieni "${c.consulenteAttuale}"</option>
+                <option value="replace">Sostituisci con "${c.consulenteNuovo}"</option>
+            </select>
+        </div>`).join('');
+    document.getElementById('consulenteConflictModal').style.display = 'flex';
+}
+
+function closeConsulenteConflictModal(event) {
+    if (event && event.target.id !== 'consulenteConflictModal') return;
+    document.getElementById('consulenteConflictModal').style.display = 'none';
+}
+
+async function applyConsulenteConflictDecisions() {
+    const decisions = pendingConsulenteConflicts.map((c, i) => {
+        const choice = document.getElementById(`conflictChoice-${i}`)?.value || 'keep';
+        return { id: c.id, action: choice, consultantName: c.consulenteNuovo };
+    });
+
+    try {
+        const res = await fetch('/api/preventivi-telefonici/resolve-consultant-conflicts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(decisions)
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert(err.error || 'Errore nell\'applicare le scelte');
+            return;
+        }
+        pendingConsulenteConflicts = [];
+        closeConsulenteConflictModal();
+        await loadPreventivi();
+    } catch (err) {
+        console.error('Errore risoluzione conflitti consulente:', err);
+        alert('Errore di rete nell\'applicare le scelte');
     }
 }
 
@@ -782,6 +878,7 @@ function openEditPreventivoModal(id) {
     document.getElementById('editPvModello').value = p.modello || '';
     document.getElementById('editPvTargaTelaio').value = p.targaTelaio || '';
     document.getElementById('editPvLinkLead').value = p.linkLead || '';
+    document.getElementById('editPvConsulente').value = p.consultantName || '';
     document.getElementById('editPreventivoModal').style.display = 'flex';
 }
 
@@ -834,12 +931,14 @@ async function saveEditPreventivo() {
     const modello = document.getElementById('editPvModello').value.trim();
     const targaTelaio = document.getElementById('editPvTargaTelaio').value.trim();
     const linkLead = document.getElementById('editPvLinkLead').value.trim();
+    const consultantName = document.getElementById('editPvConsulente').value;
 
     const mancanti = [];
     if (!clienteNome) mancanti.push('Nome');
     if (!clienteCognome) mancanti.push('Cognome');
     if (!marca) mancanti.push('Marchio');
     if (!modello) mancanti.push('Modello');
+    if (!consultantName) mancanti.push('Consulente');
     if (mancanti.length > 0) {
         alert('Campi obbligatori mancanti: ' + mancanti.join(', '));
         return;
@@ -849,7 +948,7 @@ async function saveEditPreventivo() {
         const res = await fetch(`/api/preventivi-telefonici/${id}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ clienteNome, clienteCognome, marca, modello, targaTelaio: targaTelaio || null, linkLead: linkLead || null })
+            body: JSON.stringify({ clienteNome, clienteCognome, marca, modello, targaTelaio: targaTelaio || null, linkLead: linkLead || null, consultantName })
         });
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));

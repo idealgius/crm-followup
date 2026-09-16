@@ -1125,7 +1125,7 @@ select.input-dark {
 
 /* ===== PREVENTIVI TELEFONICI ===== */
 .status-GENERATO { background: var(--badge-in-progress-bg); color: var(--badge-in-progress-color); }
-.status-NON_RISPONDE { background: rgba(138,143,170,0.15); color: var(--text-secondary); }
+.status-NON_INTERESSATO { background: rgba(124,77,255,0.12); color: #7c4dff; }
 .status-TRATTATIVA_GENERATA { background: rgba(255,152,0,0.15); color: #ff9800; }
 .status-CHIUSA { background: rgba(0,200,83,0.12); color: #00c853; }
 .status-FALLITA { background: rgba(255,61,61,0.12); color: #ff3d3d; }
@@ -1326,8 +1326,8 @@ select.input-dark {
 .preventivo-step-line.active-blue { background: var(--badge-in-progress-color); }
 .preventivo-step-line.active-orange { background: #ff9800; }
 
-.preventivo-terminal-status.st-NON_RISPONDE i,
-.preventivo-terminal-status.st-NON_RISPONDE .label { color: var(--text-secondary); }
+.preventivo-terminal-status.st-NON_INTERESSATO i,
+.preventivo-terminal-status.st-NON_INTERESSATO .label { color: #7c4dff; }
 .preventivo-terminal-status.st-CHIUSA i,
 .preventivo-terminal-status.st-CHIUSA .label { color: #00c853; }
 .preventivo-terminal-status.st-FALLITA i,

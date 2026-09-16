@@ -81,10 +81,64 @@ public class PreventivoTelefonicoController {
             response.put("aggiornati", result.updated);
             response.put("invariati", result.unchanged);
             response.put("errori", result.errori);
+            response.put("conflittiConsulente", result.conflittiConsulente);
             return ResponseEntity.ok(response);
         } catch (IOException e) {
             return ResponseEntity.badRequest().body(Map.of("error", "Errore nella lettura del file: " + e.getMessage()));
         }
+    }
+
+    @GetMapping("/import-log")
+    public ResponseEntity<?> getImportLog(HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+
+        List<Map<String, Object>> result = preventivoImportService.getImportHistory().stream().map(log -> {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", log.getId());
+            m.put("fileName", log.getFileName());
+            m.put("importedAt", log.getImportedAt().toString());
+            m.put("creati", log.getCreati());
+            m.put("aggiornati", log.getAggiornati());
+            m.put("invariati", log.getInvariati());
+            m.put("numErrori", log.getNumErrori());
+            Map<String, Object> user = new LinkedHashMap<>();
+            user.put("id", log.getImportedBy().getId());
+            user.put("fullName", log.getImportedBy().getFullName());
+            m.put("importedBy", user);
+            return m;
+        }).collect(Collectors.toList());
+        return ResponseEntity.ok(result);
+    }
+
+    // ===== RISOLUZIONE CONFLITTI CONSULENTE (post-import) =====
+    // Il popup di conflitto (non il confirm() del browser) mostra all'utente
+    // ogni preventivo dove il consulente nel file differisce da quello gia'
+    // salvato A MANO (consultantManuallyEdited=true). Questo endpoint riceve
+    // le decisioni prese riga per riga: "replace" applica il consulente del
+    // file e toglie la protezione manuale (torna in sync con l'import);
+    // "keep" non tocca nulla e lascia il preventivo protetto come prima.
+    @PostMapping("/resolve-consultant-conflicts")
+    public ResponseEntity<?> resolveConsultantConflicts(@RequestBody List<Map<String, Object>> decisions, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        Optional<User> userOpt = userRepository.findById(userId);
+        if (userOpt.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "Utente non trovato"));
+
+        int applicati = 0;
+        for (Map<String, Object> d : decisions) {
+            if (!"replace".equals(d.get("action"))) continue;
+            Long id = Long.valueOf(String.valueOf(d.get("id")));
+            String nuovoConsulente = (String) d.get("consultantName");
+            Optional<PreventivoTelefonico> pOpt = preventivoService.getById(id);
+            if (pOpt.isEmpty() || nuovoConsulente == null || nuovoConsulente.isBlank()) continue;
+            PreventivoTelefonico p = pOpt.get();
+            p.setConsultantName(nuovoConsulente);
+            p.setConsultantManuallyEdited(false);
+            preventivoService.update(p, userOpt.get());
+            applicati++;
+        }
+        return ResponseEntity.ok(Map.of("applicati", applicati));
     }
 
     @PostMapping
@@ -191,6 +245,15 @@ public class PreventivoTelefonicoController {
         }
         if (body.containsKey("targaTelaio")) p.setTargaTelaio(trimOrNull(body.get("targaTelaio")));
         if (body.containsKey("linkLead")) p.setLinkLead(trimOrNull(body.get("linkLead")));
+        if (body.containsKey("consultantName")) {
+            String v = trimOrNull(body.get("consultantName"));
+            if (v == null) return ResponseEntity.badRequest().body(Map.of("error", "Consulente obbligatorio"));
+            p.setConsultantName(v);
+            // Modifica manuale: da questo momento l'import non lo
+            // sovrascrivera' piu' in automatico se il file porta un
+            // consulente diverso — chiedera' conferma.
+            p.setConsultantManuallyEdited(true);
+        }
 
         PreventivoTelefonico saved = preventivoService.update(p, userOpt.get());
         return ResponseEntity.ok(buildListResponse(List.of(saved)).get(0));
@@ -228,6 +291,7 @@ public class PreventivoTelefonicoController {
             m.put("linkLead", p.getLinkLead());
             m.put("sourceLeadId", p.getSourceLeadId());
             m.put("consultantName", p.getConsultantName());
+            m.put("consultantManuallyEdited", p.getConsultantManuallyEdited());
             m.put("status", p.getStatus());
             m.put("createdAt", p.getCreatedAt() != null ? p.getCreatedAt().toString() : null);
 
