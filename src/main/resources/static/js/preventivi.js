@@ -45,17 +45,22 @@ function populatePreventiviOperatoreFilter() {
 // caricati (preventiviData, gia' filtrato per periodo dal backend) e
 // ridisegna tutto — nessuna nuova chiamata al server.
 function applyPreventiviFilters() {
+    const searchText = (document.getElementById('pvSearchText')?.value || '').trim().toLowerCase();
     const operatore = document.getElementById('pvFilterOperatore')?.value || '';
     const consulente = document.getElementById('pvFilterConsulente')?.value || '';
     const tipo = document.getElementById('pvFilterTipo')?.value || '';
     const status = document.getElementById('pvFilterStatus')?.value || '';
 
-    preventiviFiltered = preventiviData.filter(p =>
-        (!operatore || p.user?.fullName === operatore) &&
-        (!consulente || p.consultantName === consulente) &&
-        (!tipo || p.tipo === tipo) &&
-        (!status || p.status === status)
-    );
+    preventiviFiltered = preventiviData.filter(p => {
+        if (searchText) {
+            const haystack = `${p.clienteNome || ''} ${p.clienteCognome || ''} ${p.sourceLeadId || ''} ${p.marca || ''} ${p.modello || ''} ${p.consultantName || ''}`.toLowerCase();
+            if (!haystack.includes(searchText)) return false;
+        }
+        return (!operatore || p.user?.fullName === operatore) &&
+            (!consulente || p.consultantName === consulente) &&
+            (!tipo || p.tipo === tipo) &&
+            (!status || p.status === status);
+    });
 
     renderPreventiviList('VENDITA', 'preventiviVenditaList', 'preventiviVenditaCount');
     renderPreventiviList('NOLEGGIO', 'preventiviNoleggioList', 'preventiviNoleggioCount');
@@ -65,6 +70,8 @@ function applyPreventiviFilters() {
 }
 
 function resetPreventiviFilters() {
+    const searchEl = document.getElementById('pvSearchText');
+    if (searchEl) searchEl.value = '';
     ['pvFilterOperatore', 'pvFilterConsulente', 'pvFilterTipo', 'pvFilterStatus'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = '';
@@ -249,7 +256,7 @@ function renderPreventiviList(tipo, containerId, countId) {
             <button onclick="event.stopPropagation();deletePreventivo(${p.id})" class="preventivo-icon-btn danger" title="Elimina">🗑️</button>`;
 
         if (isTerminal) {
-            return `<div class="preventivo-card ${cardClass} terminal" onclick="togglePreventivoDetail(${p.id})">
+            return `<div class="preventivo-card ${cardClass} terminal" data-preventivo-id="${p.id}" onclick="togglePreventivoDetail(${p.id})">
                 <div class="preventivo-header">
                     <div class="preventivo-client">
                         <div class="preventivo-avatar ${cardClass}">${initials}</div>
@@ -286,7 +293,7 @@ function renderPreventiviList(tipo, containerId, countId) {
                 <button onclick="event.stopPropagation();changePreventivoStatus(${p.id},'FALLITA')" class="preventivo-pill-btn outline-red">❌ Fallita</button>`;
         }
 
-        return `<div class="preventivo-card ${cardClass}" onclick="togglePreventivoDetail(${p.id})">
+        return `<div class="preventivo-card ${cardClass}" data-preventivo-id="${p.id}" onclick="togglePreventivoDetail(${p.id})">
             <div class="preventivo-header">
                 <div class="preventivo-client">
                     <div class="preventivo-avatar ${cardClass}">${initials}</div>
@@ -694,7 +701,7 @@ function showPreventivoDrilldownItems(title, items) {
         list.innerHTML = `<div style="color:var(--text-secondary);font-size:13px;padding:20px 0">Nessun risultato</div>`;
     } else {
         list.innerHTML = items.map(p => `
-            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+            <div onclick="jumpToPreventivoCard(${p.id})" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer">
                 <div>
                     <div style="font-weight:700;font-size:13px;color:var(--text-primary)">${p.clienteNome} ${p.clienteCognome}</div>
                     <div style="font-size:12px;color:var(--text-secondary)">${p.marca} — ${p.modello} · ${p.consultantName}</div>
@@ -703,6 +710,21 @@ function showPreventivoDrilldownItems(title, items) {
             </div>`).join('');
     }
     modal.style.display = 'flex';
+}
+
+// Chiude il popup di drill-down, azzera tutti i filtri (per garantire che
+// la card sia davvero visibile qualunque filtro fosse attivo) e scorre
+// fino ad essa evidenziandola per un paio di secondi.
+function jumpToPreventivoCard(id) {
+    closePreventivoDrilldown();
+    resetPreventiviFilters();
+    setTimeout(() => {
+        const card = document.querySelector(`[data-preventivo-id="${id}"]`);
+        if (!card) return;
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.classList.add('preventivo-card-highlight');
+        setTimeout(() => card.classList.remove('preventivo-card-highlight'), 2500);
+    }, 150);
 }
 
 function closePreventivoDrilldown(event) {

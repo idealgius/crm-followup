@@ -1371,6 +1371,14 @@ select.input-dark {
 .preventivo-empty i { font-size: 26px; color: var(--border); }
 .preventivo-empty div { font-size: 13px; color: var(--text-secondary); margin-top: 10px; }
 
+.preventivo-card-highlight {
+    animation: preventivoHighlightPulse 1.25s ease-in-out 2;
+}
+@keyframes preventivoHighlightPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(240,192,64,0); border-color: var(--border); }
+    50% { box-shadow: 0 0 0 6px rgba(240,192,64,0.35); border-color: #f0c040; }
+}
+
 .preventivo-detail {
     margin-top: 12px;
     padding-top: 12px;

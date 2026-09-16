@@ -1309,6 +1309,7 @@
                 <button onclick="showNewPreventivoForm()" class="btn-gold">+ NUOVO PREVENTIVO TELEFONICO</button>
             </div>
             <div class="filter-bar" style="margin-top:10px">
+                <input type="text" id="pvSearchText" placeholder="🔍 Cerca per nome, cognome, ID lead, marca, modello, consulente..." class="input-dark" style="min-width:280px" oninput="applyPreventiviFilters()">
                 <select id="pvFilterOperatore" class="input-dark" onchange="applyPreventiviFilters()">
                     <option value="">Tutti gli operatori</option>
                 </select>
