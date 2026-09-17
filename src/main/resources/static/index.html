@@ -1470,6 +1470,22 @@
             </div>
         </div>
 
+        <div id="pvImportConfirmModal" class="modal-overlay" style="display:none" onclick="closePvImportConfirmModal(event)">
+            <div class="modal-box" onclick="event.stopPropagation()" style="max-width:480px">
+                <div class="modal-header">
+                    <h3>📥 Importare i lead?</h3>
+                    <button type="button" class="modal-close" onclick="closePvImportConfirmModal()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <p id="pvImportConfirmText" style="font-size:13px;color:var(--text-secondary);line-height:1.6"></p>
+                    <div class="form-actions">
+                        <button onclick="confirmPreventiviLeadImport()" class="btn-gold">OK, IMPORTA</button>
+                        <button onclick="closePvImportConfirmModal()" class="btn-secondary">ANNULLA</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div id="consulenteConflictModal" class="modal-overlay" style="display:none" onclick="closeConsulenteConflictModal(event)">
             <div class="modal-box" onclick="event.stopPropagation()" style="max-width:640px">
                 <div class="modal-header">

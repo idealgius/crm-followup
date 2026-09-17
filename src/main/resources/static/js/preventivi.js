@@ -745,14 +745,30 @@ function closePreventivoDrilldown(event) {
 // IMPORT LEAD DA CSV — carica il file, mostra un riepilogo
 // (creati/duplicati/errori riga per riga) nello stesso modal usato per i
 // drill-down dei grafici, poi ricarica la lista.
-async function importPreventiviLeadCsv(file) {
-    if (!file) return;
-    const input = document.getElementById('pvImportLeadInput');
-    if (!confirm(`Importare i lead dal file "${file.name}"? I lead già importati in precedenza (stesso ID) verranno aggiornati con lo stato e i dati più recenti, non duplicati.`)) {
-        if (input) input.value = '';
-        return;
-    }
+let pendingImportFile = null;
 
+function importPreventiviLeadCsv(file) {
+    if (!file) return;
+    pendingImportFile = file;
+    document.getElementById('pvImportConfirmText').textContent =
+        `Importare i lead dal file "${file.name}"? I lead già importati in precedenza (stesso ID) verranno aggiornati con lo stato e i dati più recenti, non duplicati.`;
+    document.getElementById('pvImportConfirmModal').style.display = 'flex';
+}
+
+function closePvImportConfirmModal(event) {
+    if (event && event.target.id !== 'pvImportConfirmModal') return;
+    document.getElementById('pvImportConfirmModal').style.display = 'none';
+    const input = document.getElementById('pvImportLeadInput');
+    if (input) input.value = '';
+    pendingImportFile = null;
+}
+
+async function confirmPreventiviLeadImport() {
+    const file = pendingImportFile;
+    document.getElementById('pvImportConfirmModal').style.display = 'none';
+    if (!file) return;
+
+    const input = document.getElementById('pvImportLeadInput');
     const formData = new FormData();
     formData.append('file', file);
 
@@ -760,6 +776,7 @@ async function importPreventiviLeadCsv(file) {
         const res = await fetch('/api/preventivi-telefonici/import-lead', { method: 'POST', body: formData });
         const data = await res.json().catch(() => ({}));
         if (input) input.value = '';
+        pendingImportFile = null;
 
         if (!res.ok) {
             alert(data.error || 'Errore durante l\'import');
