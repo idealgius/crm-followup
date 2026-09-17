@@ -2,10 +2,12 @@ package com.gruppoautoscala.followup.controller;
 
 import com.gruppoautoscala.followup.model.PreventivoTelefonico;
 import com.gruppoautoscala.followup.model.PreventivoTelefonicoStatusHistory;
+import com.gruppoautoscala.followup.model.NoleggioTrattativa;
 import com.gruppoautoscala.followup.model.User;
 import com.gruppoautoscala.followup.repository.UserRepository;
 import com.gruppoautoscala.followup.service.PreventivoTelefonicoService;
 import com.gruppoautoscala.followup.service.PreventivoImportService;
+import com.gruppoautoscala.followup.service.PreventivoRentSyncService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -27,6 +29,7 @@ public class PreventivoTelefonicoController {
     private static final Set<String> TIPI_AMMESSI = Set.of("VENDITA", "NOLEGGIO");
 
     @Autowired private PreventivoTelefonicoService preventivoService;
+    @Autowired private PreventivoRentSyncService rentSyncService;
     @Autowired private PreventivoImportService preventivoImportService;
     @Autowired private UserRepository userRepository;
 
@@ -179,6 +182,7 @@ public class PreventivoTelefonicoController {
         p.setMarca(marca);
         p.setModello(modello);
         p.setTargaTelaio(trimOrNull(body.get("targaTelaio")));
+        p.setTelefono(trimOrNull(body.get("telefono")));
         p.setLinkLead(linkLead);
         p.setConsultantName(consultantName);
 
@@ -244,6 +248,7 @@ public class PreventivoTelefonicoController {
             p.setModello(v);
         }
         if (body.containsKey("targaTelaio")) p.setTargaTelaio(trimOrNull(body.get("targaTelaio")));
+        if (body.containsKey("telefono")) p.setTelefono(trimOrNull(body.get("telefono")));
         if (body.containsKey("linkLead")) p.setLinkLead(trimOrNull(body.get("linkLead")));
         if (body.containsKey("consultantName")) {
             String v = trimOrNull(body.get("consultantName"));
@@ -288,6 +293,21 @@ public class PreventivoTelefonicoController {
             m.put("marca", p.getMarca());
             m.put("modello", p.getModello());
             m.put("targaTelaio", p.getTargaTelaio());
+            m.put("telefono", p.getTelefono());
+
+            // NUOVO: collegamento con la trattativa Rent generata
+            // automaticamente (solo per preventivi Noleggio).
+            Optional<NoleggioTrattativa> linked = rentSyncService.findLinked(p.getId());
+            if (linked.isPresent()) {
+                NoleggioTrattativa t = linked.get();
+                m.put("rentTrattativaId", t.getId());
+                boolean modificataInRent = t.getUpdatedAt() != null && t.getLastAutoSyncAt() != null
+                        && t.getUpdatedAt().isAfter(t.getLastAutoSyncAt());
+                m.put("rentModificataDopoSync", modificataInRent);
+            } else {
+                m.put("rentTrattativaId", null);
+                m.put("rentModificataDopoSync", false);
+            }
             m.put("linkLead", p.getLinkLead());
             m.put("sourceLeadId", p.getSourceLeadId());
             m.put("consultantName", p.getConsultantName());

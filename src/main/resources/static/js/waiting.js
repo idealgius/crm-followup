@@ -7,6 +7,8 @@ let waitingEntriesFiltered = [];
 let waitingView = 'attivi'; // 'attivi' | 'archivio'
 let waitingDetailId = null;
 let waitingAlertShownThisSession = false;
+let waitingSelectionMode = false;
+let waitingSelectedIds = new Set();
 
 const WAITING_STATUS_LIST = ['WAITING', 'CALLED', 'APPOINTMENT', 'INTERESTED', 'CLOSED', 'FAILED'];
 const WAITING_STATUS_LABELS = {
@@ -64,7 +66,81 @@ function switchWaitingView(view) {
     const btnArchivio = document.getElementById('waitingNavArchivio');
     if (btnAttivi) btnAttivi.classList.toggle('waiting-nav-active', view === 'attivi');
     if (btnArchivio) btnArchivio.classList.toggle('waiting-nav-active', view === 'archivio');
+
+    if (waitingSelectionMode) toggleWaitingSelectionMode();
+
     applyWaitingFilters();
+}
+
+// ============================================================
+// ELIMINAZIONE MULTIPLA — solo nella vista Archivio
+// ============================================================
+
+function toggleWaitingSelectionMode() {
+    waitingSelectionMode = !waitingSelectionMode;
+    waitingSelectedIds.clear();
+    const bar = document.getElementById('waitingSelectionBar');
+    if (bar) bar.style.display = waitingSelectionMode ? 'flex' : 'none';
+    renderWaitingList(waitingEntriesFiltered);
+    renderWaitingSelectionBar();
+}
+
+function toggleWaitingSelected(id) {
+    if (waitingSelectedIds.has(id)) waitingSelectedIds.delete(id);
+    else waitingSelectedIds.add(id);
+    renderWaitingList(waitingEntriesFiltered);
+    renderWaitingSelectionBar();
+}
+
+function toggleWaitingSelectAll() {
+    if (waitingSelectedIds.size === waitingEntriesFiltered.length) {
+        waitingSelectedIds.clear();
+    } else {
+        waitingEntriesFiltered.forEach(e => waitingSelectedIds.add(e.id));
+    }
+    renderWaitingList(waitingEntriesFiltered);
+    renderWaitingSelectionBar();
+}
+
+function renderWaitingSelectionBar() {
+    const countEl = document.getElementById('waitingSelectionCount');
+    if (countEl) countEl.textContent = `${waitingSelectedIds.size} selezionat${waitingSelectedIds.size === 1 ? 'o' : 'i'}`;
+}
+
+async function deleteWaitingSelected() {
+    if (waitingSelectedIds.size === 0) { alert('Nessun cliente selezionato'); return; }
+    if (!confirm(`Eliminare definitivamente ${waitingSelectedIds.size} client${waitingSelectedIds.size === 1 ? 'e' : 'i'} selezionat${waitingSelectedIds.size === 1 ? 'o' : 'i'}? L'azione non è reversibile.`)) return;
+    await deleteWaitingBatch(Array.from(waitingSelectedIds));
+}
+
+async function deleteWaitingAll() {
+    const ids = waitingEntriesFiltered.map(e => e.id);
+    if (ids.length === 0) { alert('Nessun cliente in archivio'); return; }
+    if (!confirm(`Eliminare definitivamente TUTTI i ${ids.length} clienti ${waitingView === 'archivio' ? 'in archivio' : 'attivi'}? L'azione non è reversibile.`)) return;
+    await deleteWaitingBatch(ids);
+}
+
+async function deleteWaitingBatch(ids) {
+    try {
+        const res = await fetch('/api/waiting/batch', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids })
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert(err.error || 'Errore nell\'eliminazione');
+            return;
+        }
+        waitingSelectionMode = false;
+        waitingSelectedIds.clear();
+        const bar = document.getElementById('waitingSelectionBar');
+        if (bar) bar.style.display = 'none';
+        loadWaitingList();
+    } catch (err) {
+        console.error('Errore eliminazione multipla recall:', err);
+        alert('Errore di rete nell\'eliminazione');
+    }
 }
 
 // ============================================================
@@ -341,9 +417,16 @@ function renderWaitingCard(e, today) {
     const historyCount = (e.recallHistory && e.recallHistory.length) ? e.recallHistory.length : 0;
     const createdInfo = e.createdAt ? `<span style="font-size:11px;color:var(--text-secondary)">📅 Inserito: ${formatDateTimeWaiting(e.createdAt)}</span>` : '';
 
+    const inSelection = waitingSelectionMode;
+    const checkboxHtml = inSelection
+        ? `<input type="checkbox" onclick="event.stopPropagation();toggleWaitingSelected(${e.id})" ${waitingSelectedIds.has(e.id) ? 'checked' : ''} style="width:18px;height:18px;margin-right:12px;margin-top:2px;cursor:pointer;flex-shrink:0">`
+        : '';
+    const cardClick = inSelection ? `toggleWaitingSelected(${e.id})` : `openWaitingDetailModal(${e.id})`;
+
     return `
-        <div class="waiting-card ${isRecallToday ? 'recall-card-today' : isRecallPast ? 'recall-card-past' : ''}" onclick="openWaitingDetailModal(${e.id})" style="cursor:pointer">
-            <div>
+        <div class="waiting-card ${isRecallToday ? 'recall-card-today' : isRecallPast ? 'recall-card-past' : ''}" onclick="${cardClick}" style="cursor:pointer${inSelection ? ';display:flex;align-items:flex-start' : ''}">
+            ${checkboxHtml}
+            <div style="flex:1">
                 <div class="waiting-name">${e.fullName}</div>
                 <div class="waiting-details">
                     📞 ${e.contact} · 🚗 ${e.brand} ${e.model}
@@ -357,10 +440,10 @@ function renderWaitingCard(e, today) {
                 </div>
                 ${createdInfo ? `<div style="margin-top:6px">${createdInfo}</div>` : ''}
             </div>
-            <div class="waiting-actions" onclick="event.stopPropagation()">
+            ${!inSelection ? `<div class="waiting-actions" onclick="event.stopPropagation()">
                 <button class="btn-small btn-blue" onclick="openWaitingDetailModal(${e.id})">✏️ Gestisci</button>
                 <button class="btn-small btn-red" onclick="deleteWaiting(${e.id})">🗑️</button>
-            </div>
+            </div>` : ''}
         </div>
     `;
 }

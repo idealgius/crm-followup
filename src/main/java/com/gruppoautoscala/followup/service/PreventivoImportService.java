@@ -61,6 +61,7 @@ public class PreventivoImportService {
     @Autowired private PreventivoTelefonicoStatusHistoryRepository historyRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private PreventivoImportLogRepository importLogRepository;
+    @Autowired private PreventivoRentSyncService rentSyncService;
 
     public static class ImportResult {
         public int created = 0;
@@ -193,6 +194,9 @@ public class PreventivoImportService {
             tipo = isNoleggioConsulente ? "NOLEGGIO" : "VENDITA";
         }
 
+        String telefono = get(record, "Telefono 1");
+        if (isBlank(telefono)) telefono = get(record, "Telefono 2");
+
         String marca = normalizeMarca(get(record, "Marca"));
         String modello = get(record, "Modello");
         if (isBlank(marca) || isBlank(modello)) {
@@ -241,6 +245,7 @@ public class PreventivoImportService {
             p.setClienteCognome(clienteCognome);
             p.setMarca(marca);
             p.setModello(modello);
+            p.setTelefono(telefono);
             p.setConsultantName(consultantName);
             p.setSourceLeadId(sourceLeadId);
             p.setUser(caller);
@@ -254,6 +259,8 @@ public class PreventivoImportService {
             h.setChangedBy(importer);
             h.setChangedAt(ricontattoAt);
             historyRepository.save(h);
+
+            rentSyncService.sync(p);
 
             result.created++;
             return;
@@ -269,6 +276,7 @@ public class PreventivoImportService {
         if (!Objects.equals(p.getClienteCognome(), clienteCognome)) { p.setClienteCognome(clienteCognome); changed = true; }
         if (!Objects.equals(p.getMarca(), marca)) { p.setMarca(marca); changed = true; }
         if (!Objects.equals(p.getModello(), modello)) { p.setModello(modello); changed = true; }
+        if (!Objects.equals(p.getTelefono(), telefono)) { p.setTelefono(telefono); changed = true; }
 
         if (!Objects.equals(p.getConsultantName(), consultantName)) {
             if (Boolean.TRUE.equals(p.getConsultantManuallyEdited())) {
@@ -302,6 +310,7 @@ public class PreventivoImportService {
             h.setChangedBy(importer);
             h.setChangedAt(ricontattoAt);
             historyRepository.save(h);
+            rentSyncService.sync(p);
         }
 
         if (changed) {

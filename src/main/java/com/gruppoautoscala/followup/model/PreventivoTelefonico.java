@@ -46,6 +46,11 @@ public class PreventivoTelefonico {
     @Column(name = "targa_telaio", length = 50)
     private String targaTelaio;
 
+    // Opzionale: numero di telefono del cliente. Da import, letto da
+    // "Telefono 1" (con fallback su "Telefono 2" se il primo e' vuoto).
+    @Column(length = 50)
+    private String telefono;
+
     // Obbligatorio SOLO per la creazione manuale dal form (validato nel
     // controller) — opzionale a livello di entita'/DB perche' i record
     // creati da import Excel/CSV quasi mai lo hanno in origine. Aggiungibile

@@ -249,6 +249,12 @@ function renderPreventiviList(tipo, containerId, countId) {
                 — ${formatPreventivoDateTime(h.changedAt)} — <b>${h.changedBy?.fullName || '—'}</b>
             </div>`).join('');
 
+        const rentBadgeHtml = p.rentModificataDopoSync
+            ? `<div style="display:flex;justify-content:flex-end;margin-top:8px">
+                <span onclick="event.stopPropagation();jumpToRentTrattativa(${p.rentTrattativaId})" style="cursor:pointer;font-size:11px;font-weight:700;color:#ff9800;background:rgba(255,152,0,0.12);padding:4px 10px;border-radius:12px" title="Aperta la scheda in Rent">✏️ Modificato in Rent</span>
+            </div>`
+            : '';
+
         const utilityButtons = `
             ${p.linkLead ? `<a href="${p.linkLead}" target="_blank" onclick="event.stopPropagation()" class="preventivo-icon-btn" title="Link lead">🔗</a>` : ''}
             <button onclick="event.stopPropagation();togglePreventivoDetail(${p.id})" class="preventivo-icon-btn" title="Storico">🕓</button>
@@ -275,6 +281,7 @@ function renderPreventiviList(tipo, containerId, countId) {
                     </div>
                 </div>
                 <div id="preventivoDetail-${p.id}" class="preventivo-detail" style="display:none">${historyHtml}</div>
+                ${rentBadgeHtml}
             </div>`;
         }
 
@@ -325,6 +332,7 @@ function renderPreventiviList(tipo, containerId, countId) {
             </div>
 
             <div id="preventivoDetail-${p.id}" class="preventivo-detail" style="display:none">${historyHtml}</div>
+            ${rentBadgeHtml}
         </div>`;
     }).join('');
 }
@@ -873,6 +881,17 @@ async function applyConsulenteConflictDecisions() {
         console.error('Errore risoluzione conflitti consulente:', err);
         alert('Errore di rete nell\'applicare le scelte');
     }
+}
+
+// Dal badge "Modificato in Rent": passa alla sezione Rent, ricarica le
+// trattative e apre direttamente il modal di quella collegata — riusa il
+// meccanismo gia' esistente in rent.js (rentTrattative + openRentTrattativaModal),
+// niente da reinventare.
+async function jumpToRentTrattativa(trattativaId) {
+    if (!trattativaId) return;
+    showPage('rent');
+    if (typeof loadRentTrattative === 'function') await loadRentTrattative();
+    if (typeof openRentTrattativaModal === 'function') openRentTrattativaModal(trattativaId);
 }
 
 // Aggancio al cambio tema (☾/☀ in navbar) — stesso pattern di

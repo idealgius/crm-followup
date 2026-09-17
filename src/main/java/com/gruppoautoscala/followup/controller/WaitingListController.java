@@ -102,6 +102,29 @@ public class WaitingListController {
         return ResponseEntity.ok(waitingListService.update(entry));
     }
 
+    // NUOVO: eliminazione multipla — riusa waitingListService.delete(id) gia'
+    // esistente e testato, in un ciclo, invece di aggiungere un metodo nuovo
+    // al service che non ho mai visto. Un solo giro di rete per il frontend,
+    // usato sia per "elimina selezionati" che per "elimina tutti" (in quel
+    // caso il frontend manda tutti gli id dell'archivio attualmente filtrato).
+    @DeleteMapping("/batch")
+    public ResponseEntity<?> deleteBatch(@RequestBody Map<String, Object> body, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+
+        Object idsObj = body.get("ids");
+        if (!(idsObj instanceof List)) return ResponseEntity.badRequest().body(Map.of("error", "Nessun id fornito"));
+        List<?> idsRaw = (List<?>) idsObj;
+        if (idsRaw.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "Nessun id fornito"));
+
+        int eliminati = 0;
+        for (Object idObj : idsRaw) {
+            waitingListService.delete(Long.valueOf(String.valueOf(idObj)));
+            eliminati++;
+        }
+        return ResponseEntity.ok(Map.of("eliminati", eliminati));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id, HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");

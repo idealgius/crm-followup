@@ -30,6 +30,7 @@ public class PreventivoTelefonicoService {
 
     @Autowired private PreventivoTelefonicoRepository preventivoRepository;
     @Autowired private PreventivoTelefonicoStatusHistoryRepository historyRepository;
+    @Autowired private PreventivoRentSyncService rentSyncService;
 
     public PreventivoTelefonico create(PreventivoTelefonico p, User creator) {
         p.setUser(creator);
@@ -45,6 +46,8 @@ public class PreventivoTelefonicoService {
         h.setChangedBy(creator);
         h.setChangedAt(saved.getCreatedAt());
         historyRepository.save(h);
+
+        rentSyncService.sync(saved);
 
         return saved;
     }
@@ -108,6 +111,8 @@ public class PreventivoTelefonicoService {
         h.setChangedBy(changedBy);
         h.setChangedAt(now);
         historyRepository.save(h);
+
+        rentSyncService.sync(saved);
 
         return saved;
     }

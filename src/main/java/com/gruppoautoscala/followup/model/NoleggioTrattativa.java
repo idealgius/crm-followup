@@ -85,4 +85,20 @@ public class NoleggioTrattativa {
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt = LocalDateTime.now(ZONA_ITALIA);
+
+    // ===== NUOVO: collegamento con Preventivi Telefonici =====
+    // Valorizzato SOLO quando la trattativa e' stata generata automaticamente
+    // da un Preventivo Telefonico di tipo NOLEGGIO (mai per le trattative
+    // create a mano da questa sezione). Chiave usata per trovare/aggiornare
+    // la stessa trattativa ad ogni sync, invece di duplicarla.
+    @Column(name = "source_preventivo_id", unique = true)
+    private Long sourcePreventivoId;
+
+    // Timestamp dell'ULTIMA sincronizzazione automatica scritta da un
+    // Preventivo Telefonico (creazione, import, o cambio stato manuale sul
+    // preventivo). Confrontato con updatedAt per capire se qualcuno ha
+    // modificato la trattativa DENTRO Rent dopo quel momento — in tal caso
+    // il Preventivo Telefonico mostra l'avviso "Modificato in Rent".
+    @Column(name = "last_auto_sync_at")
+    private LocalDateTime lastAutoSyncAt;
 }

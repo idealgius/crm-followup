@@ -346,9 +346,18 @@
         </div>
 
         <!-- NAV INTERNO: Attivi / Archivio -->
-        <div style="display:flex;gap:10px;margin-bottom:20px">
+        <div style="display:flex;gap:10px;margin-bottom:20px;align-items:center">
             <button id="waitingNavAttivi" class="btn-sede waiting-nav-active" onclick="switchWaitingView('attivi')">📋 Attivi</button>
             <button id="waitingNavArchivio" class="btn-sede" onclick="switchWaitingView('archivio')">📁 Archivio (Chiusi/Falliti)</button>
+            <button id="waitingArchiveDeleteBtn" class="btn-sede-danger" onclick="toggleWaitingSelectionMode()">🗑️ Elimina</button>
+        </div>
+
+        <div id="waitingSelectionBar" style="display:none;background:var(--bg-card);border:1.5px solid #ff3d3d;border-radius:10px;padding:10px 16px;margin-bottom:16px;align-items:center;gap:12px;flex-wrap:wrap">
+            <span id="waitingSelectionCount" style="font-size:13px;font-weight:700;color:var(--text-primary)">0 selezionati</span>
+            <button class="btn-small btn-secondary" onclick="toggleWaitingSelectAll()">Seleziona tutto</button>
+            <button class="btn-small btn-red" onclick="deleteWaitingSelected()">🗑️ Elimina selezionati</button>
+            <button class="btn-small btn-red" onclick="deleteWaitingAll()">🗑️ Elimina tutti</button>
+            <button class="btn-small btn-secondary" style="margin-left:auto" onclick="toggleWaitingSelectionMode()">Annulla</button>
         </div>
 
         <!-- BARRA DI RICERCA -->
