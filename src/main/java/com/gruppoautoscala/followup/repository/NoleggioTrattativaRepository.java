@@ -2,6 +2,7 @@ package com.gruppoautoscala.followup.repository;
 
 import com.gruppoautoscala.followup.model.NoleggioTrattativa;
 import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
 import java.util.Optional;
 
 public interface NoleggioTrattativaRepository extends JpaRepository<NoleggioTrattativa, Long> {
@@ -10,4 +11,10 @@ public interface NoleggioTrattativaRepository extends JpaRepository<NoleggioTrat
     // Telefonico — usata dal servizio di sincronizzazione per capire se
     // crearne una nuova o aggiornare quella gia' esistente.
     Optional<NoleggioTrattativa> findBySourcePreventivoId(Long sourcePreventivoId);
+
+    // Trattative MAI collegate a un preventivo (create a mano da un
+    // consulente) — usate per il riscontro per numero di telefono, prima
+    // di creare una trattativa nuova, per evitare doppioni quando la stessa
+    // persona e' gia' stata inserita direttamente in Rent.
+    List<NoleggioTrattativa> findBySourcePreventivoIdIsNull();
 }

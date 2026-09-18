@@ -68,18 +68,30 @@ public class PreventivoRentSyncService {
 
         NoleggioTrattativa t;
         if (existingOpt.isEmpty()) {
-            t = new NoleggioTrattativa();
-            t.setUser(p.getUser());
-            t.setNome(p.getClienteNome());
-            t.setCognome(p.getClienteCognome());
-            String tel = p.getTelefono();
-            t.setCellulare(tel != null && !tel.isBlank() ? tel : "N/D");
-            t.setMarchio(p.getMarca());
-            t.setModello(p.getModello());
-            t.setLinkLeadspark(p.getLinkLead());
-            t.setFonte("Preventivo Telefonico");
-            t.setSourcePreventivoId(p.getId());
-            t.setCreatedAt(now);
+            // Riscontro per numero di telefono: se un consulente ha gia'
+            // creato a mano una trattativa per questa stessa persona (mai
+            // collegata a un preventivo), la agganciamo invece di duplicarla
+            // — i suoi dati (nome/cognome/marchio/modello/cellulare) restano
+            // quelli inseriti dal consulente, non li sovrascriviamo.
+            NoleggioTrattativa matched = findByPhoneAmongUnlinked(p.getTelefono());
+
+            if (matched != null) {
+                t = matched;
+                t.setSourcePreventivoId(p.getId());
+            } else {
+                t = new NoleggioTrattativa();
+                t.setUser(p.getUser());
+                t.setNome(p.getClienteNome());
+                t.setCognome(p.getClienteCognome());
+                String tel = p.getTelefono();
+                t.setCellulare(tel != null && !tel.isBlank() ? tel : "N/D");
+                t.setMarchio(p.getMarca());
+                t.setModello(p.getModello());
+                t.setLinkLeadspark(p.getLinkLead());
+                t.setFonte("Preventivo Telefonico");
+                t.setSourcePreventivoId(p.getId());
+                t.setCreatedAt(now);
+            }
         } else {
             // Trattativa gia' esistente: si tocca SOLO stato/data richiamo,
             // mai gli altri campi — potrebbero essere stati corretti a mano
@@ -96,6 +108,29 @@ public class PreventivoRentSyncService {
         t.setLastAutoSyncAt(now);
 
         noleggioTrattativaRepository.save(t);
+    }
+
+    // Cerca, tra le trattative MAI collegate a un preventivo (create a mano
+    // da un consulente), una con lo stesso numero di telefono — confrontato
+    // sulle sole cifre, ignorando prefissi/spazi diversi (es. "+39 320..."
+    // vs "320...").
+    private NoleggioTrattativa findByPhoneAmongUnlinked(String telefono) {
+        String normalized = normalizePhone(telefono);
+        if (normalized.isEmpty()) return null;
+        for (NoleggioTrattativa candidate : noleggioTrattativaRepository.findBySourcePreventivoIdIsNull()) {
+            if (normalized.equals(normalizePhone(candidate.getCellulare()))) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private String normalizePhone(String raw) {
+        if (raw == null) return "";
+        String digits = raw.replaceAll("\\D", "");
+        // Confronta solo le ultime 9 cifre, cosi' prefissi diversi (+39,
+        // 0039, uno spazio in piu', ecc.) non impediscono il match.
+        return digits.length() > 9 ? digits.substring(digits.length() - 9) : digits;
     }
 
     public Optional<NoleggioTrattativa> findLinked(Long preventivoId) {
