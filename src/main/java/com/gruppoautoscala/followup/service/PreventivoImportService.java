@@ -49,13 +49,33 @@ public class PreventivoImportService {
     );
 
     // Stessa lista consulenti della tendina in index.html — idem, solo
-    // normalizzazione, mai scarto.
+    // normalizzazione, mai scarto. IMPORTANTE: scritta in ordine "Nome
+    // Cognome", la stessa convenzione usata in tutto il resto dell'app
+    // (dashboard, Follow-up, grafici) — NON "Cognome Nome". Un elenco
+    // scritto nell'ordine sbagliato qui era la causa del bug per cui
+    // "Castaldo Marco" e "Marco Castaldo" comparivano come due consulenti
+    // diversi nel riepilogo: la vecchia lista, in ordine Cognome Nome,
+    // "normalizzava" solo l'input che per caso coincideva col suo stesso
+    // ordine sbagliato, lasciando l'altro intatto.
     private static final List<String> CONSULENTI_LIST = List.of(
-        "Ambrosino Luca", "Capitelli Silvio", "Castaldo Marco", "Castaldo Roberto",
-        "Crispo Raffaele", "Filosa Claudio", "Fiore Guido", "Gerardi Claudio", "Giordano Luca",
-        "Imperato Ciro", "Montuori Francesco", "Palumbo Enrico", "Scala Rosario",
-        "Sementa Francesco", "Zaritto Davide", "Zuppa Mattia"
+        "Luca Ambrosino", "Silvio Capitelli", "Marco Castaldo", "Roberto Castaldo",
+        "Raffaele Crispo", "Claudio Filosa", "Guido Fiore", "Claudio Gerardi", "Luca Giordano",
+        "Ciro Imperato", "Francesco Montuori", "Enrico Palumbo", "Rosario Scala",
+        "Francesco Sementa", "Davide Zaritto", "Mattia Zuppa"
     );
+
+    // Indice di CONSULENTI_LIST per "chiave nome" (stesso schema di
+    // nameKey/usersByName usato per il Caller): permette di riconoscere un
+    // consulente qualunque sia l'ordine con cui il file lo scrive
+    // ("Castaldo Marco" o "Marco Castaldo" risultano la stessa chiave) e
+    // di restituire sempre la forma canonica "Nome Cognome".
+    private static final Map<String, String> CONSULENTI_BY_KEY = buildConsulentiByKey();
+
+    private static Map<String, String> buildConsulentiByKey() {
+        Map<String, String> m = new HashMap<>();
+        for (String c : CONSULENTI_LIST) m.put(staticNameKey(c), c);
+        return m;
+    }
 
     @Autowired private PreventivoTelefonicoRepository preventivoRepository;
     @Autowired private PreventivoTelefonicoStatusHistoryRepository historyRepository;
@@ -335,7 +355,7 @@ public class PreventivoImportService {
 
     private boolean isBlank(String s) { return s == null || s.isBlank(); }
 
-    private String normalize(String s) {
+    private static String normalize(String s) {
         if (s == null) return "";
         return s.trim().toLowerCase()
             .replace('à', 'a').replace('á', 'a')
@@ -351,6 +371,12 @@ public class PreventivoImportService {
     // con doppio spazio) producono la stessa chiave e vengono riconosciuti
     // come lo stesso nome, indipendentemente da come e' stato salvato.
     private String nameKey(String s) {
+        return staticNameKey(s);
+    }
+
+    // Versione static di nameKey, richiamabile dall'inizializzazione
+    // statica di CONSULENTI_BY_KEY (prima che esista un'istanza).
+    private static String staticNameKey(String s) {
         if (s == null) return "";
         String norm = normalize(s).replaceAll("[^a-z\\s]", " ").trim();
         if (norm.isEmpty()) return "";
@@ -408,10 +434,20 @@ public class PreventivoImportService {
         return trimmed.isEmpty() ? null : trimmed.toUpperCase();
     }
 
+    // Riconosce il consulente indipendentemente dall'ordine in cui il file
+    // scrive nome e cognome (stesso principio di nameKey/usersByName usato
+    // per il Caller poco sopra): se la chiave-parole del testo del file
+    // combacia con quella di un consulente noto, restituisce SEMPRE la
+    // forma canonica "Nome Cognome" di CONSULENTI_LIST, qualunque sia
+    // l'ordine con cui era scritto nel file (evita che "Castaldo Marco" e
+    // "Marco Castaldo" finiscano come due consulenti diversi a schermo).
+    // Solo se il testo non corrisponde a nessun consulente noto viene
+    // tenuto cosi' com'e' nel file (mai scartata la riga per questo).
     private String normalizeConsulente(String raw) {
         if (raw == null) return null;
         String trimmed = raw.trim();
-        for (String c : CONSULENTI_LIST) if (c.equalsIgnoreCase(trimmed)) return c;
-        return trimmed.isEmpty() ? null : trimmed;
+        if (trimmed.isEmpty()) return null;
+        String canonical = CONSULENTI_BY_KEY.get(nameKey(trimmed));
+        return canonical != null ? canonical : trimmed;
     }
 }
