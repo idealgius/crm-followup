@@ -298,6 +298,7 @@ public class ContactLogController {
         // con update(), che già esiste e gestisce il salvataggio.
         if (ALERT_CATEGORIES.contains(category) && Boolean.TRUE.equals(acquistoAlert)) {
             log.setAcquistoAlert(true);
+            log.setAcquistoAlertSegnalatoAt(LocalDateTime.now());
             log.setAcquistoAlertStatus(null);
             log.setAlertNotifyAll(alertNotifyAll == null ? true : alertNotifyAll);
             if (Boolean.FALSE.equals(alertNotifyAll) && alertRecipientIdsRaw != null) {
@@ -363,6 +364,11 @@ public class ContactLogController {
         if (logOpt.isEmpty()) return ResponseEntity.notFound().build();
 
         ContactLog log = logOpt.get();
+        // NUOVO: catturato PRIMA di applicare le modifiche sotto — serve a
+        // distinguere "l'allert era gia' presente" da "questa modifica lo
+        // sta aggiungendo ora per la prima volta" (solo nel secondo caso
+        // vogliamo mandare la mail e segnare acquistoAlertSegnalatoAt).
+        boolean wasAlreadyAlerted = Boolean.TRUE.equals(log.getAcquistoAlert());
 
         // ===== ALLERT — permessi dedicati =====
         // La gestione dell'Allert (stato + note) è riservata a MODERATORE, GESTORE, ADMIN
@@ -497,7 +503,25 @@ public class ContactLogController {
             log.setContactDate(LocalDateTime.parse((String) body.get("contactDate")));
         }
 
-        Map<String, Object> updatedMap = toMap(contactLogService.update(log));
+        // NUOVO: l'allert e' stato appena aggiunto ora (non c'era prima di
+        // questa PATCH) — stessa segnalazione di quando avviene in fase di
+        // creazione: data della segnalazione + mail ai destinatari giusti.
+        boolean isNowAlerted = Boolean.TRUE.equals(log.getAcquistoAlert());
+        boolean newlyFlagged = !wasAlreadyAlerted && isNowAlerted;
+        if (newlyFlagged) {
+            log.setAcquistoAlertSegnalatoAt(LocalDateTime.now());
+        }
+
+        ContactLog saved = contactLogService.update(log);
+
+        if (newlyFlagged) {
+            List<User> mailRecipients = Boolean.FALSE.equals(saved.getAlertNotifyAll())
+                    ? saved.getAlertRecipients()
+                    : userRepository.findAll();
+            alertMailService.notifyNewAlert(saved, mailRecipients);
+        }
+
+        Map<String, Object> updatedMap = toMap(saved);
         broadcastContactEvent("updated", updatedMap);
         return ResponseEntity.ok(updatedMap);
     }
@@ -659,6 +683,7 @@ public class ContactLogController {
         // NUOVO: consulente di riferimento.
         m.put("consultantName", log.getConsultantName());
         m.put("acquistoAlert", log.getAcquistoAlert());
+        m.put("acquistoAlertSegnalatoAt", log.getAcquistoAlertSegnalatoAt());
         m.put("acquistoAlertStatus", log.getAcquistoAlertStatus());
         m.put("acquistoAlertNoteGestione", log.getAcquistoAlertNoteGestione());
         m.put("acquistoAlertNoteGestita", log.getAcquistoAlertNoteGestita());

@@ -149,6 +149,15 @@ public class ContactLog {
     @Column(name = "acquisto_alert_gestita_at")
     private LocalDateTime acquistoAlertGestitaAt;
 
+    // ===== NUOVO: quando l'allert e' stato EFFETTIVAMENTE segnalato. Uguale
+    // a createdAt/contactDate quando l'allert viene impostato in fase di
+    // creazione (caso normale), ma DIVERSA se l'allert viene aggiunto in un
+    // secondo momento modificando un contatto gia' esistente e piu' vecchio
+    // — in quel caso vogliamo poter mostrare/ordinare "Da Gestire" con il
+    // momento vero della segnalazione, non la data originale del contatto.
+    @Column(name = "acquisto_alert_segnalato_at")
+    private LocalDateTime acquistoAlertSegnalatoAt;
+
     // ===== NUOVO: destinatari dell'allert =====
     // Questi due campi sono condivisi da TUTTE le categorie che possono avere
     // un allert (Info Acquisto effettuato, Pratica Leasing, Pratica

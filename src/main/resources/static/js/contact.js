@@ -706,8 +706,14 @@ function checkAcquistoAlertDaGestire() {
     const inGestione = alertAttivi.filter(l => l.acquistoAlertStatus === 'IN_GESTIONE');
 
     const renderCard = (log) => {
-        const date = log.contactDate.split('T')[0];
-        const time = log.contactDate.split('T')[1]?.substring(0,5) || '';
+        // NUOVO: se l'allert è stato aggiunto in un secondo momento (modifica
+        // di un contatto già esistente), mostriamo QUANDO è stato segnalato
+        // l'allert, non quando è stato inserito originariamente il contatto
+        // — altrimenti un allert aggiunto oggi su un contatto di 2 settimane
+        // fa sembrerebbe "vecchio" di 2 settimane.
+        const alertDate = log.acquistoAlertSegnalatoAt || log.contactDate;
+        const date = alertDate.split('T')[0];
+        const time = alertDate.split('T')[1]?.substring(0,5) || '';
         const visual = acquistoAlertVisual(log);
         return `<div class="followup-card" style="margin-bottom:10px;cursor:pointer;border-left:4px solid ${visual.color}" onclick="closeAcquistoAlertDaGestireModal();openAcquistoAlertModal(${log.id})">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
@@ -3381,6 +3387,19 @@ function openEditContactModal(id, logData) {
     const log = logData || contactLogs.find(l => l.id === id);
     if (!log) return;
     editingContactId = id;
+    // NUOVO: ricorda se il contatto ha GIA' un allert — se sì, il blocco
+    // "Segnala problematica" resta nascosto (un allert esistente si gestisce
+    // dal suo popup dedicato, non da qui). Reset del toggle ad ogni apertura.
+    editingContactAlreadyAlerted = !!log.acquistoAlert;
+    editAlertToggled = false;
+    const editAlertBtn = document.getElementById('editContactAlertBtn');
+    if (editAlertBtn) editAlertBtn.classList.remove('btn-sede-active');
+    const editAlertHidden = document.getElementById('editContactAlert');
+    if (editAlertHidden) editAlertHidden.value = 'false';
+    const editAlertDestRow = document.getElementById('editContactAlertDestinatariRow');
+    if (editAlertDestRow) editAlertDestRow.style.display = 'none';
+    const editAlertInviaATutti = document.getElementById('editContactAlertInviaATutti');
+    if (editAlertInviaATutti) editAlertInviaATutti.checked = true;
     const categorySelect = document.getElementById('editContactCategory');
     if (categorySelect) {
         categorySelect.innerHTML = ALL_CATEGORIES.map(c => `<option value="${c}" ${c===log.category?'selected':''}>${c}</option>`).join('');
@@ -3453,12 +3472,74 @@ function onEditCategoryChange() {
     show('editContactMarcaModelloRow', isVenditaLike);
     show('editContactLinkAutoRow', isVenditaLike);
     show('editContactPromoRow', cat === 'Info Vendita in Promo');
+    // NUOVO: blocco "Segnala problematica (Allert)" — solo per le 4
+    // categorie che lo supportano, e solo se il contatto non ha GIA' un
+    // allert (altrimenti si gestisce dal popup dedicato, non da qui).
+    const ALERT_CATEGORIES_EDIT = ['Info Acquisto effettuato', 'Pratica Leasing', 'Pratica Finanziamento', 'Amministrazione'];
+    show('editContactAlertRow', ALERT_CATEGORIES_EDIT.includes(cat) && !editingContactAlreadyAlerted);
 }
 function closeEditContactModal(event) {
     if (event && event.target.id !== 'editContactModal') return;
     const modal = document.getElementById('editContactModal');
     if (modal) modal.style.display = 'none';
     editingContactId = null;
+}
+
+// ===== NUOVO: allert aggiunto da un contatto GIA' esistente (modal di
+// modifica), stesso schema "invia a tutti / scegli destinatari" già usato
+// in creazione, ma con ID propri per non entrare in conflitto con quelli
+// del form di creazione (entrambi presenti nel DOM contemporaneamente). =====
+let editingContactAlreadyAlerted = false;
+let editAlertToggled = false;
+
+function toggleEditContactAlert() {
+    editAlertToggled = !editAlertToggled;
+    const btn = document.getElementById('editContactAlertBtn');
+    if (btn) btn.classList.toggle('btn-sede-active', editAlertToggled);
+    const hidden = document.getElementById('editContactAlert');
+    if (hidden) hidden.value = editAlertToggled ? 'true' : 'false';
+    const row = document.getElementById('editContactAlertDestinatariRow');
+    if (row) row.style.display = editAlertToggled ? 'block' : 'none';
+    if (editAlertToggled) loadUsersForEditAlertDestinatari();
+}
+
+async function loadUsersForEditAlertDestinatari() {
+    // Riusa la stessa cache utenti del form di creazione, se già caricata
+    // (stesso endpoint, stesso elenco) — evita una chiamata in più.
+    if (alertDestinatariUsersCache) { renderEditAlertDestinatariList(alertDestinatariUsersCache); return; }
+    try {
+        const res = await fetch('/api/auth/users/basic');
+        if (!res.ok) return;
+        alertDestinatariUsersCache = await res.json();
+        renderEditAlertDestinatariList(alertDestinatariUsersCache);
+    } catch (err) {
+        console.error('Errore caricamento utenti per destinatari allert (modifica):', err);
+    }
+}
+
+function renderEditAlertDestinatariList(users) {
+    const list = document.getElementById('editContactAlertDestinatariList');
+    if (!list) return;
+    list.innerHTML = users.map(u => `
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-primary);cursor:pointer;padding:4px 2px">
+            <input type="checkbox" class="edit-contact-alert-destinatario-checkbox" value="${u.id}" style="width:15px;height:15px;cursor:pointer;accent-color:#f0c040">
+            ${u.fullName}
+        </label>
+    `).join('');
+}
+
+function toggleEditAlertInviaATutti() {
+    const checked = document.getElementById('editContactAlertInviaATutti')?.checked;
+    const wrapper = document.getElementById('editContactAlertDestinatariListWrapper');
+    if (wrapper) wrapper.style.display = checked ? 'none' : 'block';
+    if (!checked) loadUsersForEditAlertDestinatari();
+}
+
+function getEditAlertDestinatariPayload() {
+    const inviaATutti = document.getElementById('editContactAlertInviaATutti')?.checked !== false;
+    if (inviaATutti) return { alertNotifyAll: true, alertRecipientIds: null };
+    const ids = Array.from(document.querySelectorAll('.edit-contact-alert-destinatario-checkbox:checked')).map(cb => Number(cb.value));
+    return { alertNotifyAll: false, alertRecipientIds: ids };
 }
 async function saveEditContactLog() {
     if (!editingContactId) return;
@@ -3518,6 +3599,14 @@ async function saveEditContactLog() {
             payload.marca = editMarca || null;
             payload.modello = editModello || null;
             payload.linkAuto = editLinkAuto || null;
+        }
+        // NUOVO: allert segnalato ora da un contatto già esistente — solo se
+        // il pulsante è stato attivato in questa sessione di modifica
+        // (editingContactAlreadyAlerted=false garantisce che il blocco fosse
+        // visibile, quindi non stiamo ritoccando un allert già presente).
+        if (editAlertToggled && !editingContactAlreadyAlerted) {
+            payload.acquistoAlert = true;
+            Object.assign(payload, getEditAlertDestinatariPayload());
         }
         const res = await fetch(`/api/contacts/${editingContactId}`, {
             method: 'PATCH', headers: { 'Content-Type': 'application/json' },

@@ -884,6 +884,28 @@
                     <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA (opzionale)</label>
                     <textarea id="editContactNotaAggiuntiva" placeholder="Note aggiuntive libere..." class="input-field" style="margin-bottom:15px"></textarea>
 
+                    <!-- NUOVO: permette di segnalare un allert su un contatto GIA'
+                         ESISTENTE che non ne aveva uno — prima l'allert si poteva
+                         impostare solo in fase di creazione, non modificando un
+                         contatto salvato in precedenza. Visibile solo per le 4
+                         categorie che supportano l'allert, e solo se il contatto
+                         non e' gia' segnalato (un allert gia' presente si gestisce
+                         dal suo popup dedicato, non da qui). -->
+                    <div id="editContactAlertRow" style="display:none;margin-bottom:15px">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">SEGNALAZIONE</label>
+                        <button type="button" class="btn-sede" id="editContactAlertBtn" onclick="toggleEditContactAlert()">🔔 Segnala problematica (Allert)</button>
+                        <input type="hidden" id="editContactAlert" value="false">
+                        <div id="editContactAlertDestinatariRow" style="display:none;margin-top:10px;background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px">
+                            <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:8px">A CHI VA SEGNALATO L'ALLERT</label>
+                            <label class="checkbox-label" style="padding:4px 0">
+                                <input type="checkbox" id="editContactAlertInviaATutti" checked onchange="toggleEditAlertInviaATutti()"> Invia a tutti (chi ha i permessi di gestione)
+                            </label>
+                            <div id="editContactAlertDestinatariListWrapper" style="display:none;margin-top:8px">
+                                <div id="editContactAlertDestinatariList" style="max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;border:1px solid var(--border);border-radius:8px;padding:8px"></div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="form-actions" style="margin-top:10px">
                         <button onclick="saveEditContactLog()" class="btn-gold">SALVA MODIFICHE</button>
                         <button onclick="closeEditContactModal()" class="btn-secondary">ANNULLA</button>
