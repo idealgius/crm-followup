@@ -11,6 +11,8 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 // Invia una mail di notifica quando viene inserito un nuovo allert nel
 // Registro Contatti (categorie: Info Acquisto effettuato, Pratica Leasing,
@@ -20,13 +22,27 @@ import java.util.List;
 // Una mail SEPARATA per ogni destinatario (non un unico invio con più "to"),
 // cosi' il saluto iniziale ("Ciao <nome>") e' personalizzato per ciascuno.
 //
-// Un eventuale errore di invio (SMTP giu', credenziali sbagliate, indirizzo
-// non valido) NON deve mai bloccare la creazione del contatto: ogni fallimento
-// viene solo loggato come warning, la richiesta HTTP va comunque a buon fine.
+// FIX: l'invio avviene su un thread separato (EXECUTOR sotto), MAI sul
+// thread della richiesta HTTP. Se il server SMTP non risponde (es. porta
+// bloccata dall'hosting, server giu'), un tentativo di connessione puo'
+// restare "appeso" per decine di secondi per OGNI destinatario — se questo
+// accadesse sul thread della richiesta, la creazione del contatto
+// risulterebbe bloccata (form che non si chiude, tabella che non si
+// aggiorna) fino allo scadere di tutti i timeout, anche se il contatto in
+// realta' e' gia' stato salvato correttamente sul database.
 @Service
 public class AlertMailService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AlertMailService.class);
+
+    // Pool piccolo e dedicato, thread daemon (non impedisce lo spegnimento
+    // pulito dell'applicazione): l'invio mail non e' mai così frequente da
+    // giustificarne uno più grande.
+    private static final ExecutorService EXECUTOR = Executors.newFixedThreadPool(2, r -> {
+        Thread t = new Thread(r, "alert-mail-sender");
+        t.setDaemon(true);
+        return t;
+    });
 
     @Autowired
     private JavaMailSender mailSender;
@@ -39,7 +55,12 @@ public class AlertMailService {
 
     public void notifyNewAlert(ContactLog contact, List<User> recipients) {
         if (recipients == null || recipients.isEmpty()) return;
+        // Ritorna SUBITO: il lavoro vero avviene in background su EXECUTOR,
+        // il chiamante (ContactLogController) non aspetta l'esito.
+        EXECUTOR.submit(() -> doSend(contact, recipients));
+    }
 
+    private void doSend(ContactLog contact, List<User> recipients) {
         String nomeCompleto = ((contact.getClienteNome() != null ? contact.getClienteNome() : "") + " " +
                 (contact.getClienteCognome() != null ? contact.getClienteCognome() : "")).trim();
         String subject = "\uD83D\uDD14 Nuovo Allert" + (nomeCompleto.isBlank() ? "" : " - " + nomeCompleto);
