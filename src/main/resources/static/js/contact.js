@@ -2020,6 +2020,29 @@ function alertIsVisibleToCurrentUser(log) {
 // filtrato), il log non veniva mai trovato e la finestra non si apriva,
 // senza nessun errore visibile. Ora cerca anche negli altri due posti dove
 // questi contatti "fuori periodo" finiscono davvero.
+// Apre la scheda di un allert specifico arrivando da un link esterno (es.
+// il link nella mail di notifica), che puo' riferirsi a un contatto FUORI
+// dal periodo attualmente filtrato a schermo — per questo lo recupera per
+// ID dal backend invece di cercarlo solo in contactLogs. Chiamata da
+// app.js all'avvio se l'URL contiene ?openAlert=<id>.
+async function openAlertFromLink(id) {
+    console.log('[DEBUG openAlertFromLink] avviato per id=', id);
+    try {
+        const res = await fetch(`/api/contacts/${id}`);
+        console.log('[DEBUG openAlertFromLink] risposta HTTP status=', res.status);
+        if (!res.ok) return;
+        const log = await res.json();
+        console.log('[DEBUG openAlertFromLink] log ricevuto:', log);
+        if (!contactLogs.some(l => l.id === log.id)) {
+            contactLogs.unshift(log);
+        }
+        openAcquistoAlertModal(log.id);
+        console.log('[DEBUG openAlertFromLink] openAcquistoAlertModal chiamata');
+    } catch (err) {
+        console.error('Errore apertura allert da link:', err);
+    }
+}
+
 function openAcquistoAlertModal(id) {
     const log = contactLogs.find(l => l.id === id)
         || lastDetailItems.find(l => l.id === id)

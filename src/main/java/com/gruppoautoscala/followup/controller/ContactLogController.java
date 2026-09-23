@@ -3,6 +3,7 @@ package com.gruppoautoscala.followup.controller;
 import com.gruppoautoscala.followup.model.ContactLog;
 import com.gruppoautoscala.followup.model.User;
 import com.gruppoautoscala.followup.repository.UserRepository;
+import com.gruppoautoscala.followup.service.AlertMailService;
 import com.gruppoautoscala.followup.service.ContactLogService;
 import com.gruppoautoscala.followup.service.ExcelExportService;
 import jakarta.servlet.http.HttpSession;
@@ -29,6 +30,9 @@ public class ContactLogController {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private AlertMailService alertMailService;
 
     // Iniettato da WebSocketConfig — invia messaggi ai client sottoscritti a
     // un topic (es. /topic/contacts). Se non è configurato correttamente
@@ -297,13 +301,13 @@ public class ContactLogController {
             log.setAcquistoAlertStatus(null);
             log.setAlertNotifyAll(alertNotifyAll == null ? true : alertNotifyAll);
             if (Boolean.FALSE.equals(alertNotifyAll) && alertRecipientIdsRaw != null) {
-                List<User> recipients = alertRecipientIdsRaw.stream()
+                List<User> explicitRecipients = alertRecipientIdsRaw.stream()
                         .map(idObj -> Long.valueOf(String.valueOf(idObj)))
                         .map(userRepository::findById)
                         .filter(Optional::isPresent)
                         .map(Optional::get)
                         .collect(Collectors.toList());
-                log.setAlertRecipients(recipients);
+                log.setAlertRecipients(explicitRecipients);
             }
             log = contactLogService.update(log);
         }
@@ -320,6 +324,23 @@ public class ContactLogController {
         if (CONSULENTE_CATEGORY.equals(category) && consultantName != null && !consultantName.isBlank()) {
             log.setConsultantName(consultantName);
             log = contactLogService.update(log);
+        }
+
+        // ===== NUOVO: mail di notifica =====
+        // Spedita qui, DOPO nota e consulente (sopra), non subito dopo aver
+        // impostato l'allert: se la mail partiva prima, il testo si perdeva
+        // nota/consulente perché venivano salvati sul contatto solo nei due
+        // blocchi successivi — a quel punto la mail era già stata inviata
+        // con il contatto ancora incompleto.
+        // notifyAll (default) -> letteralmente tutti gli utenti registrati.
+        // notifyAll = false -> solo i destinatari scelti a mano sopra.
+        // Un errore qui non deve mai far fallire la creazione del contatto:
+        // notifyNewAlert() cattura internamente ogni eccezione.
+        if (ALERT_CATEGORIES.contains(category) && Boolean.TRUE.equals(acquistoAlert)) {
+            List<User> mailRecipients = Boolean.FALSE.equals(log.getAlertNotifyAll())
+                    ? log.getAlertRecipients()
+                    : userRepository.findAll();
+            alertMailService.notifyNewAlert(log, mailRecipients);
         }
 
         Map<String, Object> logMap = toMap(log);
@@ -506,6 +527,21 @@ public class ContactLogController {
         deletedPayload.put("id", id);
         broadcastContactEvent("deleted", deletedPayload);
         return ResponseEntity.ok(Map.of("message", "Eliminato"));
+    }
+
+    // Recupera un singolo contatto per ID — usato dal link diretto nella mail
+    // di notifica allert, che deve aprire la scheda anche se il contatto e'
+    // fuori dal periodo attualmente filtrato a schermo (gli altri endpoint
+    // restituiscono solo liste filtrate per data).
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getById(@PathVariable Long id, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+
+        Optional<ContactLog> logOpt = contactLogService.getById(id);
+        if (logOpt.isEmpty()) return ResponseEntity.notFound().build();
+
+        return ResponseEntity.ok(toMap(logOpt.get()));
     }
 
     @GetMapping("/stats")

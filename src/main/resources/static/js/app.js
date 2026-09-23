@@ -454,10 +454,31 @@ window.onload = function() {
             // di tornare sempre alla pagina di default del ruolo.
             const hashPage = getPageFromHash();
             const defaultPage = getDefaultPageForRole(data.role);
+
+            // NUOVO: se l'URL contiene ?openAlert=<id> (link cliccato dalla mail
+            // di notifica allert), si va DIRETTAMENTE su Registro Contatti invece
+            // che sulla pagina di default/hash, cosi' non serve una doppia
+            // navigazione (una verso la pagina "normale", una verso Contatti).
+            const openAlertParams = new URLSearchParams(window.location.search);
+            const openAlertId = openAlertParams.get('openAlert');
+            console.log('[DEBUG] openAlertId letto dall\'URL:', openAlertId, '- URL completo:', window.location.href);
+            let targetPage = hashPage || defaultPage;
+            if (openAlertId && hasAccess('CONTACTS', data.role)) {
+                targetPage = 'contacts';
+            }
+
             // NUOVO: await — l'overlay di caricamento (già visibile di
             // default) resta su finché anche i dati della prima pagina
             // non sono pronti, non solo finché il layout è disegnato.
-            await showPage(hashPage || defaultPage);
+            await showPage(targetPage);
+
+            // NUOVO: apre la scheda dell'allert indicato nel link, poi ripulisce
+            // il parametro dall'URL — cosi' un refresh successivo (F5) non la
+            // riapre in automatico ogni volta.
+            if (openAlertId && typeof openAlertFromLink === 'function') {
+                await openAlertFromLink(Number(openAlertId));
+                history.replaceState(null, '', window.location.pathname + window.location.hash);
+            }
 
             // FIX PRESTAZIONI: loadStats() veniva chiamata QUI e poi anche
             // dentro showPage() quando la pagina è "dashboard" (poche righe
