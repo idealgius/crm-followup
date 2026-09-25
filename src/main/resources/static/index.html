@@ -1293,8 +1293,8 @@
                     </div>
                 </div>
                 <div class="modal-body" style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start">
-                    <!-- COLONNA SINISTRA: stato + scheda cliente/richiesta -->
-                    <div style="flex:1 1 380px;min-width:300px">
+                    <!-- COLONNA 1: stato + scheda cliente/richiesta -->
+                    <div id="acquistoAlertModalLeftCol" style="flex:1 1 380px;min-width:300px">
                         <div style="margin-bottom:14px">
                             <span style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px">STATO ATTUALE:</span>
                             <span id="acquistoAlertModalStatus" style="font-weight:800;margin-left:6px">—</span>
@@ -1304,8 +1304,13 @@
                         <div id="acquistoAlertModalClientInfo" style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px"></div>
                     </div>
 
-                    <!-- COLONNA DESTRA: mail, destinatari, gestione -->
-                    <div style="flex:1 1 320px;min-width:280px">
+                    <!-- COLONNA 2: mail, destinatari — separata dalla gestione
+                         (COLONNA 3) apposta: con lo schermo intero, tre colonne
+                         affiancate usano lo spazio meglio di due colonne
+                         allargate; in anteprima (stretta) si dispongono da
+                         sole su più righe grazie al flex-wrap qui sopra, senza
+                         bisogno di codice che le ridimensioni a mano. -->
+                    <div id="acquistoAlertModalMiddleCol" style="flex:1 1 320px;min-width:280px">
                         <!-- NUOVO: stato invio mail — se non è ancora partita
                              (checkbox "invia automaticamente" disattivato in
                              fase di creazione/modifica), mostra un pulsante per
@@ -1329,7 +1334,10 @@
                         <div id="acquistoAlertReadOnlyNote" style="display:none;background:rgba(255,152,0,0.08);border:1px solid rgba(255,152,0,0.3);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text-secondary);margin-bottom:14px">
                             Solo Moderatore, Gestore e Admin possono gestire questo allert.
                         </div>
+                    </div>
 
+                    <!-- COLONNA 3: azioni di gestione -->
+                    <div id="acquistoAlertModalRightCol" style="flex:1 1 320px;min-width:280px">
                         <button type="button" id="acquistoAlertBtnInGestione" class="btn-gold" onclick="setAcquistoAlertStatus('IN_GESTIONE')" style="background:linear-gradient(135deg,#f0c040,#d4a820);width:100%;margin-bottom:6px">🟡 IN GESTIONE</button>
 
                         <!-- Chi ha messo "in gestione" e quando -->

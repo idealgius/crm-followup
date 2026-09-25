@@ -2144,17 +2144,21 @@ function openAcquistoAlertModal(id) {
     if (collapseIcon) collapseIcon.style.transform = 'rotate(0deg)';
     refreshAcquistoAlertModalDisplay(log);
 
-    // NUOVO: registra (o aggiorna) questa finestra nella taskbar in basso —
-    // se era già aperta/minimizzata, ne ripristina anche lo stato
-    // anteprima/espansa così come l'aveva lasciato.
+    // NUOVO: registra (o aggiorna) questa finestra nella taskbar in basso.
+    // FIX: prima ricordava anche lo stato anteprima/espansa da un'apertura
+    // all'altra — ma questo causava un bug per cui riaprendo un allert
+    // poteva ripartire "espanso" per errore, senza che sembrasse così
+    // dall'icona. Ora parte SEMPRE pulito, in anteprima: l'espansione è
+    // solo un'azione manuale per la visualizzazione corrente, non si porta
+    // dietro nulla da un'apertura all'altra.
     let entry = alertTaskbar.find(w => w.id === id);
     if (!entry) {
-        entry = { id, label: clienteNomeCompleto(log), expanded: false };
+        entry = { id, label: clienteNomeCompleto(log) };
         alertTaskbar.push(entry);
     } else {
         entry.label = clienteNomeCompleto(log);
     }
-    applyAcquistoAlertModalSize(entry.expanded);
+    applyAcquistoAlertModalSize(false);
     renderAlertTaskbar();
 
     const modal = document.getElementById('acquistoAlertModal');
@@ -2173,13 +2177,13 @@ function applyAcquistoAlertModalSize(expanded) {
         if (overlay) overlay.style.padding = '0';
         box.style.maxWidth = '100vw';
         box.style.width = '100vw';
-        box.style.maxHeight = '100vh';
-        box.style.height = '100vh';
+        box.style.maxHeight = '96vh';
+        box.style.height = '96vh';
         box.style.borderRadius = '0';
         box.style.margin = '0';
         box.style.display = 'flex';
         box.style.flexDirection = 'column';
-        if (body) { body.style.flex = '1'; body.style.overflowY = 'auto'; }
+        if (body) { body.style.flex = '1'; body.style.minHeight = '0'; body.style.overflowY = 'auto'; }
     } else {
         if (overlay) overlay.style.padding = '';
         box.style.maxWidth = '920px';
@@ -2190,7 +2194,7 @@ function applyAcquistoAlertModalSize(expanded) {
         box.style.margin = '';
         box.style.display = '';
         box.style.flexDirection = '';
-        if (body) { body.style.flex = ''; body.style.overflowY = ''; }
+        if (body) { body.style.flex = ''; body.style.minHeight = ''; body.style.overflowY = ''; }
     }
     const btn = document.getElementById('acquistoAlertModalExpandBtn');
     if (btn) btn.textContent = expanded ? '⤡' : '⤢';
@@ -2198,10 +2202,10 @@ function applyAcquistoAlertModalSize(expanded) {
 }
 
 function toggleAcquistoAlertModalExpand() {
-    const entry = alertTaskbar.find(w => w.id === acquistoAlertModalId);
-    if (!entry) return;
-    entry.expanded = !entry.expanded;
-    applyAcquistoAlertModalSize(entry.expanded);
+    const box = document.querySelector('#acquistoAlertModal .modal-box');
+    if (!box) return;
+    const isCurrentlyExpanded = box.style.width === '100vw';
+    applyAcquistoAlertModalSize(!isCurrentlyExpanded);
 }
 
 // Apre/chiude il pannello di modifica destinatari nel modal di gestione
@@ -2551,7 +2555,7 @@ function renderAlertTaskbar() {
     bar.style.display = 'flex';
     bar.innerHTML = alertTaskbar.map(w => `
         <div onclick="restoreAlertWindow(${w.id})" style="display:flex;align-items:center;gap:8px;background:${w.id === acquistoAlertModalId ? 'rgba(240,192,64,0.18)' : 'var(--step-bg)'};border:1.5px solid ${w.id === acquistoAlertModalId ? '#f0c040' : 'var(--border)'};border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;font-weight:700;color:var(--text-primary)">
-            🔔 ${w.label}${w.expanded ? ' ⤢' : ''}
+            🔔 ${w.label}
             <span onclick="event.stopPropagation();closeAlertWindowFromTaskbar(${w.id})" style="color:var(--text-secondary);font-weight:800;padding:0 2px">✕</span>
         </div>
     `).join('');
