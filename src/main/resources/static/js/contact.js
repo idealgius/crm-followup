@@ -771,10 +771,38 @@ function populateOperatorFilter() {
 // o sul calendario, che aprono già la vista giornaliera dedicata.
 // ============================================================
 
+// NUOVO: elenco di TUTTE le date storiche (non solo il periodo filtrato a
+// schermo), usato per popolare le tendine Anno/Mese/Settimana. Prima queste
+// tendine si popolavano solo da contactLogs (il periodo già caricato, di
+// norma il mese corrente), quindi sembravano "limitate" — mancavano mesi/
+// anni più vecchi. Caricato una volta sola, in background, e poi le tendine
+// si ridisegnano da sole quando arriva.
+let allContactDatesCache = null;
+let allContactDatesLoading = false;
+
+async function ensureAllContactDatesLoaded() {
+    if (allContactDatesCache || allContactDatesLoading) return;
+    allContactDatesLoading = true;
+    try {
+        const res = await fetch('/api/contacts/date-list');
+        if (res.ok) allContactDatesCache = await res.json();
+    } catch (err) {
+        console.error('Errore caricamento date storiche contatti:', err);
+    } finally {
+        allContactDatesLoading = false;
+    }
+    if (allContactDatesCache) populateContactYearFilter();
+}
+
 function populateContactYearFilter() {
     const sel = document.getElementById('contactYearFilter');
     if (!sel) return;
-    const years = [...new Set(contactLogs.map(l => l.contactDate.split('T')[0].split('-')[0]))].sort((a, b) => b - a);
+    if (!allContactDatesCache) ensureAllContactDatesLoaded();
+    // Finché lo storico completo non è arrivato, uso quello che c'è (il
+    // periodo già caricato) — le tendine si aggiornano da sole appena
+    // ensureAllContactDatesLoaded() completa.
+    const sourceDates = allContactDatesCache || contactLogs.map(l => l.contactDate.split('T')[0]);
+    const years = [...new Set(sourceDates.map(d => d.split('-')[0]))].sort((a, b) => b - a);
     const current = sel.value;
     sel.innerHTML = '<option value="">Tutti gli anni</option>' + years.map(y => `<option value="${y}" ${y === current ? 'selected' : ''}>${y}</option>`).join('');
     populateContactWeekFilter();
@@ -789,16 +817,16 @@ function populateContactWeekFilter() {
     const yearFilter = document.getElementById('contactYearFilter')?.value || '';
     const monthFilter = document.getElementById('contactMonthFilter')?.value || '';
 
-    const scoped = contactLogs.filter(l => {
-        const d = parseLocalDate(l.contactDate.split('T')[0]);
+    const sourceDates = allContactDatesCache || contactLogs.map(l => l.contactDate.split('T')[0]);
+    const scopedDates = sourceDates.filter(date => {
+        const d = parseLocalDate(date);
         if (yearFilter && d.getFullYear().toString() !== yearFilter) return false;
         if (monthFilter && (d.getMonth() + 1).toString() !== monthFilter) return false;
         return true;
     });
 
     const weeksSet = new Map(); // sortKey -> label
-    scoped.forEach(l => {
-        const date = l.contactDate.split('T')[0];
+    scopedDates.forEach(date => {
         const label = getWeekKey(date);
         const monday = getISOWeekMonday(date);
         const match = label.match(/Settimana (\d+)/);
@@ -812,8 +840,41 @@ function populateContactWeekFilter() {
     sel.innerHTML = '<option value="">Tutte le settimane</option>' + sortedWeeks.map(([key, label]) => `<option value="${key}" ${key === current ? 'selected' : ''}>${label}</option>`).join('');
 }
 
-function onContactPeriodFilterChange() {
+// FIX: prima, scegliere un anno/mese non ancora scaricato in memoria
+// mostrava zero risultati — la tendina permetteva di selezionarlo (specie
+// ora che elenca tutto lo storico, vedi ensureAllContactDatesLoaded), ma
+// applyContactFilters() filtra SEMPRE e solo contactLogs, il periodo già
+// caricato. Qui, se manca, lo scarichiamo al volo (stesso schema già usato
+// in goToContactSearchResult per il redirect da ricerca) prima di filtrare.
+async function onContactPeriodFilterChange() {
     populateContactWeekFilter();
+    const yearFilter = document.getElementById('contactYearFilter')?.value || '';
+    const monthFilter = document.getElementById('contactMonthFilter')?.value || '';
+    if (yearFilter) {
+        const from = monthFilter
+            ? `${yearFilter}-${monthFilter.padStart(2, '0')}-01`
+            : `${yearFilter}-01-01`;
+        const to = monthFilter
+            ? new Date(Number(yearFilter), Number(monthFilter), 0).toISOString().split('T')[0]
+            : `${yearFilter}-12-31`;
+        const alreadyLoaded = contactLogs.some(l => {
+            const d = l.contactDate.split('T')[0];
+            return d >= from && d <= to;
+        });
+        if (!alreadyLoaded) {
+            try {
+                const res = await fetch(`/api/contacts?from=${from}&to=${to}`);
+                if (res.ok) {
+                    const rangeLogs = await res.json();
+                    const existingIds = new Set(contactLogs.map(l => l.id));
+                    rangeLogs.forEach(l => { if (!existingIds.has(l.id)) contactLogs.push(l); });
+                    contactLogs.sort((a, b) => (b.contactDate || '').localeCompare(a.contactDate || ''));
+                }
+            } catch (err) {
+                console.error('Errore caricamento periodo filtrato:', err);
+            }
+        }
+    }
     applyContactFilters();
 }
 
@@ -981,6 +1042,18 @@ async function goToContactSearchResult(date, id) {
             console.error('Errore caricamento contatti del giorno:', err);
         }
     }
+    // FIX: il giorno veniva scaricato e aggiunto a contactLogs, ma
+    // contactLogsFiltered — il vero array da cui legge la vista giornaliera
+    // — restava quello vecchio, calcolato l'ultima volta che erano stati
+    // applicati i filtri. Senza questo passaggio la vista risultava vuota
+    // ("si rompe") per qualunque cliente fuori dal periodo già in memoria.
+    // Azzeriamo anche mese/settimana selezionati: un filtro attivo su un
+    // mese diverso nasconderebbe comunque il giorno appena caricato.
+    const monthFilterEl = document.getElementById('contactMonthFilter');
+    const weekFilterEl = document.getElementById('contactWeekFilter');
+    if (monthFilterEl) monthFilterEl.value = '';
+    if (weekFilterEl) weekFilterEl.value = '';
+    if (typeof applyContactFilters === 'function') applyContactFilters();
     showDayView(date);
     // Piccolo ritardo: showDayView ridisegna la tabella subito, ma il
     // browser ha bisogno di un attimo per calcolare le posizioni prima che
@@ -1240,6 +1313,7 @@ function renderGenericContactDetail() {
     }
     list.innerHTML = html;
     modal.style.display = 'flex';
+    bringModalToFront('sedeDetailModal');
 }
 
 function toggleDetailNominativoFilter() {
@@ -1464,11 +1538,14 @@ function closeSedeDetail(event) {
 // appena aperta prima che diventasse visibile. Ora si apre PRIMA la scheda
 // (sincrono, subito) e solo dopo si chiude il popup allert, con la stessa
 // rete di sicurezza (setTimeout) a riforzare la visibilità poco dopo.
+// NUOVO: "Tutti gli Allert" non si chiude più in automatico aprendo un
+// contatto al suo interno — stessa logica dello Storico Cliente (vedi
+// openHistoryCardDetail): resta aperto sotto, portato in secondo piano
+// solo visivamente (bringModalToFront sulla scheda appena aperta).
 function closeGenericDetailAndEdit(id) {
     const log = lastDetailItems.find(l => l.id === id) || contactLogs.find(l => l.id === id);
     openEditContactModal(id, log);
-    const modal = document.getElementById('sedeDetailModal');
-    if (modal) modal.style.display = 'none';
+    bringModalToFront('editContactModal');
     setTimeout(() => {
         const editModal = document.getElementById('editContactModal');
         if (editModal && editModal.style.display !== 'flex') editModal.style.display = 'flex';
@@ -2066,13 +2143,211 @@ function openAcquistoAlertModal(id) {
     if (collapseBody) collapseBody.style.display = 'none';
     if (collapseIcon) collapseIcon.style.transform = 'rotate(0deg)';
     refreshAcquistoAlertModalDisplay(log);
+
+    // NUOVO: registra (o aggiorna) questa finestra nella taskbar in basso —
+    // se era già aperta/minimizzata, ne ripristina anche lo stato
+    // anteprima/espansa così come l'aveva lasciato.
+    let entry = alertTaskbar.find(w => w.id === id);
+    if (!entry) {
+        entry = { id, label: clienteNomeCompleto(log), expanded: false };
+        alertTaskbar.push(entry);
+    } else {
+        entry.label = clienteNomeCompleto(log);
+    }
+    applyAcquistoAlertModalSize(entry.expanded);
+    renderAlertTaskbar();
+
     const modal = document.getElementById('acquistoAlertModal');
     if (modal) modal.style.display = 'flex';
+    bringModalToFront('acquistoAlertModal');
+}
+
+// NUOVO: dimensione del popup — "anteprima" (comoda, non invasiva) oppure
+// "espansa" (davvero a schermo intero, bordo a bordo, non solo "quasi").
+function applyAcquistoAlertModalSize(expanded) {
+    const overlay = document.getElementById('acquistoAlertModal');
+    const box = document.querySelector('#acquistoAlertModal .modal-box');
+    const body = document.querySelector('#acquistoAlertModal .modal-body');
+    if (!box) return;
+    if (expanded) {
+        if (overlay) overlay.style.padding = '0';
+        box.style.maxWidth = '100vw';
+        box.style.width = '100vw';
+        box.style.maxHeight = '100vh';
+        box.style.height = '100vh';
+        box.style.borderRadius = '0';
+        box.style.margin = '0';
+        box.style.display = 'flex';
+        box.style.flexDirection = 'column';
+        if (body) { body.style.flex = '1'; body.style.overflowY = 'auto'; }
+    } else {
+        if (overlay) overlay.style.padding = '';
+        box.style.maxWidth = '920px';
+        box.style.width = '92vw';
+        box.style.maxHeight = '';
+        box.style.height = '';
+        box.style.borderRadius = '';
+        box.style.margin = '';
+        box.style.display = '';
+        box.style.flexDirection = '';
+        if (body) { body.style.flex = ''; body.style.overflowY = ''; }
+    }
+    const btn = document.getElementById('acquistoAlertModalExpandBtn');
+    if (btn) btn.textContent = expanded ? '⤡' : '⤢';
+    if (btn) btn.title = expanded ? 'Torna ad anteprima' : 'Espandi';
+}
+
+function toggleAcquistoAlertModalExpand() {
+    const entry = alertTaskbar.find(w => w.id === acquistoAlertModalId);
+    if (!entry) return;
+    entry.expanded = !entry.expanded;
+    applyAcquistoAlertModalSize(entry.expanded);
 }
 
 // Apre/chiude il pannello di modifica destinatari nel modal di gestione
 // allert — chiuso di default (vedi openAcquistoAlertModal), così le note
 // restano subito leggibili senza dover scrollare.
+// NUOVO: invio manuale della mail allert, per quando non è partita in
+// automatico (checkbox "invia mail automaticamente" disattivato).
+async function inviaMailAllertManuale(id) {
+    try {
+        const res = await fetch(`/api/contacts/${id}/invia-mail-allert`, { method: 'PATCH' });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert(err.error || 'Errore durante l\'invio della mail');
+            return;
+        }
+        const updated = await res.json();
+        const idx = contactLogs.findIndex(l => l.id === id);
+        if (idx !== -1) contactLogs[idx] = updated;
+        refreshAcquistoAlertModalDisplay(updated);
+    } catch (err) {
+        console.error('Errore invio mail allert manuale:', err);
+        alert('Errore di rete durante l\'invio della mail');
+    }
+}
+
+// NUOVO: Modifica Anagrafica — scheda piccola raggiunta dall'icona 👤 nel
+// popup Gestione Allert. Sempre modificabile, anche dopo l'invio mail.
+let alertAnagraficaId = null;
+
+function findAlertLogById(id) {
+    return contactLogs.find(l => l.id === id)
+        || lastDetailItems.find(l => l.id === id)
+        || customerHistoryCache.find(l => l.id === id);
+}
+
+function openAlertAnagraficaModal(id) {
+    const log = findAlertLogById(id);
+    if (!log) return;
+    alertAnagraficaId = id;
+    document.getElementById('alertAnagraficaNome').value = log.clienteNome || '';
+    document.getElementById('alertAnagraficaCognome').value = log.clienteCognome || '';
+    document.getElementById('alertAnagraficaNumero').value = log.clienteNumero || '';
+    document.getElementById('alertAnagraficaNumero2').value = log.clienteNumero2 || '';
+    document.getElementById('alertAnagraficaEmail').value = log.clienteEmail || '';
+    document.getElementById('alertAnagraficaMarca').value = log.marca || '';
+    document.getElementById('alertAnagraficaModello').value = log.modello || '';
+    document.getElementById('alertAnagraficaModal').style.display = 'flex';
+    bringModalToFront('alertAnagraficaModal');
+}
+
+function closeAlertAnagraficaModal(event) {
+    if (event && event.target.id !== 'alertAnagraficaModal') return;
+    document.getElementById('alertAnagraficaModal').style.display = 'none';
+    alertAnagraficaId = null;
+}
+
+async function saveAlertAnagrafica() {
+    if (!alertAnagraficaId) return;
+    const payload = {
+        clienteNome: document.getElementById('alertAnagraficaNome').value.trim() || null,
+        clienteCognome: document.getElementById('alertAnagraficaCognome').value.trim() || null,
+        clienteNumero: document.getElementById('alertAnagraficaNumero').value.trim() || null,
+        clienteNumero2: document.getElementById('alertAnagraficaNumero2').value.trim() || null,
+        clienteEmail: document.getElementById('alertAnagraficaEmail').value.trim() || null,
+        marca: document.getElementById('alertAnagraficaMarca').value.trim() || null,
+        modello: document.getElementById('alertAnagraficaModello').value.trim() || null
+    };
+    try {
+        const res = await fetch(`/api/contacts/${alertAnagraficaId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert(err.error || 'Errore durante il salvataggio');
+            return;
+        }
+        const updated = await res.json();
+        const idx = contactLogs.findIndex(l => l.id === alertAnagraficaId);
+        if (idx !== -1) contactLogs[idx] = updated;
+        closeAlertAnagraficaModal();
+        refreshAcquistoAlertModalDisplay(updated);
+        if (typeof renderDayView === 'function') renderDayView();
+    } catch (err) {
+        console.error('Errore salvataggio anagrafica:', err);
+        alert('Errore di rete durante il salvataggio');
+    }
+}
+
+// NUOVO: Modifica Richiesta — scheda piccola raggiunta dall'icona ✏️ nel
+// popup Gestione Allert. Il backend la rifiuta (403) se la mail è già
+// stata inviata — l'icona stessa arriva già disabilitata in quel caso.
+let alertRichiestaId = null;
+
+function openAlertRichiestaModal(id) {
+    const log = findAlertLogById(id);
+    if (!log || log.alertEmailInviataAt) return;
+    alertRichiestaId = id;
+    document.getElementById('alertRichiestaTipologia').value = log.otherNote || '';
+    document.getElementById('alertRichiestaTarga').value = log.serviceTarga || '';
+    document.getElementById('alertRichiestaConsulente').value = log.consultantName || '';
+    document.getElementById('alertRichiestaNota').value = log.acquistoNote || '';
+    document.getElementById('alertRichiestaNotaAggiuntiva').value = log.notaAggiuntiva || '';
+    document.getElementById('alertRichiestaModal').style.display = 'flex';
+    bringModalToFront('alertRichiestaModal');
+}
+
+function closeAlertRichiestaModal(event) {
+    if (event && event.target.id !== 'alertRichiestaModal') return;
+    document.getElementById('alertRichiestaModal').style.display = 'none';
+    alertRichiestaId = null;
+}
+
+async function saveAlertRichiesta() {
+    if (!alertRichiestaId) return;
+    const payload = {
+        otherNote: document.getElementById('alertRichiestaTipologia').value.trim() || null,
+        serviceTarga: document.getElementById('alertRichiestaTarga').value.trim() || null,
+        consultantName: document.getElementById('alertRichiestaConsulente').value.trim() || null,
+        acquistoNote: document.getElementById('alertRichiestaNota').value.trim() || null,
+        notaAggiuntiva: document.getElementById('alertRichiestaNotaAggiuntiva').value.trim() || null
+    };
+    try {
+        const res = await fetch(`/api/contacts/${alertRichiestaId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert(err.error || 'Errore durante il salvataggio (la mail potrebbe essere già stata inviata)');
+            return;
+        }
+        const updated = await res.json();
+        const idx = contactLogs.findIndex(l => l.id === alertRichiestaId);
+        if (idx !== -1) contactLogs[idx] = updated;
+        closeAlertRichiestaModal();
+        refreshAcquistoAlertModalDisplay(updated);
+        if (typeof renderDayView === 'function') renderDayView();
+    } catch (err) {
+        console.error('Errore salvataggio richiesta:', err);
+        alert('Errore di rete durante il salvataggio');
+    }
+}
+
 function toggleAcquistoAlertModalDestinatariCollapse() {
     const body = document.getElementById('acquistoAlertModalDestinatariCollapseBody');
     const icon = document.getElementById('acquistoAlertModalDestinatariCollapseIcon');
@@ -2095,11 +2370,23 @@ function refreshAcquistoAlertModalDisplay(log) {
         const time = log.contactDate.split('T')[1]?.substring(0,5) || '';
         const linkParts = [];
         if (log.linkAuto) linkParts.push(`<a href="${log.linkAuto}" target="_blank" rel="noopener" style="color:#7c4dff;font-weight:700;text-decoration:none">🔗 Lead</a>`);
+        const esc = s => (s || '').replace(/'/g, "\\'");
+        // NUOVO: richiesta bloccata (non più modificabile) una volta che
+        // la mail è partita — chi l'ha ricevuta ha già letto quei dati.
+        const richiestaLocked = !!log.alertEmailInviataAt;
+        const iconBtn = (icon, title, onclick, disabled) => `<button type="button" ${disabled ? 'disabled' : `onclick="${onclick}"`} title="${title}${disabled ? ' (bloccato: mail già inviata)' : ''}" style="width:34px;height:34px;border-radius:8px;border:1.5px solid var(--border);background:var(--step-bg);color:${disabled ? 'var(--text-secondary)' : 'var(--text-primary)'};font-size:15px;cursor:${disabled ? 'not-allowed' : 'pointer'};opacity:${disabled ? '0.45' : '1'}">${icon}</button>`;
+        const iconsRow = `<div style="display:flex;gap:8px;margin-bottom:12px">
+            ${iconBtn('👤', 'Modifica anagrafica', `openAlertAnagraficaModal(${log.id})`, false)}
+            ${iconBtn('✏️', 'Modifica richiesta', `openAlertRichiestaModal(${log.id})`, richiestaLocked)}
+            ${iconBtn('📁', 'Storico cliente', `openCustomerHistoryModal('${esc(log.clienteNome)}','${esc(log.clienteCognome)}','${esc(log.clienteNumero)}')`, false)}
+        </div>`;
         clientInfoEl.innerHTML = `
+            ${iconsRow}
             <div style="font-size:12px;color:var(--text-secondary);line-height:1.9">
                 📅 ${formatDateIT(date)} · 🕐 ${time}<br>
-                📞 ${clienteNumeroDisplay(log)}<br>
-                👤 Operatore: ${log.user?.fullName || '—'}<br>
+                📞 ${clienteNumeroDisplay(log)}${log.clienteNumero2 ? ` · 📞 ${log.clienteNumero2}` : ''}
+                ${log.clienteEmail ? `<br>✉️ ${log.clienteEmail}` : ''}
+                <br>👤 Operatore: ${log.user?.fullName || '—'}<br>
                 📋 Tipologia: ${log.otherNote || '—'}
                 ${log.acquistoNote ? `<br>📝 Nota: ${log.acquistoNote}` : ''}
                 ${log.notaAggiuntiva ? `<br>📝 Nota aggiuntiva: ${log.notaAggiuntiva}` : ''}
@@ -2114,6 +2401,23 @@ function refreshAcquistoAlertModalDisplay(log) {
     } else {
         const infoEl = document.getElementById('acquistoAlertModalInfo');
         if (infoEl) infoEl.textContent = `${log.otherNote || ''}${log.acquistoNote ? ' · ' + log.acquistoNote : ''} · segnalato da ${log.user?.fullName || '—'}`;
+    }
+
+    // NUOVO: stato invio mail — se non ancora partita (checkbox "invia
+    // automaticamente" disattivato in creazione/modifica), mostra un
+    // pulsante per inviarla ora a mano; altrimenti mostra solo quando è
+    // partita, senza permettere un secondo invio.
+    const mailStatusEl = document.getElementById('acquistoAlertModalMailStatus');
+    if (mailStatusEl) {
+        if (log.alertEmailInviataAt) {
+            const d = log.alertEmailInviataAt.split('T')[0];
+            const t = log.alertEmailInviataAt.split('T')[1]?.substring(0,5) || '';
+            mailStatusEl.innerHTML = `<div style="font-size:12px;color:var(--text-secondary)">📧 Mail inviata il ${formatDateIT(d)} alle ${t}</div>`;
+        } else if (canManageAlerts()) {
+            mailStatusEl.innerHTML = `<button type="button" class="btn-sede" onclick="inviaMailAllertManuale(${log.id})" style="width:100%">📧 Invia mail ora</button>`;
+        } else {
+            mailStatusEl.innerHTML = `<div style="font-size:12px;color:var(--text-secondary)">📧 Mail non ancora inviata</div>`;
+        }
     }
 
     const audit = acquistoAlertAuditInfo(log);
@@ -2222,10 +2526,62 @@ async function saveAcquistoAlertDestinatari() {
     }
 }
 
+// ===== NUOVO: taskbar per gestire più Allert "aperti" insieme, come
+// finestre di un sistema operativo — se ne può aprire uno a schermo pieno,
+// ridurlo a una linguetta (senza chiuderlo davvero) e passare a un altro
+// cliente, ripristinando poi entrambi con un clic. Un solo popup condiviso
+// viene riusato per mostrare quello attivo al momento (i dati vengono
+// sempre ripresi da contactLogs/cache, quindi non c'è nulla da "salvare"
+// nel passaggio tra un allert e l'altro).
+let alertTaskbar = []; // [{ id, label }]
+
+function renderAlertTaskbar() {
+    let bar = document.getElementById('alertTaskbar');
+    if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'alertTaskbar';
+        document.body.appendChild(bar);
+    }
+    // NUOVO: posizionata appena sotto la navbar (in alto, come le schede di
+    // un browser), non più in basso — altezza della navbar misurata al
+    // volo, così resta corretta anche se cambia (mobile, temi, ecc.).
+    const navbarHeight = document.querySelector('.navbar')?.offsetHeight || 70;
+    bar.style.cssText = `position:fixed;left:0;right:0;top:${navbarHeight}px;z-index:9990;display:flex;gap:8px;padding:8px 12px;background:var(--card-bg,#12141c);border-bottom:1.5px solid var(--border);flex-wrap:wrap`;
+    if (alertTaskbar.length === 0) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+    bar.style.display = 'flex';
+    bar.innerHTML = alertTaskbar.map(w => `
+        <div onclick="restoreAlertWindow(${w.id})" style="display:flex;align-items:center;gap:8px;background:${w.id === acquistoAlertModalId ? 'rgba(240,192,64,0.18)' : 'var(--step-bg)'};border:1.5px solid ${w.id === acquistoAlertModalId ? '#f0c040' : 'var(--border)'};border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;font-weight:700;color:var(--text-primary)">
+            🔔 ${w.label}${w.expanded ? ' ⤢' : ''}
+            <span onclick="event.stopPropagation();closeAlertWindowFromTaskbar(${w.id})" style="color:var(--text-secondary);font-weight:800;padding:0 2px">✕</span>
+        </div>
+    `).join('');
+}
+
+function restoreAlertWindow(id) {
+    openAcquistoAlertModal(id);
+}
+
+function closeAlertWindowFromTaskbar(id) {
+    alertTaskbar = alertTaskbar.filter(w => w.id !== id);
+    if (acquistoAlertModalId === id) closeAcquistoAlertModal();
+    renderAlertTaskbar();
+}
+
+// Riduce l'allert attualmente aperto a una linguetta nella taskbar in
+// basso, SENZA chiuderlo — resta raggiungibile con un clic.
+function minimizeAcquistoAlertModal() {
+    const modal = document.getElementById('acquistoAlertModal');
+    if (modal) modal.style.display = 'none';
+}
+
 function closeAcquistoAlertModal(event) {
     if (event && event.target.id !== 'acquistoAlertModal') return;
     const modal = document.getElementById('acquistoAlertModal');
     if (modal) modal.style.display = 'none';
+    // Chiudere per davvero (✕) rimuove anche la linguetta dalla taskbar,
+    // a differenza di minimizeAcquistoAlertModal() qui sopra.
+    alertTaskbar = alertTaskbar.filter(w => w.id !== acquistoAlertModalId);
+    renderAlertTaskbar();
     acquistoAlertModalId = null;
     acquistoAlertNoteGestioneVisible = false;
     acquistoAlertNoteGestitaVisible = false;
@@ -3328,6 +3684,9 @@ async function createContactLog() {
         acquistoAlert: isAcquisto ? acquistoAlert : (isLeasingFin ? leasingAlert : false),
         alertNotifyAll: destinatariPayload.alertNotifyAll,
         alertRecipientIds: destinatariPayload.alertRecipientIds,
+        // NUOVO: se non attivo (checkbox spuntato di default), la mail
+        // dell'allert non parte in automatico — resta da inviare a mano.
+        inviaEmailAllert: document.getElementById('contactAlertInviaEmail')?.checked !== false,
         noleggioTipo: isRichiestaCliente ? (noleggioTipo||null) : null,
         noleggioLink: isRichiestaCliente ? (noleggioLink||null) : null,
         serviceTarga: isService ? (serviceTarga || null) : (isAcquisto ? (acquistoTarga || null) : (isLeasingFin ? (leasingTarga || null) : null)),
@@ -3400,6 +3759,8 @@ function openEditContactModal(id, logData) {
     if (editAlertDestRow) editAlertDestRow.style.display = 'none';
     const editAlertInviaATutti = document.getElementById('editContactAlertInviaATutti');
     if (editAlertInviaATutti) editAlertInviaATutti.checked = true;
+    const editAlertInviaEmail = document.getElementById('editContactAlertInviaEmail');
+    if (editAlertInviaEmail) editAlertInviaEmail.checked = true;
     const categorySelect = document.getElementById('editContactCategory');
     if (categorySelect) {
         categorySelect.innerHTML = ALL_CATEGORIES.map(c => `<option value="${c}" ${c===log.category?'selected':''}>${c}</option>`).join('');
@@ -3442,6 +3803,7 @@ function openEditContactModal(id, logData) {
     onEditCategoryChange();
     const modal = document.getElementById('editContactModal');
     if (modal) modal.style.display = 'flex';
+    bringModalToFront('editContactModal');
 }
 // Stessa definizione di "categoria simile a Info Vendita" usata dal form di
 // creazione (vedi onCategoryChange), riusata qui per coerenza.
@@ -3607,6 +3969,7 @@ async function saveEditContactLog() {
         if (editAlertToggled && !editingContactAlreadyAlerted) {
             payload.acquistoAlert = true;
             Object.assign(payload, getEditAlertDestinatariPayload());
+            payload.inviaEmailAllert = document.getElementById('editContactAlertInviaEmail')?.checked !== false;
         }
         const res = await fetch(`/api/contacts/${editingContactId}`, {
             method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -3680,6 +4043,8 @@ function hideNewContactForm() {
     if (leasingAlertHiddenReset) leasingAlertHiddenReset.value = 'false';
     const inviaATuttiEl = document.getElementById('contactAlertInviaATutti');
     if (inviaATuttiEl) inviaATuttiEl.checked = true;
+    const inviaEmailEl = document.getElementById('contactAlertInviaEmail');
+    if (inviaEmailEl) inviaEmailEl.checked = true;
     const nonComEl = document.getElementById('nonComunicaNominativo');
     if (nonComEl) nonComEl.checked = false;
     document.getElementById('clienteNome').placeholder = 'Nome Cliente *';
@@ -3820,17 +4185,15 @@ let customerHistoryCache = [];
 function openHistoryCardDetail(id) {
     const log = customerHistoryCache.find(l => l.id === id);
     if (!log) return;
-    // FIX: prima si chiudeva lo Storico e SOLO DOPO (con 50ms di attesa in
-    // mezzo) si apriva la scheda di modifica — quel buco di tempo lasciava
-    // spazio a qualunque altro meccanismo della pagina per richiudere il
-    // modal appena aperto prima che diventasse visibile. Ora si apre PRIMA
-    // la scheda (sincrono, subito), e solo dopo si chiude lo Storico —
-    // nessuna finestra temporale in mezzo in cui possa succedere altro.
     openEditContactModal(id, log);
-    closeCustomerHistoryModal();
-    // Rete di sicurezza: se qualcos'altro nella pagina dovesse comunque
-    // richiudere il modal appena aperto, lo forza di nuovo visibile poco
-    // dopo (invisibile all'utente, la finestra resta comunque aperta).
+    // NUOVO: lo Storico NON si chiude più in automatico — resta aperto
+    // sotto la scheda appena aperta, così non serve riaprirlo con l'icona
+    // 📁 ogni volta per tornare a scegliere un altro contatto. Si chiude
+    // solo se l'utente lo chiude esplicitamente (✕).
+    bringModalToFront('editContactModal');
+    // Rete di sicurezza ereditata da un fix precedente (vedi storico): se
+    // qualcos'altro nella pagina dovesse comunque richiudere il modal
+    // appena aperto, lo forza di nuovo visibile poco dopo.
     setTimeout(() => {
         const modal = document.getElementById('editContactModal');
         if (modal && modal.style.display !== 'flex') modal.style.display = 'flex';
@@ -3847,6 +4210,7 @@ async function openCustomerHistoryModal(nome, cognome, numero) {
     if (title) title.textContent = `📁 Storico — ${nomeCompleto}`;
     body.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-secondary)">Caricamento…</div>`;
     modal.style.display = 'flex';
+    bringModalToFront('customerHistoryModal');
 
     try {
         const params = new URLSearchParams();
@@ -3870,10 +4234,14 @@ async function openCustomerHistoryModal(nome, cognome, numero) {
             const [y, m, d] = l.contactDate.split('T')[0].split('-');
             const dataFmt = `${d}/${m}/${y}`;
             const oraFmt = l.contactDate.split('T')[1]?.substring(0, 5) || '';
+            const dateIso = l.contactDate.split('T')[0];
             const tipo = l.otherNote || l.acquistoNote || l.serviceNote || '';
             const notaExtra = l.notaAggiuntiva || '';
-            return `<div onclick="event.stopPropagation();openHistoryCardDetail(${l.id})" style="cursor:pointer;background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px" onmouseover="this.style.border='1.5px solid var(--accent, #4a90d9)'" onmouseout="this.style.border='1.5px solid var(--border)'">
-                <div style="font-weight:700;color:var(--text-primary);margin-bottom:4px">📅 ${dataFmt} · 🕐 ${oraFmt}</div>
+            return `<div style="cursor:pointer;background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px" onclick="event.stopPropagation();openHistoryCardDetail(${l.id})" onmouseover="this.style.border='1.5px solid var(--accent, #4a90d9)'" onmouseout="this.style.border='1.5px solid var(--border)'">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+                    <div style="font-weight:700;color:var(--text-primary);margin-bottom:4px">📅 ${dataFmt} · 🕐 ${oraFmt}</div>
+                    <button type="button" onclick="event.stopPropagation();goToContactDayFromHistory('${dateIso}', ${l.id})" title="Vai al giorno nel calendario" style="flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;background:rgba(74,144,217,0.15);color:#4a90d9;border:none;cursor:pointer;font-size:13px">📆</button>
+                </div>
                 <div style="font-size:12px;color:var(--text-secondary)">
                     <span class="contact-category-badge">${l.category}</span>
                     ${tipo ? `<br>📋 ${tipo}` : ''}
@@ -3886,6 +4254,36 @@ async function openCustomerHistoryModal(nome, cognome, numero) {
         console.error('Errore caricamento storico cliente:', err);
         body.innerHTML = `<div style="padding:20px;text-align:center;color:var(--text-secondary)">Errore nel caricamento dello storico.</div>`;
     }
+}
+
+// NUOVO: "vai al giorno nel calendario" da una riga dello Storico — riusa
+// lo stesso meccanismo già costruito per il salto da un risultato di
+// ricerca (goToContactSearchResult), che scarica il giorno se manca,
+// ricalcola i filtri e ci scorre sopra evidenziandola. In più, passa prima
+// alla pagina Registro Contatti se non ci si è già sopra — lo Storico ora
+// può essere aperto anche da altre sezioni del CRM (vedi taskbar allert).
+async function goToContactDayFromHistory(date, id) {
+    if (typeof showPage === 'function' && document.getElementById('contactsPage')?.style.display === 'none') {
+        await showPage('contacts');
+    }
+    await goToContactSearchResult(date, id);
+}
+
+// ===== NUOVO: porta in primo piano l'ultimo popup aperto =====
+// Prima l'ordine di sovrapposizione dipendeva solo dalla posizione nel
+// codice HTML — spostare dei popup (es. Gestione Allert, fuori da
+// #contactsPage per restare aperti cambiando sezione) cambiava quell'ordine
+// e ne rompeva la sovrapposizione attesa (es. lo Storico si apriva DIETRO
+// la Gestione Allert invece che davanti). Ora ogni apertura di un popup
+// aggiorna il suo z-index a un numero sempre più alto, così l'ultimo
+// aperto è sempre visibile sopra agli altri, a prescindere da dove si
+// trova nell'HTML.
+let topModalZIndex = 10000;
+function bringModalToFront(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    topModalZIndex += 1;
+    el.style.zIndex = topModalZIndex;
 }
 
 function closeCustomerHistoryModal(event) {

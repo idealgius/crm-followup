@@ -129,6 +129,21 @@ public class ContactLogController {
         return ResponseEntity.ok(result);
     }
 
+    // NUOVO: solo le date (formato "yyyy-MM-dd"), non i record interi —
+    // usata per popolare le tendine Anno/Mese/Settimana con TUTTO lo
+    // storico invece che solo il periodo attualmente caricato a schermo,
+    // che le rendeva "limitate" ai soli mesi già scaricati dal frontend.
+    @GetMapping("/date-list")
+    public ResponseEntity<?> getDateList(HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        List<String> dates = contactLogService.getAllContactDates().stream()
+                .map(dt -> dt.toLocalDate().toString())
+                .distinct()
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(dates);
+    }
+
     @GetMapping
     public ResponseEntity<?> getAll(
             @RequestParam(required = false) String from,
@@ -335,13 +350,21 @@ public class ContactLogController {
         // con il contatto ancora incompleto.
         // notifyAll (default) -> letteralmente tutti gli utenti registrati.
         // notifyAll = false -> solo i destinatari scelti a mano sopra.
+        // NUOVO: inviaEmailAllert (default true se assente, per compatibilità
+        // con eventuali chiamate che non lo specificano) — se false, l'allert
+        // viene comunque creato e visibile in "Da Gestire", ma la mail NON
+        // parte automaticamente: resta disponibile un invio manuale dal
+        // popup Gestione Allert (endpoint invia-mail-allert più sotto).
         // Un errore qui non deve mai far fallire la creazione del contatto:
         // notifyNewAlert() cattura internamente ogni eccezione.
-        if (ALERT_CATEGORIES.contains(category) && Boolean.TRUE.equals(acquistoAlert)) {
+        boolean inviaEmailAllert = !Boolean.FALSE.equals(body.get("inviaEmailAllert"));
+        if (ALERT_CATEGORIES.contains(category) && Boolean.TRUE.equals(acquistoAlert) && inviaEmailAllert) {
             List<User> mailRecipients = Boolean.FALSE.equals(log.getAlertNotifyAll())
                     ? log.getAlertRecipients()
                     : userRepository.findAll();
             alertMailService.notifyNewAlert(log, mailRecipients);
+            log.setAlertEmailInviataAt(LocalDateTime.now());
+            log = contactLogService.update(log);
         }
 
         Map<String, Object> logMap = toMap(log);
@@ -369,6 +392,19 @@ public class ContactLogController {
         // sta aggiungendo ora per la prima volta" (solo nel secondo caso
         // vogliamo mandare la mail e segnare acquistoAlertSegnalatoAt).
         boolean wasAlreadyAlerted = Boolean.TRUE.equals(log.getAcquistoAlert());
+
+        // NUOVO: una volta che la mail dell'allert è partita, la "richiesta"
+        // (tipologia, note, targa, consulente) si blocca — chi l'ha ricevuta
+        // via mail ha già letto quei dati, cambiarli dopo creerebbe
+        // disallineamento. L'anagrafica (nome/cognome/numeri/email/marca/
+        // modello) resta SEMPRE modificabile, non è toccata da questo blocco.
+        boolean touchesRichiesta = body.containsKey("otherNote") || body.containsKey("acquistoNote")
+                || body.containsKey("notaAggiuntiva") || body.containsKey("serviceTarga")
+                || body.containsKey("consultantName");
+        if (touchesRichiesta && log.getAlertEmailInviataAt() != null) {
+            return ResponseEntity.status(403).body(Map.of("error",
+                    "La mail per questo Allert è già stata inviata: la richiesta non è più modificabile"));
+        }
 
         // ===== ALLERT — permessi dedicati =====
         // La gestione dell'Allert (stato + note) è riservata a MODERATORE, GESTORE, ADMIN
@@ -398,6 +434,8 @@ public class ContactLogController {
         if (body.containsKey("clienteNome")) log.setClienteNome((String) body.get("clienteNome"));
         if (body.containsKey("clienteCognome")) log.setClienteCognome((String) body.get("clienteCognome"));
         if (body.containsKey("clienteNumero")) log.setClienteNumero((String) body.get("clienteNumero"));
+        if (body.containsKey("clienteNumero2")) log.setClienteNumero2((String) body.get("clienteNumero2"));
+        if (body.containsKey("clienteEmail")) log.setClienteEmail((String) body.get("clienteEmail"));
         if (body.containsKey("nonComunicaNominativo")) log.setNonComunicaNominativo((Boolean) body.get("nonComunicaNominativo"));
         if (body.containsKey("otherNote")) log.setOtherNote((String) body.get("otherNote"));
         if (body.containsKey("notaAggiuntiva")) log.setNotaAggiuntiva((String) body.get("notaAggiuntiva"));
@@ -515,11 +553,59 @@ public class ContactLogController {
         ContactLog saved = contactLogService.update(log);
 
         if (newlyFlagged) {
-            List<User> mailRecipients = Boolean.FALSE.equals(saved.getAlertNotifyAll())
-                    ? saved.getAlertRecipients()
-                    : userRepository.findAll();
-            alertMailService.notifyNewAlert(saved, mailRecipients);
+            boolean inviaEmailAllert = !Boolean.FALSE.equals(body.get("inviaEmailAllert"));
+            if (inviaEmailAllert) {
+                List<User> mailRecipients = Boolean.FALSE.equals(saved.getAlertNotifyAll())
+                        ? saved.getAlertRecipients()
+                        : userRepository.findAll();
+                alertMailService.notifyNewAlert(saved, mailRecipients);
+                saved.setAlertEmailInviataAt(LocalDateTime.now());
+                saved = contactLogService.update(saved);
+            }
         }
+
+        Map<String, Object> updatedMap = toMap(saved);
+        broadcastContactEvent("updated", updatedMap);
+        return ResponseEntity.ok(updatedMap);
+    }
+
+    // NUOVO: invio manuale della mail di notifica allert, per quando in
+    // creazione/modifica si e' scelto di NON mandarla in automatico
+    // (checkbox "invia automaticamente" disattivato). Stessi permessi della
+    // gestione allert (Moderatore/Gestore/Admin/Back Office) — chi ha
+    // accesso a "Da Gestire" e' chi ha senso possa anche decidere di
+    // sbloccare l'invio manualmente. Non permesso se la mail e' gia' stata
+    // inviata in precedenza (automaticamente o manualmente) — evita doppi
+    // invii per errore.
+    @PatchMapping("/{id}/invia-mail-allert")
+    public ResponseEntity<?> inviaMailAllertManuale(@PathVariable Long id, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        Optional<User> userOpt = userRepository.findById(userId);
+        if (userOpt.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "Utente non trovato"));
+        String role = userOpt.get().getRole();
+        boolean canManageAlert = "ADMIN".equals(role) || "GESTORE".equals(role) || "MODERATORE".equals(role) || "BACK_OFFICE".equals(role);
+        if (!canManageAlert) {
+            return ResponseEntity.status(403).body(Map.of("error", "Solo Moderatore, Gestore o Admin possono inviare la mail dell'Allert"));
+        }
+
+        Optional<ContactLog> logOpt = contactLogService.getById(id);
+        if (logOpt.isEmpty()) return ResponseEntity.notFound().build();
+        ContactLog log = logOpt.get();
+
+        if (!Boolean.TRUE.equals(log.getAcquistoAlert())) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Questo contatto non ha un Allert attivo"));
+        }
+        if (log.getAlertEmailInviataAt() != null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "La mail per questo Allert è già stata inviata"));
+        }
+
+        List<User> mailRecipients = Boolean.FALSE.equals(log.getAlertNotifyAll())
+                ? log.getAlertRecipients()
+                : userRepository.findAll();
+        alertMailService.notifyNewAlert(log, mailRecipients);
+        log.setAlertEmailInviataAt(LocalDateTime.now());
+        ContactLog saved = contactLogService.update(log);
 
         Map<String, Object> updatedMap = toMap(saved);
         broadcastContactEvent("updated", updatedMap);
@@ -668,6 +754,8 @@ public class ContactLogController {
         m.put("clienteNome", log.getClienteNome());
         m.put("clienteCognome", log.getClienteCognome());
         m.put("clienteNumero", log.getClienteNumero());
+        m.put("clienteNumero2", log.getClienteNumero2());
+        m.put("clienteEmail", log.getClienteEmail());
         m.put("nonComunicaNominativo", log.getNonComunicaNominativo());
         m.put("otherNote", log.getOtherNote());
         m.put("notaAggiuntiva", log.getNotaAggiuntiva());
@@ -684,6 +772,7 @@ public class ContactLogController {
         m.put("consultantName", log.getConsultantName());
         m.put("acquistoAlert", log.getAcquistoAlert());
         m.put("acquistoAlertSegnalatoAt", log.getAcquistoAlertSegnalatoAt());
+        m.put("alertEmailInviataAt", log.getAlertEmailInviataAt());
         m.put("acquistoAlertStatus", log.getAcquistoAlertStatus());
         m.put("acquistoAlertNoteGestione", log.getAcquistoAlertNoteGestione());
         m.put("acquistoAlertNoteGestita", log.getAcquistoAlertNoteGestita());

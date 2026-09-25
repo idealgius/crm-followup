@@ -703,14 +703,14 @@
 
         <!-- MODAL MODIFICA CONTATTO — ESTESO: tutti i campi editabili -->
         <div id="editContactModal" class="modal-overlay" style="display:none" onclick="closeEditContactModal(event)">
-            <div class="modal-box" onclick="event.stopPropagation()" style="max-width:560px">
+            <div class="modal-box" onclick="event.stopPropagation()" style="max-width:620px">
                 <div class="modal-header">
                     <h3>Modifica Contatto</h3>
                     <button type="button" class="modal-close" onclick="closeEditContactModal()">✕</button>
                 </div>
                 <div class="modal-body">
 
-                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">CATEGORIA *</label>
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">🗂️ CATEGORIA *</label>
                     <select id="editContactCategory" class="input-field" onchange="onEditCategoryChange()"></select>
 
                     <!-- DATI CLIENTE -->
@@ -858,14 +858,15 @@
                     </div>
 
                     <!-- PRATICA LEASING / FINANZIAMENTO / AMMINISTRAZIONE — NUOVO, mancava del tutto -->
-                    <div id="editContactLeasingFinRow" style="display:none">
-                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MARCA VEICOLO (opzionale)</label>
+                    <div id="editContactLeasingFinRow" style="display:none;background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px">
+                        <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#1a4080;margin-bottom:10px;text-transform:uppercase">🚗 Veicolo</div>
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MARCA (opzionale)</label>
                         <input type="text" id="editContactLeasingMarcaInput" placeholder="Es. Peugeot" class="input-field">
                         <input type="hidden" id="editContactLeasingMarca" value="">
-                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLO VEICOLO (opzionale)</label>
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLO (opzionale)</label>
                         <input type="text" id="editContactLeasingModello" placeholder="Es. 208 1.2 PureTech 100cv" class="input-field">
-                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TARGA (opzionale)</label>
-                        <input type="text" id="editContactLeasingTarga" placeholder="Es. AB123CD" class="input-field" style="text-transform:uppercase">
+                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">🔖 TARGA (opzionale)</label>
+                        <input type="text" id="editContactLeasingTarga" placeholder="Es. AB123CD" class="input-field" style="text-transform:uppercase;margin-bottom:0">
                     </div>
 
                     <!-- PROMO -->
@@ -881,8 +882,10 @@
                     </div>
 
                     <!-- NOTA UNIVERSALE — NUOVO, non era mai modificabile dopo la creazione -->
-                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA (opzionale)</label>
-                    <textarea id="editContactNotaAggiuntiva" placeholder="Note aggiuntive libere..." class="input-field" style="margin-bottom:15px"></textarea>
+                    <div style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:14px;margin-bottom:16px">
+                        <div style="font-size:11px;font-weight:800;letter-spacing:1px;color:#1a4080;margin-bottom:10px;text-transform:uppercase">📝 Nota</div>
+                        <textarea id="editContactNotaAggiuntiva" placeholder="Note aggiuntive libere..." class="input-field" style="margin-bottom:0"></textarea>
+                    </div>
 
                     <!-- NUOVO: permette di segnalare un allert su un contatto GIA'
                          ESISTENTE che non ne aveva uno — prima l'allert si poteva
@@ -903,6 +906,9 @@
                             <div id="editContactAlertDestinatariListWrapper" style="display:none;margin-top:8px">
                                 <div id="editContactAlertDestinatariList" style="max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;border:1px solid var(--border);border-radius:8px;padding:8px"></div>
                             </div>
+                            <label class="checkbox-label" style="padding:8px 0 0;border-top:1px solid var(--border);margin-top:10px">
+                                <input type="checkbox" id="editContactAlertInviaEmail" checked> 📧 Invia mail automaticamente
+                            </label>
                         </div>
                     </div>
 
@@ -915,70 +921,6 @@
         </div>
 
         <!-- MODAL GESTIONE ALLERT — Info Acquisto effettuato -->
-        <div id="acquistoAlertModal" class="modal-overlay" style="display:none" onclick="closeAcquistoAlertModal(event)">
-            <div class="modal-box" onclick="event.stopPropagation()" style="max-width:480px">
-                <div class="modal-header">
-                    <h3 id="acquistoAlertModalTitle">Gestione Allert</h3>
-                    <button type="button" class="modal-close" onclick="closeAcquistoAlertModal()">✕</button>
-                </div>
-                <div class="modal-body">
-                    <div style="margin-bottom:14px">
-                        <span style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px">STATO ATTUALE:</span>
-                        <span id="acquistoAlertModalStatus" style="font-weight:800;margin-left:6px">—</span>
-                    </div>
-
-                    <!-- Scheda cliente completa -->
-                    <div id="acquistoAlertModalClientInfo" style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px"></div>
-
-                    <!-- NUOVO: modifica destinatari a posteriori -->
-                    <div id="acquistoAlertModalDestinatariBlock" style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px">
-                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:8px">A CHI È SEGNALATO (modificabile)</label>
-                        <label class="checkbox-label" style="padding:4px 0">
-                            <input type="checkbox" id="acquistoAlertModalInviaATutti" onchange="onAcquistoAlertModalDestinatariChange()"> Invia a tutti
-                        </label>
-                        <div id="acquistoAlertModalDestinatariListWrapper" style="display:none;margin-top:8px">
-                            <div id="acquistoAlertModalDestinatariList" style="max-height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;border:1px solid var(--border);border-radius:8px;padding:8px"></div>
-                        </div>
-                        <button type="button" class="btn-secondary" onclick="saveAcquistoAlertDestinatari()" style="margin-top:10px;font-size:12px;padding:6px 14px">💾 Salva destinatari</button>
-                    </div>
-
-                    <div id="acquistoAlertModalInfo" style="display:none"></div>
-
-                    <div id="acquistoAlertReadOnlyNote" style="display:none;background:rgba(255,152,0,0.08);border:1px solid rgba(255,152,0,0.3);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text-secondary);margin-bottom:14px">
-                        Solo Moderatore, Gestore e Admin possono gestire questo allert.
-                    </div>
-
-                    <button type="button" id="acquistoAlertBtnInGestione" class="btn-gold" onclick="setAcquistoAlertStatus('IN_GESTIONE')" style="background:linear-gradient(135deg,#f0c040,#d4a820);width:100%;margin-bottom:6px">🟡 IN GESTIONE</button>
-
-                    <!-- Chi ha messo "in gestione" e quando -->
-                    <div id="acquistoAlertInGestioneInfo" style="display:none;font-size:11px;color:var(--text-secondary);margin-bottom:10px;padding:0 4px"></div>
-
-                    <div id="acquistoAlertNoteGestioneRow" style="display:none;margin-bottom:16px">
-                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA IN GESTIONE</label>
-                        <textarea id="acquistoAlertNoteGestione" placeholder="Note sulla presa in carico..." class="input-field" onblur="saveAcquistoAlertNote('acquistoAlertNoteGestione')"></textarea>
-                        <div id="acquistoAlertNoteGestioneInseritaInfo" style="display:none;font-size:11px;color:var(--text-secondary);margin-top:4px;padding:0 4px"></div>
-                        <div id="acquistoAlertNoteGestioneModificataInfo" style="display:none;font-size:11px;color:var(--text-secondary);margin-top:4px;padding:0 4px"></div>
-                    </div>
-
-                    <button type="button" id="acquistoAlertBtnGestita" class="btn-gold" onclick="setAcquistoAlertStatus('GESTITA')" style="background:linear-gradient(135deg,#00c853,#00913c);color:#fff;width:100%;margin-bottom:6px">🟢 GESTITA</button>
-
-                    <!-- Chi ha messo "gestita" e quando -->
-                    <div id="acquistoAlertGestitaInfo" style="display:none;font-size:11px;color:var(--text-secondary);margin-bottom:10px;padding:0 4px"></div>
-
-                    <div id="acquistoAlertNoteGestitaRow" style="display:none;margin-bottom:16px">
-                        <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA GESTITA</label>
-                        <textarea id="acquistoAlertNoteGestita" placeholder="Note sulla risoluzione..." class="input-field" onblur="saveAcquistoAlertNote('acquistoAlertNoteGestita')"></textarea>
-                        <div id="acquistoAlertNoteGestitaInseritaInfo" style="display:none;font-size:11px;color:var(--text-secondary);margin-top:4px;padding:0 4px"></div>
-                        <div id="acquistoAlertNoteGestitaModificataInfo" style="display:none;font-size:11px;color:var(--text-secondary);margin-top:4px;padding:0 4px"></div>
-                    </div>
-
-                    <div class="form-actions" style="margin-top:6px;flex-wrap:wrap">
-                        <button id="acquistoAlertBtnRimuovi" class="btn-secondary" onclick="setAcquistoAlertStatus(null)">↺ Rimuovi Gestione</button>
-                        <button class="btn-secondary" onclick="closeAcquistoAlertModal()">CHIUDI</button>
-                    </div>
-                </div>
-            </div>
-        </div>
 
         <!-- MODAL INFO ACQUISTO DA GESTIRE — popup automatico all'apertura del
              Registro Contatti, mostrato solo a chi ha i permessi di gestione -->
@@ -1214,6 +1156,14 @@
                     <div id="contactAlertDestinatariListWrapper" style="display:none;margin-top:8px">
                         <div id="contactAlertDestinatariList" style="max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;border:1px solid var(--border);border-radius:8px;padding:8px"></div>
                     </div>
+                    <!-- NUOVO: di default la mail parte da sola appena si
+                         salva l'allert. Deselezionando questa casella,
+                         l'allert viene comunque creato e visibile in "Da
+                         Gestire", ma la mail resta ferma finché qualcuno non
+                         la invia a mano dal popup Gestione Allert. -->
+                    <label class="checkbox-label" style="padding:8px 0 0;border-top:1px solid var(--border);margin-top:10px">
+                        <input type="checkbox" id="contactAlertInviaEmail" checked> 📧 Invia mail automaticamente
+                    </label>
                 </div>
 
                 <!-- PRATICA LEASING / PRATICA FINANZIAMENTO / AMMINISTRAZIONE —
@@ -1325,6 +1275,155 @@
         </div>
         <div id="contactLogsList"></div>
     </div>
+
+        <!-- NUOVO: questi tre popup (Gestione Allert, Modifica Anagrafica,
+             Modifica Richiesta) sono stati spostati FUORI da #contactsPage
+             apposta: prima, quando #contactsPage passava a display:none
+             (navigando su un'altra sezione del CRM), li nascondeva con
+             se' anche se erano stati minimizzati nella taskbar in basso.
+             Ora restano raggiungibili da qualunque pagina del CRM. -->
+        <div id="acquistoAlertModal" class="modal-overlay" style="display:none" onclick="closeAcquistoAlertModal(event)">
+            <div class="modal-box" onclick="event.stopPropagation()" style="max-width:920px;width:92vw">
+                <div class="modal-header">
+                    <h3 id="acquistoAlertModalTitle">Gestione Allert</h3>
+                    <div style="display:flex;gap:6px;align-items:center">
+                        <button type="button" id="acquistoAlertModalExpandBtn" onclick="toggleAcquistoAlertModalExpand()" title="Espandi" class="modal-close" style="font-size:15px">⤢</button>
+                        <button type="button" onclick="minimizeAcquistoAlertModal()" title="Riduci a icona" class="modal-close" style="font-size:18px">—</button>
+                        <button type="button" class="modal-close" onclick="closeAcquistoAlertModal()">✕</button>
+                    </div>
+                </div>
+                <div class="modal-body" style="display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start">
+                    <!-- COLONNA SINISTRA: stato + scheda cliente/richiesta -->
+                    <div style="flex:1 1 380px;min-width:300px">
+                        <div style="margin-bottom:14px">
+                            <span style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px">STATO ATTUALE:</span>
+                            <span id="acquistoAlertModalStatus" style="font-weight:800;margin-left:6px">—</span>
+                        </div>
+
+                        <!-- Scheda cliente completa -->
+                        <div id="acquistoAlertModalClientInfo" style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px"></div>
+                    </div>
+
+                    <!-- COLONNA DESTRA: mail, destinatari, gestione -->
+                    <div style="flex:1 1 320px;min-width:280px">
+                        <!-- NUOVO: stato invio mail — se non è ancora partita
+                             (checkbox "invia automaticamente" disattivato in
+                             fase di creazione/modifica), mostra un pulsante per
+                             inviarla manualmente adesso. -->
+                        <div id="acquistoAlertModalMailStatus" style="margin-bottom:14px"></div>
+
+                        <!-- NUOVO: modifica destinatari a posteriori -->
+                        <div id="acquistoAlertModalDestinatariBlock" style="background:var(--step-bg);border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px">
+                            <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:8px">A CHI È SEGNALATO (modificabile)</label>
+                            <label class="checkbox-label" style="padding:4px 0">
+                                <input type="checkbox" id="acquistoAlertModalInviaATutti" onchange="onAcquistoAlertModalDestinatariChange()"> Invia a tutti
+                            </label>
+                            <div id="acquistoAlertModalDestinatariListWrapper" style="display:none;margin-top:8px">
+                                <div id="acquistoAlertModalDestinatariList" style="max-height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;border:1px solid var(--border);border-radius:8px;padding:8px"></div>
+                            </div>
+                            <button type="button" class="btn-secondary" onclick="saveAcquistoAlertDestinatari()" style="margin-top:10px;font-size:12px;padding:6px 14px">💾 Salva destinatari</button>
+                        </div>
+
+                        <div id="acquistoAlertModalInfo" style="display:none"></div>
+
+                        <div id="acquistoAlertReadOnlyNote" style="display:none;background:rgba(255,152,0,0.08);border:1px solid rgba(255,152,0,0.3);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--text-secondary);margin-bottom:14px">
+                            Solo Moderatore, Gestore e Admin possono gestire questo allert.
+                        </div>
+
+                        <button type="button" id="acquistoAlertBtnInGestione" class="btn-gold" onclick="setAcquistoAlertStatus('IN_GESTIONE')" style="background:linear-gradient(135deg,#f0c040,#d4a820);width:100%;margin-bottom:6px">🟡 IN GESTIONE</button>
+
+                        <!-- Chi ha messo "in gestione" e quando -->
+                        <div id="acquistoAlertInGestioneInfo" style="display:none;font-size:11px;color:var(--text-secondary);margin-bottom:10px;padding:0 4px"></div>
+
+                        <div id="acquistoAlertNoteGestioneRow" style="display:none;margin-bottom:16px">
+                            <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA IN GESTIONE</label>
+                            <textarea id="acquistoAlertNoteGestione" placeholder="Note sulla presa in carico..." class="input-field" onblur="saveAcquistoAlertNote('acquistoAlertNoteGestione')"></textarea>
+                            <div id="acquistoAlertNoteGestioneInseritaInfo" style="display:none;font-size:11px;color:var(--text-secondary);margin-top:4px;padding:0 4px"></div>
+                            <div id="acquistoAlertNoteGestioneModificataInfo" style="display:none;font-size:11px;color:var(--text-secondary);margin-top:4px;padding:0 4px"></div>
+                        </div>
+
+                        <button type="button" id="acquistoAlertBtnGestita" class="btn-gold" onclick="setAcquistoAlertStatus('GESTITA')" style="background:linear-gradient(135deg,#00c853,#00913c);color:#fff;width:100%;margin-bottom:6px">🟢 GESTITA</button>
+
+                        <!-- Chi ha messo "gestita" e quando -->
+                        <div id="acquistoAlertGestitaInfo" style="display:none;font-size:11px;color:var(--text-secondary);margin-bottom:10px;padding:0 4px"></div>
+
+                        <div id="acquistoAlertNoteGestitaRow" style="display:none;margin-bottom:16px">
+                            <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA GESTITA</label>
+                            <textarea id="acquistoAlertNoteGestita" placeholder="Note sulla risoluzione..." class="input-field" onblur="saveAcquistoAlertNote('acquistoAlertNoteGestita')"></textarea>
+                            <div id="acquistoAlertNoteGestitaInseritaInfo" style="display:none;font-size:11px;color:var(--text-secondary);margin-top:4px;padding:0 4px"></div>
+                            <div id="acquistoAlertNoteGestitaModificataInfo" style="display:none;font-size:11px;color:var(--text-secondary);margin-top:4px;padding:0 4px"></div>
+                        </div>
+
+                        <div class="form-actions" style="margin-top:6px;flex-wrap:wrap">
+                            <button id="acquistoAlertBtnRimuovi" class="btn-secondary" onclick="setAcquistoAlertStatus(null)">↺ Rimuovi Gestione</button>
+                            <button class="btn-secondary" onclick="closeAcquistoAlertModal()">CHIUDI</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- NUOVO: Modifica Anagrafica — scheda piccola e mirata (icona 👤
+             nel popup Gestione Allert), separata dal grande modal "Modifica
+             Contatto". Sempre modificabile, anche dopo l'invio della mail
+             (l'anagrafica non è "la richiesta", non si blocca mai). -->
+        <div id="alertAnagraficaModal" class="modal-overlay" style="display:none" onclick="closeAlertAnagraficaModal(event)">
+            <div class="modal-box" onclick="event.stopPropagation()" style="max-width:420px">
+                <div class="modal-header">
+                    <h3>👤 Modifica Anagrafica</h3>
+                    <button type="button" class="modal-close" onclick="closeAlertAnagraficaModal()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOME</label>
+                    <input type="text" id="alertAnagraficaNome" class="input-field" style="margin-bottom:12px">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">COGNOME</label>
+                    <input type="text" id="alertAnagraficaCognome" class="input-field" style="margin-bottom:12px">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NUMERO</label>
+                    <input type="text" id="alertAnagraficaNumero" class="input-field" style="margin-bottom:12px">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">SECONDO NUMERO (opzionale)</label>
+                    <input type="text" id="alertAnagraficaNumero2" class="input-field" style="margin-bottom:12px">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">EMAIL (opzionale)</label>
+                    <input type="email" id="alertAnagraficaEmail" class="input-field" style="margin-bottom:12px">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MARCA VEICOLO (opzionale)</label>
+                    <input type="text" id="alertAnagraficaMarca" class="input-field" style="margin-bottom:12px">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">MODELLO VEICOLO (opzionale)</label>
+                    <input type="text" id="alertAnagraficaModello" class="input-field" style="margin-bottom:12px">
+                    <div class="form-actions" style="margin-top:6px">
+                        <button class="btn-gold" onclick="saveAlertAnagrafica()">SALVA</button>
+                        <button class="btn-secondary" onclick="closeAlertAnagraficaModal()">ANNULLA</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- NUOVO: Modifica Richiesta — scheda piccola e mirata (icona ✏️
+             nel popup Gestione Allert). Il backend la rifiuta (403) se la
+             mail dell'allert è già stata inviata — l'icona stessa arriva già
+             disabilitata in quel caso, questa è solo la seconda barriera. -->
+        <div id="alertRichiestaModal" class="modal-overlay" style="display:none" onclick="closeAlertRichiestaModal(event)">
+            <div class="modal-box" onclick="event.stopPropagation()" style="max-width:420px">
+                <div class="modal-header">
+                    <h3>✏️ Modifica Richiesta</h3>
+                    <button type="button" class="modal-close" onclick="closeAlertRichiestaModal()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TIPOLOGIA</label>
+                    <input type="text" id="alertRichiestaTipologia" class="input-field" style="margin-bottom:12px">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">TARGA (opzionale)</label>
+                    <input type="text" id="alertRichiestaTarga" class="input-field" style="margin-bottom:12px">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">CONSULENTE (opzionale)</label>
+                    <input type="text" id="alertRichiestaConsulente" class="input-field" style="margin-bottom:12px">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA (opzionale)</label>
+                    <textarea id="alertRichiestaNota" class="input-field" style="margin-bottom:12px"></textarea>
+                    <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">NOTA AGGIUNTIVA (opzionale)</label>
+                    <textarea id="alertRichiestaNotaAggiuntiva" class="input-field" style="margin-bottom:12px"></textarea>
+                    <div class="form-actions" style="margin-top:6px">
+                        <button class="btn-gold" onclick="saveAlertRichiesta()">SALVA</button>
+                        <button class="btn-secondary" onclick="closeAlertRichiestaModal()">ANNULLA</button>
+                    </div>
+                </div>
+            </div>
+        </div>
 
     <!-- PREVENTIVI TELEFONICI PAGE -->
     <div id="preventiviPage" class="page page-wide" style="display:none">

@@ -114,6 +114,12 @@ public class ContactLogService {
         return results.size() > 50 ? results.subList(0, 50) : results;
     }
 
+    // NUOVO: per popolare le tendine Anno/Mese/Settimana con TUTTO lo
+    // storico invece che solo il periodo filtrato a schermo.
+    public List<LocalDateTime> getAllContactDates() {
+        return contactLogRepository.findAllContactDates();
+    }
+
     public List<ContactLog> getByDateRange(LocalDateTime from, LocalDateTime to) {
         return contactLogRepository.findByContactDateBetweenOrderByContactDateAsc(from, to);
     }

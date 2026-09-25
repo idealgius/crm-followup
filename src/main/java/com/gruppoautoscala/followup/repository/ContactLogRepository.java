@@ -61,6 +61,15 @@ public interface ContactLogRepository extends JpaRepository<ContactLog, Long> {
 
     List<ContactLog> findByUserOrderByContactDateAsc(User user);
 
+    // ===== NUOVO: tendine Anno/Mese/Settimana su TUTTO lo storico =====
+    // Prima le tendine si popolavano solo dai contatti già scaricati (il
+    // periodo filtrato a schermo, di norma il mese corrente), quindi
+    // sembravano "limitate" — mancavano mesi/anni più vecchi mai caricati.
+    // Query leggera apposta: solo la colonna data, non i record interi con
+    // tutti i JOIN FETCH delle altre query qui sopra.
+    @Query("SELECT c.contactDate FROM ContactLog c")
+    List<LocalDateTime> findAllContactDates();
+
     @Query("SELECT c.category, COUNT(c) FROM ContactLog c GROUP BY c.category")
     List<Object[]> countByCategory();
 

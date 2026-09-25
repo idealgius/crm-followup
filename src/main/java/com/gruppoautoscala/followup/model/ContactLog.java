@@ -31,6 +31,15 @@ public class ContactLog {
     @Column(name = "cliente_numero", length = 50)
     private String clienteNumero;
 
+    // ===== NUOVO: secondo numero ed email del cliente — opzionali,
+    // aggiungibili/modificabili dalla scheda "Modifica Anagrafica"
+    // raggiungibile dal popup Gestione Allert (icona 👤). =====
+    @Column(name = "cliente_numero_2", length = 50)
+    private String clienteNumero2;
+
+    @Column(name = "cliente_email", length = 255)
+    private String clienteEmail;
+
     @Column(name = "non_comunica_nominativo")
     private Boolean nonComunicaNominativo = false;
 
@@ -157,6 +166,14 @@ public class ContactLog {
     // momento vero della segnalazione, non la data originale del contatto.
     @Column(name = "acquisto_alert_segnalato_at")
     private LocalDateTime acquistoAlertSegnalatoAt;
+
+    // ===== NUOVO: quando la mail di notifica e' stata EFFETTIVAMENTE
+    // inviata (automaticamente o manualmente) — null finche' non parte.
+    // Serve a: 1) sapere se mostrare il pulsante "Invia mail" manuale nel
+    // popup Gestione Allert, 2) in futuro, bloccare la modifica della
+    // richiesta una volta che la mail e' gia' partita.
+    @Column(name = "alert_email_inviata_at")
+    private LocalDateTime alertEmailInviataAt;
 
     // ===== NUOVO: destinatari dell'allert =====
     // Questi due campi sono condivisi da TUTTE le categorie che possono avere
