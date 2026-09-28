@@ -7,6 +7,7 @@ import com.gruppoautoscala.followup.repository.UserPermissionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class RolePermissionService {
@@ -16,6 +17,32 @@ public class RolePermissionService {
 
     @Autowired
     private UserPermissionRepository userPermissionRepository;
+
+    // ===== CACHE IN MEMORIA =====
+    // Ogni richiesta al CRM controlla i permessi dell'utente, e prima ogni
+    // controllo faceva 2 query al database (override personale + tabella
+    // permessi di ruolo per intero). Con il database lontano dal server,
+    // ogni query costa 150-250 ms: la sola risposta di /api/permissions
+    // (11 sezioni x 2 query, piu' la matrice finale) arrivava a ~5 secondi.
+    // I permessi cambiano di rado (solo dalla pagina Permessi), quindi si
+    // tengono in memoria per 60 secondi, e si svuotano subito quando
+    // l'admin li modifica da qui (setAccess / setUserAccess). Il TTL di 60s
+    // copre il caso di una modifica fatta direttamente sul database.
+    private static final long CACHE_TTL_MS = 60_000;
+    private volatile Map<String, Map<String, String>> matrixCache;
+    private volatile long matrixCacheAt = 0;
+    private final Map<Long, UserOverridesCache> userOverridesCache = new ConcurrentHashMap<>();
+
+    private static class UserOverridesCache {
+        final Map<String, String> overrides;
+        final long at;
+        UserOverridesCache(Map<String, String> overrides, long at) { this.overrides = overrides; this.at = at; }
+    }
+
+    private void invalidateCaches() {
+        matrixCache = null;
+        userOverridesCache.clear();
+    }
 
     // Tutti i ruoli e tutte le sezioni gestibili — usati sia per validare gli
     // input sia per costruire la matrice completa (ogni ruolo × ogni sezione,
@@ -87,6 +114,27 @@ public class RolePermissionService {
     // tutto), sia per applyRolePermissions/showPage (che ne usano solo la
     // riga del ruolo dell'utente loggato).
     public Map<String, Map<String, String>> getEffectiveMatrix() {
+        // Copia difensiva: chi la riceve non puo' sporcare la cache.
+        Map<String, Map<String, String>> copy = new LinkedHashMap<>();
+        for (Map.Entry<String, Map<String, String>> e : matrixSnapshot().entrySet()) {
+            copy.put(e.getKey(), new LinkedHashMap<>(e.getValue()));
+        }
+        return copy;
+    }
+
+    // Matrice dalla cache (interna, in sola lettura) — se scaduta o svuotata
+    // la ricostruisce dal database.
+    private Map<String, Map<String, String>> matrixSnapshot() {
+        long now = System.currentTimeMillis();
+        Map<String, Map<String, String>> cached = matrixCache;
+        if (cached != null && now - matrixCacheAt < CACHE_TTL_MS) return cached;
+        Map<String, Map<String, String>> built = buildMatrixFromDb();
+        matrixCache = built;
+        matrixCacheAt = now;
+        return built;
+    }
+
+    private Map<String, Map<String, String>> buildMatrixFromDb() {
         Map<String, Map<String, String>> matrix = new LinkedHashMap<>();
         for (String role : ROLES) {
             Map<String, String> row = new LinkedHashMap<>();
@@ -118,6 +166,7 @@ public class RolePermissionService {
         rp.setSection(section);
         rp.setAccess(access);
         rolePermissionRepository.save(rp);
+        invalidateCaches();
     }
 
     // ===== PERMESSO EFFETTIVO (ruolo + override personale) =====
@@ -125,10 +174,25 @@ public class RolePermissionService {
     // VINCE SEMPRE (override totale); altrimenti si applica il permesso di
     // ruolo, calcolato come sopra.
     public String getEffectiveAccess(Long userId, String role, String section) {
-        Optional<UserPermission> override = userPermissionRepository.findByUserIdAndSection(userId, section);
-        if (override.isPresent()) return override.get().getAccess();
-        Map<String, String> row = getEffectiveMatrix().getOrDefault(role, Map.of());
+        String override = getUserOverrides(userId).get(section);
+        if (override != null) return override;
+        Map<String, String> row = matrixSnapshot().getOrDefault(role, Map.of());
         return row.getOrDefault(section, "NONE");
+    }
+
+    // Override personali di UN utente (sezione -> accesso), dalla cache o,
+    // se scaduta/assente, con UNA sola query per tutte le sezioni (prima
+    // era una query per ogni sezione).
+    private Map<String, String> getUserOverrides(Long userId) {
+        long now = System.currentTimeMillis();
+        UserOverridesCache c = userOverridesCache.get(userId);
+        if (c != null && now - c.at < CACHE_TTL_MS) return c.overrides;
+        Map<String, String> overrides = new HashMap<>();
+        for (UserPermission up : userPermissionRepository.findByUserId(userId)) {
+            overrides.put(up.getSection(), up.getAccess());
+        }
+        userOverridesCache.put(userId, new UserOverridesCache(overrides, now));
+        return overrides;
     }
 
     // Confronta due livelli di accesso secondo l'ordine "di forza" definito
@@ -158,6 +222,7 @@ public class RolePermissionService {
         if (access == null) {
             userPermissionRepository.findByUserIdAndSection(userId, section)
                 .ifPresent(userPermissionRepository::delete);
+            invalidateCaches();
             return;
         }
 
@@ -167,5 +232,6 @@ public class RolePermissionService {
         up.setSection(section);
         up.setAccess(access);
         userPermissionRepository.save(up);
+        invalidateCaches();
     }
 }

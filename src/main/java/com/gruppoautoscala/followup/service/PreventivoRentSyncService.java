@@ -2,6 +2,7 @@ package com.gruppoautoscala.followup.service;
 
 import com.gruppoautoscala.followup.model.NoleggioTrattativa;
 import com.gruppoautoscala.followup.model.PreventivoTelefonico;
+import com.gruppoautoscala.followup.repository.NoleggioTrattativaLinkRepository;
 import com.gruppoautoscala.followup.repository.NoleggioTrattativaRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -9,6 +10,11 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 // Sincronizza automaticamente i Preventivi Telefonici di tipo NOLEGGIO con
@@ -30,6 +36,7 @@ public class PreventivoRentSyncService {
     private static final ZoneId ZONA_ITALIA = ZoneId.of("Europe/Rome");
 
     @Autowired private NoleggioTrattativaRepository noleggioTrattativaRepository;
+    @Autowired private NoleggioTrattativaLinkRepository noleggioTrattativaLinkRepository;
 
     public void sync(PreventivoTelefonico p) {
         // Solo i preventivi Noleggio generano/aggiornano una trattativa Rent.
@@ -135,5 +142,22 @@ public class PreventivoRentSyncService {
 
     public Optional<NoleggioTrattativa> findLinked(Long preventivoId) {
         return noleggioTrattativaRepository.findBySourcePreventivoId(preventivoId);
+    }
+
+    // Versione "in blocco" di findLinked, per le liste: restituisce la mappa
+    // idPreventivo -> trattativa Rent collegata con poche query invece di
+    // una per preventivo. Le richieste sono spezzate a gruppi di 1000 id
+    // per restare ampiamente sotto il limite di parametri di PostgreSQL.
+    public Map<Long, NoleggioTrattativa> findLinkedBatch(Collection<Long> preventivoIds) {
+        Map<Long, NoleggioTrattativa> result = new HashMap<>();
+        if (preventivoIds == null || preventivoIds.isEmpty()) return result;
+        List<Long> ids = new ArrayList<>(preventivoIds);
+        for (int i = 0; i < ids.size(); i += 1000) {
+            List<Long> chunk = ids.subList(i, Math.min(i + 1000, ids.size()));
+            for (NoleggioTrattativa t : noleggioTrattativaLinkRepository.findBySourcePreventivoIdIn(chunk)) {
+                result.put(t.getSourcePreventivoId(), t);
+            }
+        }
+        return result;
     }
 }

@@ -284,6 +284,15 @@ public class PreventivoTelefonicoController {
         Map<Long, List<PreventivoTelefonicoStatusHistory>> historyByPreventivo = allHistory.stream()
             .collect(Collectors.groupingBy(h -> h.getPreventivo().getId()));
 
+        // FIX prestazioni: le trattative Rent collegate si recuperano TUTTE
+        // insieme qui, prima del ciclo. Prima ogni riga faceva la sua query
+        // (findLinked dentro il ciclo) — un N+1 che con centinaia di
+        // preventivi e il database lontano dal server allungava la pagina
+        // di decine di secondi, nonostante il commento qui sopra dicesse
+        // "niente N+1" (era stato aggiunto dopo, con il collegamento a Rent).
+        Map<Long, NoleggioTrattativa> linkedByPreventivo = rentSyncService.findLinkedBatch(
+            preventivi.stream().map(PreventivoTelefonico::getId).collect(Collectors.toList()));
+
         return preventivi.stream().map(p -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", p.getId());
@@ -297,9 +306,8 @@ public class PreventivoTelefonicoController {
 
             // NUOVO: collegamento con la trattativa Rent generata
             // automaticamente (solo per preventivi Noleggio).
-            Optional<NoleggioTrattativa> linked = rentSyncService.findLinked(p.getId());
-            if (linked.isPresent()) {
-                NoleggioTrattativa t = linked.get();
+            NoleggioTrattativa t = linkedByPreventivo.get(p.getId());
+            if (t != null) {
                 m.put("rentTrattativaId", t.getId());
                 boolean modificataInRent = t.getUpdatedAt() != null && t.getLastAutoSyncAt() != null
                         && t.getUpdatedAt().isAfter(t.getLastAutoSyncAt());
