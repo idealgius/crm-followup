@@ -167,6 +167,17 @@ public class ContactLog {
     @Column(name = "acquisto_alert_segnalato_at")
     private LocalDateTime acquistoAlertSegnalatoAt;
 
+    // ===== NUOVO: nome dell'operatore che ha SEGNALATO l'allert — mostrato
+    // nella mail di notifica, dato che parte sempre dallo stesso indirizzo
+    // e i destinatari devono poter capire chi l'ha aperto. Puo' essere
+    // diverso dall'operatore che ha registrato il contatto (se l'allert e'
+    // stato aggiunto in un secondo momento da un'altra persona), per questo
+    // non basta contact.user. Salvato come semplice testo (non relazione
+    // verso User) per non aggiungere altri JOIN alle query del Registro
+    // Contatti, gia' ottimizzate contro l'N+1.
+    @Column(name = "acquisto_alert_segnalato_da_nome", length = 150)
+    private String acquistoAlertSegnalatoDaNome;
+
     // ===== NUOVO: quando la mail di notifica e' stata EFFETTIVAMENTE
     // inviata (automaticamente o manualmente) — null finche' non parte.
     // Serve a: 1) sapere se mostrare il pulsante "Invia mail" manuale nel

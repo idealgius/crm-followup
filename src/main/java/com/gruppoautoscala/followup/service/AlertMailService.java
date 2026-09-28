@@ -95,7 +95,18 @@ public class AlertMailService {
         sb.append("Ciao ").append(primoNome).append(",\n\n");
         sb.append("ti è stato segnalato un nuovo allert dal CRM di Gruppo Autoscala per il/la cliente: ")
           .append(nomeCompleto.isBlank() ? "non comunicato" : nomeCompleto)
-          .append(" - ").append(numero).append(".\n\n");
+          .append(" - ").append(numero).append(".\n");
+        // NUOVO: chi ha segnalato l'allert — la mail parte sempre dallo stesso
+        // indirizzo, quindi senza questa riga non si capirebbe da chi arriva
+        // la segnalazione. Per gli allert creati prima di questo campo si usa
+        // l'operatore che ha registrato il contatto.
+        String segnalatoDa = c.getAcquistoAlertSegnalatoDaNome() != null && !c.getAcquistoAlertSegnalatoDaNome().isBlank()
+                ? c.getAcquistoAlertSegnalatoDaNome()
+                : (c.getUser() != null ? c.getUser().getFullName() : null);
+        if (segnalatoDa != null && !segnalatoDa.isBlank()) {
+            sb.append("Segnalato da: ").append(segnalatoDa).append("\n");
+        }
+        sb.append("\n");
         sb.append("La richiesta riguarda: ").append(c.getCategory());
         if (tipologia != null) sb.append(" (").append(tipologia).append(")");
         sb.append("\n");
@@ -113,7 +124,7 @@ public class AlertMailService {
         sb.append("\n");
         sb.append("Ti sono inoltre state lasciate le seguenti note: ")
           .append(nota != null && !nota.isBlank() ? nota : "nessuna nota").append("\n\n");
-        sb.append("Apri la scheda del cliente: ").append(link);
+        sb.append("Ti ricordo di gestire l'allert direttamente dal CRM: ").append(link);
         return sb.toString();
     }
 }

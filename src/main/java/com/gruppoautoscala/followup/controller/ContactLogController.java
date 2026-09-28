@@ -314,6 +314,7 @@ public class ContactLogController {
         if (ALERT_CATEGORIES.contains(category) && Boolean.TRUE.equals(acquistoAlert)) {
             log.setAcquistoAlert(true);
             log.setAcquistoAlertSegnalatoAt(LocalDateTime.now());
+            log.setAcquistoAlertSegnalatoDaNome(userOpt.get().getFullName());
             log.setAcquistoAlertStatus(null);
             log.setAlertNotifyAll(alertNotifyAll == null ? true : alertNotifyAll);
             if (Boolean.FALSE.equals(alertNotifyAll) && alertRecipientIdsRaw != null) {
@@ -548,6 +549,10 @@ public class ContactLogController {
         boolean newlyFlagged = !wasAlreadyAlerted && isNowAlerted;
         if (newlyFlagged) {
             log.setAcquistoAlertSegnalatoAt(LocalDateTime.now());
+            // Chi sta facendo la modifica adesso e' chi segnala l'allert —
+            // non necessariamente chi aveva registrato il contatto.
+            Optional<User> flaggerOpt = userRepository.findById(userId);
+            if (flaggerOpt.isPresent()) log.setAcquistoAlertSegnalatoDaNome(flaggerOpt.get().getFullName());
         }
 
         ContactLog saved = contactLogService.update(log);
