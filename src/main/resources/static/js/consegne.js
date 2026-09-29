@@ -86,7 +86,8 @@
         need(rows, ['CLIENTE', 'B2C', 'TARGA/TELAIO', 'STATO', 'PROVENIENZA', 'DATA'], 'DATABASE');
         return rows.filter(r => r['CLIENTE'] || r['TARGA/TELAIO']).map(r => ({
             cliente: r['CLIENTE'], b2c: String(r['B2C']).toUpperCase(), tt: r['TARGA/TELAIO'],
-            stato: r['STATO'], prov: r['PROVENIENZA'], data: r['DATA']
+            stato: r['STATO'], prov: r['PROVENIENZA'], data: r['DATA'],
+            vend: r['VENDITORE'] || '', modello: r['MODELLO'] || '', canale: r['CANALE'] || '', mese: r['MESE'] || ''
         }));
     }
 
@@ -94,7 +95,10 @@
     const pl = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     const STOP = new Set(['SRL', 'SRLS', 'SNC', 'SAS', 'SPA', 'DI', 'E', 'C', 'DE', 'DEL', 'DELLA', 'LA', 'LO', 'S', 'A']);
     function toks(s) {
-        s = String(s || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9 ]/g, ' ');
+        // Punti e apostrofi si tolgono SENZA spezzare la parola:
+        // "F.V.B." -> "FVB", "D'AVANZO" -> "DAVANZO" (entrambi i file uguali).
+        s = String(s || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toUpperCase()
+            .replace(/[.'\u2019`]/g, '').replace(/[^A-Z0-9 ]/g, ' ');
         return new Set(s.split(/\s+/).filter(w => w.length > 1 && !STOP.has(w)));
     }
     function pd(s) {
@@ -120,7 +124,8 @@
     }
 
     function compute() {
-        const G = db.map((g, i) => ({ ...g, _i: i, _pl: pl(g.tt), _tk: toks(g.cliente), _d: pd(g.data) }));
+        const G = db.map((g, i) => ({ ...g, _i: i, _pl: pl(g.tt), _tk: toks(g.cliente), _d: pd(g.data),
+            _vend: toks(g.vend), _mod: toks(g.modello) }));
         const used = new Set();
         const recs = [], verify = []; let excl = 0;
 
@@ -148,6 +153,25 @@
                     how = h; break;
                 }
             }
+            // Ultima possibilita': data vicina (entro 7 giorni) + stesso
+            // consulente + almeno una parola del modello in comune, su righe
+            // del foglio non ancora abbinate. Se piu' righe sono possibili
+            // vince quella con piu' parole del modello in comune, poi la
+            // data piu' vicina.
+            if (!best) {
+                const tv = toks(t.vend), tm = toks(`${t.marca} ${t.modello}`);
+                let top = null;
+                G.forEach(g => {
+                    if (used.has(g._i)) return;
+                    const dd = days(g._d, dc);
+                    if (dd > 7) return;
+                    if (![...tv].some(w => g._vend.has(w))) return;
+                    const mc = [...tm].filter(w => g._mod.has(w)).length;
+                    if (!mc) return;
+                    if (!top || mc > top.mc || (mc === top.mc && dd < top.dd)) top = { g, dd, mc };
+                });
+                if (top) { best = top; how = 'data + consulente + modello'; }
+            }
             const base = {
                 cliente: nice(nameOf(t)), marca: t.marca.trim(), modello: t.modello.replace(/\s+/g, ' ').trim(),
                 vend: nice(t.vend), chiusura: t.chiusura, targa: (t.targa || t.telaio || '—').trim(), tipo: t.tipo,
@@ -171,7 +195,29 @@
                 prov: best.g.prov ? cap(best.g.prov) : 'Non specificato', abb: how
             });
         });
-        result = { recs: recs.filter(r => r.m), verify, excl };
+        // Righe del foglio (B2C = FALSE) senza nessuna trattativa nel CSV:
+        // si segnalano comunque con il bollino "i". Le non annullate entrano
+        // nel conteggio, nel mese della DATA del foglio (consegnate -> "Senza
+        // data", perche' nel CSV non c'e' una data di consegna; le altre ->
+        // "Da consegnare"). Le annullate si possono vedere nella lista ma
+        // non si contano, come quelle del CSV.
+        const MESI_UP = ['', 'GENNAIO', 'FEBBRAIO', 'MARZO', 'APRILE', 'MAGGIO', 'GIUGNO', 'LUGLIO', 'AGOSTO', 'SETTEMBRE', 'OTTOBRE', 'NOVEMBRE', 'DICEMBRE'];
+        const soloFoglio = [];
+        G.forEach(g => {
+            if (used.has(g._i) || g.b2c !== 'FALSE') return;
+            const st = String(g.stato || '').toUpperCase().replace(/\s+,/g, ',').replace(/\s+/g, ' ').trim();
+            const m = g._d ? g._d.getMonth() + 1 : MESI_UP.indexOf(String(g.mese).toUpperCase().trim());
+            if (m < 1) return;
+            const k = st.includes('ANNULLATA') ? 'ann' : st.includes('CONSEGNATA') ? 'nd' : 'dc';
+            soloFoglio.push({
+                cliente: nice(g.cliente), marca: '', modello: String(g.modello || '').replace(/\s+/g, ' ').trim(),
+                vend: nice(g.vend), chiusura: g.data || '', targa: (g.tt || '—').trim(), tipo: cap(String(g.canale || '').trim()),
+                m, k, stato: st || 'STATO NON INDICATO', consegna: '', prevista: false,
+                prov: g.prov ? cap(g.prov) : 'Non specificato', abb: 'solo foglio', solo: true
+            });
+        });
+        const contate = soloFoglio.filter(r => r.k !== 'ann');
+        result = { recs: recs.filter(r => r.m).concat(contate), verify, excl, soloFoglio };
     }
 
     /* ================= util ================= */
@@ -328,7 +374,9 @@
             const c = f => rs.filter(f).length;
             const dcC = c(r => r.k === 'dc'), annC = c(r => r.k === 'ann'), ndC = c(r => r.k === 'nd');
             const flag = !isTotal && n && dcC / n > .10; if (flag) flagged.push(label);
-            let s = `<tr class="${isTotal ? 'cg-total' : ''}"><td class="cg-m">${label}${flag ? '<small title="Più del 10% ancora da consegnare">‡</small>' : ''}</td>`;
+            const soloC = c(r => r.solo);
+            const badge = soloC ? `<button type="button" class="cg-info" data-solo="${key}" title="${soloC} contratti presenti solo nel foglio Google, senza trattativa nel CSV: clicca per vederli">i</button>` : '';
+            let s = `<tr class="${isTotal ? 'cg-total' : ''}"><td class="cg-m">${label}${flag ? '<small title="Più del 10% ancora da consegnare">‡</small>' : ''}${badge}</td>`;
             s += `<td><button class="cg-cell cg-tot" type="button" data-f="${key}|all">${fmt(n)}</button></td>`;
             BUCKETS.forEach(k => {
                 const x = c(r => r.k === k);
@@ -369,6 +417,10 @@
                     <span class="cg-lbl" title="${esc(s)}">${esc(cap(s))}</span><span class="cg-n">${n}</span>
                     <span class="cg-track"><span class="cg-fill" style="width:${n / maxR * 100}%"></span></span></button>`).join('') || '<p class="cg-hint">Nessuna vettura da consegnare.</p>'}</div>
               </div>
+              <button class="cg-verify" type="button" id="cgSolo">
+                <span class="cg-big cg-big-info">${result.soloFoglio.filter(r => r.k !== 'ann').length}</span>
+                <div><b>Solo nel foglio Google <span class="cg-info cg-info-static">i</span></b><span>Contratti nel foglio DATABASE senza trattativa nel CSV (nessuna data contratto nel gestionale). Sono conteggiati nella tabella con il bollino "i".${result.soloFoglio.some(r => r.k === 'ann') ? ` Nella lista trovi anche ${result.soloFoglio.filter(r => r.k === 'ann').length} annullate, che non si contano.` : ''}</span></div>
+              </button>
               <button class="cg-verify" type="button" id="cgVerify">
                 <span class="cg-big">${result.verify.length}</span>
                 <div><b>Da verificare</b><span>Trattative del CSV non trovate nel foglio DATABASE né per targa/telaio né per nome. Non sono conteggiate nella tabella.${result.excl ? ` Escluse perché B2C nel foglio: ${result.excl}.` : ''}</span></div>
@@ -385,6 +437,15 @@
             if (k === 'ann') openModal('Trattative annullate', R.filter(r => r.k === 'ann'), base);
         });
         body.querySelector('#cgHeat').addEventListener('click', e => {
+            const info = e.target.closest('[data-solo]');
+            if (info) {
+                const mk = info.dataset.solo;
+                const base = mk === 'T' ? R : R.filter(r => r.m === +mk);
+                const rows = base.filter(r => r.solo);
+                openModal(`${mk === 'T' ? 'Tutti i mesi' : MESI_L[+mk]} · solo nel foglio Google`, rows,
+                    { n: base.length, label: mk === 'T' ? 'nel periodo importato' : 'di ' + MESI_L[+mk].toLowerCase() }, { reasons: true });
+                return;
+            }
             const b = e.target.closest('[data-f]'); if (!b) return;
             const [mk, bk] = b.dataset.f.split('|');
             const base = mk === 'T' ? R : R.filter(r => r.m === +mk);
@@ -403,6 +464,8 @@
             openModal('Vetture da consegnare', R.filter(r => r.k === 'dc'), { n: R.length, label: 'nel periodo importato' },
                 { reasons: true, chip: decodeURIComponent(b.dataset.reason) });
         });
+        body.querySelector('#cgSolo').addEventListener('click', () =>
+            openModal('Solo nel foglio Google: senza trattativa nel CSV', result.soloFoglio, null, { reasons: true }));
         body.querySelector('#cgVerify').addEventListener('click', () =>
             openModal('Da verificare: non trovate nel foglio DATABASE', result.verify, null, { verify: true }));
     }
@@ -460,7 +523,7 @@
             (curVerify ? '<th>Targa / telaio</th><th>Tipo</th><th>Sede</th>'
                 : '<th>Data consegna</th><th>Stato</th><th>Provenienza</th><th>Tipo</th><th>Targa / telaio</th>') + '</tr></thead><tbody>' +
             rows.map(r => '<tr>' +
-                `<td class="cg-cl">${esc(r.cliente)}</td><td>${esc(r.marca)} ${esc(r.modello)}</td><td>${esc(r.vend)}</td><td>${esc(r.chiusura)}</td>` +
+                `<td class="cg-cl">${esc(r.cliente)}${r.solo ? '<span class="cg-abb cg-abb-info"><span class="cg-info cg-info-static">i</span> Solo nel foglio: nessuna trattativa nel CSV, data dal foglio</span>' : ''}${r.abb === 'data + consulente + modello' ? '<span class="cg-abb" title="Nome e targa diversi nei due file: abbinata perché coincidono data (entro 7 giorni), consulente e modello">abbinata per data, consulente e modello</span>' : ''}</td><td>${esc(r.marca)} ${esc(r.modello)}</td><td>${esc(r.vend)}</td><td>${esc(r.chiusura)}</td>` +
                 (curVerify ? `<td>${esc(r.targa)}</td><td>${esc(r.tipo)}</td><td>${esc(r.sede)}</td>`
                     : `<td>${r.consegna ? esc(r.consegna) : '—'}${r.prevista ? '<span class="cg-prev">prevista</span>' : ''}</td>` +
                     `<td><span class="cg-tag ${isDel(r) ? 'ok' : r.k === 'dc' ? 'wait' : ''}">${esc(cap(r.stato))}</span></td>` +
