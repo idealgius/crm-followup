@@ -5,6 +5,7 @@ import com.gruppoautoscala.followup.model.ConsegneDataset;
 import com.gruppoautoscala.followup.model.User;
 import com.gruppoautoscala.followup.repository.UserRepository;
 import com.gruppoautoscala.followup.service.ConsegneService;
+import com.gruppoautoscala.followup.service.RolePermissionService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -21,15 +22,17 @@ import java.util.Optional;
  *  GET  /api/consegne/data                -> ultimo import trattative + ultima lettura foglio DATABASE
  *  POST /api/consegne/trattative          -> salva un nuovo import trattative (sostituisce il precedente)
  *  POST /api/consegne/database/aggiorna   -> rilegge SUBITO il foglio Google
+ *  POST /api/consegne/verifiche           -> segna / toglie la verifica manuale di una pratica ("i")
  *
- * Tutti gli endpoint richiedono login. L'import trattative e' riservato a
- * ADMIN, GESTORE e MODERATORE (cambia IMPORT_ROLES per allargarlo).
+ * Permessi: sezione CONSEGNE della pagina Permessi (ruolo + operatore).
+ *  - vedere i dati e aggiornare il foglio: almeno "Solo lettura"
+ *  - importare trattative e segnare/togliere verifiche: "Completo" o superiore
  */
 @RestController
 @RequestMapping("/api/consegne")
 public class ConsegneController {
 
-    private static final List<String> IMPORT_ROLES = List.of("ADMIN", "GESTORE", "MODERATORE");
+    private static final String SECTION = "CONSEGNE";
 
     @Autowired
     private ConsegneService consegneService;
@@ -40,13 +43,28 @@ public class ConsegneController {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private RolePermissionService rolePermissionService;
+
+    private String access(HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        String role = (String) session.getAttribute("userRole");
+        if (userId == null) return null;
+        return rolePermissionService.getEffectiveAccess(userId, role, SECTION);
+    }
+    private boolean puoVedere(String access) { return access != null && rolePermissionService.hasAtLeast(access, "READ_ONLY"); }
+    private boolean puoModificare(String access) { return access != null && rolePermissionService.hasAtLeast(access, "FULL"); }
+    private ResponseEntity<?> negato(String access) {
+        return access == null ? ResponseEntity.status(401).body(Map.of("error", "Non autenticato"))
+                              : ResponseEntity.status(403).body(Map.of("error", "Non hai il permesso per l'area Consegne"));
+    }
+
     @GetMapping("/data")
     public ResponseEntity<?> getData(HttpSession session) {
-        Long userId = (Long) session.getAttribute("userId");
-        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
-        String role = (String) session.getAttribute("userRole");
+        String acc = access(session);
+        if (!puoVedere(acc)) return negato(acc);
         try {
-            return ResponseEntity.ok(buildData(role));
+            return ResponseEntity.ok(buildData(acc));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("error", "Errore lettura dati Consegne: " + e.getMessage()));
         }
@@ -54,12 +72,9 @@ public class ConsegneController {
 
     @PostMapping("/trattative")
     public ResponseEntity<?> importaTrattative(@RequestBody Map<String, Object> body, HttpSession session) {
+        String acc = access(session);
+        if (!puoModificare(acc)) return negato(acc);
         Long userId = (Long) session.getAttribute("userId");
-        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
-        String role = (String) session.getAttribute("userRole");
-        if (!IMPORT_ROLES.contains(role)) {
-            return ResponseEntity.status(403).body(Map.of("error", "Solo Admin, Gestore o Moderatore possono importare le trattative"));
-        }
         Object rows = body.get("rows");
         if (!(rows instanceof List<?> lista) || lista.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("error", "Il file non contiene trattative valide"));
@@ -67,7 +82,7 @@ public class ConsegneController {
         try {
             String json = objectMapper.writeValueAsString(lista);
             consegneService.salvaTrattative(json, lista.size(), nomeUtente(userId));
-            return ResponseEntity.ok(buildData(role));
+            return ResponseEntity.ok(buildData(acc));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("error", "Salvataggio import non riuscito: " + e.getMessage()));
         }
@@ -75,12 +90,12 @@ public class ConsegneController {
 
     @PostMapping("/database/aggiorna")
     public ResponseEntity<?> aggiornaFoglio(HttpSession session) {
+        String acc = access(session);
+        if (!puoVedere(acc)) return negato(acc);
         Long userId = (Long) session.getAttribute("userId");
-        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
-        String role = (String) session.getAttribute("userRole");
         try {
             consegneService.aggiornaDaFoglio(nomeUtente(userId));
-            return ResponseEntity.ok(buildData(role));
+            return ResponseEntity.ok(buildData(acc));
         } catch (IllegalStateException e) {
             return ResponseEntity.status(503).body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
@@ -88,7 +103,26 @@ public class ConsegneController {
         }
     }
 
-    private Map<String, Object> buildData(String role) throws Exception {
+    @PostMapping("/verifiche")
+    public ResponseEntity<?> verifica(@RequestBody Map<String, Object> body, HttpSession session) {
+        String acc = access(session);
+        if (!puoModificare(acc)) return negato(acc);
+        Long userId = (Long) session.getAttribute("userId");
+        Object key = body.get("key");
+        if (!(key instanceof String chiave) || chiave.isBlank() || chiave.length() > 500) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Pratica non valida"));
+        }
+        boolean verificata = Boolean.TRUE.equals(body.get("verificata"));
+        try {
+            Map<String, Object> out = new HashMap<>();
+            out.put("verifiche", consegneService.setVerifica(chiave, verificata, nomeUtente(userId)));
+            return ResponseEntity.ok(out);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Salvataggio verifica non riuscito: " + e.getMessage()));
+        }
+    }
+
+    private Map<String, Object> buildData(String acc) throws Exception {
         Map<String, Object> out = new HashMap<>();
 
         Optional<ConsegneDataset> tr = consegneService.get(ConsegneService.TRATTATIVE);
@@ -112,7 +146,9 @@ public class ConsegneController {
         out.put("foglioCollegato", consegneService.isFoglioConfigurato());
         out.put("foglioControllatoAt", consegneService.getUltimoControllo());
         out.put("foglioErrore", consegneService.getUltimoErrore());
-        out.put("puoImportare", IMPORT_ROLES.contains(role));
+        out.put("puoImportare", puoModificare(acc));
+        out.put("puoModificare", puoModificare(acc));
+        out.put("verifiche", consegneService.getVerifiche());
         return out;
     }
 

@@ -1,5 +1,7 @@
 package com.gruppoautoscala.followup.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gruppoautoscala.followup.model.ConsegneDataset;
 import com.gruppoautoscala.followup.repository.ConsegneDatasetRepository;
 import org.slf4j.Logger;
@@ -18,6 +20,8 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -36,9 +40,14 @@ public class ConsegneService {
 
     public static final String TRATTATIVE = "TRATTATIVE";
     public static final String DATABASE = "DATABASE";
+    // Verifiche manuali delle pratiche con bollino "i" (JSON: chiave pratica -> {da, at})
+    public static final String VERIFICHE = "VERIFICHE";
 
     @Autowired
     private ConsegneDatasetRepository repository;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Value("${GSHEET_URL:}")
     private String sheetUrl;
@@ -120,6 +129,41 @@ public class ConsegneService {
             ultimoErrore = e.getMessage();
             throw e;
         }
+    }
+
+    /** Tutte le verifiche manuali: chiave pratica -> {da: operatore, at: data/ora ISO}. */
+    public Map<String, Map<String, String>> getVerifiche() {
+        return repository.findById(VERIFICHE)
+                .map(ConsegneDataset::getContenuto)
+                .filter(c -> c != null && !c.isBlank())
+                .map(c -> {
+                    try {
+                        return objectMapper.readValue(c, new TypeReference<LinkedHashMap<String, Map<String, String>>>() {});
+                    } catch (Exception e) {
+                        log.warn("[Consegne] Verifiche non leggibili: {}", e.getMessage());
+                        return new LinkedHashMap<String, Map<String, String>>();
+                    }
+                })
+                .orElseGet(LinkedHashMap::new);
+    }
+
+    /**
+     * Segna (verificata = true) o toglie (false) la verifica manuale di una pratica.
+     * Le verifiche NON dipendono dagli import: restano valide finche' la
+     * pratica (cliente + targa + mese del foglio) resta la stessa.
+     */
+    public synchronized Map<String, Map<String, String>> setVerifica(String chiave, boolean verificata, String chi) throws Exception {
+        Map<String, Map<String, String>> map = getVerifiche();
+        if (verificata) {
+            Map<String, String> v = new LinkedHashMap<>();
+            v.put("da", chi);
+            v.put("at", java.time.Instant.now().toString()); // ISO in UTC: il browser lo mostra nell'ora locale
+            map.put(chiave, v);
+        } else {
+            map.remove(chiave);
+        }
+        salva(VERIFICHE, objectMapper.writeValueAsString(map), map.size(), chi);
+        return map;
     }
 
     /** Rilettura automatica del foglio ogni 5 minuti (prima volta 1 minuto dopo l'avvio). */

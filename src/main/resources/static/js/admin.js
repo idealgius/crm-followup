@@ -209,7 +209,10 @@ const PERMISSION_SECTIONS = [
     { key: 'SERVICE', icon: '🔧', label: 'Service' },
     { key: 'GRAFICI', icon: '☰', label: 'Menu Grafici' },
     { key: 'ADMIN', icon: '⚙️', label: 'Utenti/Permessi' },
-    { key: 'VEICOLI', icon: '🚙', label: 'Vetture in Consegna' }
+    { key: 'VEICOLI', icon: '🚙', label: 'Vetture in Consegna' },
+    // NUOVO: area Consegne (tempistiche) + selezione area dopo il login.
+    // Chi non ce l'ha entra direttamente in In bound.
+    { key: 'CONSEGNE', icon: '🔑', label: 'Consegne (selezione area)' }
 ];
 
 const ACCESS_LEVEL_META = {

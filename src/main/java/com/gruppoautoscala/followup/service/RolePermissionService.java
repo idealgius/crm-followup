@@ -51,7 +51,9 @@ public class RolePermissionService {
         "UTENTE", "BACK_OFFICE", "MODERATORE", "GESTORE", "ADMIN", "NOLEGGIO", "SERVICE"
     );
     public static final List<String> SECTIONS = List.of(
-        "DASHBOARD", "FOLLOWUPS", "WAITING", "CONTACTS", "PROMO", "ADMIN", "RENT", "SERVICE", "GRAFICI", "VEICOLI", "PREVENTIVI"
+        "DASHBOARD", "FOLLOWUPS", "WAITING", "CONTACTS", "PROMO", "ADMIN", "RENT", "SERVICE", "GRAFICI", "VEICOLI", "PREVENTIVI",
+        // NUOVO: area Consegne + selezione area dopo il login
+        "CONSEGNE"
     );
     // 4° livello "ADMIN_FULL" — come FULL ma può toccare anche i record
     // creati da un utente ADMIN. L'ordine della lista è anche l'ordine di
@@ -77,16 +79,23 @@ public class RolePermissionService {
     static {
         DEFAULTS.put("UTENTE", Map.of("CONTACTS", "FULL"));
         DEFAULTS.put("BACK_OFFICE", Map.of("CONTACTS", "FULL"));
-        DEFAULTS.put("MODERATORE", Map.of(
+        // NUOVO: CONSEGNE di default solo a Moderatore, Gestore e Admin (modificabile
+        // dalla pagina Permessi). HashMap invece di Map.of perche' Map.of accetta
+        // al massimo 10 coppie e GESTORE ne ha 11.
+        Map<String, String> moderatoreDefaults = new HashMap<>(Map.of(
             "DASHBOARD", "FULL", "FOLLOWUPS", "FULL", "WAITING", "FULL",
             "CONTACTS", "FULL", "PROMO", "FULL", "RENT", "FULL", "SERVICE", "FULL",
             "GRAFICI", "FULL", "PREVENTIVI", "FULL"
         ));
-        DEFAULTS.put("GESTORE", Map.of(
+        moderatoreDefaults.put("CONSEGNE", "FULL");
+        DEFAULTS.put("MODERATORE", moderatoreDefaults);
+        Map<String, String> gestoreDefaults = new HashMap<>(Map.of(
             "DASHBOARD", "ADMIN_FULL", "FOLLOWUPS", "ADMIN_FULL", "WAITING", "ADMIN_FULL",
             "CONTACTS", "ADMIN_FULL", "PROMO", "ADMIN_FULL", "RENT", "ADMIN_FULL", "SERVICE", "ADMIN_FULL",
             "ADMIN", "ADMIN_FULL", "GRAFICI", "ADMIN_FULL", "PREVENTIVI", "ADMIN_FULL"
         ));
+        gestoreDefaults.put("CONSEGNE", "ADMIN_FULL");
+        DEFAULTS.put("GESTORE", gestoreDefaults);
         Map<String, String> adminDefaults = new HashMap<>();
         adminDefaults.put("DASHBOARD", "ADMIN_FULL");
         adminDefaults.put("FOLLOWUPS", "ADMIN_FULL");
@@ -99,6 +108,7 @@ public class RolePermissionService {
         adminDefaults.put("GRAFICI", "ADMIN_FULL");
         adminDefaults.put("VEICOLI", "ADMIN_FULL");
         adminDefaults.put("PREVENTIVI", "ADMIN_FULL");
+        adminDefaults.put("CONSEGNE", "ADMIN_FULL");
         DEFAULTS.put("ADMIN", adminDefaults);
         DEFAULTS.put("NOLEGGIO", Map.of("RENT", "FULL"));
         DEFAULTS.put("SERVICE", Map.of("SERVICE", "FULL"));

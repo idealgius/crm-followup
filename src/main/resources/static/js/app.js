@@ -165,6 +165,9 @@ const NAV_ID_BY_SECTION = {
 };
 
 function applyRolePermissions(role) {
+    // NUOVO: voce "Seleziona Area" nel menu del nome e clic sul logo, solo
+    // per chi ha accesso a Consegne (permesso CONSEGNE, vedi /js/macro-home.js)
+    if (window.MacroHome) MacroHome.refreshNav();
     Object.entries(NAV_ID_BY_SECTION).forEach(([section, navId]) => {
         const el = document.getElementById(navId);
         if (!el) return;
@@ -475,7 +478,8 @@ window.onload = function() {
             // - nessuna sezione nell'URL (o #home) -> mostra la home
             // - sezione di In bound nell'URL (refresh) o link allert dalla
             //   mail -> comportamento di sempre, niente home.
-            // NOLEGGIO/SERVICE non vedono la home (MacroHome.canShow).
+            // La home la vede solo chi ha il permesso CONSEGNE (MacroHome.canShow):
+            // tutti gli altri entrano direttamente in In bound.
             const urlHash = window.location.hash.replace('#', '').trim();
             const macroHomeOk = !openAlertId && window.MacroHome && MacroHome.canShow(data.role);
             if (macroHomeOk && urlHash === 'consegne') {

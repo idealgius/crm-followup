@@ -19,10 +19,23 @@
     let root = null;
     let inConsegne = false;
 
-    // NOLEGGIO e SERVICE hanno gia' la loro dashboard dedicata: niente home.
-    function canShow(role) {
-        role = role || (typeof currentUser !== 'undefined' && currentUser ? currentUser.role : null);
-        return !!role && role !== 'NOLEGGIO' && role !== 'SERVICE';
+    // La selezione area (e l'area Consegne) la vede SOLO chi ha il permesso
+    // CONSEGNE (pagina Permessi per Ruolo / per Operatore; default:
+    // Moderatore, Gestore, Admin). Tutti gli altri entrano direttamente in
+    // In bound. Il parametro role resta per compatibilita' con le chiamate
+    // esistenti: vale il permesso effettivo dell'utente loggato.
+    function canShow() {
+        if (typeof currentUser === 'undefined' || !currentUser) return false;
+        return typeof hasAccess === 'function' && hasAccess('CONSEGNE');
+    }
+
+    // Voce "Seleziona Area" nel menu del nome e clic sul logo: solo per chi puo'
+    function refreshNav() {
+        const ok = canShow();
+        const item = document.getElementById('navSelectArea');
+        if (item) item.style.display = ok ? 'flex' : 'none';
+        const logo = document.getElementById('navLogo');
+        if (logo) { logo.style.cursor = ok ? 'pointer' : ''; logo.title = ok ? 'Torna alla selezione area' : ''; }
     }
 
     function hideAllPages() {
@@ -112,6 +125,7 @@
     }
 
     function openConsegne() {
+        if (!canShow()) return;
         hide();
         stopInboundLiveUpdates();
         hideAllPages();
@@ -227,6 +241,7 @@
 
     window.MacroHome = {
         canShow: canShow,
+        refreshNav: refreshNav,
         show: show,
         hide: hide,
         onShowPage: onShowPage,

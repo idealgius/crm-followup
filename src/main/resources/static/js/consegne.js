@@ -101,9 +101,26 @@
             .replace(/[.'\u2019`]/g, '').replace(/[^A-Z0-9 ]/g, ' ');
         return new Set(s.split(/\s+/).filter(w => w.length > 1 && !STOP.has(w)));
     }
+    // Lettura "intelligente" delle date (formato sempre giorno/mese/anno):
+    //  - 27/01/2026, 5/6/2026, 27-01-2026, 27.01.2026 -> normali
+    //  - 2701/2026, 27/012026, 26//02/2026, 27012026  -> si tolgono i
+    //    separatori e le 8 cifre si leggono come ggmmaaaa
+    //  - 270126 -> 6 cifre ggmmaa (anno 20aa)
+    // Giorno e mese devono esistere davvero, altrimenti la data e' "non valida".
     function pd(s) {
-        const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(String(s || '').trim());
-        return m ? new Date(+m[3], +m[2] - 1, +m[1]) : null;
+        const str = String(s || '').trim();
+        if (!str) return null;
+        let g, m, a;
+        const sep = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})(?!\d)/.exec(str);
+        if (sep) { g = +sep[1]; m = +sep[2]; a = +sep[3]; }
+        else {
+            const dig = (str.split(/\s/)[0] || '').replace(/\D/g, '');
+            if (dig.length === 8) { g = +dig.slice(0, 2); m = +dig.slice(2, 4); a = +dig.slice(4); }
+            else if (dig.length === 6) { g = +dig.slice(0, 2); m = +dig.slice(2, 4); a = 2000 + +dig.slice(4); }
+            else return null;
+        }
+        const d = new Date(a, m - 1, g);
+        return (d.getFullYear() === a && d.getMonth() === m - 1 && d.getDate() === g) ? d : null;
     }
     const days = (a, b) => (a && b) ? Math.abs(Math.round((a - b) / 86400000)) : 999;
     const nameOf = t => { const n = `${t.nome} ${t.cognome}`.replace(/\s+/g, ' ').trim(); return n || t.rag.trim(); };
@@ -129,7 +146,12 @@
         const used = new Set();
         const recs = [], verify = []; let excl = 0;
 
-        tratt.forEach(t => {
+        // ABBINAMENTO "a livelli": prima si assegnano a TUTTE le trattative
+        // gli abbinamenti piu' sicuri (targa + nome), poi quelli per nome,
+        // e cosi' via. Ogni riga del foglio puo' essere usata UNA volta sola:
+        // due trattative non possono piu' finire sulla stessa riga (prima
+        // succedeva con i doppioni nel gestionale e gonfiava i conteggi).
+        const T = tratt.map(t => {
             const dc = pd(t.chiusura);
             const tk = new Set([...toks(nameOf(t)), ...toks(t.rag)]);
             const info = [];
@@ -137,87 +159,176 @@
                 const k = plateKind(t, g), n = nameMatch(tk, g._tk);
                 if (k || n) info.push({ g, k, n, dd: days(g._d, dc) });
             });
-            const tiers = [
-                ['targa + nome', x => x.k && x.n],
-                ['nome', x => x.n && x.dd <= 45],
-                ['targa/telaio', x => x.k === 'strong' && x.dd <= 60],
-                ['telaio parziale', x => x.k === 'suffix' && x.dd <= 30],
-                ['nome', x => x.n]
-            ];
-            let best = null, how = '';
-            for (const [h, f] of tiers) {
-                const cand = info.filter(f);
-                if (cand.length) {
-                    const free = cand.filter(x => !used.has(x.g._i));
-                    best = (free.length ? free : cand).reduce((a, b) => b.dd < a.dd ? b : a);
-                    how = h; break;
-                }
-            }
-            // Ultima possibilita': data vicina (entro 7 giorni) + stesso
-            // consulente + almeno una parola del modello in comune, su righe
-            // del foglio non ancora abbinate. Se piu' righe sono possibili
-            // vince quella con piu' parole del modello in comune, poi la
-            // data piu' vicina.
-            if (!best) {
-                const tv = toks(t.vend), tm = toks(`${t.marca} ${t.modello}`);
-                let top = null;
-                G.forEach(g => {
-                    if (used.has(g._i)) return;
-                    const dd = days(g._d, dc);
-                    if (dd > 7) return;
-                    if (![...tv].some(w => g._vend.has(w))) return;
-                    const mc = [...tm].filter(w => g._mod.has(w)).length;
-                    if (!mc) return;
-                    if (!top || mc > top.mc || (mc === top.mc && dd < top.dd)) top = { g, dd, mc };
-                });
-                if (top) { best = top; how = 'data + consulente + modello'; }
-            }
-            const base = {
-                cliente: nice(nameOf(t)), marca: t.marca.trim(), modello: t.modello.replace(/\s+/g, ' ').trim(),
-                vend: nice(t.vend), chiusura: t.chiusura, targa: (t.targa || t.telaio || '—').trim(), tipo: t.tipo,
-                sede: t.sede.replace(/Gruppo Auto ?Scala srl/i, '').trim() || 'Agnano'
-            };
-            if (!best) { verify.push(base); return; }
-            used.add(best.g._i);
-            if (best.g.b2c !== 'FALSE') { excl++; return; }
-
-            const st = String(best.g.stato || '').toUpperCase().replace(/\s+,/g, ',').replace(/\s+/g, ' ').trim();
-            const dReal = pd(t.consegna), dPrev = pd(t.prevista), dCon = dReal || dPrev;
-            let k;
-            if (st.includes('ANNULLATA')) k = 'ann';
-            else if (st.includes('CONSEGNATA')) {
-                if (dCon && dc) k = Math.min(6, Math.max(0, (dCon.getFullYear() - dc.getFullYear()) * 12 + dCon.getMonth() - dc.getMonth()));
-                else k = 'nd';
-            } else k = 'dc';
-            recs.push({
-                ...base, m: dc ? dc.getMonth() + 1 : 0, k, stato: st || 'STATO NON INDICATO',
-                consegna: (k === 'nd' || !dCon) ? '' : fmtD(dCon), prevista: !dReal && !!dPrev && k !== 'nd',
-                prov: best.g.prov ? cap(best.g.prov) : 'Non specificato', abb: how
+            return { t, dc, info, best: null, how: '' };
+        });
+        const tiers = [
+            ['targa + nome', x => x.k && x.n],
+            ['nome', x => x.n && x.dd <= 45],
+            ['targa/telaio', x => x.k === 'strong' && x.dd <= 60],
+            ['telaio parziale', x => x.k === 'suffix' && x.dd <= 30],
+            ['nome', x => x.n]
+        ];
+        tiers.forEach(([h, f]) => {
+            // In ogni livello si abbinano prima le coppie con la data piu' vicina
+            const pairs = [];
+            T.forEach((o, oi) => { if (!o.best) o.info.forEach(x => { if (f(x)) pairs.push({ oi, x }); }); });
+            pairs.sort((a, b) => a.x.dd - b.x.dd);
+            pairs.forEach(({ oi, x }) => {
+                const o = T[oi];
+                if (o.best || used.has(x.g._i)) return;
+                o.best = x; o.how = h; used.add(x.g._i);
             });
         });
-        // Righe del foglio (B2C = FALSE) senza nessuna trattativa nel CSV:
-        // si segnalano comunque con il bollino "i". Le non annullate entrano
-        // nel conteggio, nel mese della DATA del foglio (consegnate -> "Senza
-        // data", perche' nel CSV non c'e' una data di consegna; le altre ->
-        // "Da consegnare"). Le annullate si possono vedere nella lista ma
-        // non si contano, come quelle del CSV.
+        // Ultima possibilita': data vicina (entro 7 giorni) + stesso
+        // consulente + almeno una parola del modello in comune, su righe del
+        // foglio non ancora abbinate.
+        T.forEach(o => {
+            if (o.best) return;
+            const t = o.t, tv = toks(t.vend), tm = toks(`${t.marca} ${t.modello}`);
+            let top = null;
+            G.forEach(g => {
+                if (used.has(g._i)) return;
+                const dd = days(g._d, o.dc);
+                if (dd > 7) return;
+                if (![...tv].some(w => g._vend.has(w))) return;
+                const mc = [...tm].filter(w => g._mod.has(w)).length;
+                if (!mc) return;
+                if (!top || mc > top.mc || (mc === top.mc && dd < top.dd)) top = { g, dd, mc };
+            });
+            if (top) { o.best = top; o.how = 'data + consulente + modello'; used.add(top.g._i); }
+        });
+
+        // Chi tra le trattative "puntava" a ciascuna riga del foglio (serve a
+        // spiegare perche' una riga del foglio o una trattativa e' rimasta sola)
+        const candidati = new Map();
+        T.forEach(o => o.info.forEach(x => {
+            if (!candidati.has(x.g._i)) candidati.set(x.g._i, []);
+            candidati.get(x.g._i).push(o);
+        }));
+        const presaDa = new Map(); // riga foglio -> trattativa abbinata
+        T.forEach(o => { if (o.best) presaDa.set(o.best.g._i, o); });
+
         const MESI_UP = ['', 'GENNAIO', 'FEBBRAIO', 'MARZO', 'APRILE', 'MAGGIO', 'GIUGNO', 'LUGLIO', 'AGOSTO', 'SETTEMBRE', 'OTTOBRE', 'NOVEMBRE', 'DICEMBRE'];
+        const normStato = x => String(x || '').toUpperCase().replace(/\s+,/g, ',').replace(/\s+/g, ' ').trim();
+        const targaCsv = t => (t.targa || t.telaio || '').trim();
+
+        // Mese del contratto: vale la colonna MESE del foglio; se manca, la
+        // DATA del foglio; se manca anche quella, la data del gestionale.
+        // Segnala (da verificare a mano) le righe con DATA non leggibile o
+        // con DATA di un mese diverso da MESE.
+        function meseFoglio(g, fallback) {
+            const mMese = MESI_UP.indexOf(String(g.mese || '').toUpperCase().trim());
+            const mData = g._d ? g._d.getMonth() + 1 : 0;
+            const m = mMese > 0 ? mMese : (mData || (fallback ? fallback.getMonth() + 1 : 0));
+            const anno = g._d ? g._d.getFullYear() : (fallback ? fallback.getFullYear() : new Date().getFullYear());
+            let anom = null;
+            if (String(g.data || '').trim() && !g._d) anom = `Data nel foglio non leggibile ("${g.data}"): vale il mese ${cap(MESI_UP[m] || '')}`;
+            else if (g._d && mMese > 0 && mData !== mMese) anom = `Data nel foglio (${fmtD(g._d)}) di un mese diverso da quello indicato (${cap(MESI_UP[mMese])}): vale il mese`;
+            return { m, anno, anom };
+        }
+        function bucket(st, dCon, anno, m) {
+            if (st.includes('ANNULLATA')) return 'ann';
+            if (st.includes('CONSEGNATA')) {
+                if (!dCon || !m) return 'nd';
+                return Math.min(6, Math.max(0, (dCon.getFullYear() - anno) * 12 + (dCon.getMonth() + 1) - m));
+            }
+            return 'dc';
+        }
+        const keyOf = g => [[...toks(g.cliente)].sort().join(' '), pl(g.tt), String(g.mese || '').toUpperCase().trim() || (g._d ? g._d.getMonth() + 1 : '')].join('|');
+
+        const esclusiB2C = [];
+        T.forEach(o => {
+            const t = o.t, dc = o.dc, best = o.best, how = o.how;
+            const base = {
+                cliente: nice(nameOf(t)), marca: t.marca.trim(), modello: t.modello.replace(/\s+/g, ' ').trim(),
+                vend: nice(t.vend), chiusura: dc ? fmtD(dc) : t.chiusura, targa: targaCsv(t) || '—', tipo: t.tipo,
+                sede: t.sede.replace(/Gruppo Auto ?Scala srl/i, '').trim() || 'Agnano', note: []
+            };
+            if (!best) {
+                const occupate = o.info.filter(x => presaDa.has(x.g._i));
+                if (occupate.length) {
+                    const x = occupate.reduce((a, b) => b.dd < a.dd ? b : a);
+                    const altra = presaDa.get(x.g._i);
+                    base.doppione = true;
+                    base.note.push({ c: 'dup', t: `Non abbinata: la riga del foglio compatibile (${nice(x.g.cliente)}, ${x.g.tt || 'senza targa'}, ${x.g._d ? fmtD(x.g._d) : x.g.data}) è già abbinata alla trattativa di ${nice(nameOf(altra.t))}${altra.dc ? ' del ' + fmtD(altra.dc) : ''}: possibile doppione nel gestionale` });
+                } else {
+                    base.note.push({ c: 'dup', t: `Non abbinata: nel foglio nessuna riga con ${targaCsv(t) ? 'targa/telaio ' + targaCsv(t) + ', ' : ''}nome "${nice(nameOf(t))}" o stessa data, consulente e modello` });
+                }
+                verify.push(base); return;
+            }
+            const g = best.g;
+            if (g.b2c !== 'FALSE') {
+                base.note.push({ c: 'abb', t: `Esclusa: nel foglio la riga di ${nice(g.cliente)} ha B2C = ${g.b2c || 'vuoto'}` });
+                esclusiB2C.push(base); excl++; return;
+            }
+            const st = normStato(g.stato);
+            const { m, anno, anom } = meseFoglio(g, dc);
+            const dReal = pd(t.consegna), dPrev = pd(t.prevista), dCon = dReal || dPrev;
+            const k = bucket(st, dCon, anno, m);
+
+            // Motivo dell'abbinamento (solo quando non e' "perfetto")
+            const tc = targaCsv(t), tf = (g.tt || '').trim();
+            if (how === 'nome') base.note.push({ c: 'abb', t: tc ? `Abbinata per nome: targa diversa (gestionale ${tc}, foglio ${tf || 'vuota'})` : `Abbinata per nome: targa/telaio assente nel gestionale (foglio ${tf || 'vuota'})` });
+            else if (how === 'targa/telaio' || how === 'telaio parziale') base.note.push({ c: 'abb', t: `Abbinata per ${how}: nome diverso (gestionale ${nice(nameOf(t))}, foglio ${nice(g.cliente)})` });
+            else if (how === 'data + consulente + modello') base.note.push({ c: 'abb', t: `Abbinata per data, consulente e modello: nome e targa diversi (foglio ${nice(g.cliente)}, ${tf || 'senza targa'})` });
+            if (g._d && dc && fmtD(g._d) !== fmtD(dc)) base.note.push({ c: 'abb', t: `Data nel gestionale ${fmtD(dc)}, nel foglio ${fmtD(g._d)}: vale quella del foglio` });
+
+            recs.push({
+                ...base, chiusura: g._d ? fmtD(g._d) : base.chiusura, m, k, stato: st || 'STATO NON INDICATO',
+                consegna: (k === 'nd' || !dCon) ? '' : fmtD(dCon), prevista: !dReal && !!dPrev && k !== 'nd',
+                prov: g.prov ? cap(g.prov) : 'Non specificato', abb: how,
+                check: !!anom && k !== 'ann', key: anom ? keyOf(g) : null,
+                note: anom ? base.note.concat([{ c: 'info', t: anom }]) : base.note
+            });
+        });
+
+        // Righe del foglio (B2C = FALSE) senza nessuna trattativa nel CSV.
+        // Le non annullate si contano (consegnate -> "Senza data", le altre ->
+        // "Da consegnare") e vanno verificate a mano (bollino "i"). Le
+        // annullate si vedono nella lista ma non si contano.
         const soloFoglio = [];
         G.forEach(g => {
             if (used.has(g._i) || g.b2c !== 'FALSE') return;
-            const st = String(g.stato || '').toUpperCase().replace(/\s+,/g, ',').replace(/\s+/g, ' ').trim();
-            const m = g._d ? g._d.getMonth() + 1 : MESI_UP.indexOf(String(g.mese).toUpperCase().trim());
-            if (m < 1) return;
+            const st = normStato(g.stato);
+            const { m, anom } = meseFoglio(g, null);
             const k = st.includes('ANNULLATA') ? 'ann' : st.includes('CONSEGNATA') ? 'nd' : 'dc';
+            const note = [];
+            const cands = (candidati.get(g._i) || []).filter(o => o.best);
+            if (cands.length) {
+                const o = cands[0];
+                note.push({ c: 'info', t: `Solo nel foglio: la trattativa compatibile di ${nice(nameOf(o.t))}${o.dc ? ' del ' + fmtD(o.dc) : ''} è già abbinata a un'altra riga del foglio: possibile doppione nel foglio` });
+            } else {
+                note.push({ c: 'info', t: `Solo nel foglio: nel gestionale nessuna trattativa con ${g.tt ? 'targa/telaio ' + g.tt.trim() + ' o ' : ''}nome "${nice(g.cliente)}"` });
+            }
+            if (anom) note.push({ c: 'info', t: anom });
             soloFoglio.push({
                 cliente: nice(g.cliente), marca: '', modello: String(g.modello || '').replace(/\s+/g, ' ').trim(),
-                vend: nice(g.vend), chiusura: g.data || '', targa: (g.tt || '—').trim(), tipo: cap(String(g.canale || '').trim()),
+                vend: nice(g.vend), chiusura: g._d ? fmtD(g._d) : (g.data || ''), targa: (g.tt || '—').trim(), tipo: cap(String(g.canale || '').trim()),
                 m, k, stato: st || 'STATO NON INDICATO', consegna: '', prevista: false,
-                prov: g.prov ? cap(g.prov) : 'Non specificato', abb: 'solo foglio', solo: true
+                prov: g.prov ? cap(g.prov) : 'Non specificato', abb: 'solo foglio', solo: true,
+                check: k !== 'ann', key: keyOf(g), note
             });
         });
-        const contate = soloFoglio.filter(r => r.k !== 'ann');
-        result = { recs: recs.filter(r => r.m).concat(contate), verify, excl, soloFoglio };
+        const contate = soloFoglio.filter(r => r.k !== 'ann' && r.m);
+
+        // QUADRATURA: ogni riga del CSV e del foglio deve finire in un posto solo
+        const usiRiga = new Map();
+        T.forEach(o => { if (o.best) usiRiga.set(o.best.g._i, (usiRiga.get(o.best.g._i) || 0) + 1); });
+        const abbinate = recs;
+        const quad = {
+            csvTot: tratt.length, abbinate: abbinate.length, esclusiB2C: esclusiB2C.length, verify: verify.length,
+            foglioTot: G.filter(g => g.b2c === 'FALSE').length,
+            soloTot: soloFoglio.length, soloAnn: soloFoglio.filter(r => r.k === 'ann').length,
+            soloSenzaMese: soloFoglio.filter(r => !r.m).length,
+            righeRiusate: [...usiRiga.values()].filter(v => v > 1).length,
+            dateCorrette: G.filter(g => g._d && !/^\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{4}/.test(String(g.data || '').trim())).length,
+            metodi: abbinate.reduce((acc, r) => { acc[r.abb] = (acc[r.abb] || 0) + 1; return acc; }, {})
+        };
+        quad.okCsv = quad.abbinate + quad.esclusiB2C + quad.verify === quad.csvTot;
+        quad.okFoglio = quad.abbinate + quad.soloTot === quad.foglioTot;
+        quad.ok = quad.okCsv && quad.okFoglio && quad.righeRiusate === 0;
+
+        result = { recs: recs.filter(r => r.m).concat(contate), verify, excl, soloFoglio, esclusiB2C, abbinate, quad };
     }
 
     /* ================= util ================= */
@@ -233,8 +344,13 @@
     const pct = (a, b) => b ? (a / b * 100).toFixed(1).replace('.', ',') + '%' : '—';
     const fmt = n => n.toLocaleString('it-IT');
     const isDel = r => typeof r.k === 'number' || r.k === 'nd';
+    // Verifica manuale (righe con bollino "i"): salvata sul server, per chiave pratica
+    const verOf = r => (r && r.key && meta && meta.verifiche) ? meta.verifiche[r.key] || null : null;
+    const needsCheck = r => !!(r && r.check && !verOf(r));
     const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+    const whenDay = iso => iso ? new Date(iso).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+    const whenTime = iso => iso ? new Date(iso).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '';
     const when = iso => iso ? new Date(iso).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
 
     async function api(path, opts = {}) {
@@ -355,14 +471,17 @@
     function render(body) {
         const R = result.recs;
         const months = [...new Set(R.map(r => r.m))].sort((a, b) => a - b);
-        const tot = R.length, del = R.filter(isDel).length, dcN = R.filter(r => r.k === 'dc').length, annN = R.filter(r => r.k === 'ann').length;
+        // Le annullate NON fanno parte dei contratti (come nel conteggio sul
+        // foglio): percentuali calcolate solo sui contratti validi.
+        const RV = R.filter(r => r.k !== 'ann');
+        const tot = RV.length, del = RV.filter(isDel).length, dcN = RV.filter(r => r.k === 'dc').length, annN = R.filter(r => r.k === 'ann').length;
         const ndTot = R.filter(r => r.k === 'nd').length;
 
         const kpi = [
             ['all', 'Contratti firmati', tot, 'nel periodo importato', '📝', 'var(--cg-grey-soft)'],
             ['del', 'Consegnati', del, pct(del, tot) + ' dei contratti', '🔑', 'var(--cg-teal-soft)'],
             ['dc', 'Da consegnare', dcN, pct(dcN, tot) + ' dei contratti', '⏳', 'var(--cg-amber-soft)'],
-            ['ann', 'Annullate', annN, pct(annN, tot) + ' dei contratti', '✕', 'var(--cg-grey-soft)']
+            ['ann', 'Annullate', annN, 'non incluse nei contratti', '✕', 'var(--cg-grey-soft)']
         ].map(([id, l, n, s, ic, bg]) => `<button class="cg-kpi" type="button" data-kpi="${id}">
             <div class="cg-k-top">${l}<span class="cg-dot" style="background:${bg}">${ic}</span></div>
             <div class="cg-num">${fmt(n)}</div><div class="cg-sub">${s}</div></button>`).join('');
@@ -370,21 +489,21 @@
         const flagged = [];
         const empty = '<td><span class="cg-cell cg-empty-cell">–</span></td>';
         function row(label, rs, key, isTotal) {
-            const n = rs.length;
             const c = f => rs.filter(f).length;
+            const n = c(r => r.k !== 'ann'); // contratti validi (annullate escluse)
             const dcC = c(r => r.k === 'dc'), annC = c(r => r.k === 'ann'), ndC = c(r => r.k === 'nd');
             const flag = !isTotal && n && dcC / n > .10; if (flag) flagged.push(label);
-            const soloC = c(r => r.solo);
-            const badge = soloC ? `<button type="button" class="cg-info" data-solo="${key}" title="${soloC} contratti presenti solo nel foglio Google, senza trattativa nel CSV: clicca per vederli">i</button>` : '';
+            const daVer = c(needsCheck);
+            const badge = daVer ? `<button type="button" class="cg-info" data-solo="${key}" title="${daVer} contratti da verificare a mano (solo nel foglio o data da controllare): clicca per vederli">i</button>` : '';
             let s = `<tr class="${isTotal ? 'cg-total' : ''}"><td class="cg-m">${label}${flag ? '<small title="Più del 10% ancora da consegnare">‡</small>' : ''}${badge}</td>`;
-            s += `<td><button class="cg-cell cg-tot" type="button" data-f="${key}|all">${fmt(n)}</button></td>`;
+            s += n ? `<td><button class="cg-cell cg-tot" type="button" data-f="${key}|all">${fmt(n)}</button></td>` : empty;
             BUCKETS.forEach(k => {
                 const x = c(r => r.k === k);
                 s += x ? `<td><button class="cg-cell" type="button" style="${heatStyle(x / n)}" data-f="${key}|${k}" title="${x} vetture">${pct(x, n)}</button></td>` : empty;
             });
             if (ndTot) s += ndC ? `<td><button class="cg-cell cg-nd" type="button" data-f="${key}|nd" title="${ndC} vetture">${pct(ndC, n)}</button></td>` : empty;
             s += dcC ? `<td><button class="cg-cell cg-dc" type="button" data-f="${key}|dc" title="${dcC} vetture">${pct(dcC, n)}</button></td>` : empty;
-            s += annC ? `<td><button class="cg-cell cg-ann" type="button" data-f="${key}|ann" title="${annC} vetture">${pct(annC, n)}</button></td>` : empty;
+            s += annC ? `<td><button class="cg-cell cg-ann" type="button" data-f="${key}|ann" title="Annullate: non incluse nei contratti">${fmt(annC)}</button></td>` : empty;
             return s + '</tr>';
         }
         let table = '<thead><tr><th>Mese contratto</th><th>Contratti</th>' + BUCKETS.map(k => `<th>${BLABEL(k)}</th>`).join('') +
@@ -405,9 +524,10 @@
               <h2>Tempistiche consegne per mese di contratto</h2>
               <p class="cg-hint">Percentuale dei contratti firmati nel mese, consegnati dopo N mesi. Clicca una cella per vedere i clienti.</p>
               <div class="cg-scroll"><table class="cg-heat" id="cgHeat">${table}</table></div>
-              <p class="cg-foot">Percentuali calcolate sul totale dei contratti firmati nel mese. Consegnata = stato CONSEGNATA nel foglio DATABASE; il mese si calcola dalla data di consegna del CSV (se manca quella effettiva si usa la prevista).
+              <p class="cg-foot">Percentuali calcolate sui contratti firmati nel mese, annullate escluse (la colonna Annullate ne mostra il numero). Il mese del contratto è quello della colonna MESE del foglio DATABASE. Consegnata = stato CONSEGNATA nel foglio; i mesi di consegna si calcolano dalla data di consegna del CSV (se manca quella effettiva si usa la prevista).
               ${ndTot ? ' "Senza data": consegnate secondo il foglio ma senza nessuna data di consegna nel CSV.' : ''}
               ${flagged.length ? ' ‡ Mesi con più del 10% di contratti ancora da consegnare: la distribuzione è incompleta e si aggiornerà con le prossime consegne.' : ''}</p>
+              <button type="button" class="cg-quad-link ${result.quad.ok ? 'ok' : 'ko'}" id="cgQuad">${result.quad.ok ? '✓ Quadratura: tutto torna' : '⚠ Quadratura: i conti non tornano'} · dettagli</button>
             </div>
             <div class="cg-side">
               <div class="cg-card">
@@ -419,59 +539,114 @@
               </div>
               <button class="cg-verify" type="button" id="cgSolo">
                 <span class="cg-big cg-big-info">${result.soloFoglio.filter(r => r.k !== 'ann').length}</span>
-                <div><b>Solo nel foglio Google <span class="cg-info cg-info-static">i</span></b><span>Contratti nel foglio DATABASE senza trattativa nel CSV (nessuna data contratto nel gestionale). Sono conteggiati nella tabella con il bollino "i".${result.soloFoglio.some(r => r.k === 'ann') ? ` Nella lista trovi anche ${result.soloFoglio.filter(r => r.k === 'ann').length} annullate, che non si contano.` : ''}</span></div>
+                <div><b>Solo nel foglio Google</b><span>Contratti nel foglio DATABASE senza trattativa nel CSV, conteggiati nella tabella. ${(() => { const n = result.soloFoglio.filter(needsCheck).length; return n ? `<em class="cg-todo">${n} da verificare a mano</em>` : '<em class="cg-done">tutti verificati</em>'; })()}${result.soloFoglio.some(r => r.k === 'ann') ? ` Nella lista trovi anche ${result.soloFoglio.filter(r => r.k === 'ann').length} annullate, che non si contano.` : ''}</span></div>
               </button>
               <button class="cg-verify" type="button" id="cgVerify">
                 <span class="cg-big">${result.verify.length}</span>
-                <div><b>Da verificare</b><span>Trattative del CSV non trovate nel foglio DATABASE né per targa/telaio né per nome. Non sono conteggiate nella tabella.${result.excl ? ` Escluse perché B2C nel foglio: ${result.excl}.` : ''}</span></div>
+                <div><b>Da verificare</b><span>Trattative del CSV che non si è riusciti ad abbinare al foglio DATABASE: nella lista trovi il motivo di ciascuna. Non sono conteggiate nella tabella.</span></div>
               </button>
             </div>
           </section>`;
 
         body.querySelector('.cg-kpis').addEventListener('click', e => {
             const b = e.target.closest('[data-kpi]'); if (!b) return;
-            const base = { n: R.length, label: 'nel periodo importato' }, k = b.dataset.kpi;
-            if (k === 'all') openModal('Tutti i contratti firmati', R, null);
+            const base = { n: RV.length, label: 'nel periodo importato' }, k = b.dataset.kpi;
+            if (k === 'all') openModal('Tutti i contratti firmati', RV, null);
             if (k === 'del') openModal('Vetture consegnate', R.filter(isDel), base);
             if (k === 'dc') openModal('Vetture da consegnare', R.filter(r => r.k === 'dc'), base, { reasons: true });
-            if (k === 'ann') openModal('Trattative annullate', R.filter(r => r.k === 'ann'), base);
+            if (k === 'ann') openModal('Trattative annullate (non incluse nei contratti)', R.filter(r => r.k === 'ann'), null);
         });
         body.querySelector('#cgHeat').addEventListener('click', e => {
             const info = e.target.closest('[data-solo]');
             if (info) {
                 const mk = info.dataset.solo;
-                const base = mk === 'T' ? R : R.filter(r => r.m === +mk);
-                const rows = base.filter(r => r.solo);
-                openModal(`${mk === 'T' ? 'Tutti i mesi' : MESI_L[+mk]} · solo nel foglio Google`, rows,
-                    { n: base.length, label: mk === 'T' ? 'nel periodo importato' : 'di ' + MESI_L[+mk].toLowerCase() }, { reasons: true });
+                const base = (mk === 'T' ? R : R.filter(r => r.m === +mk)).filter(r => r.k !== 'ann');
+                const rows = base.filter(r => r.check);
+                openModal(`${mk === 'T' ? 'Tutti i mesi' : MESI_L[+mk]} · da verificare a mano`, rows,
+                    { n: base.length, label: mk === 'T' ? 'nel periodo importato' : 'di ' + MESI_L[+mk].toLowerCase() }, { reasons: true, origin: 'check' });
                 return;
             }
             const b = e.target.closest('[data-f]'); if (!b) return;
             const [mk, bk] = b.dataset.f.split('|');
-            const base = mk === 'T' ? R : R.filter(r => r.m === +mk);
+            const baseAll = mk === 'T' ? R : R.filter(r => r.m === +mk);
+            const base = baseAll.filter(r => r.k !== 'ann');
             const where = mk === 'T' ? 'Tutti i mesi' : MESI_L[+mk];
             const mLabel = mk === 'T' ? 'nel periodo importato' : 'firmati a ' + MESI_L[+mk].toLowerCase();
             let rows, title, opts = {};
             if (bk === 'all') { rows = base; title = `${where} · tutti i contratti`; }
             else if (bk === 'dc') { rows = base.filter(r => r.k === 'dc'); title = `${where} · da consegnare`; opts.reasons = true; }
-            else if (bk === 'ann') { rows = base.filter(r => r.k === 'ann'); title = `${where} · annullate`; }
+            else if (bk === 'ann') { rows = baseAll.filter(r => r.k === 'ann'); title = `${where} · annullate (non incluse nei contratti)`; }
             else if (bk === 'nd') { rows = base.filter(r => r.k === 'nd'); title = `${where} · consegnate senza data`; }
             else { rows = base.filter(r => r.k === +bk); title = `${where} · consegnate ${BLABEL(+bk).toLowerCase()}`; }
-            openModal(title, rows, bk === 'all' ? null : { n: base.length, label: mLabel }, opts);
+            openModal(title, rows, (bk === 'all' || bk === 'ann') ? null : { n: base.length, label: mLabel }, opts);
         });
         body.querySelector('#cgBars').addEventListener('click', e => {
             const b = e.target.closest('[data-reason]'); if (!b) return;
-            openModal('Vetture da consegnare', R.filter(r => r.k === 'dc'), { n: R.length, label: 'nel periodo importato' },
+            openModal('Vetture da consegnare', R.filter(r => r.k === 'dc'), { n: RV.length, label: 'nel periodo importato' },
                 { reasons: true, chip: decodeURIComponent(b.dataset.reason) });
         });
         body.querySelector('#cgSolo').addEventListener('click', () =>
             openModal('Solo nel foglio Google: senza trattativa nel CSV', result.soloFoglio, null, { reasons: true }));
         body.querySelector('#cgVerify').addEventListener('click', () =>
             openModal('Da verificare: non trovate nel foglio DATABASE', result.verify, null, { verify: true }));
+        body.querySelector('#cgQuad').addEventListener('click', openQuadratura);
+    }
+
+    /* ================= quadratura ================= */
+    function openQuadratura() {
+        const q = result.quad;
+        const ok = v => v ? '<span class="cg-q-ok">✓</span>' : '<span class="cg-q-ko">✕</span>';
+        const lnk = (id, n) => `<button type="button" class="cg-q-n" data-q="${id}">${fmt(n)}</button>`;
+        const metodi = Object.entries(q.metodi).sort((a, b) => b[1] - a[1])
+            .map(([m, n]) => `<li><span>per ${esc(m)}</span>${lnk('m:' + m, n)}</li>`).join('');
+        const html = `
+          <div class="cg-q-grid">
+            <div class="cg-q-box">
+              <h4>${ok(q.okCsv)} CSV trattative importato</h4>
+              <div class="cg-q-tot">${fmt(q.csvTot)} <small>trattative (Noleggio già escluso)</small></div>
+              <ul>
+                <li><span>abbinate al foglio (B2C = FALSE)</span>${lnk('abb', q.abbinate)}</li>
+                <li><span>scartate: nel foglio B2C = TRUE</span>${lnk('b2c', q.esclusiB2C)}</li>
+                <li><span>da verificare: non trovate nel foglio</span>${lnk('ver', q.verify)}</li>
+              </ul>
+              <p class="cg-q-sum">${fmt(q.abbinate)} + ${fmt(q.esclusiB2C)} + ${fmt(q.verify)} = ${fmt(q.abbinate + q.esclusiB2C + q.verify)}</p>
+            </div>
+            <div class="cg-q-box">
+              <h4>${ok(q.okFoglio)} Foglio DATABASE</h4>
+              <div class="cg-q-tot">${fmt(q.foglioTot)} <small>righe con B2C = FALSE</small></div>
+              <ul>
+                <li><span>abbinate al CSV</span>${lnk('abb', q.abbinate)}</li>
+                <li><span>solo nel foglio (${fmt(q.soloAnn)} annullate, non contate)</span>${lnk('solo', q.soloTot)}</li>
+              </ul>
+              <p class="cg-q-sum">${fmt(q.abbinate)} + ${fmt(q.soloTot)} = ${fmt(q.abbinate + q.soloTot)}</p>
+            </div>
+            <div class="cg-q-box">
+              <h4>Come sono state abbinate</h4>
+              <ul>${metodi}</ul>
+            </div>
+            <div class="cg-q-box">
+              <h4>Controlli</h4>
+              <ul>
+                <li><span>righe del foglio usate da più trattative</span><b>${ok(q.righeRiusate === 0)} ${fmt(q.righeRiusate)}</b></li>
+                <li><span>date del foglio lette correggendo il formato</span><b>${fmt(q.dateCorrette)}</b></li>
+                <li><span>contratti da verificare a mano ancora aperti</span>${lnk('check', result.recs.filter(needsCheck).length)}</li>
+              </ul>
+            </div>
+          </div>`;
+        openInfo(q.ok ? '✓ Quadratura: tutto torna' : '⚠ Quadratura: i conti non tornano', html);
+    }
+    function quadList(id) {
+        const q = result;
+        if (id === 'abb') return openModal('Trattative abbinate al foglio', q.abbinate, null, {});
+        if (id === 'b2c') return openModal('Scartate: B2C = TRUE nel foglio', q.esclusiB2C, null, { verify: true });
+        if (id === 'ver') return openModal('Da verificare: non trovate nel foglio DATABASE', q.verify, null, { verify: true });
+        if (id === 'solo') return openModal('Solo nel foglio Google: senza trattativa nel CSV', q.soloFoglio, null, { reasons: true });
+        if (id === 'check') return openModal('Da verificare a mano', q.recs.filter(r => r.check), null, { reasons: true, origin: 'check' });
+        if (id.startsWith('m:')) { const m = id.slice(2); return openModal(`Abbinate per ${m}`, q.abbinate.filter(r => r.abb === m), null, {}); }
     }
 
     /* ================= finestra lista clienti ================= */
-    let ov = null, cur = [], curChip = null, curVerify = false, lastFocus = null;
+    let ov = null, cur = [], curChip = null, curVerify = false, curOrigin = '', lastFocus = null;
     function ensureModal() {
         if (ov) return;
         ov = document.createElement('div');
@@ -479,13 +654,28 @@
         ov.innerHTML = `<div class="cg-modal">
             <div class="cg-m-head"><div><h3 id="cgMTitle"></h3><div class="cg-stat" id="cgMStat"></div></div>
               <button class="cg-x" type="button" aria-label="Chiudi">✕</button></div>
-            <div class="cg-m-tools"><input type="search" id="cgMSearch" placeholder="Cerca cliente, vettura, consulente o targa"><div class="cg-chips" id="cgMChips"></div></div>
-            <div class="cg-m-body"><table class="cg-list" id="cgMList"></table></div></div>`;
+            <div class="cg-m-tools"><input type="search" id="cgMSearch" placeholder="Cerca cliente, vettura, consulente o targa"><div class="cg-chips" id="cgMOrigin"></div><div class="cg-chips" id="cgMChips"></div></div>
+            <div class="cg-m-body"><table class="cg-list" id="cgMList"></table><div id="cgMInfo"></div></div></div>`;
         document.body.appendChild(ov);
         ov.querySelector('.cg-x').addEventListener('click', closeModal);
         ov.addEventListener('click', e => { if (e.target === ov) closeModal(); });
         document.addEventListener('keydown', e => { if (e.key === 'Escape' && ov.classList.contains('open')) closeModal(); });
         ov.querySelector('#cgMSearch').addEventListener('input', renderList);
+        ov.querySelector('#cgMInfo').addEventListener('click', e => {
+            const b = e.target.closest('[data-q]'); if (b) quadList(b.dataset.q);
+        });
+        ov.querySelector('#cgMList').addEventListener('click', e => {
+            const b = e.target.closest('[data-vkey]'); if (!b) return;
+            const key = decodeURIComponent(b.dataset.vkey), on = b.dataset.von === '1';
+            if (!on && !confirm('Rimuovere la verifica manuale di questa pratica?')) return;
+            setVerifica(key, on, b);
+        });
+        ov.querySelector('#cgMOrigin').addEventListener('click', e => {
+            const c = e.target.closest('[data-origin]'); if (!c) return;
+            curOrigin = c.dataset.origin;
+            ov.querySelectorAll('#cgMOrigin .cg-chip').forEach(x => x.classList.toggle('on', x === c));
+            renderList();
+        });
         ov.querySelector('#cgMChips').addEventListener('click', e => {
             const c = e.target.closest('[data-chip]'); if (!c) return;
             curChip = decodeURIComponent(c.dataset.chip) || null;
@@ -493,10 +683,26 @@
             renderList();
         });
     }
+    function showListMode(list) {
+        ov.querySelector('.cg-m-tools').style.display = list ? '' : 'none';
+        ov.querySelector('#cgMList').style.display = list ? '' : 'none';
+        ov.querySelector('#cgMInfo').style.display = list ? 'none' : '';
+    }
+    function openInfo(title, html) {
+        ensureModal();
+        if (!ov.classList.contains('open')) lastFocus = document.activeElement;
+        showListMode(false);
+        ov.querySelector('#cgMTitle').textContent = title;
+        ov.querySelector('#cgMStat').innerHTML = '';
+        ov.querySelector('#cgMInfo').innerHTML = html;
+        ov.classList.add('open');
+    }
     function openModal(title, rows, base, opts = {}) {
         ensureModal();
-        lastFocus = document.activeElement;
-        cur = rows; curChip = opts.chip || null; curVerify = !!opts.verify;
+        if (!ov.classList.contains('open')) lastFocus = document.activeElement;
+        showListMode(true);
+        cur = rows; curChip = opts.chip || null; curVerify = !!opts.verify; curOrigin = opts.origin || '';
+        renderOrigin();
         ov.querySelector('#cgMTitle').textContent = title;
         ov.querySelector('#cgMStat').innerHTML = base
             ? `<span class="cg-n">${fmt(rows.length)} vetture</span><span class="cg-p">${pct(rows.length, base.n)}</span><span class="cg-of">su ${fmt(base.n)} contratti ${base.label}</span>`
@@ -513,9 +719,59 @@
         ov.classList.add('open');
         search.focus();
     }
+    // Filtri origine con conteggi: Tutti / Abbinati al CSV / Solo nel foglio /
+    // Da verificare a mano / Verificati a mano (compaiono solo se servono)
+    function renderOrigin() {
+        const box = ov.querySelector('#cgMOrigin');
+        if (curVerify) { box.innerHTML = ''; return; }
+        const nSolo = cur.filter(r => r.solo).length, nAbb = cur.length - nSolo;
+        const nCheck = cur.filter(needsCheck).length, nVer = cur.filter(r => r.check && verOf(r)).length;
+        const chip = (id, label, n) => `<button class="cg-chip ${curOrigin === id ? 'on' : ''}" type="button" data-origin="${id}">${label} (${fmt(n)})</button>`;
+        box.innerHTML = (nSolo || nCheck || nVer) ?
+            chip('', 'Tutti', cur.length) +
+            (nSolo && nAbb ? chip('abb', 'Abbinati al CSV', nAbb) + chip('solo', 'Solo nel foglio', nSolo) : '') +
+            (nCheck ? chip('check', '<span class="cg-info cg-info-static">i</span>Da verificare a mano', nCheck) : '') +
+            (nVer ? chip('ver', '✓ Verificati a mano', nVer) : '') : '';
+    }
+    const originOk = r => !curOrigin || (curOrigin === 'solo' ? r.solo : curOrigin === 'abb' ? !r.solo
+        : curOrigin === 'check' ? needsCheck(r) : curOrigin === 'ver' ? !!(r.check && verOf(r)) : true);
+
+    function noteHtml(r) {
+        const v = verOf(r), daFare = needsCheck(r);
+        let h = (r.note || []).map(n => n.c === 'info'
+            ? `<span class="cg-abb ${daFare ? 'cg-abb-info' : 'cg-abb-muted'}">${daFare ? '<span class="cg-info cg-info-static">i</span>' : ''}${esc(n.t)}</span>`
+            : `<span class="cg-abb ${n.c === 'dup' ? 'cg-abb-dup' : ''}">${esc(n.t)}</span>`).join('');
+        if (r.check && r.key) {
+            const k = encodeURIComponent(r.key);
+            h += v
+                ? `<span class="cg-verok">✓ Verificato manualmente da ${esc(v.da)} il ${esc(whenDay(v.at))} alle ${esc(whenTime(v.at))}</span>` +
+                  `<button type="button" class="cg-vlink" data-vkey="${k}" data-von="0">Rimuovi verifica</button>`
+                : `<button type="button" class="cg-vbtn" data-vkey="${k}" data-von="1">Segna come verificata</button>`;
+            // Senza permesso "Completo" su Consegne: niente pulsanti, solo lo stato
+            if (!(meta && meta.puoModificare)) h = h.replace(/<button type="button" class="cg-v(btn|link)"[^>]*>[^<]*<\/button>/g, '');
+        }
+        return h;
+    }
+
+    async function setVerifica(key, on, btn) {
+        if (btn) btn.disabled = true;
+        try {
+            const d = await api('/verifiche', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key, verificata: on })
+            });
+            meta.verifiche = d.verifiche || {};
+            renderOrigin(); renderList();
+            render(rootEl.querySelector('#cgBody')); // aggiorna bollini e conteggi della tabella
+        } catch (e) {
+            alert('Verifica non salvata: ' + e.message);
+            if (btn) btn.disabled = false;
+        }
+    }
+
     function renderList() {
         const q = ov.querySelector('#cgMSearch').value.trim().toLowerCase();
-        const rows = cur.filter(r => (!curChip || r.stato === curChip) &&
+        const rows = cur.filter(r => (!curChip || r.stato === curChip) && originOk(r) &&
             (!q || [r.cliente, r.marca, r.modello, r.vend, r.targa].join(' ').toLowerCase().includes(q)));
         const list = ov.querySelector('#cgMList');
         if (!rows.length) { list.innerHTML = '<tbody><tr><td class="cg-empty-msg">Nessuna vettura corrisponde alla ricerca.</td></tr></tbody>'; return; }
@@ -523,7 +779,7 @@
             (curVerify ? '<th>Targa / telaio</th><th>Tipo</th><th>Sede</th>'
                 : '<th>Data consegna</th><th>Stato</th><th>Provenienza</th><th>Tipo</th><th>Targa / telaio</th>') + '</tr></thead><tbody>' +
             rows.map(r => '<tr>' +
-                `<td class="cg-cl">${esc(r.cliente)}${r.solo ? '<span class="cg-abb cg-abb-info"><span class="cg-info cg-info-static">i</span> Solo nel foglio: nessuna trattativa nel CSV, data dal foglio</span>' : ''}${r.abb === 'data + consulente + modello' ? '<span class="cg-abb" title="Nome e targa diversi nei due file: abbinata perché coincidono data (entro 7 giorni), consulente e modello">abbinata per data, consulente e modello</span>' : ''}</td><td>${esc(r.marca)} ${esc(r.modello)}</td><td>${esc(r.vend)}</td><td>${esc(r.chiusura)}</td>` +
+                `<td class="cg-cl">${esc(r.cliente)}${noteHtml(r)}</td><td>${esc(r.marca)} ${esc(r.modello)}</td><td>${esc(r.vend)}</td><td>${esc(r.chiusura)}</td>` +
                 (curVerify ? `<td>${esc(r.targa)}</td><td>${esc(r.tipo)}</td><td>${esc(r.sede)}</td>`
                     : `<td>${r.consegna ? esc(r.consegna) : '—'}${r.prevista ? '<span class="cg-prev">prevista</span>' : ''}</td>` +
                     `<td><span class="cg-tag ${isDel(r) ? 'ok' : r.k === 'dc' ? 'wait' : ''}">${esc(cap(r.stato))}</span></td>` +
