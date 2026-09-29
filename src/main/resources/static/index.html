@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CRM Gestione Clienti | Gruppo Autoscala</title>
     <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/macro-home.css">
+    <link rel="stylesheet" href="/css/consegne.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -66,7 +68,7 @@
                     </div>
                 </div>
             </div>
-            <img src="/img/logo.webp" alt="Gruppo Autoscala">
+            <img src="/img/logo.webp" alt="Gruppo Autoscala" title="Torna alla home" style="cursor:pointer" onclick="if (window.MacroHome) MacroHome.show()">
             <span id="navBrandBadge" style="font-family:'Inter',sans-serif;font-weight:800;font-size:13px;letter-spacing:2px;color:#f0c040;opacity:0.9">BDC</span>
         </div>
         <div class="nav-links">
@@ -147,6 +149,15 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- NUOVO: AREA CONSEGNE — seconda macro categoria della home (la prima,
+         "In bound", e' tutto il CRM attuale). Area separata dalle pagine di
+         In bound: si apre da MacroHome.openConsegne() (vedi /js/macro-home.js).
+         Il contenuto (import, tabella tempistiche, liste clienti) viene
+         costruito da /js/consegne.js dentro #consegneRoot. -->
+    <div id="consegnePage" class="page" style="display:none">
+        <div id="consegneRoot"></div>
     </div>
 
     <!-- DASHBOARD -->
@@ -2585,6 +2596,8 @@
 <script src="/js/veicoli.js"></script>
 <script src="/js/preventivi.js"></script>
 <script src="/js/app.js"></script>
+<script src="/js/macro-home.js"></script>
+<script src="/js/consegne.js"></script>
 <script src="/js/graphmenu.js"></script>
 <script src="/js/multiselect.js"></script>
 </body>

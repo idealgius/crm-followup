@@ -258,6 +258,9 @@ function hideLoadingOverlay() {
 
 async function showPage(page, updateHash = true) {
     showLoadingOverlay();
+    // NUOVO: aprendo una qualunque pagina di In bound si chiudono la home
+    // "macro categorie" e l'area Consegne (vedi /js/macro-home.js).
+    if (window.MacroHome) MacroHome.onShowPage();
     const role = currentUser?.role || 'UTENTE';
 
     if (!VALID_PAGES.includes(page)) page = 'dashboard';
@@ -467,10 +470,26 @@ window.onload = function() {
                 targetPage = 'contacts';
             }
 
-            // NUOVO: await — l'overlay di caricamento (già visibile di
-            // default) resta su finché anche i dati della prima pagina
-            // non sono pronti, non solo finché il layout è disegnato.
-            await showPage(targetPage);
+            // NUOVO: home "macro categorie" (In bound / Consegne).
+            // - #consegne nell'URL (refresh dentro Consegne) -> riapre Consegne
+            // - nessuna sezione nell'URL (o #home) -> mostra la home
+            // - sezione di In bound nell'URL (refresh) o link allert dalla
+            //   mail -> comportamento di sempre, niente home.
+            // NOLEGGIO/SERVICE non vedono la home (MacroHome.canShow).
+            const urlHash = window.location.hash.replace('#', '').trim();
+            const macroHomeOk = !openAlertId && window.MacroHome && MacroHome.canShow(data.role);
+            if (macroHomeOk && urlHash === 'consegne') {
+                MacroHome.openConsegne();
+                hideLoadingOverlay();
+            } else if (macroHomeOk && !hashPage) {
+                MacroHome.show();
+                hideLoadingOverlay();
+            } else {
+                // NUOVO: await — l'overlay di caricamento (già visibile di
+                // default) resta su finché anche i dati della prima pagina
+                // non sono pronti, non solo finché il layout è disegnato.
+                await showPage(targetPage);
+            }
 
             // NUOVO: apre la scheda dell'allert indicato nel link, poi ripulisce
             // il parametro dall'URL — cosi' un refresh successivo (F5) non la

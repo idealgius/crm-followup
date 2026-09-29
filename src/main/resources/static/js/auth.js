@@ -73,7 +73,15 @@ async function login() {
         document.getElementById('mainApp').style.display = 'block';
 
         const defaultPage = typeof getDefaultPageForRole === 'function' ? getDefaultPageForRole(data.role) : (data.role === 'UTENTE' ? 'contacts' : 'dashboard');
-        showPage(defaultPage);
+        // NUOVO: dopo il login si parte dalla home "macro categorie"
+        // (In bound / Consegne) — tranne NOLEGGIO/SERVICE, che vanno
+        // direttamente alla loro dashboard come prima.
+        if (window.MacroHome && MacroHome.canShow(data.role)) {
+            MacroHome.show();
+            hideLoadingOverlay();
+        } else {
+            showPage(defaultPage);
+        }
 
         if (data.role !== 'UTENTE') loadStats();
 
@@ -124,6 +132,8 @@ async function logout() {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
     currentUser = null;
     sessionStorage.removeItem('currentPage');
+    // NUOVO: chiude home "macro categorie" / area Consegne e ripristina la navbar
+    if (window.MacroHome) MacroHome.reset();
 
     // Reset navbar: nasconde tutto finché il prossimo login non riapplica i permessi corretti
     document.getElementById('navDashboard').style.display = 'none';
