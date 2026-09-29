@@ -55,6 +55,27 @@ public class RolePermissionService {
         // NUOVO: area Consegne + selezione area dopo il login
         "CONSEGNE"
     );
+    // ===== NUOVO: PERMESSI DEI GRAFICI =====
+    // Un grafico e' una "sezione" come le altre, salvata nella stessa tabella
+    // role_permissions / user_permissions, ma con solo due valori usati:
+    // NONE = nascosto, READ_ONLY = visibile. Tenuti in una lista separata
+    // perche' la pagina Permessi li mostra in una tabella a parte, divisa per
+    // sezione del CRM. Le chiavi sono le stesse usate nel frontend (app.js,
+    // CHART_PERMISSIONS).
+    public static final List<String> CHARTS = List.of(
+        "G_DASH_FOLLOWUP", "G_DASH_RECALL",
+        "G_CT_CATEGORIE", "G_CT_OPERATORE", "G_CT_SEDE", "G_CT_ACQUISTO", "G_CT_FONTE", "G_CT_SERVICE_SEDE",
+        "G_CT_MARCHE", "G_CT_NOL_TIPO", "G_CT_NOL_LEAD", "G_CT_PROMO_MODELLI", "G_CT_PROMO_APP", "G_CT_PROMO_RICH",
+        "G_PV_MARCHE", "G_PV_OPERATORE", "G_PV_CONSULENTE", "G_PV_TRATTATIVE", "G_PV_ESITO",
+        "G_RENT_STATO", "G_RENT_FONTE", "G_RENT_MARCHI", "G_RENT_INFO",
+        "G_SRV_STATO", "G_SRV_CHIAMATE", "G_SRV_ESITO",
+        "G_CG_TEMPI", "G_CG_MOTIVI"
+    );
+
+    private static boolean isValidKey(String key) {
+        return SECTIONS.contains(key) || CHARTS.contains(key);
+    }
+
     // 4° livello "ADMIN_FULL" — come FULL ma può toccare anche i record
     // creati da un utente ADMIN. L'ordine della lista è anche l'ordine di
     // "forza" del permesso, usato da hasAtLeast() sotto.
@@ -115,6 +136,12 @@ public class RolePermissionService {
     }
 
     private String defaultAccess(String role, String section) {
+        // Grafici: di default come prima di questa funzione — tutti visibili,
+        // tranne "Chiamate per operatore" per i BDC (ruolo UTENTE), che prima
+        // era nascosto fisso nel codice (app.js).
+        if (CHARTS.contains(section)) {
+            return ("UTENTE".equals(role) && "G_CT_OPERATORE".equals(section)) ? "NONE" : "READ_ONLY";
+        }
         return DEFAULTS.getOrDefault(role, Map.of()).getOrDefault(section, "NONE");
     }
 
@@ -151,6 +178,9 @@ public class RolePermissionService {
             for (String section : SECTIONS) {
                 row.put(section, defaultAccess(role, section));
             }
+            for (String chart : CHARTS) {
+                row.put(chart, defaultAccess(role, chart));
+            }
             matrix.put(role, row);
         }
         for (RolePermission rp : rolePermissionRepository.findAll()) {
@@ -167,7 +197,7 @@ public class RolePermissionService {
     // default" — l'admin vede sempre esplicitamente cosa ha impostato).
     public void setAccess(String role, String section, String access) {
         if (!ROLES.contains(role)) throw new IllegalArgumentException("Ruolo non valido");
-        if (!SECTIONS.contains(section)) throw new IllegalArgumentException("Sezione non valida");
+        if (!isValidKey(section)) throw new IllegalArgumentException("Sezione non valida");
         if (!ACCESS_LEVELS.contains(access)) throw new IllegalArgumentException("Livello di accesso non valido");
 
         RolePermission rp = rolePermissionRepository.findByRoleAndSection(role, section)
@@ -226,7 +256,7 @@ public class RolePermissionService {
     // null, l'override viene RIMOSSO (l'utente torna a ereditare il
     // permesso del suo ruolo).
     public void setUserAccess(Long userId, String section, String access) {
-        if (!SECTIONS.contains(section)) throw new IllegalArgumentException("Sezione non valida");
+        if (!isValidKey(section)) throw new IllegalArgumentException("Sezione non valida");
         if (access != null && !ACCESS_LEVELS.contains(access)) throw new IllegalArgumentException("Livello di accesso non valido");
 
         if (access == null) {

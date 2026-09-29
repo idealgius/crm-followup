@@ -39,12 +39,17 @@ public class PermissionController {
         for (String section : RolePermissionService.SECTIONS) {
             myEffective.put(section, rolePermissionService.getEffectiveAccess(userId, role, section));
         }
+        // NUOVO: anche i permessi dei grafici (NONE = nascosto, READ_ONLY = visibile)
+        for (String chart : RolePermissionService.CHARTS) {
+            myEffective.put(chart, rolePermissionService.getEffectiveAccess(userId, role, chart));
+        }
 
         return ResponseEntity.ok(Map.of(
             "matrix", rolePermissionService.getEffectiveMatrix(),
             "myEffective", myEffective,
             "roles", RolePermissionService.ROLES,
             "sections", RolePermissionService.SECTIONS,
+            "charts", RolePermissionService.CHARTS,
             "accessLevels", RolePermissionService.ACCESS_LEVELS
         ));
     }
@@ -99,6 +104,7 @@ public class PermissionController {
         return ResponseEntity.ok(Map.of(
             "users", users,
             "sections", RolePermissionService.SECTIONS,
+            "charts", RolePermissionService.CHARTS,
             "accessLevels", RolePermissionService.ACCESS_LEVELS
         ));
     }
