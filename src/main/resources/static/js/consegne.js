@@ -40,6 +40,7 @@
     let tratt = null;   // [{...colonne minime}]
     let db = null;      // [{...colonne minime}]
     let result = null;  // {recs, verify, excl}
+    let vendMap = new Map(); // nome consulente nel foglio -> nome completo (dal CSV)
     let rootEl = null;
     let meta = null;    // info ultimo import / ultima lettura foglio dal server
     let autoTimer = null;
@@ -259,6 +260,18 @@
         }
         const keyOf = g => [[...toks(g.cliente)].sort().join(' '), pl(g.tt), String(g.mese || '').toUpperCase().trim() || (g._d ? g._d.getMonth() + 1 : '')].join('|');
 
+        // Consulenti: nel foglio c'e' solo il nome ("CLAUDIO", "CLAUDIO G"): lo si collega
+        // al nome completo del CSV usato piu' spesso nelle trattative abbinate.
+        const cnt = new Map();
+        T.forEach(o => {
+            if (!o.best) return;
+            const k = String(o.best.g.vend || '').toUpperCase().replace(/\s+/g, ' ').trim();
+            if (!k) return;
+            if (!cnt.has(k)) cnt.set(k, new Map());
+            const m2 = cnt.get(k), full = nice(o.t.vend);
+            m2.set(full, (m2.get(full) || 0) + 1);
+        });
+        vendMap = new Map([...cnt].map(([k, m2]) => [k, [...m2].sort((a, b) => b[1] - a[1])[0][0]]));
         const esclusiB2C = [], manuali = [], eliminate = [], soloCsv = [];
         // Chiave stabile di una trattativa del CSV (resta uguale tra un import e l'altro)
         const csvKey = (t, dc) => ['csv', [...toks(nameOf(t))].sort().join(' '), pl(targaCsv(t)), dc ? fmtD(dc) : t.chiusura].join('|');
@@ -473,21 +486,61 @@
             </div>
             <div class="cg-actions">
               <label class="cg-btn" id="cgImportLbl" style="display:none">Importa trattative (CSV)<input type="file" accept=".csv,text/csv" id="cgFileTratt" hidden></label>
+              <label class="cg-btn cg-btn-ghost" id="cgImportDbLbl" style="display:none" title="Carica la scheda DATABASE esportata come CSV (mette in pausa l'aggiornamento automatico da Google)">Importa foglio (CSV)<input type="file" accept=".csv,text/csv" id="cgFileDb" hidden></label>
               <button type="button" class="cg-btn cg-btn-light" id="cgSheetBtn">Aggiorna dal foglio Google</button>
             </div>
           </div>
           <div class="cg-src" id="cgSrc"></div>
+          <div class="cg-tabs" role="tablist">
+            <button type="button" class="cg-tab on" data-tab="tempi" role="tab">Tempistiche</button>
+            <button type="button" class="cg-tab" data-tab="analisi" role="tab">Analisi avanzamento</button>
+          </div>
         </div>
-        <div class="cg-wrap" id="cgBody"></div>`;
+        <div class="cg-wrap" id="cgBody"></div>
+        <div class="cg-wrap" id="cgAnalisi" style="display:none"></div>`;
         rootEl.querySelector('#cgFileTratt').addEventListener('change', e => importTrattative(e.target));
+        rootEl.querySelector('#cgFileDb').addEventListener('change', e => importDatabaseCsv(e.target));
+        rootEl.querySelectorAll('.cg-tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
         rootEl.querySelector('#cgSheetBtn').addEventListener('click', refreshSheet);
+    }
+
+    // Schede: "Tempistiche" (tabella esistente) / "Analisi avanzamento" (consegne-analisi.js)
+    let tab = 'tempi';
+    function showTab(t) {
+        tab = t;
+        rootEl.querySelectorAll('.cg-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+        rootEl.querySelector('#cgBody').style.display = t === 'tempi' ? '' : 'none';
+        const an = rootEl.querySelector('#cgAnalisi');
+        an.style.display = t === 'analisi' ? '' : 'none';
+        if (t === 'analisi' && window.ConsegneAnalisi) ConsegneAnalisi.show(an);
+    }
+
+    // Import del foglio DATABASE come CSV (alternativa alla lettura da Google)
+    function importDatabaseCsv(input) {
+        const file = input.files && input.files[0]; if (!file) return;
+        const r = new FileReader();
+        r.onload = async () => {
+            try {
+                const text = String(r.result);
+                slimDatabase(parseCSV(text));          // controllo colonne prima di inviare
+                const d = await api('/database/import', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csv: text })
+                });
+                applyServerData(d);
+                refresh('Foglio importato da CSV: l\'aggiornamento automatico da Google è in pausa finché non premi "Aggiorna dal foglio Google".');
+            } catch (e) { setSrc(e.message, true); }
+            finally { input.value = ''; }
+        };
+        r.readAsText(file, 'utf-8');
     }
 
     function setSrc(msg, isErr) {
         const t = meta && meta.trattative, d = meta && meta.database;
         const imp = rootEl.querySelector('#cgImportLbl');
         if (imp) imp.style.display = meta && meta.puoImportare ? '' : 'none';
-        let foglio = d ? `${fmt(d.righe || 0)} righe · aggiornato ${when(d.aggiornatoAt)}` : 'non ancora letto';
+        const impDb = rootEl.querySelector('#cgImportDbLbl');
+        if (impDb) impDb.style.display = meta && meta.puoImportare ? '' : 'none';
+        let foglio = d ? `${fmt(d.righe || 0)} righe · aggiornato ${when(d.aggiornatoAt)}${String(d.aggiornatoDa || '').startsWith('Import CSV') ? ' (da CSV, aggiornamento automatico in pausa)' : ''}` : 'non ancora letto';
         if (meta && !meta.foglioCollegato) foglio = 'collegamento non configurato sul server';
         rootEl.querySelector('#cgSrc').innerHTML =
             `Ultimo import trattative: <b>${t ? fmt(t.righe || 0) + ' righe · ' + when(t.aggiornatoAt) + (t.aggiornatoDa ? ' da ' + esc(t.aggiornatoDa) : '') : 'nessuno'}</b>` +
@@ -538,6 +591,7 @@
 
     function refresh(msg) {
         setSrc(msg);
+        if (window.ConsegneAnalisi) ConsegneAnalisi.refresh();
         const body = rootEl.querySelector('#cgBody');
         if (!tratt || !db) {
             const canImp = meta && meta.puoImportare;
@@ -748,7 +802,11 @@
     }
 
     /* ================= finestra lista clienti ================= */
-    let ov = null, cur = [], curChip = null, curVerify = false, curOrigin = '', lastFocus = null;
+    // Filtri della lista: piu' scelte possibili per gruppo (motivi / origine).
+    // Dentro un gruppo vale "una qualsiasi" delle scelte, tra i gruppi vale "e".
+    let ov = null, cur = [], curVerify = false, curBase = null, lastFocus = null;
+    let curChips = new Set(), curOrigins = new Set();
+    const ORIGIN_LABEL = { abb: 'Abbinati', solo: 'Solo nel foglio', csv: 'Solo nel CSV', check: 'Da verificare a mano', ver: 'Verificati a mano' };
     function ensureModal() {
         if (ov) return;
         ov = document.createElement('div');
@@ -757,7 +815,8 @@
             <div class="cg-m-head"><div><h3 id="cgMTitle"></h3><div class="cg-stat" id="cgMStat"></div></div>
               <button class="cg-x" type="button" aria-label="Chiudi">✕</button></div>
             <div class="cg-m-tools"><input type="search" id="cgMSearch" placeholder="Cerca cliente, vettura, consulente o targa"><div class="cg-chips" id="cgMOrigin"></div><div class="cg-chips" id="cgMChips"></div></div>
-            <div class="cg-m-body"><table class="cg-list" id="cgMList"></table><div id="cgMInfo"></div></div></div>`;
+            <div class="cg-m-body"><table class="cg-list" id="cgMList"></table><div id="cgMInfo"></div></div>
+            <div class="cg-m-foot" id="cgMFoot"></div></div>`;
         document.body.appendChild(ov);
         ov.querySelector('.cg-x').addEventListener('click', closeModal);
         ov.addEventListener('click', e => { if (e.target === ov) closeModal(); });
@@ -783,14 +842,18 @@
         });
         ov.querySelector('#cgMOrigin').addEventListener('click', e => {
             const c = e.target.closest('[data-origin]'); if (!c) return;
-            curOrigin = c.dataset.origin;
-            ov.querySelectorAll('#cgMOrigin .cg-chip').forEach(x => x.classList.toggle('on', x === c));
-            renderList();
+            const id = c.dataset.origin;
+            if (!id) curOrigins.clear(); else if (curOrigins.has(id)) curOrigins.delete(id); else curOrigins.add(id);
+            renderOrigin(); renderList();
         });
         ov.querySelector('#cgMChips').addEventListener('click', e => {
             const c = e.target.closest('[data-chip]'); if (!c) return;
-            curChip = decodeURIComponent(c.dataset.chip) || null;
-            ov.querySelectorAll('.cg-chip').forEach(x => x.classList.toggle('on', x === c));
+            const sct = decodeURIComponent(c.dataset.chip);
+            if (!sct) curChips.clear(); else if (curChips.has(sct)) curChips.delete(sct); else curChips.add(sct);
+            ov.querySelectorAll('#cgMChips .cg-chip').forEach(x => {
+                const v = decodeURIComponent(x.dataset.chip);
+                x.classList.toggle('on', v ? curChips.has(v) : curChips.size === 0);
+            });
             renderList();
         });
     }
@@ -798,6 +861,7 @@
         ov.querySelector('.cg-m-tools').style.display = list ? '' : 'none';
         ov.querySelector('#cgMList').style.display = list ? '' : 'none';
         ov.querySelector('#cgMInfo').style.display = list ? 'none' : '';
+        if (!list) ov.querySelector('#cgMFoot').innerHTML = '';
     }
     function openInfo(title, html) {
         ensureModal();
@@ -812,18 +876,17 @@
         ensureModal();
         if (!ov.classList.contains('open')) lastFocus = document.activeElement;
         showListMode(true);
-        cur = rows; curChip = opts.chip || null; curVerify = !!opts.verify; curOrigin = opts.origin || '';
+        cur = rows; curVerify = !!opts.verify; curBase = base || null;
+        curChips = new Set(opts.chip ? [opts.chip] : []);
+        curOrigins = new Set(opts.origin ? [opts.origin] : []);
         renderOrigin();
         ov.querySelector('#cgMTitle').textContent = title;
-        ov.querySelector('#cgMStat').innerHTML = base
-            ? `<span class="cg-n">${fmt(rows.length)} vetture</span><span class="cg-p">${pct(rows.length, base.n)}</span><span class="cg-of">su ${fmt(base.n)} contratti ${base.label}</span>`
-            : `<span class="cg-n">${fmt(rows.length)} ${curVerify ? 'trattative' : 'contratti'}</span>`;
         const chips = ov.querySelector('#cgMChips');
         if (opts.reasons) {
             const cnt = {}; rows.forEach(r => cnt[r.stato] = (cnt[r.stato] || 0) + 1);
-            chips.innerHTML = `<button class="cg-chip ${curChip ? '' : 'on'}" type="button" data-chip="">Tutti i motivi</button>` +
+            chips.innerHTML = `<button class="cg-chip ${curChips.size ? '' : 'on'}" type="button" data-chip="">Tutti i motivi</button>` +
                 Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([s, n]) =>
-                    `<button class="cg-chip ${curChip === s ? 'on' : ''}" type="button" data-chip="${encodeURIComponent(s)}">${esc(cap(s))} (${n})</button>`).join('');
+                    `<button class="cg-chip ${curChips.has(s) ? 'on' : ''}" type="button" data-chip="${encodeURIComponent(s)}">${esc(cap(s))} (${n})</button>`).join('');
         } else chips.innerHTML = '';
         const search = ov.querySelector('#cgMSearch'); search.value = '';
         renderList();
@@ -837,7 +900,7 @@
         if (curVerify) { box.innerHTML = ''; return; }
         const nSolo = cur.filter(r => r.solo).length, nCsv = cur.filter(r => r.soloCsv).length, nAbb = cur.length - nSolo - nCsv;
         const nCheck = cur.filter(needsCheck).length, nVer = cur.filter(r => r.check && verOf(r)).length;
-        const chip = (id, label, n) => `<button class="cg-chip ${curOrigin === id ? 'on' : ''}" type="button" data-origin="${id}">${label} (${fmt(n)})</button>`;
+        const chip = (id, label, n) => `<button class="cg-chip ${(id ? curOrigins.has(id) : curOrigins.size === 0) ? 'on' : ''}" type="button" data-origin="${id}">${label} (${fmt(n)})</button>`;
         const origini = [nAbb, nSolo, nCsv].filter(Boolean).length;
         box.innerHTML = (origini > 1 || nCheck || nVer) ?
             chip('', 'Tutti', cur.length) +
@@ -845,8 +908,29 @@
             (nCheck ? chip('check', '<span class="cg-info cg-info-static">i</span>Da verificare a mano', nCheck) : '') +
             (nVer ? chip('ver', '✓ Verificati a mano', nVer) : '') : '';
     }
-    const originOk = r => !curOrigin || (curOrigin === 'solo' ? r.solo : curOrigin === 'csv' ? r.soloCsv : curOrigin === 'abb' ? (!r.solo && !r.soloCsv)
-        : curOrigin === 'check' ? needsCheck(r) : curOrigin === 'ver' ? !!(r.check && verOf(r)) : true);
+    const originIs = (id, r) => id === 'solo' ? !!r.solo : id === 'csv' ? !!r.soloCsv : id === 'abb' ? (!r.solo && !r.soloCsv)
+        : id === 'check' ? needsCheck(r) : id === 'ver' ? !!(r.check && verOf(r)) : true;
+    const originOk = r => !curOrigins.size || [...curOrigins].some(id => originIs(id, r));
+    const reasonOk = r => !curChips.size || curChips.has(r.stato);
+
+    // Totale e percentuale in alto: sempre calcolati sulle righe filtrate.
+    // Con piu' filtri scelti, in basso il totale e la percentuale di ciascuno.
+    function renderStat(rows, searchOk) {
+        const unit = curVerify ? 'trattative' : (curBase ? 'vetture' : 'contratti');
+        const filtered = curChips.size + curOrigins.size > 0;
+        ov.querySelector('#cgMStat').innerHTML = curBase
+            ? `<span class="cg-n">${fmt(rows.length)} ${unit}</span><span class="cg-p">${pct(rows.length, curBase.n)}</span><span class="cg-of">su ${fmt(curBase.n)} contratti ${curBase.label}${filtered ? ' · con i filtri scelti' : ''}</span>`
+            : `<span class="cg-n">${fmt(rows.length)} ${unit}</span>${filtered ? `<span class="cg-p">${pct(rows.length, cur.length)}</span><span class="cg-of">di ${fmt(cur.length)} in elenco · con i filtri scelti</span>` : ''}`;
+        const foot = ov.querySelector('#cgMFoot');
+        if (curChips.size + curOrigins.size < 2) { foot.innerHTML = ''; return; }
+        const den = curBase ? curBase.n : cur.length;
+        const denLbl = curBase ? `su ${fmt(curBase.n)} contratti` : `di ${fmt(cur.length)} in elenco`;
+        const righe = [];
+        curChips.forEach(sc => righe.push([cap(sc), cur.filter(r => r.stato === sc && originOk(r) && searchOk(r)).length]));
+        curOrigins.forEach(id => righe.push([ORIGIN_LABEL[id] || id, cur.filter(r => originIs(id, r) && reasonOk(r) && searchOk(r)).length]));
+        foot.innerHTML = `<div class="cg-foot-t">Dettaglio per filtro <small>(${denLbl})</small></div><div class="cg-foot-g">` +
+            righe.map(([l, n]) => `<div class="cg-foot-i"><span>${esc(l)}</span><b>${fmt(n)}</b><em>${pct(n, den)}</em></div>`).join('') + `</div>`;
+    }
 
     function noteHtml(r) {
         const v = verOf(r), daFare = needsCheck(r);
@@ -924,8 +1008,9 @@
 
     function renderList() {
         const q = ov.querySelector('#cgMSearch').value.trim().toLowerCase();
-        const rows = cur.filter(r => (!curChip || r.stato === curChip) && originOk(r) &&
-            (!q || [r.cliente, r.marca, r.modello, r.vend, r.targa].join(' ').toLowerCase().includes(q)));
+        const searchOk = r => !q || [r.cliente, r.marca, r.modello, r.vend, r.targa].join(' ').toLowerCase().includes(q);
+        const rows = cur.filter(r => reasonOk(r) && originOk(r) && searchOk(r));
+        renderStat(rows, searchOk);
         const list = ov.querySelector('#cgMList');
         if (!rows.length) { list.innerHTML = '<tbody><tr><td class="cg-empty-msg">Nessuna vettura corrisponde alla ricerca.</td></tr></tbody>'; return; }
         list.innerHTML = '<thead><tr><th>Cliente</th><th>Vettura</th><th>Consulente</th><th>Data chiusura</th>' +
@@ -957,5 +1042,16 @@
         }
     }
 
-    window.Consegne = { init: init };
+    window.Consegne = {
+        init: init,
+        // strumenti condivisi con l'Analisi avanzamento (consegne-analisi.js)
+        api: {
+            csv: () => (meta && meta.database && meta.database.csv) || null,
+            meta: () => meta,
+            vendMap: () => vendMap,
+            parseCSV, pd, fmtD, nice, cap, esc, fmt, pct, toks,
+            openModal: (title, rows, base, opts) => openModal(title, rows, base, opts || {}),
+            post: (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        }
+    };
 })();

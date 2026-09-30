@@ -4,7 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gruppoautoscala.followup.model.ConsegneDataset;
 import com.gruppoautoscala.followup.model.User;
 import com.gruppoautoscala.followup.repository.UserRepository;
+import com.gruppoautoscala.followup.service.ConsegneExcelService;
 import com.gruppoautoscala.followup.service.ConsegneService;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import com.gruppoautoscala.followup.service.RolePermissionService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,6 +25,8 @@ import java.util.Optional;
  *  GET  /api/consegne/data                -> ultimo import trattative + ultima lettura foglio DATABASE
  *  POST /api/consegne/trattative          -> salva un nuovo import trattative (sostituisce il precedente)
  *  POST /api/consegne/database/aggiorna   -> rilegge SUBITO il foglio Google
+ *  POST /api/consegne/database/import     -> carica la scheda DATABASE da CSV (mette in pausa l'automatico)
+ *  POST /api/consegne/export-excel        -> Excel dell'Analisi avanzamento (piu' fogli, grafici nativi)
  *  POST /api/consegne/verifiche           -> segna / toglie la verifica manuale di una pratica ("i")
  *
  * Permessi: sezione CONSEGNE della pagina Permessi (ruolo + operatore).
@@ -45,6 +50,9 @@ public class ConsegneController {
 
     @Autowired
     private RolePermissionService rolePermissionService;
+
+    @Autowired
+    private ConsegneExcelService consegneExcelService;
 
     private String access(HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");
@@ -100,6 +108,38 @@ public class ConsegneController {
             return ResponseEntity.status(503).body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             return ResponseEntity.status(502).body(Map.of("error", "Lettura del foglio Google non riuscita: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/database/import")
+    public ResponseEntity<?> importaFoglioCsv(@RequestBody Map<String, Object> body, HttpSession session) {
+        String acc = access(session);
+        if (!puoModificare(acc)) return negato(acc);
+        Long userId = (Long) session.getAttribute("userId");
+        Object csv = body.get("csv");
+        if (!(csv instanceof String testo) || testo.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "File CSV vuoto"));
+        }
+        try {
+            consegneService.importaDatabaseCsv(testo, nomeUtente(userId));
+            return ResponseEntity.ok(buildData(acc));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/export-excel")
+    public ResponseEntity<?> exportExcel(@RequestBody Map<String, Object> body, HttpSession session) {
+        String acc = access(session);
+        if (!puoVedere(acc)) return negato(acc);
+        try {
+            byte[] xlsx = consegneExcelService.crea(body);
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"consegne-analisi.xlsx\"")
+                    .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                    .body(xlsx);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Export Excel non riuscito: " + e.getMessage()));
         }
     }
 

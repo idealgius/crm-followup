@@ -178,10 +178,33 @@ public class ConsegneService {
         return map;
     }
 
+    /**
+     * Import della scheda DATABASE da un file CSV (alternativa alla lettura
+     * da Google). Finche' l'ultimo dato e' un import CSV, la rilettura
+     * automatica ogni 5 minuti resta in pausa: riparte quando qualcuno preme
+     * "Aggiorna dal foglio Google".
+     */
+    public synchronized ConsegneDataset importaDatabaseCsv(String csv, String chi) throws IOException {
+        String body = csv == null ? "" : csv.replace("\uFEFF", "");
+        String intestazione = body.lines().filter(l -> !l.isBlank()).findFirst().orElse("").toUpperCase();
+        if (!intestazione.contains("CLIENTE") || !intestazione.contains("STATO")) {
+            throw new IOException("Il file non sembra la scheda DATABASE (mancano le colonne CLIENTE / STATO)");
+        }
+        int righe = (int) Math.max(0, body.lines().filter(l -> !l.isBlank()).count() - 1);
+        return salva(DATABASE, body, righe, "Import CSV · " + chi);
+    }
+
+    private boolean databaseDaImportCsv() {
+        return repository.findById(DATABASE)
+                .map(d -> d.getAggiornatoDa() != null && d.getAggiornatoDa().startsWith("Import CSV"))
+                .orElse(false);
+    }
+
     /** Rilettura automatica del foglio ogni 5 minuti (prima volta 1 minuto dopo l'avvio). */
     @Scheduled(initialDelay = 60_000, fixedDelay = 300_000)
     public void aggiornamentoAutomatico() {
         if (!isFoglioConfigurato()) return;
+        if (databaseDaImportCsv()) return;   // in pausa: l'ultimo dato e' un import CSV
         try {
             aggiornaDaFoglio("Aggiornamento automatico");
         } catch (Exception e) {
