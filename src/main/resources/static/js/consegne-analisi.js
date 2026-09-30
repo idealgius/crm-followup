@@ -649,7 +649,7 @@
             charts.forEach(c => c.destroy()); charts.clear();
             container.querySelector('#anGrid').innerHTML = '';
             container.querySelector('#anKpis').innerHTML = '';
-            container.querySelector('#anFilters').innerHTML = '<p class="cg-hint" style="margin:0">Il foglio DATABASE non è ancora stato letto: premi "Aggiorna dal foglio Google" oppure "Importa foglio (CSV)".</p>';
+            container.querySelector('#anFilters').innerHTML = '<p class="cg-hint" style="margin:0">Il foglio DATABASE non è ancora stato letto: premi "Aggiorna dal foglio Google".</p>';
             return;
         }
         renderFilters();
