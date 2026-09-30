@@ -306,7 +306,69 @@ function renderPermissionMatrix() {
     });
 
     html += `</tbody></table>`;
+    html += renderChartPermissionTable();
     container.innerHTML = html;
+}
+
+// ===== NUOVO: PERMESSI DEI GRAFICI (per ruolo) =====
+// Tabella separata sotto quella delle sezioni: una riga per ogni grafico
+// del CRM (elenco in app.js, CHART_PERMISSIONS), raggruppati per sezione.
+// Solo due scelte: 👁 Visibile (READ_ONLY) / 🚫 Nascosto (NONE).
+const CHART_ACCESS_META = {
+    NONE: { icon: '🚫', label: 'Nascosto' },
+    READ_ONLY: { icon: '👁', label: 'Visibile' }
+};
+
+function renderChartPermissionTable() {
+    if (typeof CHART_PERMISSIONS === 'undefined') return '';
+    const groups = [...new Set(CHART_PERMISSIONS.map(c => c.group))];
+    let html = `<h3 style="margin:28px 0 6px;font-size:16px">📊 Grafici</h3>
+        <p style="margin:0 0 12px;font-size:12.5px;color:var(--text-secondary)">Quali grafici vede ogni ruolo. Un grafico nascosto sparisce sia dalla sua pagina sia da "☰ Mostra Grafici".</p>
+        <table class="permission-matrix-table">
+        <thead><tr><th style="text-align:left">Grafico</th>${permissionRolesCache.map(r => `<th>${formatRole(r)}</th>`).join('')}</tr></thead>
+        <tbody>`;
+    groups.forEach(g => {
+        html += `<tr><td colspan="${permissionRolesCache.length + 1}" style="text-align:left;font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--text-secondary);padding-top:14px">${g}</td></tr>`;
+        CHART_PERMISSIONS.filter(c => c.group === g).forEach(c => {
+            html += `<tr>
+                <td style="text-align:left;font-weight:600;white-space:nowrap">${c.label}</td>
+                ${permissionRolesCache.map(role => {
+                    const cur = permissionMatrixCache[role]?.[c.key] === 'NONE' ? 'NONE' : 'READ_ONLY';
+                    return `<td><div class="permission-cell-group">
+                        ${Object.entries(CHART_ACCESS_META).map(([level, m]) => `
+                            <button type="button" class="permission-cell-btn ${cur === level ? 'active' : ''} level-${level}"
+                                title="${m.label}" onclick="setChartPermission('${role}','${c.key}','${level}', this)">${m.icon}</button>`).join('')}
+                    </div></td>`;
+                }).join('')}
+            </tr>`;
+        });
+    });
+    return html + `</tbody></table>`;
+}
+
+async function setChartPermission(role, key, access, btnEl) {
+    const group = btnEl?.closest('.permission-cell-group');
+    try {
+        const res = await fetch('/api/permissions', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role, section: key, access })
+        });
+        if (!res.ok) {
+            const data = await res.json().catch(() => null);
+            alert(data?.error || 'Errore nel salvataggio del permesso');
+            return;
+        }
+        const data = await res.json();
+        permissionMatrixCache = data.matrix || permissionMatrixCache;
+        if (group) {
+            group.querySelectorAll('.permission-cell-btn').forEach(b => b.classList.remove('active'));
+            btnEl.classList.add('active');
+        }
+    } catch (err) {
+        console.error('Errore salvataggio permesso grafico:', err);
+        alert('Errore di connessione nel salvataggio del permesso');
+    }
 }
 
 async function setPermission(role, section, access, btnEl) {
@@ -415,8 +477,37 @@ function renderOperatorPermissions() {
                     </div>`;
                 }).join('')}
             </div>
+            ${renderOperatorChartOverrides(u)}
         </div>`;
     }).join('');
+}
+
+// NUOVO: eccezioni personali sui grafici, in un blocco richiudibile per non
+// allungare troppo la scheda di ogni operatore.
+function renderOperatorChartOverrides(u) {
+    if (typeof CHART_PERMISSIONS === 'undefined') return '';
+    const ov = u.overrides || {};
+    const n = CHART_PERMISSIONS.filter(c => ov[c.key]).length;
+    const groups = [...new Set(CHART_PERMISSIONS.map(c => c.group))];
+    return `<details style="margin-top:10px">
+        <summary style="cursor:pointer;font-size:13px;font-weight:700">📊 Grafici${n ? ` · ${n} eccezion${n === 1 ? 'e' : 'i'}` : ''}</summary>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
+        ${groups.map(g => `<div style="font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--text-secondary);margin-top:8px">${g}</div>` +
+            CHART_PERMISSIONS.filter(c => c.group === g).map(c => {
+                const cur = ov[c.key] || 'INHERIT';
+                return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:4px 0;border-bottom:1px solid var(--border)">
+                    <span style="font-size:13px;font-weight:600">${c.label}</span>
+                    <div class="permission-cell-group">
+                        <button type="button" class="permission-cell-btn ${cur === 'INHERIT' ? 'active' : ''}" title="Eredita da ruolo"
+                            onclick="setOperatorPermission(${u.id},'${c.key}','INHERIT', this)">↩️</button>
+                        ${Object.entries(CHART_ACCESS_META).map(([level, m]) => `
+                            <button type="button" class="permission-cell-btn ${cur === level ? 'active' : ''} level-${level}" title="${m.label}"
+                                onclick="setOperatorPermission(${u.id},'${c.key}','${level}', this)">${m.icon}</button>`).join('')}
+                    </div>
+                </div>`;
+            }).join('')).join('')}
+        </div>
+    </details>`;
 }
 
 async function setOperatorPermission(userId, section, access, btnEl) {

@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/macro-home.css">
     <link rel="stylesheet" href="/css/consegne.css">
+    <!-- NUOVO: grafici nascosti dai permessi (vedi applyChartPermissions in app.js) -->
+    <style>.chart-perm-hidden { display: none !important; }</style>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
@@ -232,8 +234,8 @@
             </div>
         </div>
         <div class="dashboard-grid-2x2">
-            <div class="chart-card dashboard-cell"><h3>FOLLOW-UP vs RISPOSTE vs APPUNTAMENTI</h3><canvas id="chartFollowUp"></canvas></div>
-            <div class="chart-card dashboard-cell"><h3>LISTA RECALL</h3><canvas id="chartWaiting"></canvas></div>
+            <div data-chart="G_DASH_FOLLOWUP" class="chart-card dashboard-cell"><h3>FOLLOW-UP vs RISPOSTE vs APPUNTAMENTI</h3><canvas id="chartFollowUp"></canvas></div>
+            <div data-chart="G_DASH_RECALL" class="chart-card dashboard-cell"><h3>LISTA RECALL</h3><canvas id="chartWaiting"></canvas></div>
         </div>
 
         <!-- NUOVO: REPORT GIORNALIERO — combina Follow-up, Recall e Recall
@@ -602,11 +604,11 @@
         <div id="contactChartPrint" class="contact-charts-row">
 
             <div class="chart-card contact-chart-categorie">
-                <div>
+                <div data-chart="G_CT_CATEGORIE">
                     <h3>DISTRIBUZIONE CATEGORIE</h3>
                     <div style="height:320px;position:relative"><canvas id="chartContacts"></canvas></div>
                 </div>
-                <div id="chartOperatoreWrapper" style="display:none">
+                <div data-chart="G_CT_OPERATORE" id="chartOperatoreWrapper" style="display:none">
                     <h3 style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);margin-bottom:12px;text-transform:uppercase">CHIAMATE PER OPERATORE</h3>
                     <div style="height:320px;position:relative"><canvas id="chartContactsByOperator"></canvas></div>
                 </div>
@@ -621,25 +623,25 @@
                     </div>
                     <div id="contactCalendar" class="fu-calendar"></div>
                 </div>
-                <div>
+                <div data-chart="G_CT_SEDE">
                     <h3>APPUNTAMENTI PER SEDE</h3>
                     <div style="height:240px;position:relative"><canvas id="chartAppuntamentiSede"></canvas></div>
                 </div>
             </div>
 
             <div class="chart-card contact-chart-acquisto">
-                <div>
+                <div data-chart="G_CT_ACQUISTO">
                     <h3>INFO ACQUISTO EFFETTUATO</h3>
                     <div style="height:320px;position:relative"><canvas id="chartInfoAcquisto"></canvas></div>
                 </div>
-                <div id="chartFonteWrapper">
+                <div data-chart="G_CT_FONTE" id="chartFonteWrapper">
                     <h3 style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);margin-bottom:12px;text-transform:uppercase">FONTE INFO VENDITA</h3>
                     <div style="height:320px;position:relative"><canvas id="chartFonteVendita"></canvas></div>
                 </div>
             </div>
 
             <!-- SERVICE — grafici Agnano e Salerno affiancati nella stessa card -->
-            <div class="chart-card contact-chart-service">
+            <div data-chart="G_CT_SERVICE_SEDE" class="chart-card contact-chart-service">
                 <h3>SERVICE PER SEDE</h3>
                 <div class="contact-chart-service-inner">
                     <div class="contact-chart-service-col">
@@ -653,17 +655,17 @@
                 </div>
             </div>
 
-            <div class="chart-card contact-chart-marche">
+            <div data-chart="G_CT_MARCHE" class="chart-card contact-chart-marche">
                 <h3>PERFORMANCE MARCHE</h3>
                 <div id="chartMarcheCustom"></div>
             </div>
 
             <div class="chart-card contact-chart-noleggio" id="chartNoleggioWrapper" style="display:none">
-                <div>
+                <div data-chart="G_CT_NOL_TIPO">
                     <h3>TIPOLOGIA NOLEGGIO</h3>
                     <canvas id="chartNoleggioTipo" style="max-height:190px"></canvas>
                 </div>
-                <div>
+                <div data-chart="G_CT_NOL_LEAD">
                     <h3 style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--text-secondary);margin-bottom:12px;text-transform:uppercase">SOLO INFO vs LEAD GENERATA</h3>
                     <canvas id="chartNoleggioLead" style="max-height:190px"></canvas>
                 </div>
@@ -680,15 +682,15 @@
             <div id="contactPromoChartsContent" style="display:none">
                 <div id="contactPromoStatCards" class="stats-grid" style="margin-bottom:20px"></div>
                 <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:stretch">
-                    <div class="chart-card" style="width:420px;min-width:420px;flex:1">
+                    <div data-chart="G_CT_PROMO_MODELLI" class="chart-card" style="width:420px;min-width:420px;flex:1">
                         <h3>MODELLI RICHIESTI IN PROMO</h3>
                         <div id="chartPromoModelliCustom" style="display:flex;flex-direction:column;gap:10px;margin-top:8px"></div>
                     </div>
-                    <div class="chart-card" style="width:320px;min-width:320px">
+                    <div data-chart="G_CT_PROMO_APP" class="chart-card" style="width:320px;min-width:320px">
                         <h3>RICHIESTE vs APPUNTAMENTI</h3>
                         <canvas id="chartPromoAppContact" style="max-height:260px"></canvas>
                     </div>
-                    <div class="chart-card" style="width:300px;min-width:300px">
+                    <div data-chart="G_CT_PROMO_RICH" class="chart-card" style="width:300px;min-width:300px">
                         <h3>RICHIESTA PROMO</h3>
                         <canvas id="chartPromoRichiestaContact" style="max-height:260px"></canvas>
                     </div>
@@ -1547,23 +1549,23 @@
         </div>
 
         <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));margin-bottom:24px">
-            <div class="calendar-card" style="max-width:100%">
+            <div data-chart="G_PV_MARCHE" class="calendar-card" style="max-width:100%">
                 <div class="calendar-header"><h3>Performance Marchi</h3></div>
                 <div id="pvChartMarche"></div>
             </div>
-            <div class="calendar-card" style="max-width:100%">
+            <div data-chart="G_PV_OPERATORE" class="calendar-card" style="max-width:100%">
                 <div class="calendar-header"><h3>Preventivi per Operatore</h3></div>
                 <canvas id="pvChartOperatore" height="200"></canvas>
             </div>
-            <div class="calendar-card" style="max-width:100%">
+            <div data-chart="G_PV_CONSULENTE" class="calendar-card" style="max-width:100%">
                 <div class="calendar-header"><h3>Preventivi per Consulente</h3></div>
                 <div id="pvChartConsulente"></div>
             </div>
-            <div class="calendar-card" style="max-width:100%">
+            <div data-chart="G_PV_TRATTATIVE" class="calendar-card" style="max-width:100%">
                 <div class="calendar-header"><h3>Trattative Generate</h3></div>
                 <canvas id="pvChartTrattative" height="200"></canvas>
             </div>
-            <div class="calendar-card" style="max-width:100%">
+            <div data-chart="G_PV_ESITO" class="calendar-card" style="max-width:100%">
                 <div class="calendar-header"><h3>Esito Trattative</h3></div>
                 <canvas id="pvChartEsito" height="200"></canvas>
             </div>
@@ -2058,19 +2060,19 @@
 
         <!-- GRAFICI -->
         <div style="margin-bottom:28px;display:flex;gap:20px;flex-wrap:wrap;align-items:stretch">
-            <div class="chart-card" style="width:340px;min-width:340px;flex:1">
+            <div data-chart="G_RENT_STATO" class="chart-card" style="width:340px;min-width:340px;flex:1">
                 <h3>DISTRIBUZIONE STATO TRATTATIVE</h3>
                 <canvas id="chartRentStato" style="max-height:260px"></canvas>
             </div>
-            <div class="chart-card" style="width:340px;min-width:340px;flex:1">
+            <div data-chart="G_RENT_FONTE" class="chart-card" style="width:340px;min-width:340px;flex:1">
                 <h3>FONTE TRATTATIVE</h3>
                 <canvas id="chartRentFonte" style="max-height:260px"></canvas>
             </div>
-            <div class="chart-card" style="width:340px;min-width:340px;flex:1">
+            <div data-chart="G_RENT_MARCHI" class="chart-card" style="width:340px;min-width:340px;flex:1">
                 <h3>PERFORMANCE MARCHI</h3>
                 <div id="chartRentMarchiCustom" style="display:flex;flex-direction:column;gap:10px"></div>
             </div>
-            <div class="chart-card" style="width:340px;min-width:340px;flex:1">
+            <div data-chart="G_RENT_INFO" class="chart-card" style="width:340px;min-width:340px;flex:1">
                 <h3>SOLO INFO vs RICHIESTA CLIENTE</h3>
                 <canvas id="chartRentInfoVsRichiesta" style="max-height:260px"></canvas>
             </div>
@@ -2372,19 +2374,19 @@
 
     <!-- GRAFICI -->
     <div style="margin-bottom:28px;display:flex;gap:20px;flex-wrap:wrap;align-items:stretch">
-        <div class="chart-card" style="width:340px;min-width:340px;flex:1">
+        <div data-chart="G_SRV_STATO" class="chart-card" style="width:340px;min-width:340px;flex:1">
             <h3>DISTRIBUZIONE STATO PRATICHE</h3>
             <div style="position:relative;height:260px">
                 <canvas id="chartServiceStato2"></canvas>
             </div>
         </div>
-        <div class="chart-card" style="width:340px;min-width:340px;flex:1">
+        <div data-chart="G_SRV_CHIAMATE" class="chart-card" style="width:340px;min-width:340px;flex:1">
             <h3>CHIAMATE RICEVUTE vs APPUNTAMENTI FISSATI</h3>
             <div style="position:relative;height:260px">
                 <canvas id="chartServiceChiamateAppuntamenti"></canvas>
             </div>
         </div>
-        <div class="chart-card" style="width:340px;min-width:340px;flex:1">
+        <div data-chart="G_SRV_ESITO" class="chart-card" style="width:340px;min-width:340px;flex:1">
             <h3>ESITO APPUNTAMENTI/LAVORAZIONI</h3>
             <div style="position:relative;height:260px">
                 <canvas id="chartServiceLavorazioni"></canvas>

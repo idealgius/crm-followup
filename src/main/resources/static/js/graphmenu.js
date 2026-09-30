@@ -11,41 +11,47 @@
 // quello originale — vedi contact.js/rent.js/service.js/charts.js).
 const CHART_DEFINITIONS = [
     // --- Registro Contatti (usano il periodo scelto in questa pagina) ---
-    { id: 'distribuzioneCategorie', label: 'Distribuzione Categorie', group: 'Registro Contatti', needs: 'contacts', type: 'canvas', height: 300,
+    { id: 'distribuzioneCategorie', perm: 'G_CT_CATEGORIE', label: 'Distribuzione Categorie', group: 'Registro Contatti', needs: 'contacts', type: 'canvas', height: 300,
       render: (id, data) => renderContactChartFromLogs(data.contacts, id) },
-    { id: 'chiamateOperatore', label: 'Chiamate per Operatore', group: 'Registro Contatti', needs: 'contacts', type: 'canvas', height: 300,
+    { id: 'chiamateOperatore', perm: 'G_CT_OPERATORE', label: 'Chiamate per Operatore', group: 'Registro Contatti', needs: 'contacts', type: 'canvas', height: 300,
       render: (id, data) => renderContactChartByOperator(id, data.contacts) },
-    { id: 'appuntamentiSede', label: 'Appuntamenti per Sede', group: 'Registro Contatti', needs: 'contacts', type: 'canvas', height: 300,
+    { id: 'appuntamentiSede', perm: 'G_CT_SEDE', label: 'Appuntamenti per Sede', group: 'Registro Contatti', needs: 'contacts', type: 'canvas', height: 300,
       render: (id, data) => renderChartAppuntamentiSede(data.contacts, id) },
-    { id: 'infoAcquisto', label: 'Info Acquisto Effettuato', group: 'Registro Contatti', needs: 'contacts', type: 'canvas', height: 300,
+    { id: 'infoAcquisto', perm: 'G_CT_ACQUISTO', label: 'Info Acquisto Effettuato', group: 'Registro Contatti', needs: 'contacts', type: 'canvas', height: 300,
       render: (id, data) => renderChartInfoAcquisto(data.contacts, id) },
-    { id: 'fonteVendita', label: 'Fonte Info Vendita', group: 'Registro Contatti', needs: 'contacts', type: 'canvas', height: 300,
+    { id: 'fonteVendita', perm: 'G_CT_FONTE', label: 'Fonte Info Vendita', group: 'Registro Contatti', needs: 'contacts', type: 'canvas', height: 300,
       render: (id, data) => renderChartFonteVendita(data.contacts, id) },
 
     // --- Noleggio (dati correnti, non filtrati per data) ---
-    { id: 'rentStato', label: 'Distribuzione Stato Trattative', group: 'Noleggio', needs: 'rent', type: 'canvas', height: 300,
+    { id: 'rentStato', perm: 'G_RENT_STATO', label: 'Distribuzione Stato Trattative', group: 'Noleggio', needs: 'rent', type: 'canvas', height: 300,
       render: (id, data) => renderChartRentStato(data.rent, id) },
-    { id: 'rentFonte', label: 'Fonte Trattative', group: 'Noleggio', needs: 'rent', type: 'canvas', height: 300,
+    { id: 'rentFonte', perm: 'G_RENT_FONTE', label: 'Fonte Trattative', group: 'Noleggio', needs: 'rent', type: 'canvas', height: 300,
       render: (id, data) => renderChartRentFonte(data.rent, id) },
-    { id: 'rentMarchi', label: 'Performance Marchi', group: 'Noleggio', needs: 'rent', type: 'div', height: 'auto',
+    { id: 'rentMarchi', perm: 'G_RENT_MARCHI', label: 'Performance Marchi', group: 'Noleggio', needs: 'rent', type: 'div', height: 'auto',
       render: (id, data) => renderChartRentMarchi(data.rent, id) },
-    { id: 'rentInfoVsRichiesta', label: 'Info vs Richiesta Cliente', group: 'Noleggio', needs: 'rent', type: 'canvas', height: 300,
+    { id: 'rentInfoVsRichiesta', perm: 'G_RENT_INFO', label: 'Info vs Richiesta Cliente', group: 'Noleggio', needs: 'rent', type: 'canvas', height: 300,
       render: (id, data) => renderChartRentInfoVsRichiesta(data.rent, id) },
 
     // --- Service (dati correnti, non filtrati per data) ---
-    { id: 'serviceStato', label: 'Distribuzione Stato Pratiche', group: 'Service', needs: 'service', type: 'canvas', height: 300,
+    { id: 'serviceStato', perm: 'G_SRV_STATO', label: 'Distribuzione Stato Pratiche', group: 'Service', needs: 'service', type: 'canvas', height: 300,
       render: (id, data) => renderChartServiceStato(data.service, id) },
-    { id: 'serviceLavorazioni', label: 'Esito Appuntamenti/Lavorazioni', group: 'Service', needs: 'service', type: 'canvas', height: 300,
+    { id: 'serviceLavorazioni', perm: 'G_SRV_ESITO', label: 'Esito Appuntamenti/Lavorazioni', group: 'Service', needs: 'service', type: 'canvas', height: 300,
       render: (id, data) => renderChartServiceLavorazioni(data.service, id) },
 
     // --- Dashboard Follow-up ---
-    { id: 'followUpChart', label: 'Follow-up Totali/Risposte/Appuntamenti', group: 'Dashboard', needs: 'followupStats', type: 'canvas', height: 300,
+    { id: 'followUpChart', perm: 'G_DASH_FOLLOWUP', label: 'Follow-up Totali/Risposte/Appuntamenti', group: 'Dashboard', needs: 'followupStats', type: 'canvas', height: 300,
       render: (id, data) => renderFollowUpChart(data.followupStats, id) },
-    { id: 'waitingChart', label: 'Recall (Attesa)', group: 'Dashboard', needs: 'waitingStats', type: 'canvas', height: 300,
+    { id: 'waitingChart', perm: 'G_DASH_RECALL', label: 'Recall (Attesa)', group: 'Dashboard', needs: 'waitingStats', type: 'canvas', height: 300,
       render: (id, data) => renderWaitingChart(data.waitingStats, id) }
 ];
 
 const CHART_GROUP_ORDER = ['Registro Contatti', 'Noleggio', 'Service', 'Dashboard'];
+
+// NUOVO: "perm" di ogni grafico = chiave del permesso grafico (pagina
+// Permessi → Grafici). Qui compaiono solo i grafici che l'utente puo' vedere.
+function chartAllowed(c) {
+    return !c.perm || typeof canSeeChart !== 'function' || canSeeChart(c.perm);
+}
 
 let allChartsPreviousPage = null;
 let allChartsLastSelection = [];
@@ -71,9 +77,9 @@ function toggleGraphMenuSection() {
     const isOpen = section.style.display === 'block';
     section.style.display = isOpen ? 'none' : 'block';
     if (arrow) arrow.style.transform = isOpen ? 'rotate(0deg)' : 'rotate(90deg)';
-    if (!isOpen && !document.getElementById('graphCheckboxList').dataset.built) {
-        buildGraphCheckboxList();
-    }
+    // Ricostruita a ogni apertura: se cambiano utente o permessi, l'elenco
+    // dei grafici si aggiorna.
+    if (!isOpen) buildGraphCheckboxList();
 }
 
 function buildGraphCheckboxList() {
@@ -81,7 +87,7 @@ function buildGraphCheckboxList() {
     if (!list) return;
     let html = '';
     CHART_GROUP_ORDER.forEach(group => {
-        const items = CHART_DEFINITIONS.filter(c => c.group === group);
+        const items = CHART_DEFINITIONS.filter(c => c.group === group && chartAllowed(c));
         if (items.length === 0) return;
         html += `<div style="font-size:10px;font-weight:700;color:#aab0c0;letter-spacing:0.5px;text-transform:uppercase;margin:10px 0 4px">${group}</div>`;
         items.forEach(c => {
@@ -92,6 +98,8 @@ function buildGraphCheckboxList() {
     });
     list.innerHTML = html;
     list.dataset.built = '1';
+    const selectAll = document.getElementById('graphSelectAll');
+    if (selectAll) selectAll.checked = false;
 }
 
 function updateGraphSelectAllState() {
@@ -196,7 +204,7 @@ const CHART_GROUP_ICON = { 'Registro Contatti': '📞', 'Noleggio': '🚗', 'Ser
 async function renderAllChartsSelection() {
     const container = document.getElementById('allChartsContainer');
     if (!container) return;
-    const defs = CHART_DEFINITIONS.filter(c => allChartsLastSelection.includes(c.id));
+    const defs = CHART_DEFINITIONS.filter(c => allChartsLastSelection.includes(c.id) && chartAllowed(c));
     container.innerHTML = `<div class="empty-state"><p>Caricamento grafici…</p></div>`;
 
     const data = await fetchDataForSelection(defs);

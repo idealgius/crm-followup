@@ -73,6 +73,73 @@ function isReadOnlySection(section, role) {
     return getAccess(section, role) === 'READ_ONLY';
 }
 
+// ===== NUOVO: PERMESSI DEI GRAFICI =====
+// Elenco di tutti i grafici del CRM, divisi per sezione. La chiave e' la
+// stessa del backend (RolePermissionService.CHARTS); usata dalla pagina
+// Permessi (admin.js), da "☰ Mostra Grafici" (graphmenu.js), dall'area
+// Consegne (consegne.js) e da applyChartPermissions() qui sotto.
+// Per nascondere un grafico nella sua pagina basta l'attributo
+// data-chart="CHIAVE" sul blocco che lo contiene (vedi index.html).
+const CHART_PERMISSIONS = [
+    { key: 'G_DASH_FOLLOWUP', group: 'Dashboard', label: 'Follow-up vs risposte vs appuntamenti' },
+    { key: 'G_DASH_RECALL', group: 'Dashboard', label: 'Lista recall' },
+    { key: 'G_CT_CATEGORIE', group: 'Registro Contatti', label: 'Distribuzione categorie' },
+    { key: 'G_CT_OPERATORE', group: 'Registro Contatti', label: 'Chiamate per operatore' },
+    { key: 'G_CT_SEDE', group: 'Registro Contatti', label: 'Appuntamenti per sede' },
+    { key: 'G_CT_ACQUISTO', group: 'Registro Contatti', label: 'Info acquisto effettuato' },
+    { key: 'G_CT_FONTE', group: 'Registro Contatti', label: 'Fonte info vendita' },
+    { key: 'G_CT_SERVICE_SEDE', group: 'Registro Contatti', label: 'Service per sede' },
+    { key: 'G_CT_MARCHE', group: 'Registro Contatti', label: 'Performance marche' },
+    { key: 'G_CT_NOL_TIPO', group: 'Registro Contatti', label: 'Tipologia noleggio' },
+    { key: 'G_CT_NOL_LEAD', group: 'Registro Contatti', label: 'Solo info vs lead (noleggio)' },
+    { key: 'G_CT_PROMO_MODELLI', group: 'Registro Contatti', label: 'Promo: modelli richiesti' },
+    { key: 'G_CT_PROMO_APP', group: 'Registro Contatti', label: 'Promo: richieste vs appuntamenti' },
+    { key: 'G_CT_PROMO_RICH', group: 'Registro Contatti', label: 'Promo: richiesta promo' },
+    { key: 'G_PV_MARCHE', group: 'Preventivi', label: 'Performance marchi' },
+    { key: 'G_PV_OPERATORE', group: 'Preventivi', label: 'Preventivi per operatore' },
+    { key: 'G_PV_CONSULENTE', group: 'Preventivi', label: 'Preventivi per consulente' },
+    { key: 'G_PV_TRATTATIVE', group: 'Preventivi', label: 'Trattative generate' },
+    { key: 'G_PV_ESITO', group: 'Preventivi', label: 'Esito trattative' },
+    { key: 'G_RENT_STATO', group: 'Rent', label: 'Distribuzione stato trattative' },
+    { key: 'G_RENT_FONTE', group: 'Rent', label: 'Fonte trattative' },
+    { key: 'G_RENT_MARCHI', group: 'Rent', label: 'Performance marchi' },
+    { key: 'G_RENT_INFO', group: 'Rent', label: 'Solo info vs richiesta cliente' },
+    { key: 'G_SRV_STATO', group: 'Service', label: 'Distribuzione stato pratiche' },
+    { key: 'G_SRV_CHIAMATE', group: 'Service', label: 'Chiamate ricevute vs appuntamenti' },
+    { key: 'G_SRV_ESITO', group: 'Service', label: 'Esito appuntamenti/lavorazioni' },
+    { key: 'G_CG_TEMPI', group: 'Consegne', label: 'Tempistiche consegne' },
+    { key: 'G_CG_MOTIVI', group: 'Consegne', label: 'Da consegnare per motivo' }
+];
+
+// true se l'utente loggato puo' vedere il grafico. Se il server non ha
+// ancora questa chiave (es. permessi non caricati), vale il comportamento
+// di sempre: tutto visibile tranne "Chiamate per operatore" per i BDC.
+function canSeeChart(key) {
+    const eff = myEffectivePermissions || {};
+    if (Object.prototype.hasOwnProperty.call(eff, key)) return eff[key] !== 'NONE';
+    const fromMatrix = permissionMatrix?.[currentUser?.role]?.[key];
+    if (fromMatrix) return fromMatrix !== 'NONE';
+    return !(key === 'G_CT_OPERATORE' && currentUser?.role === 'UTENTE');
+}
+
+// Nasconde nelle pagine i grafici non permessi (classe con !important,
+// cosi' vince anche sui display impostati dai singoli script). Se un
+// riquadro contiene solo grafici nascosti, sparisce anche il riquadro.
+function applyChartPermissions() {
+    document.querySelectorAll('.chart-perm-hidden').forEach(el => el.classList.remove('chart-perm-hidden'));
+    document.querySelectorAll('[data-chart]').forEach(el => {
+        if (!canSeeChart(el.dataset.chart)) el.classList.add('chart-perm-hidden');
+    });
+    document.querySelectorAll('.chart-card, .calendar-card').forEach(card => {
+        if (card.hasAttribute('data-chart')) return;
+        const charts = card.querySelectorAll('[data-chart]');
+        if (!charts.length) return;
+        const altriTitoli = [...card.querySelectorAll('h3')].some(h => !h.closest('[data-chart]'));
+        const tuttiNascosti = [...charts].every(c => c.classList.contains('chart-perm-hidden'));
+        if (tuttiNascosti && !altriTitoli) card.classList.add('chart-perm-hidden');
+    });
+}
+
 // Può creare/modificare/eliminare in questa sezione (qualunque contenuto
 // tranne quello creato da un ADMIN) — corrisponde a FULL o ADMIN_FULL.
 function canWrite(section, role) {
@@ -185,14 +252,17 @@ function applyRolePermissions(role) {
         if (wrapper) wrapper.style.display = 'none';
         const resetBtn = document.getElementById('contactResetBtn');
         if (resetBtn) resetBtn.style.display = 'none';
-        const chartOp = document.getElementById('chartOperatoreWrapper');
-        if (chartOp) chartOp.style.display = 'none';
     } else {
         const wrapper = document.getElementById('contactOperatorFilterWrapper');
         if (wrapper) wrapper.style.display = 'inline-block';
-        const chartOp = document.getElementById('chartOperatoreWrapper');
-        if (chartOp) chartOp.style.display = 'block';
     }
+    // PRIMA "Chiamate per operatore" era nascosto fisso ai BDC (ruolo UTENTE).
+    // Ora lo decide il permesso del grafico G_CT_OPERATORE (pagina Permessi →
+    // Grafici), con lo stesso default: il contenitore resta "acceso" e ci
+    // pensa applyChartPermissions() a nasconderlo se non permesso.
+    const chartOp = document.getElementById('chartOperatoreWrapper');
+    if (chartOp) chartOp.style.display = 'block';
+    applyChartPermissions();
 }
 
 // Il tema di una dashboard verticale (navbar colorata + badge) dipende dalla

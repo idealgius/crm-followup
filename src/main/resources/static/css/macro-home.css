@@ -1,127 +1,161 @@
 /* =====================================================================
-   Home "macro categorie" + area Consegne — Gruppo Autoscala CRM
-   Tutte le classi hanno prefisso mh- per non scontrarsi con gli stili
-   esistenti del CRM (.card, .label, ecc.).
+   HOME "SELEZIONE AREA" — showroom In bound / Consegne
+   Tutte le classi hanno prefisso mh- (nessun conflitto con gli stili del CRM).
    ===================================================================== */
-.mh-home {
-  /* blocco normale sotto la navbar (non un overlay): prende il posto delle pagine */
-  position: relative;
-  min-height: calc(100vh - 70px);
-  background: #0d0f1a;
-  color: #f2f3f7;
-  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
-}
-.mh-home *, .mh-home *::before, .mh-home *::after { box-sizing: border-box; }
+.mh-home{--graphite:#14161a;--ink:#eceff3;--muted:#8e97a5;--line:rgba(255,255,255,.08);--blue:#5b8cff;--amber:#f4a83a;--green:#34c38f;
+  position:relative;min-height:calc(100vh - 70px);background:var(--graphite);color:var(--ink);font-family:Inter,system-ui,-apple-system,'Segoe UI',sans-serif}
+.mh-home *,.mh-home *::before,.mh-home *::after{box-sizing:border-box}
 
-.mh-wrap {
-  min-height: 100%;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 40px 24px; gap: 28px;
-}
-.mh-heading { text-align: center; margin-bottom: 8px; }
-.mh-heading h1 { font-size: 26px; font-weight: 800; margin: 0 0 6px; letter-spacing: .3px; color: #f2f3f7; }
-.mh-heading p { color: #9298b0; font-size: 14px; margin: 0; }
+.mh-home-wrap{min-height:calc(100vh - 70px);padding:48px 28px 56px;display:flex;flex-direction:column;align-items:center}
+.mh-head{width:min(1180px,100%);margin-bottom:28px}
+.mh-head h1{margin:0;font-size:30px;font-weight:800;letter-spacing:-.6px}
+.mh-head p{margin:6px 0 0;color:var(--muted);font-size:15px}
+.mh-bays{width:min(1180px,100%);display:grid;grid-template-columns:1fr 1fr;gap:clamp(10px,2vw,22px)}
 
-.mh-cards { display: flex; gap: 26px; flex-wrap: wrap; justify-content: center; max-width: 1100px; width: 100%; }
-.mh-card {
-  position: relative; flex: 1 1 420px; max-width: 500px; height: 340px;
-  border-radius: 28px; overflow: hidden; cursor: pointer;
-  border: 1.5px solid #262a3d; background: #151827;
-  transition: transform .35s ease, box-shadow .35s ease;
-  display: flex; flex-direction: column; justify-content: flex-end; padding: 28px;
-  text-align: left; color: inherit; font: inherit;
-}
-.mh-card:hover { transform: translateY(-8px); box-shadow: 0 20px 50px -12px rgba(0,0,0,.5); }
-.mh-card:active { transform: translateY(-4px) scale(.99); }
-.mh-card:focus-visible { outline: 3px solid #ffb648; outline-offset: 3px; }
+/* ===== bay (showroom) ===== */
+.mh-bay{position:relative;aspect-ratio:560/470;border-radius:26px;overflow:hidden;cursor:pointer;border:1px solid var(--line);
+  background:#191c21;isolation:isolate;text-align:left;color:inherit;font:inherit;padding:0;
+  transition:transform .5s cubic-bezier(.2,.8,.2,1), box-shadow .5s, border-color .5s;
+  --mx:0;--my:0}
+.mh-bay:hover{transform:translateY(-6px);box-shadow:0 30px 60px -28px rgba(0,0,0,.8)}
+.mh-bay:focus-visible{outline:3px solid var(--ink);outline-offset:4px}
+.mh-bay.mh-in:hover{border-color:rgba(91,140,255,.45)} .mh-bay.mh-out:hover{border-color:rgba(244,168,58,.45)}
+.mh-bay-in{position:absolute;left:0;top:0;width:560px;height:470px;transform:scale(var(--k,1));transform-origin:0 0}
+.mh-stage{position:absolute;inset:0 0 150px 0}
+/* luce dall'alto + pavimento lucido */
+.mh-spot{position:absolute;inset:-20% -10% 0;opacity:0;animation:mh-lightOn 1.2s .1s ease-out forwards;
+  background:radial-gradient(60% 70% at 55% 0%, var(--tint) 0%, transparent 70%)}
+.mh-in{--tint:rgba(91,140,255,.32)} .mh-out{--tint:rgba(244,168,58,.28)}
+@keyframes mh-lightOn{to{opacity:1}}
+.mh-floor{position:absolute;left:0;right:0;bottom:-150px;height:260px;
+  background:linear-gradient(180deg,#23272e 0%,#15171b 70%);border-top:1px solid rgba(255,255,255,.05)}
+.mh-floor::after{content:"";position:absolute;inset:0;background:radial-gradient(45% 40% at 55% 0%, var(--tint), transparent 70%);opacity:.8}
+/* auto con riflesso sul pavimento */
+.mh-car{position:absolute;left:var(--cl);bottom:var(--cb);width:var(--cw);
+  transform:translate(calc(var(--mx) * -10px), calc(var(--my) * -4px));transition:transform .6s cubic-bezier(.2,.8,.2,1)}
+.mh-car img{display:block;width:100%;-webkit-mask-image:linear-gradient(to bottom,#000 86%,transparent 99%);mask-image:linear-gradient(to bottom,#000 86%,transparent 99%)}
+.mh-car .mh-refl{position:absolute;left:0;top:96%;width:100%;transform:scaleY(-1);opacity:.16;filter:blur(1.5px);
+  -webkit-mask-image:linear-gradient(to top, rgba(0,0,0,.9), transparent 45%);mask-image:linear-gradient(to top, rgba(0,0,0,.9), transparent 45%)}
+.mh-car .mh-shadow{position:absolute;left:6%;right:6%;bottom:2%;height:14%;background:radial-gradient(closest-side,rgba(0,0,0,.75),transparent);filter:blur(4px);z-index:-1}
+.mh-glow{position:absolute;border-radius:50%;pointer-events:none;mix-blend-mode:screen}
+/* riflesso di luce che attraversa la carrozzeria (mascherato sulla sagoma dell'auto) */
+.mh-sheen{position:absolute;inset:0;pointer-events:none;-webkit-mask-size:100% 100%;mask-size:100% 100%;
+  background:linear-gradient(105deg,transparent 40%,rgba(255,255,255,.55) 50%,transparent 60%) no-repeat;background-size:250% 100%;
+  background-position:120% 0;animation:mh-sheen 6.5s 2.2s ease-in-out infinite;mix-blend-mode:soft-light}
+@keyframes mh-sheen{0%{background-position:120% 0}35%,100%{background-position:-20% 0}}
+.mh-car .mh-body{position:relative;animation:mh-idle 5s ease-in-out infinite}
+@keyframes mh-idle{0%,100%{transform:translateY(0)}50%{transform:translateY(-1.5px)}}
+.mh-car .mh-body.mh-settle{animation:mh-settle .7s ease-out}
+@keyframes mh-settle{30%{transform:translateY(3px)}65%{transform:translateY(-1px)}}
 
-.mh-glow { position: absolute; inset: 0; opacity: .9; z-index: 0; }
-.mh-inbound .mh-glow { background: radial-gradient(120% 100% at 15% 10%, #4f6bff 0%, #2f3fbf 38%, #171a33 78%); }
-.mh-delivery .mh-glow { background: radial-gradient(120% 100% at 85% 10%, #ffb648 0%, #e2892f 38%, #2a1f14 78%); }
+/* testo */
+.mh-info{position:absolute;left:0;right:0;bottom:0;height:150px;padding:22px 28px;display:flex;align-items:flex-end;justify-content:space-between;gap:16px;
+  background:linear-gradient(180deg,rgba(20,22,26,0) 0%,rgba(20,22,26,.85) 45%)}
+.mh-info .mh-kicker{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px}
+.mh-info .mh-kicker i{width:8px;height:8px;border-radius:50%;background:var(--acc);box-shadow:0 0 12px var(--acc)}
+.mh-in{--acc:var(--blue)} .mh-out{--acc:var(--amber)}
+.mh-info h2{margin:0;font-size:32px;font-weight:800;letter-spacing:-.8px}
+.mh-info p{margin:6px 0 0;font-size:14px;line-height:1.45;color:#b6bdc8;max-width:36ch}
+.mh-go{flex-shrink:0;width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.08);border:1px solid var(--line);transition:background .3s, transform .3s}
+.mh-bay:hover .mh-go{background:var(--acc);transform:translateX(3px)}
+.mh-go svg{width:20px;height:20px}
 
-.mh-bubble { position: absolute; border-radius: 50%; filter: blur(1px); opacity: .55; animation: mhFloat 6s ease-in-out infinite; }
-@keyframes mhFloat { 0%,100% { transform: translate(0,0); } 50% { transform: translate(6px,-14px); } }
+/* ===== IN BOUND ===== */
+.mh-in .mh-car{--cl:2%;--cb:28px;--cw:66%}
+/* targa: logo Gruppo Autoscala al posto dei caratteri */
+.mh-plate{position:absolute;left:12.3%;top:38.3%;width:9.1%;height:9.2%;display:grid;place-items:center;transform:rotate(-1.4deg);overflow:hidden}
+.mh-plate img{max-width:92%;max-height:80%;object-fit:contain}
+.mh-plate em{display:none;font-style:normal;font-weight:800;font-size:4.4px;letter-spacing:.3px;color:#1b2340;text-align:center;line-height:1.05}
+.mh-plate.mh-noimg em{display:block}
+.mh-in .mh-car.mh-enter{animation:mh-driveIn 1.4s cubic-bezier(.16,.84,.3,1) both}
+@keyframes mh-driveIn{0%{transform:translateX(-70%) scale(.96);filter:blur(3px)}70%{filter:blur(0)}100%{transform:translateX(0)}}
+.mh-streaks{position:absolute;left:0;bottom:120px;width:60%;height:80px;pointer-events:none;opacity:0;animation:mh-streak 1.4s ease-out both}
+.mh-streaks span{position:absolute;left:0;height:2px;border-radius:2px;background:linear-gradient(90deg,transparent,rgba(160,190,255,.8))}
+@keyframes mh-streak{0%{opacity:0;transform:translateX(-40%)}25%{opacity:1}100%{opacity:0;transform:translateX(30%)}}
+.mh-in .mh-g1{left:0%;top:24%;width:11%;height:10%;background:radial-gradient(closest-side,rgba(255,60,60,.9),transparent);animation:mh-drl 3.5s ease-in-out infinite}
+.mh-in .mh-g2{left:23%;top:22%;width:22%;height:11%;background:radial-gradient(closest-side,rgba(255,60,60,.9),transparent);animation:mh-drl 3.5s ease-in-out infinite}
+@keyframes mh-drl{0%,100%{opacity:.55}50%{opacity:.95}}
 
-.mh-scene { position: relative; z-index: 1; height: 165px; display: flex; align-items: center; justify-content: center; margin-bottom: 6px; }
-.mh-car-wrap { position: relative; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
-.mh-car {
-  max-width: 96%; max-height: 100%; object-fit: contain;
-  filter: drop-shadow(0 14px 10px rgba(0,0,0,.35));
-  animation: mhDriveL 1s cubic-bezier(.2,.85,.25,1) both, mhIdle 2.4s ease-in-out 1s infinite;
-}
-.mh-delivery .mh-car { animation-name: mhDriveR, mhIdle; max-width: 100%; }
-@keyframes mhDriveL { 0% { transform: translateX(-160px) scale(.94); opacity: 0; } 60% { opacity: 1; } 100% { transform: none; opacity: 1; } }
-@keyframes mhDriveR { 0% { transform: translateX(160px) scale(.94); opacity: 0; } 60% { opacity: 1; } 100% { transform: none; opacity: 1; } }
-@keyframes mhIdle { 0%,100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-3px) rotate(-.4deg); } }
-.mh-speed { position: absolute; height: 3px; background: rgba(255,255,255,.5); border-radius: 2px; animation: mhLines 1s ease-out both; }
-.mh-inbound .mh-speed { right: 55%; }
-.mh-delivery .mh-speed { left: 55%; }
-@keyframes mhLines { 0% { opacity: .8; width: 60px; } 100% { opacity: 0; width: 6px; } }
+/* smartphone */
+.mh-phone{position:absolute;right:28px;top:30px;width:146px;height:280px;border-radius:26px;padding:7px;
+  background:linear-gradient(145deg,#3b4049,#15171b);box-shadow:0 0 0 1px rgba(255,255,255,.08) inset, 0 24px 40px -14px rgba(0,0,0,.8);
+  transform:perspective(900px) rotateY(calc(-14deg + var(--mx) * 8deg)) rotateX(calc(4deg + var(--my) * -5deg)) translate(calc(var(--mx)*6px), 0);
+  transition:transform .6s cubic-bezier(.2,.8,.2,1); animation:mh-phoneIn .9s .5s cubic-bezier(.2,.8,.2,1) both}
+@keyframes mh-phoneIn{from{opacity:0;transform:perspective(900px) rotateY(-30deg) translateY(30px)}}
+.mh-phone::before{content:"";position:absolute;inset:-18px;border-radius:40px;border:2px solid var(--blue);opacity:0}
+.mh-phone.mh-ring::before{animation:mh-ring 1s ease-out}
+@keyframes mh-ring{0%{opacity:.7;transform:scale(.92)}100%{opacity:0;transform:scale(1.12)}}
+.mh-screen{position:relative;width:100%;height:100%;border-radius:20px;overflow:hidden;background:linear-gradient(180deg,#0f1420,#121826);font-size:9px}
+.mh-island{position:absolute;top:6px;left:50%;width:40px;height:11px;margin-left:-20px;border-radius:8px;background:#000;z-index:5}
+.mh-sb{display:flex;justify-content:space-between;padding:6px 12px 0;font-weight:700;font-size:8.5px;color:#dfe6f3}
+.mh-app-h{padding:14px 10px 6px;display:flex;justify-content:space-between;align-items:center}
+.mh-app-h b{font-size:11px}
+.mh-pill{white-space:nowrap;background:rgba(91,140,255,.18);color:#a9c1ff;border-radius:999px;padding:2px 7px;font-weight:700;font-size:8.5px}
+.mh-pill b{display:inline-block;min-width:12px;text-align:center}
+.mh-pill b.mh-bump{animation:mh-bump .5s}
+@keyframes mh-bump{40%{transform:scale(1.5);color:#fff}}
+.mh-list{padding:0 8px;display:flex;flex-direction:column;gap:5px}
+.mh-row{display:flex;gap:6px;align-items:center;padding:6px;border-radius:9px;background:rgba(255,255,255,.04);transition:transform .45s cubic-bezier(.2,.8,.2,1), opacity .45s, background .8s}
+.mh-row.mh-new{background:rgba(91,140,255,.22)}
+.mh-row .mh-av{width:18px;height:18px;border-radius:6px;display:grid;place-items:center;flex-shrink:0}
+.mh-row .mh-av svg{width:11px;height:11px}
+.mh-row .mh-tm{display:none}
+.mh-bars{display:flex;align-items:flex-end;gap:3px;height:26px;padding:0 10px 8px}
+.mh-bars i{flex:1;border-radius:3px 3px 1px 1px;background:linear-gradient(180deg,#6f9bff,#3b5fd0);height:20%;transition:height .8s cubic-bezier(.2,.8,.2,1)}
+.mh-bars i:last-child{background:linear-gradient(180deg,#9fc0ff,#5b8cff);box-shadow:0 0 8px rgba(91,140,255,.7)}
+.mh-call{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;align-items:center;padding-top:44px;gap:6px;
+  background:linear-gradient(180deg,#16213a,#0d1322);opacity:0;pointer-events:none;transition:opacity .35s}
+.mh-call.mh-show{opacity:1}
+.mh-call .mh-pulse{position:relative;width:42px;height:42px;border-radius:50%;background:#26365e;display:grid;place-items:center}
+.mh-call .mh-pulse::before,.mh-call .mh-pulse::after{content:"";position:absolute;inset:0;border-radius:50%;border:1.5px solid rgba(120,160,255,.7);animation:mh-callring 1.4s ease-out infinite}
+.mh-call .mh-pulse::after{animation-delay:.7s}
+@keyframes mh-callring{0%{transform:scale(1);opacity:.9}100%{transform:scale(1.9);opacity:0}}
+.mh-call .mh-pulse svg{width:18px;height:18px}
+.mh-call b{font-size:10px;margin-top:6px}
+.mh-call span{color:#8e97a5;font-size:8px}
+.mh-call .mh-btns{position:absolute;bottom:26px;display:flex;gap:30px}
+.mh-call .mh-btns i{width:26px;height:26px;border-radius:50%;display:grid;place-items:center}
+.mh-call .mh-btns i.mh-no{background:#e5484d}.mh-call .mh-btns i.mh-ok{background:#2fbf71;animation:mh-okbtn 1s ease-in-out infinite}
+@keyframes mh-okbtn{50%{transform:scale(1.12)}}
+.mh-call .mh-btns svg{width:12px;height:12px}
+.mh-call.mh-live .mh-btns{display:none}
+.mh-call .mh-timer{display:none;color:#7fe0b8;font-weight:700;font-size:9px}
+.mh-call.mh-live .mh-timer{display:block}
+.mh-row .mh-tx{min-width:0;flex:1}
+.mh-row .mh-tx b{display:block;font-size:8.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mh-row .mh-tx span{display:block;color:#8e97a5;font-size:7.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mh-row .mh-ck{width:12px;height:12px;border-radius:50%;border:1.5px solid #3a4252;flex-shrink:0;display:grid;place-items:center}
+.mh-row .mh-ck.mh-on{background:var(--green);border-color:var(--green)}
+.mh-notif{position:absolute;left:6px;right:6px;top:22px;z-index:4;padding:7px 8px;border-radius:12px;
+  background:rgba(40,48,66,.92);backdrop-filter:blur(6px);box-shadow:0 8px 18px -8px rgba(0,0,0,.8);
+  transform:translateY(-140%);opacity:0;transition:transform .5s cubic-bezier(.2,.9,.2,1.1), opacity .3s}
+.mh-notif.mh-show{transform:translateY(0);opacity:1}
+.mh-notif .mh-t{display:flex;justify-content:space-between;color:#a9c1ff;font-weight:700;font-size:7.5px;margin-bottom:2px}
+.mh-notif b{font-size:9px}
+.mh-notif div:last-child{color:#c9d1de;font-size:8px}
 
-.mh-phone { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.mh-notif { animation: mhPop 2.6s ease-in-out infinite; transform-origin: center; transform-box: fill-box; }
-@keyframes mhPop { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.12); opacity: .85; } }
+/* ===== CONSEGNE ===== */
+.mh-out .mh-car{--cl:25%;--cb:26px;--cw:74%}
+.mh-out .mh-car.mh-enter{animation:mh-parkIn 1.6s .2s cubic-bezier(.16,.84,.3,1) both}
+@keyframes mh-parkIn{0%{transform:translateX(35%);opacity:0;filter:blur(3px)}60%{filter:blur(0)}100%{transform:none;opacity:1}}
+.mh-blink{opacity:0;background:radial-gradient(closest-side,rgba(255,190,90,1),rgba(255,150,40,.6) 40%,transparent)}
+.mh-out .mh-b1{left:28%;top:38%;width:18%;height:20%}
+.mh-out .mh-b2{left:13%;top:39%;width:9%;height:16%}
+.mh-floorflash{position:absolute;left:30%;right:0;bottom:0;height:60px;opacity:0;background:radial-gradient(50% 60% at 40% 100%,rgba(255,170,60,.45),transparent)}
 
-.mh-label { position: relative; z-index: 1; }
-.mh-eyebrow { font-size: 11px; font-weight: 800; letter-spacing: 1.6px; text-transform: uppercase; opacity: .85; margin-bottom: 4px; }
-.mh-label h2 { font-size: 30px; font-weight: 800; margin: 0 0 6px; line-height: 1.1; color: #fff; }
-.mh-soon {
-  display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px;
-  background: rgba(255,255,255,.18); font-size: 9.5px; letter-spacing: 1px; vertical-align: 1px;
-}
-.mh-label p { font-size: 13px; color: rgba(255,255,255,.8); margin: 0; max-width: 320px; }
+.mh-handover{position:absolute;left:0;top:0;width:320px;height:330px;pointer-events:none}
+.mh-hand{position:absolute;left:0;top:0;display:block;filter:drop-shadow(0 18px 18px rgba(0,0,0,.5));will-change:transform}
+.mh-hand-cliente{width:178px}
+.mh-hand-consulente{width:158px}
+.mh-fob{position:absolute;left:0;top:0;width:56px;transform-origin:50% 50%;will-change:transform}
+.mh-fob svg{display:block;width:100%;filter:drop-shadow(0 5px 5px rgba(0,0,0,.5))}
+.mh-fob-shadow{position:absolute;left:0;top:0;width:52px;height:14px;border-radius:50%;background:radial-gradient(closest-side,rgba(60,30,10,.45),transparent);opacity:0}
+.mh-wave{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:2.5px solid rgba(150,225,255,.95);box-shadow:0 0 12px rgba(120,210,255,.6);opacity:0}
+.mh-badge{position:absolute;right:26px;top:26px;display:flex;align-items:center;gap:7px;padding:8px 13px;border-radius:999px;
+  background:rgba(20,22,26,.72);backdrop-filter:blur(6px);border:1px solid rgba(52,195,143,.5);font-weight:700;font-size:13px;
+  opacity:0;transform:translateY(-8px);transition:opacity .4s, transform .4s}
+.mh-badge.mh-show{opacity:1;transform:none}
+.mh-badge i{width:18px;height:18px;border-radius:50%;background:var(--green);display:grid;place-items:center}
 
-.mh-arrow {
-  position: absolute; top: 24px; right: 24px; z-index: 2; width: 40px; height: 40px; border-radius: 12px;
-  background: rgba(255,255,255,.14); backdrop-filter: blur(6px);
-  display: flex; align-items: center; justify-content: center; transition: transform .3s ease, background .3s ease;
-}
-.mh-card:hover .mh-arrow { background: rgba(255,255,255,.26); transform: translateX(4px); }
-
-/* ===== Consegne: auto a destra, passaggio chiavi a sinistra ===== */
-.mh-delivery .mh-scene { justify-content: flex-end; }
-.mh-delivery .mh-car-wrap { justify-content: flex-end; width: 64%; }
-.mh-handover {
-  position: absolute; left: 0; top: 50%; transform: translateY(-50%);
-  width: 44%; max-width: 210px; aspect-ratio: 220 / 120;
-  background: rgba(28,18,8,.45); border: 1px solid rgba(255,214,160,.25); border-radius: 18px;
-  backdrop-filter: blur(4px); z-index: 2; overflow: hidden;
-}
-.mh-handover svg { width: 100%; height: 100%; display: block; }
-.mh-handover .mh-hg, .mh-handover .mh-hr, .mh-handover .mh-key, .mh-handover .mh-done { transform-box: view-box; }
-.mh-hg { animation: mhGive 4s ease-in-out infinite; }
-@keyframes mhGive { 0%,12% { transform: translateX(0); } 32%,48% { transform: translateX(12px); } 68%,100% { transform: translateX(0); } }
-.mh-hr { animation: mhTake 4s ease-in-out infinite; }
-@keyframes mhTake { 0%,20% { transform: translateY(8px); } 42%,86% { transform: translateY(0); } 100% { transform: translateY(8px); } }
-.mh-key { animation: mhPass 4s ease-in-out infinite; }
-@keyframes mhPass {
-  0%       { transform: translate(89px,58px) rotate(0deg); opacity: 0; }
-  8%       { transform: translate(89px,58px) rotate(0deg); opacity: 1; }
-  14%      { transform: translate(89px,58px) rotate(8deg); }
-  20%      { transform: translate(92px,58px) rotate(-6deg); }
-  32%,48%  { transform: translate(101px,58px) rotate(0deg); }
-  56%      { transform: translate(122px,56px) rotate(40deg); }
-  64%,82%  { transform: translate(146px,76px) rotate(78deg); opacity: 1; }
-  88%,100% { transform: translate(146px,76px) rotate(78deg); opacity: 0; }
-}
-.mh-done { animation: mhDone 4s ease-in-out infinite; }
-@keyframes mhDone {
-  0%,58%   { opacity: 0; transform: translate(140px,10px) scale(.7); }
-  64%,84%  { opacity: 1; transform: translate(140px,6px) scale(1); }
-  94%,100% { opacity: 0; transform: translate(140px,6px) scale(1); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mh-home * { animation: none !important; }
-  .mh-key { transform: translate(146px,76px) rotate(78deg); }
-  .mh-done { opacity: 1; transform: translate(140px,6px); }
-}
-
-/* ===== Area CONSEGNE (nuova, per ora "in costruzione") ===== */
-.mh-construction {
-  max-width: 560px; margin: 60px auto; padding: 40px 32px; text-align: center;
-  background: var(--bg-card, #151827); border: 1.5px solid var(--border, #262a3d); border-radius: 20px;
-}
-.mh-construction .mh-construction-icon { font-size: 44px; margin-bottom: 12px; }
-.mh-construction h3 { margin: 0 0 8px; font-size: 18px; font-weight: 800; color: var(--text-primary, #fff); }
-.mh-construction p { margin: 0; font-size: 13px; color: var(--text-secondary, #9298b0); }
+@media (max-width:600px){.mh-home-wrap{padding:24px 10px}.mh-head h1{font-size:22px}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}

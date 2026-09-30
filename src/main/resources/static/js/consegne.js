@@ -344,6 +344,8 @@
     const pct = (a, b) => b ? (a / b * 100).toFixed(1).replace('.', ',') + '%' : '—';
     const fmt = n => n.toLocaleString('it-IT');
     const isDel = r => typeof r.k === 'number' || r.k === 'nd';
+    // Permessi grafici (pagina Permessi → Grafici → Consegne)
+    const vede = key => typeof canSeeChart !== 'function' || canSeeChart(key);
     // Verifica manuale (righe con bollino "i"): salvata sul server, per chiave pratica
     const verOf = r => (r && r.key && meta && meta.verifiche) ? meta.verifiche[r.key] || null : null;
     const needsCheck = r => !!(r && r.check && !verOf(r));
@@ -520,7 +522,7 @@
         body.innerHTML = `
           <section class="cg-kpis">${kpi}</section>
           <section class="cg-grid">
-            <div class="cg-card">
+            <div class="cg-card ${vede('G_CG_TEMPI') ? '' : 'chart-perm-hidden'}">
               <h2>Tempistiche consegne per mese di contratto</h2>
               <p class="cg-hint">Percentuale dei contratti firmati nel mese, consegnati dopo N mesi. Clicca una cella per vedere i clienti.</p>
               <div class="cg-scroll"><table class="cg-heat" id="cgHeat">${table}</table></div>
@@ -530,7 +532,7 @@
               <button type="button" class="cg-quad-link ${result.quad.ok ? 'ok' : 'ko'}" id="cgQuad">${result.quad.ok ? '✓ Quadratura: tutto torna' : '⚠ Quadratura: i conti non tornano'} · dettagli</button>
             </div>
             <div class="cg-side">
-              <div class="cg-card">
+              <div class="cg-card ${vede('G_CG_MOTIVI') ? '' : 'chart-perm-hidden'}">
                 <h2>Da consegnare, per motivo</h2>
                 <p class="cg-hint">Stato indicato nel foglio DATABASE</p>
                 <div class="cg-bars" id="cgBars">${rs.map(([s, n]) => `<button class="cg-bar" type="button" data-reason="${encodeURIComponent(s)}">
