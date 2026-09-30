@@ -140,7 +140,7 @@
         inConsegne = true;
         setNavLinksVisible(false);
         document.body.removeAttribute('data-role-theme');
-        setBadge('CONSEGNE');
+        setBadge('POWER BI');
         const page = document.getElementById('consegnePage');
         if (page) page.style.display = 'block';
         if (window.Consegne) Consegne.init();
@@ -202,7 +202,7 @@
     </div></button>
 
     <!-- CONSEGNE -->
-    <button class="mh-bay mh-out" type="button" data-mh="consegne" aria-label="Entra in Consegne"><div class="mh-bay-in">
+    <button class="mh-bay mh-out" type="button" data-mh="consegne" aria-label="Entra in Power BI"><div class="mh-bay-in">
       <div class="mh-stage">
         <div class="mh-spot"></div><div class="mh-floor"></div>
         <div class="mh-car mh-enter" id="mh-k3"><div class="mh-body" id="mh-k3Body"><img src="/img/macro/ich-x-k3.png" alt=""><div class="mh-sheen" style="-webkit-mask-image:url('/img/macro/ich-x-k3.png');mask-image:url('/img/macro/ich-x-k3.png');animation-delay:4.5s"></div>
@@ -263,9 +263,9 @@
       </div>
       <div class="mh-info">
         <div>
-          <div class="mh-kicker"><i></i>Vetture in consegna</div>
-          <h2>Consegne</h2>
-          <p>Tempi di consegna, vetture ancora da consegnare e motivo dell'attesa.</p>
+          <div class="mh-kicker"><i></i>Consegne e analisi</div>
+          <h2>Power BI</h2>
+          <p>Tempistiche di consegna, analisi dell'avanzamento, report ed export Excel.</p>
         </div>
         <span class="mh-go"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
       </div>

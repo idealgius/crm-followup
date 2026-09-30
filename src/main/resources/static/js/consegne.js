@@ -481,8 +481,8 @@
               <div class="cg-back-row">
                 <button type="button" class="cg-back" onclick="MacroHome.show()">&larr; Home</button>
               </div>
-              <h1>Consegne</h1>
-              <p>Quanto tempo passa tra la firma del contratto e la consegna della vettura</p>
+              <h1>Power BI</h1>
+              <p>Consegne, tempistiche e analisi dell'avanzamento</p>
             </div>
             <div class="cg-actions">
               <label class="cg-btn" id="cgImportLbl" style="display:none">Importa trattative (CSV)<input type="file" accept=".csv,text/csv" id="cgFileTratt" hidden></label>

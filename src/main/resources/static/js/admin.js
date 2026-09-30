@@ -212,7 +212,7 @@ const PERMISSION_SECTIONS = [
     { key: 'VEICOLI', icon: '🚙', label: 'Vetture in Consegna' },
     // NUOVO: area Consegne (tempistiche) + selezione area dopo il login.
     // Chi non ce l'ha entra direttamente in In bound.
-    { key: 'CONSEGNE', icon: '🔑', label: 'Consegne (selezione area)' }
+    { key: 'CONSEGNE', icon: '🔑', label: 'Power BI (selezione area)' }
 ];
 
 const ACCESS_LEVEL_META = {

@@ -6,7 +6,8 @@
 
    - Filtri: periodo dal/al, anno, mesi, finanziaria (una o piu'), sede,
      consulente, B2C/B2B (all'apertura entrambi).
-   - Riquadri: contratti validi, annullati, Lojack, Polizza FIR, Mawdy.
+   - Riquadri: contratti validi, annullati, da consegnare, Lojack, Polizza FIR,
+     Mawdy, Pack manutenzione.
    - Una card per categoria con 3 tipi di grafico (ciambella / colonne /
      linee mese per mese) e il report (voce, numero, %), cliccabile.
    - Export Excel (server, Apache POI) con piu' fogli e grafici nativi.
@@ -77,7 +78,7 @@
             const st = up(r['STATO']).replace(/\s+,/g, ',');
             const esito = st.includes('ANNULLATA') ? 'Annullate' : st.includes('CONSEGNATA') ? 'Consegnate' : 'Da consegnare';
             const vRaw = up(r['VENDITORE']);
-            const g = up(r['GARANZIA']), fir = up(r['FIR']);
+            const g = up(r['GARANZIA']), fir = up(r['FIR']), pack = up(r['PACK MANUTENZIONE']);
             return {
                 _i: i, data: d, dataFiltro: d || (m ? new Date(anno, m - 1, 1) : null), m, anno,
                 cliente: api.nice(r['CLIENTE']), vend: vmap.get(vRaw) || (vRaw ? api.nice(vRaw) : 'Non specificato'),
@@ -88,6 +89,7 @@
                 targa: String(r['TARGA/TELAIO'] || '').trim(), stato: st || 'STATO NON INDICATO', esito,
                 mawdy: g.includes('MAWDY') ? durata(g) : 'Non venduta',
                 fir: fir && /\d/.test(fir) ? durata(fir) : 'Non venduta',
+                pack: pack && /\d/.test(pack) ? durata(pack) : 'Non venduta',
                 lojack: up(r['LOJACK']) === 'TRUE' ? 'Installato' : 'Non installato',
                 block: up(r['BLOCKSHAFT']) === 'TRUE' ? 'Installato' : 'Non installato',
                 install: String(r['INSTALLAZIONE'] || '').split(',').map(x => x.trim()).filter(Boolean).map(x => api.cap(x)),
@@ -129,6 +131,7 @@
         { id: 'tipo', t: 'B2C / B2B', base: 'validi', get: r => r.tipo, order: ['B2C', 'B2B'] },
         { id: 'mawdy', t: 'Solo Mawdy', base: 'validi', get: r => r.mawdy, sortNum: true },
         { id: 'fir', t: 'Polizza FIR', base: 'validi', get: r => r.fir, sortNum: true },
+        { id: 'pack', t: 'Pack manutenzione', base: 'validi', get: r => r.pack, sortNum: true },
         { id: 'lojack', t: 'Lojack', base: 'validi', get: r => r.lojack, order: ['Installato', 'Non installato'] },
         { id: 'block', t: 'Blockshaft', base: 'validi', get: r => r.block, order: ['Installato', 'Non installato'] },
         { id: 'marchio', t: 'Marchio', base: 'validi', get: r => r.marchio, top: 12 },
@@ -137,7 +140,7 @@
     ];
     // tipo di grafico "migliore" per l'opzione Misti dell'export
     const BEST = { esito: 'line', consulenti: 'bar', stato: 'bar', dc: 'bar', fin: 'doughnut', canale: 'doughnut', prov: 'doughnut', marchio: 'bar',
-        mawdy: 'doughnut', fir: 'doughnut', lojack: 'doughnut', block: 'doughnut', install: 'bar', sede: 'doughnut', tipo: 'doughnut' };
+        mawdy: 'doughnut', fir: 'doughnut', pack: 'doughnut', lojack: 'doughnut', block: 'doughnut', install: 'bar', sede: 'doughnut', tipo: 'doughnut' };
 
     function baseRows(cat, R) {
         return cat.base === 'tutti' ? R : cat.base === 'dc' ? R.filter(r => r.esito === 'Da consegnare') : R.filter(r => r.esito !== 'Annullate');
@@ -224,6 +227,7 @@
         const tot = R.length, ann = R.filter(r => r.esito === 'Annullate').length, val = tot - ann;
         const V = R.filter(r => r.esito !== 'Annullate');
         const lj = V.filter(r => r.lojack === 'Installato').length, fr = V.filter(r => r.fir !== 'Non venduta').length, mw = V.filter(r => r.mawdy !== 'Non venduta').length;
+        const pk = V.filter(r => r.pack !== 'Non venduta').length;
         const dc = V.filter(r => r.esito === 'Da consegnare').length;
         const k = (id, l, n, sub, dot) => `<button type="button" class="cg-kpi" data-kpi2="${id}"><div class="cg-k-top">${l}<span class="cg-dot" style="background:${dot}"></span></div><div class="cg-num">${api.fmt(n)}</div><div class="cg-sub">${sub}</div></button>`;
         el.querySelector('#anKpis').innerHTML =
@@ -232,7 +236,8 @@
             k('dc', 'Da consegnare', dc, `${pctS(dc, val)} dei validi`, 'var(--cg-amber-soft)') +
             k('lj', 'Lojack', lj, `${pctS(lj, val)} dei validi`, 'var(--cg-violet-soft)') +
             k('fir', 'Polizza FIR', fr, `${pctS(fr, val)} dei validi`, 'var(--cg-violet-soft)') +
-            k('mw', 'Mawdy', mw, `${pctS(mw, val)} dei validi`, 'var(--cg-violet-soft)');
+            k('mw', 'Mawdy', mw, `${pctS(mw, val)} dei validi`, 'var(--cg-violet-soft)') +
+            k('pk', 'Pack manutenzione', pk, `${pctS(pk, val)} dei validi`, 'var(--cg-violet-soft)');
     }
 
     const ICON = {
@@ -353,7 +358,8 @@
         if (k) {
             const R = filtered(), V = R.filter(r => r.esito !== 'Annullate');
             const map = { val: ['Contratti validi', V], ann: ['Contratti annullati', R.filter(r => r.esito === 'Annullate')], dc: ['Vetture da consegnare', V.filter(r => r.esito === 'Da consegnare')],
-                lj: ['Lojack installati', V.filter(r => r.lojack === 'Installato')], fir: ['Polizza FIR venduta', V.filter(r => r.fir !== 'Non venduta')], mw: ['Mawdy venduta', V.filter(r => r.mawdy !== 'Non venduta')] };
+                lj: ['Lojack installati', V.filter(r => r.lojack === 'Installato')], fir: ['Polizza FIR venduta', V.filter(r => r.fir !== 'Non venduta')], mw: ['Mawdy venduta', V.filter(r => r.mawdy !== 'Non venduta')],
+                pk: ['Pack manutenzione venduto', V.filter(r => r.pack !== 'Non venduta')] };
             const [tt, list] = map[k.dataset.kpi2];
             openList(tt, list, { n: k.dataset.kpi2 === 'ann' || k.dataset.kpi2 === 'val' ? R.length : V.length, label: k.dataset.kpi2 === 'ann' || k.dataset.kpi2 === 'val' ? 'con i filtri scelti' : 'validi con i filtri scelti' });
             return;
@@ -450,12 +456,13 @@
                 ['Da consegnare', V.filter(r => r.esito === 'Da consegnare').length, V.length ? V.filter(r => r.esito === 'Da consegnare').length / V.length : 0],
                 ['Lojack', V.filter(r => r.lojack === 'Installato').length, V.length ? V.filter(r => r.lojack === 'Installato').length / V.length : 0],
                 ['Polizza FIR', V.filter(r => r.fir !== 'Non venduta').length, V.length ? V.filter(r => r.fir !== 'Non venduta').length / V.length : 0],
-                ['Mawdy', V.filter(r => r.mawdy !== 'Non venduta').length, V.length ? V.filter(r => r.mawdy !== 'Non venduta').length / V.length : 0]]
+                ['Mawdy', V.filter(r => r.mawdy !== 'Non venduta').length, V.length ? V.filter(r => r.mawdy !== 'Non venduta').length / V.length : 0],
+                ['Pack manutenzione', V.filter(r => r.pack !== 'Non venduta').length, V.length ? V.filter(r => r.pack !== 'Non venduta').length / V.length : 0]]
                 .map(([nome, n, p]) => ({ nome, valore: n, percentuale: Math.round(p * 1000) / 10 })),
             sezioni,
             contratti: {
-                intestazioni: ['Data', 'Cliente', 'Consulente', 'Sede', 'B2C/B2B', 'Tipologia', 'Provenienza', 'Marchio', 'Modello', 'Targa/Telaio', 'Pagamento', 'Stato', 'Esito', 'Mawdy', 'Polizza FIR', 'Lojack', 'Blockshaft', 'Installazioni'],
-                righe: R.map(r => [r.data ? api.fmtD(r.data) : '', r.cliente, r.vend, r.sede, r.tipo, r.canale, r.prov, r.marchio, r.modello, r.targa, r.fin, api.cap(r.stato), r.esito, r.mawdy, r.fir, r.lojack, r.block, r.install.join(', ')])
+                intestazioni: ['Data', 'Cliente', 'Consulente', 'Sede', 'B2C/B2B', 'Tipologia', 'Provenienza', 'Marchio', 'Modello', 'Targa/Telaio', 'Pagamento', 'Stato', 'Esito', 'Mawdy', 'Polizza FIR', 'Pack manutenzione', 'Lojack', 'Blockshaft', 'Installazioni'],
+                righe: R.map(r => [r.data ? api.fmtD(r.data) : '', r.cliente, r.vend, r.sede, r.tipo, r.canale, r.prov, r.marchio, r.modello, r.targa, r.fin, api.cap(r.stato), r.esito, r.mawdy, r.fir, r.pack, r.lojack, r.block, r.install.join(', ')])
             }
         };
         const res = await fetch('/api/consegne/export-excel', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
