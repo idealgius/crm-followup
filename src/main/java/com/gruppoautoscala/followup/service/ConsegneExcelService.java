@@ -2,7 +2,6 @@ package com.gruppoautoscala.followup.service;
 
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddress;
-import org.apache.poi.xddf.usermodel.chart.*;
 import org.apache.poi.xssf.usermodel.*;
 import org.springframework.stereotype.Service;
 
@@ -18,9 +17,9 @@ import java.util.*;
  * Il frontend (consegne-analisi.js) invia i dati gia' calcolati con i filtri
  * attivi; qui si costruisce il file con Apache POI:
  *  - foglio "Riepilogo": filtri usati e indicatori principali;
- *  - un foglio per ogni categoria: report (voce, numero, %) + grafico NATIVO
- *    di Excel (ciambella, colonne o linee, come scelto nell'export);
- *  - foglio "Contratti": l'elenco dei contratti filtrati.
+ *  - un foglio per ogni categoria visibile: il report (voce, numero, %),
+ *    con importi in euro dove servono. Niente grafici: solo i report.
+ *  - (opzionale) foglio "Contratti" se il frontend invia anche l'elenco.
  *
  * Formato atteso (JSON):
  * { titolo, filtri, kpi:[{nome,valore,percentuale}],
@@ -33,8 +32,6 @@ import java.util.*;
 @Service
 public class ConsegneExcelService {
 
-    private static final int CHART_COL = 8;     // il grafico parte dalla colonna I
-    private static final int DATA_COL = 20;     // dati del grafico dalla colonna U
 
     public byte[] crea(Map<String, Object> p) throws Exception {
         try (XSSFWorkbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
@@ -75,17 +72,19 @@ public class ConsegneExcelService {
                     Row row = sh.createRow(rr++);
                     for (int c = 0; c < vals.size(); c++) {
                         Object v = vals.get(c);
-                        boolean ultimaPerc = head.get(c).startsWith("%");
+                        String h = head.get(c);
+                        boolean perc = h.startsWith("%") || h.startsWith("% ");
+                        boolean euro = h.contains("€");
                         if (v instanceof Number n) {
-                            if (ultimaPerc) numero(row, c, n.doubleValue() / 100.0, st.perc);
+                            if (perc) numero(row, c, n.doubleValue() / 100.0, st.perc);
+                            else if (euro) numero(row, c, n.doubleValue(), st.euro);
                             else numero(row, c, n.doubleValue(), st.intero);
                         } else cella(row, c, String.valueOf(v), st.testo);
                     }
                 }
-                sh.setColumnWidth(0, 32 * 256);
-                for (int c = 1; c < head.size(); c++) sh.setColumnWidth(c, 14 * 256);
-
-                grafico(sh, s, st);
+                sh.setColumnWidth(0, 34 * 256);
+                for (int c = 1; c < head.size(); c++) sh.setColumnWidth(c, (head.get(c).contains("€") ? 18 : 14) * 256);
+                sh.createFreezePane(0, 4);
             }
 
             // ---------- elenco contratti ----------
@@ -112,102 +111,9 @@ public class ConsegneExcelService {
         }
     }
 
-    /* ================= grafici nativi ================= */
-    private void grafico(XSSFSheet sh, Map<?, ?> s, Stili st) {
-        String tipo = str(s.get("tipo"), "bar");
-        List<String> labels = new ArrayList<>();
-        List<String> nomiSerie = new ArrayList<>();
-        List<List<Double>> valori = new ArrayList<>();
-
-        if ("line".equals(tipo) && s.get("mesi") instanceof Map<?, ?> mesi) {
-            for (Object l : lista(mesi.get("labels"))) labels.add(String.valueOf(l));
-            for (Object so : lista(mesi.get("serie"))) {
-                Map<?, ?> se = (Map<?, ?>) so;
-                nomiSerie.add(str(se.get("nome"), ""));
-                List<Double> v = new ArrayList<>(); for (Object x : lista(se.get("valori"))) v.add(num(x)); valori.add(v);
-            }
-        } else {
-            for (Object l : lista(s.get("categorie"))) labels.add(String.valueOf(l));
-            for (Object so : lista(s.get("serie"))) {
-                Map<?, ?> se = (Map<?, ?>) so;
-                nomiSerie.add(str(se.get("nome"), ""));
-                List<Double> v = new ArrayList<>(); for (Object x : lista(se.get("valori"))) v.add(num(x)); valori.add(v);
-            }
-            if ("line".equals(tipo)) tipo = "bar"; // senza dati mensili non si puo' fare la linea
-        }
-        if (labels.isEmpty() || valori.isEmpty()) return;
-        if ("doughnut".equals(tipo) && valori.size() > 1) { nomiSerie = nomiSerie.subList(0, 1); valori = valori.subList(0, 1); }
-
-        // blocco dati del grafico (a destra, colonna U)
-        int r0 = 3;
-        Row hr = riga(sh, r0);
-        cella(hr, DATA_COL, "Dati del grafico", st.head);
-        for (int j = 0; j < nomiSerie.size(); j++) cella(hr, DATA_COL + 1 + j, nomiSerie.get(j), st.head);
-        for (int i = 0; i < labels.size(); i++) {
-            Row row = riga(sh, r0 + 1 + i);
-            cella(row, DATA_COL, labels.get(i), st.testo);
-            for (int j = 0; j < valori.size(); j++) numero(row, DATA_COL + 1 + j, i < valori.get(j).size() ? valori.get(j).get(i) : 0, st.intero);
-        }
-        sh.setColumnWidth(DATA_COL, 24 * 256);
-        int first = r0 + 1, last = r0 + labels.size();
-
-        XSSFDrawing drawing = sh.createDrawingPatriarch();
-        XSSFClientAnchor anchor = drawing.createAnchor(0, 0, 0, 0, CHART_COL, 2, CHART_COL + 10, 26);
-        XSSFChart chart = drawing.createChart(anchor);
-        chart.setTitleText(str(s.get("titolo"), ""));
-        chart.setTitleOverlay(false);
-        XDDFChartLegend legend = chart.getOrAddLegend();
-        legend.setPosition("doughnut".equals(tipo) ? LegendPosition.RIGHT : LegendPosition.BOTTOM);
-
-        XDDFDataSource<String> cat = XDDFDataSourcesFactory.fromStringCellRange(sh, new CellRangeAddress(first, last, DATA_COL, DATA_COL));
-
-        if ("doughnut".equals(tipo)) {
-            XDDFDoughnutChartData data = (XDDFDoughnutChartData) chart.createData(ChartTypes.DOUGHNUT, null, null);
-            data.setVaryColors(true);
-            data.setHoleSize(55);
-            XDDFNumericalDataSource<Double> val = XDDFDataSourcesFactory.fromNumericCellRange(sh, new CellRangeAddress(first, last, DATA_COL + 1, DATA_COL + 1));
-            XDDFChartData.Series serie = data.addSeries(cat, val);
-            serie.setTitle(nomiSerie.get(0), null);
-            chart.plot(data);
-            return;
-        }
-
-        XDDFCategoryAxis x = chart.createCategoryAxis(AxisPosition.BOTTOM);
-        XDDFValueAxis y = chart.createValueAxis(AxisPosition.LEFT);
-        y.setCrosses(AxisCrosses.AUTO_ZERO);
-
-        if ("line".equals(tipo)) {
-            XDDFLineChartData data = (XDDFLineChartData) chart.createData(ChartTypes.LINE, x, y);
-            for (int j = 0; j < valori.size(); j++) {
-                XDDFNumericalDataSource<Double> val = XDDFDataSourcesFactory.fromNumericCellRange(sh, new CellRangeAddress(first, last, DATA_COL + 1 + j, DATA_COL + 1 + j));
-                XDDFLineChartData.Series serie = (XDDFLineChartData.Series) data.addSeries(cat, val);
-                serie.setTitle(nomiSerie.get(j), null);
-                serie.setSmooth(true);
-                serie.setMarkerStyle(MarkerStyle.CIRCLE);
-            }
-            chart.plot(data);
-            return;
-        }
-
-        XDDFBarChartData data = (XDDFBarChartData) chart.createData(ChartTypes.BAR, x, y);
-        data.setBarDirection(BarDirection.COL);
-        if (valori.size() > 1) {
-            data.setBarGrouping(BarGrouping.STACKED);
-            data.setOverlap((byte) 100);
-        } else {
-            data.setVaryColors(true);
-        }
-        for (int j = 0; j < valori.size(); j++) {
-            XDDFNumericalDataSource<Double> val = XDDFDataSourcesFactory.fromNumericCellRange(sh, new CellRangeAddress(first, last, DATA_COL + 1 + j, DATA_COL + 1 + j));
-            XDDFChartData.Series serie = data.addSeries(cat, val);
-            serie.setTitle(nomiSerie.get(j), null);
-        }
-        chart.plot(data);
-    }
-
     /* ================= utilita' ================= */
     private static class Stili {
-        final CellStyle titolo, nota, head, testo, intero, perc;
+        final CellStyle titolo, nota, head, testo, intero, perc, euro;
         Stili(XSSFWorkbook wb) {
             XSSFFont ft = wb.createFont(); ft.setBold(true); ft.setFontHeightInPoints((short) 14);
             titolo = wb.createCellStyle(); titolo.setFont(ft);
@@ -220,6 +126,7 @@ public class ConsegneExcelService {
             testo = wb.createCellStyle();
             intero = wb.createCellStyle(); intero.setDataFormat(wb.createDataFormat().getFormat("#,##0"));
             perc = wb.createCellStyle(); perc.setDataFormat(wb.createDataFormat().getFormat("0.0%"));
+            euro = wb.createCellStyle(); euro.setDataFormat(wb.createDataFormat().getFormat("#,##0.00 \"€\""));
         }
     }
     private static Row riga(Sheet sh, int r) { Row row = sh.getRow(r); return row != null ? row : sh.createRow(r); }

@@ -272,7 +272,7 @@
             m2.set(full, (m2.get(full) || 0) + 1);
         });
         vendMap = new Map([...cnt].map(([k, m2]) => [k, [...m2].sort((a, b) => b[1] - a[1])[0][0]]));
-        const esclusiB2C = [], manuali = [], eliminate = [], soloCsv = [];
+        const esclusiB2C = [], manuali = [], eliminate = [], soloCsv = [], eliminateFoglio = [];
         // Chiave stabile di una trattativa del CSV (resta uguale tra un import e l'altro)
         const csvKey = (t, dc) => ['csv', [...toks(nameOf(t))].sort().join(' '), pl(targaCsv(t)), dc ? fmtD(dc) : t.chiusura].join('|');
         const decisione = key => (meta && meta.verifiche && meta.verifiche[key] && meta.verifiche[key].azione) ? meta.verifiche[key] : null;
@@ -401,13 +401,15 @@
                 note.push({ c: 'info', t: `Solo nel foglio: nel CSV nessuna trattativa con ${g.tt ? 'targa/telaio ' + g.tt.trim() + ' o ' : ''}nome "${nice(g.cliente)}"` });
             }
             if (anom) note.push({ c: 'info', t: anom });
-            soloFoglio.push({
+            const rec = {
                 cliente: nice(g.cliente), marca: '', modello: String(g.modello || '').replace(/\s+/g, ' ').trim(),
-                vend: nice(g.vend), chiusura: g._d ? fmtD(g._d) : (g.data || ''), targa: (g.tt || '—').trim(), tipo: cap(String(g.canale || '').trim()),
+                vend: vendMap.get(String(g.vend || '').toUpperCase().replace(/\s+/g, ' ').trim()) || nice(g.vend),
+                chiusura: g._d ? fmtD(g._d) : (g.data || ''), targa: (g.tt || '—').trim(), tipo: cap(String(g.canale || '').trim()),
                 m, k, stato: st || 'STATO NON INDICATO', consegna: '', prevista: false,
                 prov: g.prov ? cap(g.prov) : 'Non specificato', abb: 'solo foglio', solo: true,
                 check: k !== 'ann', key: keyOf(g), note
-            });
+            };
+            soloFoglio.push(rec);
         });
         const contate = soloFoglio.filter(r => r.k !== 'ann' && r.m);
 
@@ -419,7 +421,7 @@
             csvTot: tratt.length, abbinate: abbinate.length, esclusiB2C: esclusiB2C.length, verify: verify.length, soloCsv: soloCsv.length,
             manuali: manuali.length, eliminate: eliminate.length,
             foglioTot: G.filter(g => g.b2c === 'FALSE').length,
-            soloTot: soloFoglio.length, soloAnn: soloFoglio.filter(r => r.k === 'ann').length,
+            soloTot: soloFoglio.length, soloAnn: soloFoglio.filter(r => r.k === 'ann').length, eliminateFoglio: eliminateFoglio.length,
             soloSenzaMese: soloFoglio.filter(r => !r.m).length,
             righeRiusate: [...usiRiga.values()].filter(v => v > 1).length,
             dateCorrette: G.filter(g => g._d && !/^\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{4}/.test(String(g.data || '').trim())).length,
@@ -429,7 +431,7 @@
         quad.okFoglio = quad.abbinate + quad.soloTot === quad.foglioTot;
         quad.ok = quad.okCsv && quad.okFoglio && quad.righeRiusate === 0;
 
-        result = { recs: recs.filter(r => r.m).concat(manuali.filter(r => r.m), soloCsv.filter(r => r.m), contate), verify, excl, soloFoglio, soloCsv, esclusiB2C, abbinate, manuali, eliminate, quad };
+        result = { recs: recs.filter(r => r.m).concat(manuali.filter(r => r.m), soloCsv.filter(r => r.m), contate), verify, excl, soloFoglio, soloCsv, esclusiB2C, abbinate, manuali, eliminate, eliminateFoglio, quad };
     }
 
     /* ================= util ================= */
@@ -448,7 +450,8 @@
     // Permessi grafici (pagina Permessi → Grafici → Consegne)
     const vede = key => typeof canSeeChart !== 'function' || canSeeChart(key);
     // Verifica manuale (righe con bollino "i"): salvata sul server, per chiave pratica
-    const verOf = r => (r && r.key && meta && meta.verifiche) ? meta.verifiche[r.key] || null : null;
+    // verifica manuale = voce senza "azione" (le voci con azione sono decisioni: abbina/contratto/elimina)
+    const verOf = r => (r && r.key && meta && meta.verifiche && meta.verifiche[r.key] && !meta.verifiche[r.key].azione) ? meta.verifiche[r.key] : null;
     const needsCheck = r => !!(r && r.check && !verOf(r));
     const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -486,7 +489,6 @@
             </div>
             <div class="cg-actions">
               <label class="cg-btn" id="cgImportLbl" style="display:none">Importa trattative (CSV)<input type="file" accept=".csv,text/csv" id="cgFileTratt" hidden></label>
-              <label class="cg-btn cg-btn-ghost" id="cgImportDbLbl" style="display:none" title="Carica la scheda DATABASE esportata come CSV (mette in pausa l'aggiornamento automatico da Google)">Importa foglio (CSV)<input type="file" accept=".csv,text/csv" id="cgFileDb" hidden></label>
               <button type="button" class="cg-btn cg-btn-light" id="cgSheetBtn">Aggiorna dal foglio Google</button>
             </div>
           </div>
@@ -499,7 +501,6 @@
         <div class="cg-wrap" id="cgBody"></div>
         <div class="cg-wrap" id="cgAnalisi" style="display:none"></div>`;
         rootEl.querySelector('#cgFileTratt').addEventListener('change', e => importTrattative(e.target));
-        rootEl.querySelector('#cgFileDb').addEventListener('change', e => importDatabaseCsv(e.target));
         rootEl.querySelectorAll('.cg-tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
         rootEl.querySelector('#cgSheetBtn').addEventListener('click', refreshSheet);
     }
@@ -806,6 +807,18 @@
     // Dentro un gruppo vale "una qualsiasi" delle scelte, tra i gruppi vale "e".
     let ov = null, cur = [], curVerify = false, curBase = null, lastFocus = null;
     let curChips = new Set(), curOrigins = new Set();
+    // Filtri per colonna (freccia ▾ nell'intestazione della lista)
+    const COLS = { vend: 'Consulente', stato: 'Stato', prov: 'Provenienza', tipo: 'Tipo', sede: 'Sede' };
+    let colF = {};
+    // Ordinamento: clic sull'intestazione (crescente <-> decrescente)
+    let sortKey = null, sortDir = 1;
+    const dnum = v => { const m = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(String(v || '')); return m ? +(m[3] + m[2] + m[1]) : 0; };
+    const SORTV = { cliente: r => String(r.cliente || '').toLowerCase(), vettura: r => `${r.marca} ${r.modello}`.toLowerCase(), vend: r => String(r.vend || '').toLowerCase(),
+        chiusura: r => dnum(r.chiusura), consegna: r => dnum(r.consegna), stato: r => String(r.stato || '').toLowerCase(), prov: r => String(r.prov || '').toLowerCase(),
+        tipo: r => String(r.tipo || '').toLowerCase(), targa: r => String(r.targa || '').toLowerCase(), sede: r => String(r.sede || '').toLowerCase() };
+    const colVal = (r, k) => k === 'stato' ? cap(r.stato) : (r[k] || '—');
+    const colOk = r => Object.entries(colF).every(([k, set]) => !set.size || set.has(colVal(r, k)));
+    const colCount = () => Object.values(colF).reduce((n, set) => n + (set.size ? 1 : 0), 0);
     const ORIGIN_LABEL = { abb: 'Abbinati', solo: 'Solo nel foglio', csv: 'Solo nel CSV', check: 'Da verificare a mano', ver: 'Verificati a mano' };
     function ensureModal() {
         if (ov) return;
@@ -826,6 +839,10 @@
             const b = e.target.closest('[data-q]'); if (b) quadList(b.dataset.q);
         });
         ov.querySelector('#cgMList').addEventListener('click', e => {
+            const cf = e.target.closest('[data-colf]');
+            if (cf) { e.stopPropagation(); openColPop(cf.dataset.colf, cf); return; }
+            const so = e.target.closest('[data-sort]');
+            if (so) { const k = so.dataset.sort; if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = 1; } renderList(); return; }
             const d = e.target.closest('[data-dkey]');
             if (d) {
                 const az = d.dataset.az;
@@ -879,6 +896,7 @@
         cur = rows; curVerify = !!opts.verify; curBase = base || null;
         curChips = new Set(opts.chip ? [opts.chip] : []);
         curOrigins = new Set(opts.origin ? [opts.origin] : []);
+        colF = {}; closeColPop(); sortKey = null; sortDir = 1;
         renderOrigin();
         ov.querySelector('#cgMTitle').textContent = title;
         const chips = ov.querySelector('#cgMChips');
@@ -917,7 +935,7 @@
     // Con piu' filtri scelti, in basso il totale e la percentuale di ciascuno.
     function renderStat(rows, searchOk) {
         const unit = curVerify ? 'trattative' : (curBase ? 'vetture' : 'contratti');
-        const filtered = curChips.size + curOrigins.size > 0;
+        const filtered = curChips.size + curOrigins.size + colCount() > 0;
         ov.querySelector('#cgMStat').innerHTML = curBase
             ? `<span class="cg-n">${fmt(rows.length)} ${unit}</span><span class="cg-p">${pct(rows.length, curBase.n)}</span><span class="cg-of">su ${fmt(curBase.n)} contratti ${curBase.label}${filtered ? ' · con i filtri scelti' : ''}</span>`
             : `<span class="cg-n">${fmt(rows.length)} ${unit}</span>${filtered ? `<span class="cg-p">${pct(rows.length, cur.length)}</span><span class="cg-of">di ${fmt(cur.length)} in elenco · con i filtri scelti</span>` : ''}`;
@@ -981,7 +999,12 @@
             });
             meta.verifiche = d.verifiche || {};
             // aggiorna la riga nella lista aperta e ricalcola tabella e conteggi
-            cur.forEach(r => { if (r.dkey === key) { if (azione) r.dec = meta.verifiche[key]; else delete r.dec; } });
+            cur.forEach(r => {
+                if (r.dkey !== key) return;
+                if (azione) r.dec = meta.verifiche[key]; else delete r.dec;
+                // una riga eliminata non va piu' verificata; annullando torna com'era
+                if (r.soloCsv) r.check = azione !== 'elimina';
+            });
             renderOrigin(); renderList();
             compute(); render(rootEl.querySelector('#cgBody'));
         } catch (e) {
@@ -1008,14 +1031,30 @@
 
     function renderList() {
         const q = ov.querySelector('#cgMSearch').value.trim().toLowerCase();
-        const searchOk = r => !q || [r.cliente, r.marca, r.modello, r.vend, r.targa].join(' ').toLowerCase().includes(q);
+        const searchOk = r => (!q || [r.cliente, r.marca, r.modello, r.vend, r.targa].join(' ').toLowerCase().includes(q)) && colOk(r);
         const rows = cur.filter(r => reasonOk(r) && originOk(r) && searchOk(r));
+        if (sortKey && SORTV[sortKey]) {
+            const f = SORTV[sortKey];
+            rows.sort((a, b) => { const x = f(a), y = f(b); return (x < y ? -1 : x > y ? 1 : 0) * sortDir; });
+        }
         renderStat(rows, searchOk);
         const list = ov.querySelector('#cgMList');
-        if (!rows.length) { list.innerHTML = '<tbody><tr><td class="cg-empty-msg">Nessuna vettura corrisponde alla ricerca.</td></tr></tbody>'; return; }
-        list.innerHTML = '<thead><tr><th>Cliente</th><th>Vettura</th><th>Consulente</th><th>Data chiusura</th>' +
-            (curVerify ? '<th>Targa / telaio</th><th>Tipo</th><th>Sede</th>'
-                : '<th>Data consegna</th><th>Stato</th><th>Provenienza</th><th>Tipo</th><th>Targa / telaio</th>') + '</tr></thead><tbody>' +
+        // intestazione: clic sul nome = ordina, freccia ▾ = filtra
+        const ORDINABILI = ['chiusura', 'consegna', 'vend'];   // ordinamento solo per date e consulente
+        const th = (label, sk, fk) => {
+            const n = fk && colF[fk] ? colF[fk].size : 0;
+            const arrow = sortKey === sk ? (sortDir === 1 ? ' ↑' : ' ↓') : (ORDINABILI.includes(sk) ? ' ↕' : '');
+            const nome = ORDINABILI.includes(sk)
+                ? `<button type="button" class="cg-sort ${sortKey === sk ? 'on' : ''}" data-sort="${sk}" title="Ordina per ${label.toLowerCase()}">${label}${arrow}</button>`
+                : `<span class="cg-sort-off">${label}</span>`;
+            return `<th><span class="cg-th">${nome}` +
+                (fk ? `<button type="button" class="cg-colf ${n ? 'on' : ''}" data-colf="${fk}" title="Filtra per ${label.toLowerCase()}" aria-label="Filtra per ${label.toLowerCase()}">▾${n ? `<b>${n}</b>` : ''}</button>` : '') + `</span></th>`;
+        };
+        const head = '<thead><tr>' + th('Cliente', 'cliente') + th('Vettura', 'vettura') + th('Consulente', 'vend', 'vend') + th('Data chiusura', 'chiusura') +
+            (curVerify ? th('Targa / telaio', 'targa') + th('Tipo', 'tipo', 'tipo') + th('Sede', 'sede', 'sede')
+                : th('Data consegna', 'consegna') + th('Stato', 'stato', 'stato') + th('Provenienza', 'prov', 'prov') + th('Tipo', 'tipo', 'tipo') + th('Targa / telaio', 'targa')) + '</tr></thead>';
+        if (!rows.length) { list.innerHTML = head + `<tbody><tr><td class="cg-empty-msg" colspan="${curVerify ? 7 : 9}">Nessuna vettura corrisponde ai filtri.</td></tr></tbody>`; return; }
+        list.innerHTML = head + '<tbody>' +
             rows.map(r => '<tr>' +
                 `<td class="cg-cl">${esc(r.cliente)}${noteHtml(r)}</td><td>${esc(r.marca)} ${esc(r.modello)}</td><td>${esc(r.vend)}</td><td>${esc(r.chiusura)}</td>` +
                 (curVerify ? `<td>${esc(r.targa)}</td><td>${esc(r.tipo)}</td><td>${esc(r.sede)}</td>`
@@ -1023,7 +1062,40 @@
                     `<td><span class="cg-tag ${isDel(r) ? 'ok' : r.k === 'dc' ? 'wait' : ''}">${esc(cap(r.stato))}</span></td>` +
                     `<td>${esc(r.prov)}</td><td>${esc(r.tipo)}</td><td>${esc(r.targa)}</td>`) + '</tr>').join('') + '</tbody>';
     }
-    function closeModal() { ov.classList.remove('open'); if (lastFocus && lastFocus.focus) lastFocus.focus(); }
+    // --- menu a tendina dei filtri per colonna ---
+    let colPop = null;
+    function closeColPop() { if (colPop) { colPop.remove(); colPop = null; } }
+    function openColPop(key, btn) {
+        if (colPop && colPop.dataset.key === key) { closeColPop(); return; }
+        closeColPop();
+        const cnt = new Map();
+        cur.forEach(r => { const v = colVal(r, key); cnt.set(v, (cnt.get(v) || 0) + 1); });
+        const set = colF[key] || new Set();
+        colPop = document.createElement('div');
+        colPop.className = 'cg-colpop'; colPop.dataset.key = key;
+        colPop.innerHTML = `<div class="cg-colpop-t">Filtra per ${COLS[key].toLowerCase()}</div>` +
+            [...cnt].sort((a, b) => a[0].localeCompare(b[0], 'it')).map(([v, n]) =>
+                `<label><input type="checkbox" value="${esc(v)}" ${set.has(v) ? 'checked' : ''}><span>${esc(v)}</span><em>${fmt(n)}</em></label>`).join('') +
+            `<button type="button" data-colall>Tutti</button>`;
+        ov.appendChild(colPop);
+        const r = btn.getBoundingClientRect();
+        colPop.style.left = Math.max(8, Math.min(r.left - 10, window.innerWidth - colPop.offsetWidth - 8)) + 'px';
+        colPop.style.top = Math.min(r.bottom + 6, window.innerHeight - colPop.offsetHeight - 8) + 'px';
+        colPop.addEventListener('change', ev => {
+            const cb = ev.target.closest('input'); if (!cb) return;
+            if (!colF[key]) colF[key] = new Set();
+            if (cb.checked) colF[key].add(cb.value); else colF[key].delete(cb.value);
+            renderList();
+        });
+        colPop.addEventListener('click', ev => {
+            ev.stopPropagation();
+            if (ev.target.closest('[data-colall]')) { colF[key] = new Set(); colPop.querySelectorAll('input').forEach(i => i.checked = false); renderList(); }
+        });
+    }
+    document.addEventListener('click', e => { if (colPop && !e.target.closest('.cg-colpop') && !e.target.closest('[data-colf]')) closeColPop(); });
+
+    function closeModal() {
+        closeColPop(); ov.classList.remove('open'); if (lastFocus && lastFocus.focus) lastFocus.focus(); }
 
     /* ================= avvio ================= */
     function init() {
@@ -1049,6 +1121,7 @@
             csv: () => (meta && meta.database && meta.database.csv) || null,
             meta: () => meta,
             vendMap: () => vendMap,
+            soloCsv: () => (result && result.soloCsv) || [],
             parseCSV, pd, fmtD, nice, cap, esc, fmt, pct, toks,
             openModal: (title, rows, base, opts) => openModal(title, rows, base, opts || {}),
             post: (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })

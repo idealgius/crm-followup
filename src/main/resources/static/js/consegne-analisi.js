@@ -10,7 +10,11 @@
      Mawdy, Pack manutenzione.
    - Una card per categoria con 3 tipi di grafico (ciambella / colonne /
      linee mese per mese) e il report (voce, numero, %), cliccabile.
-   - Export Excel (server, Apache POI) con piu' fogli e grafici nativi.
+   - Filtro "Grafici": si scelgono le categorie da mostrare (ricordato).
+   - Clic su una voce del report O su una parte del grafico -> elenco contratti.
+   - Importo finanziato: per finanziaria e per mese (numero e totale in euro).
+   - Export Excel (server, Apache POI): solo i report (conteggio e %), un
+     foglio per categoria visibile, piu' il Riepilogo.
 
    Regole:
    - Periodo: vale la DATA del contratto (letta anche se scritta male,
@@ -30,14 +34,19 @@
     const TYPES = { doughnut: 'Ciambella', bar: 'Colonne', line: 'Linee' };
     // colori fissi per le voci con un significato (verde = ok, ambra = in corso, rosso = annullata, grigio = assente)
     const FIXED = { 'Consegnate': '#34c38f', 'Da consegnare': '#f4a83a', 'Annullate': '#e5484d', 'Installato': '#34c38f', 'Non installato': '#a4adba',
-        'Non venduta': '#a4adba', 'Non specificato': '#c3c9d2', 'Contanti': '#8d99ae', 'Altri': '#b2bec3' };
+        'Non venduta': '#a4adba', 'Non specificato': '#c3c9d2', 'Non indicato': '#d5d9df', 'Contanti': '#8d99ae', 'Altri': '#b2bec3' };
     const colorOf = (label, i) => FIXED[label] || PALETTE[i % PALETTE.length];
     // i valori del foglio in MAIUSCOLO (stati) si mostrano "Normali"; nomi e marchi restano come sono
     const lbl = v => (String(v) === String(v).toUpperCase() && /[A-Z]{3}/.test(String(v))) ? A().cap(v) : String(v);
     const LS_TYPES = 'consegne_analisi_grafici_v1';
+    const LS_VIS = 'consegne_analisi_visibili_v1';
+    let nascosti = new Set();   // categorie tolte dal filtro "Grafici" (ricordate nel browser)
+    const visibili = () => CATS.filter(c => !nascosti.has(c.id));
+    function saveVis() { try { localStorage.setItem(LS_VIS, JSON.stringify([...nascosti])); } catch (e) { /* */ } }
 
-    let el = null, rows = [], csvSig = null;
-    let F = { dal: '', al: '', anno: '', mesi: new Set(), fin: new Set(), sede: new Set(), vend: new Set(), tipo: new Set() };
+    let el = null, rows = [], csvRows = [], csvSig = null;
+    // fonte: '' = solo foglio Google (predefinito) | 'tutti' = foglio + contratti presenti solo nel CSV
+    let F = { fonte: '', dal: '', al: '', anno: '', mesi: new Set(), fin: new Set(), sede: new Set(), vend: new Set(), tipo: new Set() };
     let chartTypes = {};
     const charts = new Map();
 
@@ -60,12 +69,24 @@
         return FIN[v] || (v.charAt(0) + v.slice(1).toLowerCase());
     }
     const durata = v => { const m = /(\d+)/.exec(v); return m ? `${m[1]} mesi` : v; };
+    // IMPORTO FINANZIATO: "25400", "25.400", "25400,50", "25.400,00 €" -> numero; "X" o vuoto -> non indicato
+    function importo(v) {
+        let t = String(v || '').replace(/[€\s]/g, '');
+        if (!/\d/.test(t)) return null;
+        if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+        else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+        const n = parseFloat(t);
+        return isFinite(n) ? n : null;
+    }
+    // 25400 -> "25.400,00€"
+    const euro = n => (n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '€';
+    const mkOf = r => r.dataFiltro ? r.dataFiltro.getFullYear() * 100 + r.dataFiltro.getMonth() + 1 : null;
 
     function load() {
         const api = A(); if (!api) return false;
         const csv = api.csv();
         if (!csv) { rows = []; csvSig = null; return false; }
-        const sig = csv.length + ':' + csv.slice(0, 200) + (api.vendMap() ? api.vendMap().size : 0);
+        const sig = csv.length + ':' + csv.slice(0, 200) + (api.vendMap() ? api.vendMap().size : 0) + ':' + (api.soloCsv ? api.soloCsv().length : 0);
         if (sig === csvSig) return true;
         csvSig = sig;
         const vmap = api.vendMap() || new Map();
@@ -90,10 +111,26 @@
                 mawdy: g.includes('MAWDY') ? durata(g) : 'Non venduta',
                 fir: fir && /\d/.test(fir) ? durata(fir) : 'Non venduta',
                 pack: pack && /\d/.test(pack) ? durata(pack) : 'Non venduta',
+                importo: importo(r['IMPORTO FINANZIATO']),
                 lojack: up(r['LOJACK']) === 'TRUE' ? 'Installato' : 'Non installato',
                 block: up(r['BLOCKSHAFT']) === 'TRUE' ? 'Installato' : 'Non installato',
                 install: String(r['INSTALLAZIONE'] || '').split(',').map(x => x.trim()).filter(Boolean).map(x => api.cap(x)),
                 sede: ({ 'AGNANO': 'Agnano', 'NOLA': 'Nola', 'SALERNO': 'Salerno' })[up(r['note'] || r['NOTE'])] || (up(r['note'] || r['NOTE']) ? api.cap(r['note'] || r['NOTE']) : 'Non specificato')
+            };
+        });
+        // Contratti presenti SOLO nel CSV trattative (non ancora nel foglio): si vedono
+        // solo con il filtro "Fonte dati: foglio + solo CSV". Del CSV si conoscono data,
+        // cliente, consulente, vettura, tipologia e sede: il resto e' "Non indicato".
+        csvRows = (api.soloCsv ? api.soloCsv() : []).map((c, i) => {
+            const d = api.pd(c.chiusura);
+            return {
+                _i: 'csv' + i, data: d, dataFiltro: d, m: d ? d.getMonth() + 1 : 0, anno: d ? d.getFullYear() : new Date().getFullYear(),
+                cliente: c.cliente, vend: c.vend || 'Non specificato', tipo: 'Non indicato', fin: 'Non indicato',
+                canale: ({ 'NUOVO': 'Nuovo', 'KM0': 'Km0', 'KM.0': 'Km0', 'USATO': 'Usato' })[up(c.tipo)] || 'Non specificato', prov: 'Non indicato',
+                modello: `${c.marca || ''} ${c.modello || ''}`.trim(), marchio: marchio(c.marca || c.modello), targa: c.targa || '',
+                stato: up(c.stato) || 'NON ANCORA NEL FOGLIO AVANZAMENTO', esito: typeof c.k === 'number' ? 'Consegnate' : 'Da consegnare',
+                mawdy: 'Non indicato', fir: 'Non indicato', pack: 'Non indicato', lojack: 'Non indicato', block: 'Non indicato', install: [],
+                sede: c.sede || 'Non specificato', importo: null, soloCsv: true
             };
         });
         return true;
@@ -102,7 +139,7 @@
     /* ================= filtri ================= */
     function filtered() {
         const dal = F.dal ? new Date(F.dal + 'T00:00:00') : null, al = F.al ? new Date(F.al + 'T23:59:59') : null;
-        return rows.filter(r => {
+        return (F.fonte === 'tutti' ? rows.concat(csvRows) : rows).filter(r => {
             const d = r.dataFiltro;
             if ((dal || al) && !d) return false;
             if (dal && d < dal) return false;
@@ -126,6 +163,8 @@
         { id: 'consulenti', t: 'Consulenti: vendite, consegnate, in lavorazione, annullate', base: 'tutti', get: r => r.vend, special: 'consulenti' },
         { id: 'stato', t: 'Stato (annullate comprese)', base: 'tutti', get: r => r.stato },
         { id: 'fin', t: 'Metodo di pagamento', base: 'validi', get: r => r.fin, special: 'pagamento' },
+        { id: 'importo', t: 'Importo finanziato per finanziaria', base: 'validi', special: 'importo', money: true },
+        { id: 'importoMese', t: 'Finanziamenti per mese: numero e totale', base: 'validi', special: 'importoMese', money: true },
         { id: 'canale', t: 'Tipologia (Nuovo, Km0, Usato)', base: 'validi', get: r => r.canale, order: ['Nuovo', 'Km0', 'Usato', 'Non specificato'] },
         { id: 'prov', t: 'Provenienza', base: 'validi', get: r => r.prov, order: ['Italiana', 'Estera', 'Non specificato'] },
         { id: 'tipo', t: 'B2C / B2B', base: 'validi', get: r => r.tipo, order: ['B2C', 'B2B'] },
@@ -140,12 +179,30 @@
     ];
     // tipo di grafico "migliore" per l'opzione Misti dell'export
     const BEST = { esito: 'line', consulenti: 'bar', stato: 'bar', dc: 'bar', fin: 'doughnut', canale: 'doughnut', prov: 'doughnut', marchio: 'bar',
-        mawdy: 'doughnut', fir: 'doughnut', pack: 'doughnut', lojack: 'doughnut', block: 'doughnut', install: 'bar', sede: 'doughnut', tipo: 'doughnut' };
+        mawdy: 'doughnut', fir: 'doughnut', pack: 'doughnut', importo: 'bar', importoMese: 'bar', lojack: 'doughnut', block: 'doughnut', install: 'bar', sede: 'doughnut', tipo: 'doughnut' };
 
     function baseRows(cat, R) {
         return cat.base === 'tutti' ? R : cat.base === 'dc' ? R.filter(r => r.esito === 'Da consegnare') : R.filter(r => r.esito !== 'Annullate');
     }
+    // Importo finanziato: solo contratti validi pagati con una finanziaria e con importo indicato
+    function aggImporto(cat, R) {
+        const V = R.filter(r => r.esito !== 'Annullate' && r.fin !== 'Contanti' && r.fin !== 'Non specificato');
+        const F2 = V.filter(r => r.importo != null);
+        const senza = V.length - F2.length;
+        const map = new Map();
+        F2.forEach(r => {
+            const k = cat.special === 'importoMese' ? mkOf(r) : r.fin;
+            if (k == null) return;
+            if (!map.has(k)) map.set(k, []);
+            map.get(k).push(r);
+        });
+        let voci = [...map].map(([k, list]) => ({ key: k, label: cat.special === 'importoMese' ? MESI[k % 100] + ' ' + Math.floor(k / 100) : k, n: list.length, sum: list.reduce((s, r) => s + r.importo, 0), list }));
+        if (cat.special === 'importoMese') voci.sort((a, b) => a.key - b.key); else voci.sort((a, b) => b.sum - a.sum);
+        const tot = voci.reduce((s, v) => s + v.sum, 0);
+        return { voci, base: F2.length, tot, senza, B: F2 };
+    }
     function aggregate(cat, R) {
+        if (cat.money) return aggImporto(cat, R);
         const B = baseRows(cat, R);
         const map = new Map();
         B.forEach(r => (cat.multi ? cat.multi(r) : [cat.get(r)]).forEach(v => {
@@ -156,6 +213,10 @@
         if (cat.order) voci.sort((a, b) => ((cat.order.indexOf(a.label) + 1) || 99) - ((cat.order.indexOf(b.label) + 1) || 99));
         else if (cat.sortNum) voci.sort((a, b) => (parseInt(a.label) || 999) - (parseInt(b.label) || 999));
         else voci.sort((a, b) => b.n - a.n);
+        if (cat.special === 'pagamento') {
+            const coda = ['Contanti', 'Non indicato', 'Non specificato'];
+            voci = voci.filter(v => !coda.includes(v.label)).concat(coda.map(l => voci.find(v => v.label === l)).filter(Boolean));
+        }
         if (cat.top && voci.length > cat.top) {
             const rest = voci.slice(cat.top);
             voci = voci.slice(0, cat.top).concat([{ label: 'Altri', n: rest.reduce((s, v) => s + v.n, 0), list: rest.flatMap(v => v.list) }]);
@@ -179,6 +240,7 @@
         if (el && el === container && el.dataset.ready) return;
         el = container; el.dataset.ready = '1';
         try { chartTypes = JSON.parse(localStorage.getItem(LS_TYPES) || '{}'); } catch (e) { chartTypes = {}; }
+        try { nascosti = new Set(JSON.parse(localStorage.getItem(LS_VIS) || '[]')); } catch (e) { nascosti = new Set(); }
         CATS.forEach(c => { if (!TYPES[chartTypes[c.id]]) chartTypes[c.id] = Object.keys(TYPES)[Math.floor(Math.random() * 3)]; });
         saveTypes();
         el.innerHTML = `
@@ -205,6 +267,9 @@
             .concat(uniq(rows.map(r => r.fin)).filter(f => !['Agos', 'CA Bank', 'Compass', 'Deutsche Bank', 'Findomestic', 'Santander', 'Fin Casa Madre', 'Contanti', 'Non specificato'].includes(f)));
         el.querySelector('#anFilters').innerHTML = `
           <div class="cg-an-frow">
+            <label class="cg-f"><span class="cg-f-lbl">Fonte dati</span><select data-f="fonte">
+              <option value="" ${F.fonte ? '' : 'selected'}>Solo foglio Google</option>
+              <option value="tutti" ${F.fonte === 'tutti' ? 'selected' : ''}>Foglio + contratti solo nel CSV (${csvRows.length})</option></select></label>
             <label class="cg-f"><span class="cg-f-lbl">Dal</span><input type="date" data-f="dal" value="${F.dal}"></label>
             <label class="cg-f"><span class="cg-f-lbl">Al</span><input type="date" data-f="al" value="${F.al}"></label>
             <label class="cg-f"><span class="cg-f-lbl">Anno</span><select data-f="anno"><option value="">Tutti</option>${anni.map(a => `<option ${F.anno === a ? 'selected' : ''}>${a}</option>`).join('')}</select></label>
@@ -213,6 +278,10 @@
             ${msHTML('sede', 'Sede', uniq(rows.map(r => r.sede)).map(v => ({ v, l: v })))}
             ${msHTML('vend', 'Consulente', uniq(rows.map(r => r.vend)).map(v => ({ v, l: v })))}
             ${msHTML('tipo', 'B2C / B2B', [{ v: 'B2C', l: 'B2C' }, { v: 'B2B', l: 'B2B' }])}
+            <div class="cg-ms cg-ms-graf" data-ms="grafici"><span class="cg-f-lbl">Grafici</span>
+              <button type="button" class="cg-ms-btn">${nascosti.size ? `${CATS.length - nascosti.size} di ${CATS.length}` : 'Tutti'}<span>▾</span></button>
+              <div class="cg-ms-pop">${CATS.map(c => `<label><input type="checkbox" data-gv="${c.id}" ${nascosti.has(c.id) ? '' : 'checked'}>${A().esc(c.t.split(':')[0])}</label>`).join('')}
+                <div class="cg-ms-2"><button type="button" class="cg-ms-clear" data-gall="1">Mostra tutti</button><button type="button" class="cg-ms-clear" data-gnone="1">Nascondi tutti</button></div></div></div>
           </div>
           <div class="cg-an-factions">
             <button type="button" class="cg-an-link" data-act="finOnly">Solo finanziamenti</button>
@@ -248,14 +317,18 @@
     function renderGrid(R) {
         const api = A();
         charts.forEach(c => c.destroy()); charts.clear();
-        el.querySelector('#anGrid').innerHTML = CATS.map(c => `
+        if (!visibili().length) {
+            el.querySelector('#anGrid').innerHTML = '<div class="cg-card cg-empty" style="grid-column:1/-1"><p>Nessun grafico selezionato: scegli quali mostrare dal filtro "Grafici".</p></div>';
+            return;
+        }
+        el.querySelector('#anGrid').innerHTML = visibili().map(c => `
           <article class="cg-card cg-an-card ${c.special === 'consulenti' || c.id === 'stato' ? 'wide' : ''}" data-cat="${c.id}">
             <header><div><h3>${c.t}</h3><p class="cg-hint" data-sub="${c.id}"></p></div>
               <div class="cg-an-types">${Object.keys(TYPES).map(t => `<button type="button" title="${TYPES[t]}" class="${chartTypes[c.id] === t ? 'on' : ''}" data-type="${t}" data-cat="${c.id}">${ICON[t]}</button>`).join('')}</div></header>
-            <div class="cg-an-canvas"><canvas id="anc_${c.id}"></canvas></div>
+            <div class="cg-an-chart"><div class="cg-an-canvas"><canvas id="anc_${c.id}"></canvas></div><ul class="cg-an-legend" data-legend="${c.id}"></ul></div>
             <div class="cg-an-table" data-table="${c.id}"></div>
           </article>`).join('');
-        CATS.forEach(c => drawCat(c, R));
+        visibili().forEach(c => drawCat(c, R));
     }
 
     function drawCat(c, R) {
@@ -263,10 +336,17 @@
         const agg = aggregate(c, R);
         const card = el.querySelector(`[data-cat="${c.id}"].cg-an-card`);
         const baseLbl = c.base === 'tutti' ? 'contratti (annullate comprese)' : c.base === 'dc' ? 'vetture da consegnare' : 'contratti validi';
-        card.querySelector('[data-sub]').textContent = `${api.fmt(agg.base)} ${baseLbl}`;
+        card.querySelector('[data-sub]').textContent = c.money
+            ? `Totale finanziato ${euro(agg.tot)} · ${api.fmt(agg.base)} finanziamenti${agg.senza ? ` · ${api.fmt(agg.senza)} senza importo indicato` : ''}`
+            : `${api.fmt(agg.base)} ${baseLbl}`;
         // report
         let table;
-        if (c.special === 'consulenti') {
+        if (c.money) {
+            const primo = c.special === 'importoMese' ? 'Mese' : 'Finanziaria';
+            table = `<table><thead><tr><th>${primo}</th><th>Finanziamenti</th><th>Totale</th><th>Media</th><th>% sul totale</th></tr></thead><tbody>` +
+                agg.voci.map((v, i) => `<tr data-row="${c.id}|${i}"><td><i style="background:${colorOf(v.label, i)}"></i>${api.esc(v.label)}</td><td>${api.fmt(v.n)}</td><td>${euro(v.sum)}</td><td>${euro(v.n ? v.sum / v.n : 0)}</td><td>${pctS(v.sum, agg.tot)}</td></tr>`).join('') +
+                `<tr class="cg-an-sum"><td>Totale</td><td>${api.fmt(agg.base)}</td><td>${euro(agg.tot)}</td><td>${euro(agg.base ? agg.tot / agg.base : 0)}</td><td>100,0%</td></tr></tbody></table>`;
+        } else if (c.special === 'consulenti') {
             const righe = agg.voci.map(v => {
                 const cons = v.list.filter(r => r.esito === 'Consegnate').length, dcn = v.list.filter(r => r.esito === 'Da consegnare').length, an = v.list.filter(r => r.esito === 'Annullate').length;
                 return { v, cons, dcn, an, val: v.n - an };
@@ -274,7 +354,7 @@
             table = `<table><thead><tr><th>Consulente</th><th>Vendite</th><th>Consegnate</th><th>In lavorazione</th><th>Annullate</th><th>% annullate</th></tr></thead><tbody>` +
                 righe.map((x, i) => `<tr data-row="${c.id}|${i}"><td><i style="background:${colorOf(x.v.label, i)}"></i>${api.esc(x.v.label)}</td><td>${api.fmt(x.val)}</td><td>${api.fmt(x.cons)}</td><td>${api.fmt(x.dcn)}</td><td>${api.fmt(x.an)}</td><td>${pctS(x.an, x.v.n)}</td></tr>`).join('') + `</tbody></table>`;
         } else if (c.special === 'pagamento') {
-            const fins = agg.voci.filter(v => v.label !== 'Contanti' && v.label !== 'Non specificato');
+            const fins = agg.voci.filter(v => !['Contanti', 'Non specificato', 'Non indicato'].includes(v.label));
             const nf = fins.reduce((s, v) => s + v.n, 0);
             table = `<table><thead><tr><th>Voce</th><th>Contratti</th><th>%</th></tr></thead><tbody>` +
                 `<tr class="cg-an-sum"><td>Finanziamenti</td><td>${api.fmt(nf)}</td><td>${pctS(nf, agg.base)}</td></tr>` +
@@ -290,25 +370,92 @@
         const canvas = card.querySelector('canvas');
         if (charts.has(c.id)) { charts.get(c.id).destroy(); charts.delete(c.id); }
         if (typeof Chart === 'undefined' || !agg.voci.length) return;
-        charts.set(c.id, new Chart(canvas, chartConfig(c, agg, R, chartTypes[c.id])));
+        const cfg = chartConfig(c, agg, R, chartTypes[c.id]);
+        // clic su una parte del grafico -> scheda con l'elenco dei contratti
+        cfg.options.onClick = (ev, els) => { if (els && els.length) chartClick(c, agg, R, chartTypes[c.id], els[0]); };
+        cfg.options.onHover = (ev, els) => { if (ev.native && ev.native.target) ev.native.target.style.cursor = els && els.length ? 'pointer' : 'default'; };
+        card.querySelector('.cg-an-chart').classList.toggle('dn', chartTypes[c.id] === 'doughnut');   // spazio per la legenda prima di disegnare
+        const chart = new Chart(canvas, cfg);
+        charts.set(c.id, chart);
+        renderLegend(c, agg, chart, chartTypes[c.id]);
+    }
+
+    // Legenda della ciambella: tutte le voci, scorrevole se sono tante; clic = nascondi/mostra la fetta
+    function renderLegend(c, agg, chart, type) {
+        const card = el.querySelector(`.cg-an-card[data-cat="${c.id}"]`);
+        const box = card.querySelector('[data-legend]'), wrap = card.querySelector('.cg-an-chart');
+        const on = type === 'doughnut' && chart;
+        wrap.classList.toggle('dn', !!on);
+        if (!on) { box.innerHTML = ''; return; }
+        const api = A(), tot = c.money ? agg.tot : agg.base;
+        box.innerHTML = agg.voci.map((v, i) => {
+            const n = c.money ? v.sum : v.n;
+            return `<li data-leg="${i}" title="${api.esc(lbl(v.label))}"><i style="background:${colorOf(v.label, i)}"></i><span>${api.esc(lbl(v.label))}</span><b>${c.money ? euro(n) : api.fmt(n)}</b><em>${pctS(n, tot)}</em></li>`;
+        }).join('');
+        box.onclick = e => {
+            const li = e.target.closest('[data-leg]'); if (!li) return;
+            chart.toggleDataVisibility(+li.dataset.leg); chart.update();
+            li.classList.toggle('off', !chart.getDataVisibility(+li.dataset.leg));
+        };
     }
 
     function themeInk() {
         const dark = document.documentElement.getAttribute('data-theme') === 'dark';
         return { ink: dark ? '#c9d2de' : '#44505e', grid: dark ? 'rgba(255,255,255,.07)' : 'rgba(0,0,0,.06)' };
     }
+    // voci mostrate come serie nel grafico a linee
+    const lineVoci = (c, agg) => c.special === 'importoMese' ? [] : agg.voci.filter(v => v.label !== 'Altri').slice(0, 6);
+    function chartClick(c, agg, R, type, el0) {
+        const baseInfo = { n: agg.base, label: c.money ? 'finanziati' : c.base === 'tutti' ? '(annullate comprese)' : c.base === 'dc' ? 'da consegnare' : 'validi' };
+        const titolo = c.t.split(':')[0];
+        if (type === 'line' && c.special !== 'importoMese') {
+            const v = lineVoci(c, agg)[el0.datasetIndex]; if (!v) return;
+            const k = monthKeys(c.money ? agg.B : R)[el0.index];
+            const list = v.list.filter(r => mkOf(r) === k && (c.special !== 'consulenti' || r.esito !== 'Annullate'));
+            openList(`${titolo} · ${lbl(v.label)} · ${mkLabel(k)}`, list, baseInfo);
+            return;
+        }
+        const v = agg.voci[el0.index]; if (!v) return;
+        let list = v.list, extra = '';
+        if (type === 'bar' && c.special === 'consulenti') {
+            const es = ['Consegnate', 'Da consegnare', 'Annullate'][el0.datasetIndex];
+            list = v.list.filter(r => r.esito === es); extra = ' · ' + (es === 'Da consegnare' ? 'In lavorazione' : es);
+        }
+        openList(`${titolo} · ${lbl(v.label)}${extra}`, list, baseInfo);
+    }
     function chartConfig(c, agg, R, type) {
         const th = themeInk();
         const labels = agg.voci.map(v => lbl(v.label));
+        const val = v => c.money ? Math.round(v.sum * 100) / 100 : v.n;
         const common = {
             responsive: true, maintainAspectRatio: false, animation: { duration: 500 },
-            plugins: { legend: { position: type === 'doughnut' ? 'right' : 'bottom', labels: { color: th.ink, boxWidth: 10, boxHeight: 10, usePointStyle: true, font: { size: 11 } } },
-                tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label ? ctx.dataset.label + ': ' : ''}${ctx.formattedValue}` } } }
+            plugins: { legend: {
+                    // Ciambella con tante voci: niente legenda (i colori sono gia' nel report sotto, voce per voce),
+                    // altrimenti le voci in piu' finiscono fuori dal riquadro. Nomi lunghi accorciati con "…".
+                    display: type !== 'doughnut',   // la ciambella ha la sua legenda HTML scorrevole accanto
+                    position: type === 'doughnut' ? 'right' : 'bottom',
+                    labels: { color: th.ink, boxWidth: 10, boxHeight: 10, usePointStyle: true, font: { size: 11 },
+                        generateLabels: chart => {
+                            const base = type === 'doughnut' ? Chart.overrides.doughnut.plugins.legend.labels.generateLabels : Chart.defaults.plugins.legend.labels.generateLabels;
+                            return base(chart).map(l => ({ ...l, text: l.text && l.text.length > 30 ? l.text.slice(0, 29) + '…' : l.text }));
+                        } } },
+                tooltip: { callbacks: { label: ctx => {
+                    const n = ctx.parsed && typeof ctx.parsed === 'object' ? ctx.parsed.y : ctx.parsed;
+                    if (!c.money) return ` ${ctx.dataset.label ? ctx.dataset.label + ': ' : ''}${ctx.formattedValue}`;
+                    const v = agg.voci[ctx.dataIndex];
+                    return ` ${ctx.dataset.label && type === 'line' && c.special !== 'importoMese' ? ctx.dataset.label + ': ' : ''}${euro(n)}${type !== 'line' || c.special === 'importoMese' ? (v ? ` · ${v.n} finanziamenti` : '') : ''}`;
+                } } } }
         };
-        const axes = { x: { ticks: { color: th.ink, font: { size: 10 } }, grid: { display: false } }, y: { beginAtZero: true, ticks: { color: th.ink, precision: 0 }, grid: { color: th.grid } } };
+        const axes = { x: { ticks: { color: th.ink, font: { size: 10 } }, grid: { display: false } },
+            y: { beginAtZero: true, ticks: { color: th.ink, precision: 0, callback: c.money ? (v => (v >= 1000 ? (v / 1000).toLocaleString('it-IT') + 'k' : v) + '€') : undefined }, grid: { color: th.grid } } };
         if (type === 'line') {
             let mm;
-            if (c.special === 'consulenti') {
+            if (c.special === 'importoMese') {
+                mm = { labels, series: [{ nome: 'Totale finanziato', valori: agg.voci.map(val) }] };
+            } else if (c.special === 'importo') {
+                const ks = monthKeys(agg.B);
+                mm = { labels: ks.map(mkLabel), series: lineVoci(c, agg).map(v => ({ nome: v.label, valori: ks.map(k => Math.round(v.list.filter(r => mkOf(r) === k).reduce((s2, r) => s2 + r.importo, 0) * 100) / 100) })) };
+            } else if (c.special === 'consulenti') {
                 const top = agg.voci.slice(0, 6);
                 const ks = monthKeys(R);
                 mm = { labels: ks.map(mkLabel), series: top.map(v => ({ nome: v.label, valori: ks.map(k => v.list.filter(r => r.esito !== 'Annullate' && r.dataFiltro && (r.dataFiltro.getFullYear() * 100 + r.dataFiltro.getMonth() + 1) === k).length) })) };
@@ -321,9 +468,9 @@
             return { type: 'bar', data: { labels, datasets: ser.map(([l, e, col]) => ({ label: l, data: agg.voci.map(v => v.list.filter(r => r.esito === e).length), backgroundColor: col, borderRadius: 4, stack: 's' })) },
                 options: { ...common, scales: { x: { ...axes.x, stacked: true }, y: { ...axes.y, stacked: true } } } };
         }
-        const data = agg.voci.map(v => v.n);
+        const data = agg.voci.map(val);
         if (type === 'bar') {
-            return { type: 'bar', data: { labels, datasets: [{ label: 'Contratti', data, backgroundColor: agg.voci.map((v, i) => colorOf(v.label, i)), borderRadius: 6, maxBarThickness: 46 }] },
+            return { type: 'bar', data: { labels, datasets: [{ label: c.money ? 'Totale finanziato' : 'Contratti', data, backgroundColor: agg.voci.map((v, i) => colorOf(v.label, i)), borderRadius: 6, maxBarThickness: 46 }] },
                 options: { ...common, plugins: { ...common.plugins, legend: { display: false } }, scales: axes } };
         }
         return { type: 'doughnut', data: { labels, datasets: [{ data, backgroundColor: agg.voci.map((v, i) => colorOf(v.label, i)), borderWidth: 2, borderColor: document.documentElement.getAttribute('data-theme') === 'dark' ? '#1a212c' : '#fff', hoverOffset: 6 }] },
@@ -333,7 +480,8 @@
     /* ================= interazioni ================= */
     function toRecord(r) {
         return { cliente: r.cliente, marca: '', modello: r.modello, vend: r.vend, chiusura: r.data ? A().fmtD(r.data) : '', consegna: '', prevista: false,
-            stato: r.stato, prov: r.prov, tipo: r.canale, targa: r.targa || '—', note: [], k: r.esito === 'Consegnate' ? 0 : r.esito === 'Annullate' ? 'ann' : 'dc' };
+            stato: r.stato, prov: r.prov, tipo: r.canale, sede: r.sede, targa: r.targa || '—',
+            note: r.soloCsv ? [{ c: 'info', t: 'Solo nel CSV: non ancora nel foglio avanzamento' }] : [], k: r.esito === 'Consegnate' ? 0 : r.esito === 'Annullate' ? 'ann' : 'dc' };
     }
     function openList(title, list, base) {
         A().openModal(title, list.map(toRecord), base ? { n: base.n, label: base.label } : null, { reasons: true });
@@ -351,7 +499,7 @@
         if (row) {
             const [cid, i] = row.dataset.row.split('|');
             const c = CATS.find(x => x.id === cid), card = el.querySelector(`.cg-an-card[data-cat="${cid}"]`), v = card._agg.voci[+i];
-            openList(`${c.t.split(':')[0]} · ${lbl(v.label)}`, v.list, { n: card._agg.base, label: c.base === 'tutti' ? 'con i filtri scelti' : c.base === 'dc' ? 'da consegnare con i filtri scelti' : 'validi con i filtri scelti' });
+            openList(`${c.t.split(':')[0]} · ${lbl(v.label)}`, v.list, { n: card._agg.base, label: c.money ? 'finanziati' : c.base === 'tutti' ? '(annullate comprese)' : c.base === 'dc' ? 'da consegnare' : 'validi' });
             return;
         }
         const k = e.target.closest('[data-kpi2]');
@@ -361,16 +509,20 @@
                 lj: ['Lojack installati', V.filter(r => r.lojack === 'Installato')], fir: ['Polizza FIR venduta', V.filter(r => r.fir !== 'Non venduta')], mw: ['Mawdy venduta', V.filter(r => r.mawdy !== 'Non venduta')],
                 pk: ['Pack manutenzione venduto', V.filter(r => r.pack !== 'Non venduta')] };
             const [tt, list] = map[k.dataset.kpi2];
-            openList(tt, list, { n: k.dataset.kpi2 === 'ann' || k.dataset.kpi2 === 'val' ? R.length : V.length, label: k.dataset.kpi2 === 'ann' || k.dataset.kpi2 === 'val' ? 'con i filtri scelti' : 'validi con i filtri scelti' });
+            openList(tt, list, { n: k.dataset.kpi2 === 'ann' || k.dataset.kpi2 === 'val' ? R.length : V.length, label: k.dataset.kpi2 === 'ann' || k.dataset.kpi2 === 'val' ? '(annullate comprese)' : 'validi' });
             return;
         }
         const ms = e.target.closest('.cg-ms-btn');
         if (ms) { const box = ms.closest('.cg-ms'); const open = box.classList.contains('open'); el.querySelectorAll('.cg-ms.open').forEach(m => m.classList.remove('open')); if (!open) box.classList.add('open'); return; }
+        const gnone = e.target.closest('[data-gnone]');
+        if (gnone) { CATS.forEach(c => nascosti.add(c.id)); saveVis(); renderFilters(); el.querySelector('.cg-ms[data-ms="grafici"]').classList.add('open'); renderGrid(filtered()); return; }
+        const gall = e.target.closest('[data-gall]');
+        if (gall) { nascosti.clear(); saveVis(); renderFilters(); renderGrid(filtered()); return; }
         const clr = e.target.closest('[data-msclear]');
         if (clr) { F[clr.dataset.msclear].clear(); update(); return; }
         const act = e.target.closest('[data-act]');
         if (act) {
-            if (act.dataset.act === 'reset') { F = { dal: '', al: '', anno: '', mesi: new Set(), fin: new Set(), sede: new Set(), vend: new Set(), tipo: new Set() }; update(); }
+            if (act.dataset.act === 'reset') { F = { fonte: F.fonte, dal: '', al: '', anno: '', mesi: new Set(), fin: new Set(), sede: new Set(), vend: new Set(), tipo: new Set() }; update(); }
             if (act.dataset.act === 'finOnly') { F.fin = new Set(uniq(rows.map(r => r.fin)).filter(f => f !== 'Contanti' && f !== 'Non specificato')); update(); }
             if (act.dataset.act === 'excel') openExport();
         }
@@ -378,6 +530,13 @@
     function onChange(e) {
         const f = e.target.closest('[data-f]');
         if (f) { F[f.dataset.f] = f.value; update(); return; }
+        const gv = e.target.closest('[data-gv]');
+        if (gv) {
+            if (gv.checked) nascosti.delete(gv.dataset.gv); else nascosti.add(gv.dataset.gv);
+            saveVis(); renderFilters(); el.querySelector('.cg-ms[data-ms="grafici"]').classList.add('open');
+            renderGrid(filtered());
+            return;
+        }
         const cb = e.target.closest('[data-msv]');
         if (cb) {
             const key = cb.dataset.msv, v = key === 'mesi' ? +cb.value : cb.value;
@@ -390,33 +549,45 @@
         if (keepOpen) { const m = el.querySelector(`.cg-ms[data-ms="${keepOpen}"]`); if (m) m.classList.add('open'); }
         const R = filtered();
         renderKpis(R);
-        CATS.forEach(c => drawCat(c, R));
+        visibili().forEach(c => drawCat(c, R));
     }
 
     /* ================= export Excel ================= */
+    // Finestra export: si scelgono i report da mettere nel file (di partenza quelli visibili)
     function openExport() {
+        const esc = A().esc;
         const pop = document.createElement('div');
         pop.className = 'cg-ov open';
-        pop.innerHTML = `<div class="cg-modal" style="width:min(460px,100%)">
-            <div class="cg-m-head"><div><h3>Esporta Excel</h3><div class="cg-stat"><span class="cg-of">Un foglio per categoria, con report e grafico, più l'elenco dei contratti. Valgono i filtri attivi.</span></div></div>
+        pop.innerHTML = `<div class="cg-modal" style="width:min(520px,100%)">
+            <div class="cg-m-head"><div><h3>Esporta Excel</h3><div class="cg-stat"><span class="cg-of">Scegli quali report esportare. Ogni report va in un foglio, con conteggio e percentuale. Valgono i filtri attivi.</span></div></div>
               <button class="cg-x" type="button" data-x>✕</button></div>
             <div class="cg-an-exp">
-              <p class="cg-f-lbl">Grafici</p>
-              ${[['come', 'Come impostati a video'], ['doughnut', 'Tutti a ciambella'], ['bar', 'Tutti a colonne'], ['line', 'Tutti a linee (andamento mese per mese)'], ['misti', 'Misti (scelgo io il più adatto per ogni categoria)']]
-                .map(([v, l], i) => `<label><input type="radio" name="anx" value="${v}" ${i === 0 ? 'checked' : ''}> ${l}</label>`).join('')}
-              <button type="button" class="cg-btn" data-go style="margin-top:14px">⬇ Scarica Excel</button>
+              <div class="cg-an-exp-q">
+                <button type="button" class="cg-chip" data-sel="vis">Solo quelli visibili (${visibili().length})</button>
+                <button type="button" class="cg-chip" data-sel="all">Tutti (${CATS.length})</button>
+                <button type="button" class="cg-chip" data-sel="none">Nessuno</button>
+              </div>
+              <div class="cg-an-exp-list">${CATS.map(c => `<label><input type="checkbox" value="${c.id}" ${nascosti.has(c.id) ? '' : 'checked'}> ${esc(c.t.split(':')[0])}</label>`).join('')}</div>
+              <button type="button" class="cg-btn" data-go style="margin-top:12px">⬇ Scarica Excel</button>
               <p class="cg-hint" data-msg></p>
             </div></div>`;
         document.body.appendChild(pop);
+        const boxes = () => [...pop.querySelectorAll('.cg-an-exp-list input')];
         const close = () => pop.remove();
-        pop.addEventListener('click', ev => { if (ev.target === pop || ev.target.closest('[data-x]')) close(); });
+        pop.addEventListener('click', ev => {
+            if (ev.target === pop || ev.target.closest('[data-x]')) { close(); return; }
+            const sb = ev.target.closest('[data-sel]');
+            if (sb) boxes().forEach(b => { b.checked = sb.dataset.sel === 'all' ? true : sb.dataset.sel === 'none' ? false : !nascosti.has(b.value); });
+        });
         pop.querySelector('[data-go]').addEventListener('click', async () => {
-            const mode = pop.querySelector('input[name="anx"]:checked').value;
+            const ids = boxes().filter(b => b.checked).map(b => b.value);
+            if (!ids.length) { pop.querySelector('[data-msg]').textContent = 'Seleziona almeno un report.'; return; }
             const btn = pop.querySelector('[data-go]'); btn.disabled = true; btn.textContent = 'Preparazione…';
-            try { await doExport(mode); close(); }
+            try { await doExport(ids); close(); }
             catch (err) { pop.querySelector('[data-msg]').textContent = 'Export non riuscito: ' + err.message; btn.disabled = false; btn.textContent = '⬇ Scarica Excel'; }
         });
     }
+
     function filtriTesto() {
         const p = [];
         if (F.dal || F.al) p.push(`Periodo: ${F.dal || '…'} → ${F.al || '…'}`);
@@ -426,32 +597,31 @@
         if (F.sede.size) p.push(`Sede: ${[...F.sede].join(', ')}`);
         if (F.vend.size) p.push(`Consulente: ${[...F.vend].join(', ')}`);
         if (F.tipo.size) p.push(`Tipo: ${[...F.tipo].join(', ')}`);
+        p.unshift(F.fonte === 'tutti' ? 'Fonte: foglio Google + contratti solo nel CSV' : 'Fonte: solo foglio Google');
         return p.length ? p.join(' · ') : 'Nessun filtro (tutti i contratti)';
     }
-    async function doExport(mode) {
+    // Excel: solo i REPORT (conteggio e percentuale) delle categorie visibili, un foglio
+    // ciascuna, piu' il Riepilogo con filtri e indicatori.
+    async function doExport(ids) {
         const api = A(), R = filtered(), V = R.filter(r => r.esito !== 'Annullate');
-        const sezioni = CATS.map(c => {
+        const scelti = ids && ids.length ? CATS.filter(c => ids.includes(c.id)) : visibili();
+        const sezioni = scelti.map(c => {
             const agg = aggregate(c, R);
-            const tipo = mode === 'come' ? chartTypes[c.id] : mode === 'misti' ? BEST[c.id] : mode;
-            const sec = { nome: c.t.split(':')[0].replace(/[\\/?*\[\]]/g, ' ').trim(), titolo: c.t, tipo, base: agg.base,
-                categorie: agg.voci.map(v => lbl(v.label)), serie: [{ nome: 'Contratti', valori: agg.voci.map(v => v.n) }],
-                tabella: { intestazioni: ['Voce', 'Contratti', '%'], righe: agg.voci.map(v => [lbl(v.label), v.n, agg.base ? Math.round(v.n / agg.base * 1000) / 10 : 0]) } };
-            if (c.special === 'consulenti') {
-                const cols = [['Consegnate', 'Consegnate'], ['In lavorazione', 'Da consegnare'], ['Annullate', 'Annullate']];
-                sec.serie = cols.map(([l, e]) => ({ nome: l, valori: agg.voci.map(v => v.list.filter(r => r.esito === e).length) }));
-                sec.tabella = { intestazioni: ['Consulente', 'Vendite', 'Consegnate', 'In lavorazione', 'Annullate', '% annullate'],
-                    righe: agg.voci.map(v => { const an = v.list.filter(r => r.esito === 'Annullate').length; return [v.label, v.n - an, v.list.filter(r => r.esito === 'Consegnate').length, v.list.filter(r => r.esito === 'Da consegnare').length, an, v.n ? Math.round(an / v.n * 1000) / 10 : 0]; }) };
-                if (tipo === 'doughnut') sec.serie = [{ nome: 'Contratti', valori: agg.voci.map(v => v.n) }];
-            }
-            if (tipo === 'line') {
-                const mm = monthly(agg.voci, R);
-                sec.mesi = { labels: mm.labels, serie: mm.series.map(s => ({ nome: lbl(s.nome), valori: s.valori })) };
-            }
-            return sec;
+            const nome = c.t.split(':')[0].replace(/[\\/?*\[\]]/g, ' ').trim();
+            if (c.money) return { nome, titolo: c.t, base: agg.base, tabella: {
+                intestazioni: [c.special === 'importoMese' ? 'Mese' : 'Finanziaria', 'Finanziamenti', 'Totale (€)', 'Media (€)', '% sul totale'],
+                righe: agg.voci.map(v => [v.label, v.n, Math.round(v.sum * 100) / 100, v.n ? Math.round(v.sum / v.n * 100) / 100 : 0, agg.tot ? Math.round(v.sum / agg.tot * 1000) / 10 : 0])
+                    .concat([['Totale', agg.base, Math.round(agg.tot * 100) / 100, agg.base ? Math.round(agg.tot / agg.base * 100) / 100 : 0, 100]]) } };
+            if (c.special === 'consulenti') return { nome, titolo: c.t, base: agg.base, tabella: {
+                intestazioni: ['Consulente', 'Vendite', 'Consegnate', 'In lavorazione', 'Annullate', '% annullate'],
+                righe: agg.voci.map(v => { const an = v.list.filter(r => r.esito === 'Annullate').length; return [v.label, v.n - an, v.list.filter(r => r.esito === 'Consegnate').length, v.list.filter(r => r.esito === 'Da consegnare').length, an, v.n ? Math.round(an / v.n * 1000) / 10 : 0]; }) } };
+            return { nome, titolo: c.t, base: agg.base, tabella: {
+                intestazioni: ['Voce', c.base === 'dc' ? 'Vetture' : 'Contratti', '%'],
+                righe: agg.voci.map(v => [lbl(v.label), v.n, agg.base ? Math.round(v.n / agg.base * 1000) / 10 : 0]) } };
         });
         const tot = R.length, ann = R.length - V.length;
         const payload = {
-            titolo: 'Consegne · Analisi avanzamento', filtri: filtriTesto(),
+            titolo: 'Power BI · Analisi avanzamento', filtri: filtriTesto(),
             kpi: [['Contratti validi', V.length, tot ? V.length / tot : 0], ['Annullati', ann, tot ? ann / tot : 0],
                 ['Da consegnare', V.filter(r => r.esito === 'Da consegnare').length, V.length ? V.filter(r => r.esito === 'Da consegnare').length / V.length : 0],
                 ['Lojack', V.filter(r => r.lojack === 'Installato').length, V.length ? V.filter(r => r.lojack === 'Installato').length / V.length : 0],
@@ -459,11 +629,7 @@
                 ['Mawdy', V.filter(r => r.mawdy !== 'Non venduta').length, V.length ? V.filter(r => r.mawdy !== 'Non venduta').length / V.length : 0],
                 ['Pack manutenzione', V.filter(r => r.pack !== 'Non venduta').length, V.length ? V.filter(r => r.pack !== 'Non venduta').length / V.length : 0]]
                 .map(([nome, n, p]) => ({ nome, valore: n, percentuale: Math.round(p * 1000) / 10 })),
-            sezioni,
-            contratti: {
-                intestazioni: ['Data', 'Cliente', 'Consulente', 'Sede', 'B2C/B2B', 'Tipologia', 'Provenienza', 'Marchio', 'Modello', 'Targa/Telaio', 'Pagamento', 'Stato', 'Esito', 'Mawdy', 'Polizza FIR', 'Pack manutenzione', 'Lojack', 'Blockshaft', 'Installazioni'],
-                righe: R.map(r => [r.data ? api.fmtD(r.data) : '', r.cliente, r.vend, r.sede, r.tipo, r.canale, r.prov, r.marchio, r.modello, r.targa, r.fin, api.cap(r.stato), r.esito, r.mawdy, r.fir, r.pack, r.lojack, r.block, r.install.join(', ')])
-            }
+            sezioni
         };
         const res = await fetch('/api/consegne/export-excel', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         if (!res.ok) { let m = 'Errore ' + res.status; try { m = (await res.json()).error || m; } catch (e) { /* */ } throw new Error(m); }

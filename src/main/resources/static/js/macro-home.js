@@ -106,6 +106,7 @@
         document.body.removeAttribute('data-role-theme');
         setBadge('HOME');
         root.style.display = 'block';
+        document.body.classList.add('mh-home-on');   // navbar: niente scritta HOME, logo al centro
         if (scene) scene.start();
         history.replaceState(null, '', window.location.pathname + '#home');
         sessionStorage.setItem('currentPage', 'home');
@@ -114,6 +115,7 @@
 
     function hide() {
         if (root) root.style.display = 'none';
+        document.body.classList.remove('mh-home-on');
         if (scene) scene.stop();
     }
 

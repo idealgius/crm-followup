@@ -159,3 +159,8 @@
 
 @media (max-width:600px){.mh-home-wrap{padding:24px 10px}.mh-head h1{font-size:22px}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* Navbar mentre e' aperta la selezione area: via la scritta HOME, logo al centro */
+body.mh-home-on #navBrandBadge { display:none !important; }
+body.mh-home-on .navbar { position:relative; }
+body.mh-home-on .navbar #navLogo { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
