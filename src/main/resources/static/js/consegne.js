@@ -155,17 +155,40 @@
             const dc = pd(t.chiusura);
             const tk = new Set([...toks(nameOf(t)), ...toks(t.rag)]);
             const info = [];
+            const tv = toks(t.vend);
             G.forEach(g => {
                 const k = plateKind(t, g), n = nameMatch(tk, g._tk);
-                if (k || n) info.push({ g, k, n, dd: days(g._d, dc) });
+                if (k || n) info.push({
+                    g, k, n, dd: days(g._d, dc),
+                    v: [...tv].some(w => g._vend.has(w)),                      // stesso consulente
+                    ann: /ANNULLATA/i.test(String(g.stato || ''))               // riga annullata nel foglio
+                });
             });
             return { t, dc, info, best: null, how: '' };
         });
+        // ABBINAMENTI FATTI A MANO ("Verifica e abbina a..."): hanno la precedenza
+        // su tutto e riservano la riga del foglio scelta dall'operatore.
+        const fKey = g => [[...toks(g.cliente)].sort().join(' '), pl(g.tt), String(g.mese || '').toUpperCase().trim() || (g._d ? g._d.getMonth() + 1 : '')].join('|');
+        const fCsvKey = (t, dc) => ['csv', [...toks(nameOf(t))].sort().join(' '), pl((t.targa || t.telaio || '').trim()), dc ? fmtD(dc) : t.chiusura].join('|');
+        const fDec = key => (meta && meta.verifiche && meta.verifiche[key] && meta.verifiche[key].azione) ? meta.verifiche[key] : null;
+        T.forEach(o => {
+            const dec = fDec(fCsvKey(o.t, o.dc));
+            if (!dec || dec.azione !== 'abbina' || !dec.riga) return;
+            const g = G.find(x => !used.has(x._i) && fKey(x) === dec.riga);
+            if (!g) return;                       // la riga non c'e' piu' nel foglio: torna "da verificare"
+            o.best = { g, k: null, n: false, dd: days(g._d, o.dc) }; o.how = 'abbinata a mano'; o.forced = dec;
+            used.add(g._i);
+        });
+
         const tiers = [
             ['targa + nome', x => x.k && x.n],
             ['nome', x => x.n && x.dd <= 45],
-            ['targa/telaio', x => x.k === 'strong' && x.dd <= 60],
-            ['telaio parziale', x => x.k === 'suffix' && x.dd <= 30],
+            // Solo targa/telaio con NOME DIVERSO: si accetta solo se il consulente
+            // e' lo stesso e la riga del foglio non e' annullata. Una stessa vettura
+            // puo' essere stata venduta a un cliente, annullata e poi rivenduta a un
+            // altro cliente da un altro consulente: non va confusa con quella pratica.
+            ['targa/telaio', x => x.k === 'strong' && x.dd <= 60 && x.v && !x.ann],
+            ['telaio parziale', x => x.k === 'suffix' && x.dd <= 30 && x.v && !x.ann],
             ['nome', x => x.n]
         ];
         tiers.forEach(([h, f]) => {
@@ -236,7 +259,10 @@
         }
         const keyOf = g => [[...toks(g.cliente)].sort().join(' '), pl(g.tt), String(g.mese || '').toUpperCase().trim() || (g._d ? g._d.getMonth() + 1 : '')].join('|');
 
-        const esclusiB2C = [];
+        const esclusiB2C = [], manuali = [], eliminate = [], soloCsv = [];
+        // Chiave stabile di una trattativa del CSV (resta uguale tra un import e l'altro)
+        const csvKey = (t, dc) => ['csv', [...toks(nameOf(t))].sort().join(' '), pl(targaCsv(t)), dc ? fmtD(dc) : t.chiusura].join('|');
+        const decisione = key => (meta && meta.verifiche && meta.verifiche[key] && meta.verifiche[key].azione) ? meta.verifiche[key] : null;
         T.forEach(o => {
             const t = o.t, dc = o.dc, best = o.best, how = o.how;
             const base = {
@@ -246,13 +272,70 @@
             };
             if (!best) {
                 const occupate = o.info.filter(x => presaDa.has(x.g._i));
-                if (occupate.length) {
+                // Stessa vettura (targa/telaio) ma pratica di un altro cliente: tipicamente
+                // un contratto annullato e la vettura rivenduta
+                const altraPratica = o.info.filter(x => x.k && !x.n && !presaDa.has(x.g._i))
+                    .sort((a, b) => a.dd - b.dd)[0];
+                if (altraPratica) {
+                    const g = altraPratica.g;
+                    base.note.push({ c: 'dup', t: `Non abbinata: nel foglio c'è la stessa vettura (targa/telaio ${g.tt || '—'}) ma in una pratica di ${nice(g.cliente)}${g._d ? ' del ' + fmtD(g._d) : ''}${g.vend ? ', consulente ' + nice(g.vend) : ''}${altraPratica.ann ? ', ANNULLATA' : ''}: probabilmente la vettura è stata rivenduta e nel foglio manca la riga di questa trattativa` });
+                } else if (occupate.length) {
                     const x = occupate.reduce((a, b) => b.dd < a.dd ? b : a);
                     const altra = presaDa.get(x.g._i);
                     base.doppione = true;
                     base.note.push({ c: 'dup', t: `Non abbinata: la riga del foglio compatibile (${nice(x.g.cliente)}, ${x.g.tt || 'senza targa'}, ${x.g._d ? fmtD(x.g._d) : x.g.data}) è già abbinata alla trattativa di ${nice(nameOf(altra.t))}${altra.dc ? ' del ' + fmtD(altra.dc) : ''}: possibile doppione nel CSV` });
                 } else {
                     base.note.push({ c: 'dup', t: `Non abbinata: nel foglio nessuna riga con ${targaCsv(t) ? 'targa/telaio ' + targaCsv(t) + ', ' : ''}nome "${nice(nameOf(t))}" o stessa data, consulente e modello` });
+                }
+                // Decisione presa a mano su questa trattativa (resta tra un import e l'altro)
+                const dkey = csvKey(t, dc), dec = decisione(dkey);
+                base.dkey = dkey;
+                // Righe del foglio a cui si puo' abbinare a mano ("Verifica e abbina a"):
+                // stessa targa/telaio o stesso nome, oppure data vicina + stesso consulente +
+                // stesso modello. Solo righe non gia' abbinate, al massimo 3.
+                const tv2 = toks(t.vend), tm2 = toks(`${t.marca} ${t.modello}`);
+                const cand = o.info.filter(x => !used.has(x.g._i)).map(x => x.g);
+                G.forEach(g => {
+                    if (used.has(g._i) || cand.includes(g) || days(g._d, dc) > 10) return;
+                    if (![...tv2].some(w => g._vend.has(w))) return;
+                    if (![...tm2].some(w => g._mod.has(w))) return;
+                    cand.push(g);
+                });
+                base.cands = cand.sort((a, b) => days(a._d, dc) - days(b._d, dc)).slice(0, 3).map(g => ({
+                    key: keyOf(g),
+                    label: `${nice(g.cliente)} · ${g._d ? fmtD(g._d) : (g.data || 'senza data')}${g.vend ? ' · ' + nice(g.vend) : ''} · ${cap(normStato(g.stato) || 'stato non indicato')}`
+                }));
+                if (dec && dec.azione === 'elimina') { base.dec = dec; eliminate.push(base); return; }
+                if (dec && dec.azione === 'contratto') {
+                    // Contratto a parte, non presente nel foglio: mese dalla data di chiusura
+                    // del CSV; consegnato solo se nel CSV c'e' la data di consegna effettiva.
+                    const dReal = pd(t.consegna);
+                    const m = dc ? dc.getMonth() + 1 : 0;
+                    const k = dReal && dc ? Math.min(6, Math.max(0, (dReal.getFullYear() - dc.getFullYear()) * 12 + dReal.getMonth() - dc.getMonth())) : 'dc';
+                    manuali.push({
+                        ...base, dec, m, k, manuale: true,
+                        stato: dReal ? 'CONSEGNATA (DATA DA CSV)' : 'NON PRESENTE NEL FOGLIO',
+                        consegna: dReal ? fmtD(dReal) : '', prevista: false, prov: 'Non specificato', abb: 'contratto differente'
+                    });
+                    return;
+                }
+                // Nessun dubbio (nessuna riga simile, nessun doppione, nessuna stessa vettura
+                // di un altro cliente): e' un contratto non ancora inserito nel foglio
+                // avanzamento. Si conta SUBITO ("Solo nel CSV", bollino "i"): se nel CSV c'e'
+                // la data di consegna effettiva e' consegnato, altrimenti da consegnare.
+                // Quando la riga compare nel foglio si abbina da sola.
+                const anomalia = !!(altraPratica || occupate.length || base.cands.length);
+                if (!anomalia) {
+                    const dReal = pd(t.consegna);
+                    const m = dc ? dc.getMonth() + 1 : 0;
+                    const k = dReal && dc ? Math.min(6, Math.max(0, (dReal.getFullYear() - dc.getFullYear()) * 12 + dReal.getMonth() - dc.getMonth())) : 'dc';
+                    soloCsv.push({
+                        ...base, m, k, soloCsv: true, check: true, key: dkey,
+                        note: [{ c: 'info', t: `Solo nel CSV: nel foglio avanzamento non c'è ancora nessuna riga con ${targaCsv(t) ? 'targa/telaio ' + targaCsv(t) + ' o ' : ''}nome "${nice(nameOf(t))}"` }],
+                        stato: dReal ? 'CONSEGNATA (DATA DA CSV)' : 'NON ANCORA NEL FOGLIO AVANZAMENTO',
+                        consegna: dReal ? fmtD(dReal) : '', prevista: false, prov: 'Non specificato', abb: 'solo CSV'
+                    });
+                    return;
                 }
                 verify.push(base); return;
             }
@@ -268,6 +351,10 @@
 
             // Motivo dell'abbinamento (solo quando non e' "perfetto")
             const tc = targaCsv(t), tf = (g.tt || '').trim();
+            if (o.forced) {
+                base.dkey = csvKey(t, dc); base.dec = o.forced;
+                base.note.push({ c: 'abb', t: `Riga del foglio: ${nice(g.cliente)}${g._d ? ' del ' + fmtD(g._d) : ''}, ${(g.tt || 'senza targa').trim()}` });
+            }
             if (how === 'nome') base.note.push({ c: 'abb', t: tc ? `Abbinata per nome: targa diversa (CSV ${tc}, foglio ${tf || 'vuota'})` : `Abbinata per nome: targa/telaio assente nel CSV (foglio ${tf || 'vuota'})` });
             else if (how === 'targa/telaio' || how === 'telaio parziale') base.note.push({ c: 'abb', t: `Abbinata per ${how}: nome diverso (CSV ${nice(nameOf(t))}, foglio ${nice(g.cliente)})` });
             else if (how === 'data + consulente + modello') base.note.push({ c: 'abb', t: `Abbinata per data, consulente e modello: nome e targa diversi (foglio ${nice(g.cliente)}, ${tf || 'senza targa'})` });
@@ -316,7 +403,8 @@
         T.forEach(o => { if (o.best) usiRiga.set(o.best.g._i, (usiRiga.get(o.best.g._i) || 0) + 1); });
         const abbinate = recs;
         const quad = {
-            csvTot: tratt.length, abbinate: abbinate.length, esclusiB2C: esclusiB2C.length, verify: verify.length,
+            csvTot: tratt.length, abbinate: abbinate.length, esclusiB2C: esclusiB2C.length, verify: verify.length, soloCsv: soloCsv.length,
+            manuali: manuali.length, eliminate: eliminate.length,
             foglioTot: G.filter(g => g.b2c === 'FALSE').length,
             soloTot: soloFoglio.length, soloAnn: soloFoglio.filter(r => r.k === 'ann').length,
             soloSenzaMese: soloFoglio.filter(r => !r.m).length,
@@ -324,11 +412,11 @@
             dateCorrette: G.filter(g => g._d && !/^\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{4}/.test(String(g.data || '').trim())).length,
             metodi: abbinate.reduce((acc, r) => { acc[r.abb] = (acc[r.abb] || 0) + 1; return acc; }, {})
         };
-        quad.okCsv = quad.abbinate + quad.esclusiB2C + quad.verify === quad.csvTot;
+        quad.okCsv = quad.abbinate + quad.esclusiB2C + quad.soloCsv + quad.verify + quad.manuali + quad.eliminate === quad.csvTot;
         quad.okFoglio = quad.abbinate + quad.soloTot === quad.foglioTot;
         quad.ok = quad.okCsv && quad.okFoglio && quad.righeRiusate === 0;
 
-        result = { recs: recs.filter(r => r.m).concat(contate), verify, excl, soloFoglio, esclusiB2C, abbinate, quad };
+        result = { recs: recs.filter(r => r.m).concat(manuali.filter(r => r.m), soloCsv.filter(r => r.m), contate), verify, excl, soloFoglio, soloCsv, esclusiB2C, abbinate, manuali, eliminate, quad };
     }
 
     /* ================= util ================= */
@@ -543,9 +631,13 @@
                 <span class="cg-big cg-big-info">${result.soloFoglio.filter(r => r.k !== 'ann').length}</span>
                 <div><b>Solo nel foglio Google</b><span>Contratti nel foglio DATABASE senza trattativa nel CSV, conteggiati nella tabella. ${(() => { const n = result.soloFoglio.filter(needsCheck).length; return n ? `<em class="cg-todo">${n} da verificare a mano</em>` : '<em class="cg-done">tutti verificati</em>'; })()}${result.soloFoglio.some(r => r.k === 'ann') ? ` Nella lista trovi anche ${result.soloFoglio.filter(r => r.k === 'ann').length} annullate, che non si contano.` : ''}</span></div>
               </button>
-              <button class="cg-verify" type="button" id="cgVerify">
+              <button class="cg-verify" type="button" id="cgSoloCsv">
+                <span class="cg-big cg-big-info">${result.soloCsv.length}</span>
+                <div><b>Solo nel CSV</b><span>Trattative del CSV non ancora inserite nel foglio avanzamento, conteggiate nella tabella. ${(() => { const n = result.soloCsv.filter(needsCheck).length; return n ? `<em class="cg-todo">${n} da verificare a mano</em>` : '<em class="cg-done">tutte verificate</em>'; })()}</span></div>
+              </button>
+              <button class="cg-verify" type="button" id="cgVerify" style="${result.verify.length ? '' : 'display:none'}">
                 <span class="cg-big">${result.verify.length}</span>
-                <div><b>Da verificare</b><span>Trattative del CSV che non si è riusciti ad abbinare al foglio DATABASE: nella lista trovi il motivo di ciascuna. Non sono conteggiate nella tabella.</span></div>
+                <div><b>Da verificare</b><span>Casi dubbi che richiedono una scelta: doppioni, stessa vettura in una pratica di un altro cliente, righe del foglio simili. Non sono conteggiati finché non decidi.</span></div>
               </button>
             </div>
           </section>`;
@@ -587,6 +679,8 @@
             openModal('Vetture da consegnare', R.filter(r => r.k === 'dc'), { n: RV.length, label: 'nel periodo importato' },
                 { reasons: true, chip: decodeURIComponent(b.dataset.reason) });
         });
+        body.querySelector('#cgSoloCsv').addEventListener('click', () =>
+            openModal('Solo nel CSV: non ancora nel foglio avanzamento', result.soloCsv, null, { reasons: true }));
         body.querySelector('#cgSolo').addEventListener('click', () =>
             openModal('Solo nel foglio Google: senza trattativa nel CSV', result.soloFoglio, null, { reasons: true }));
         body.querySelector('#cgVerify').addEventListener('click', () =>
@@ -609,9 +703,12 @@
               <ul>
                 <li><span>abbinate al foglio (B2C = FALSE)</span>${lnk('abb', q.abbinate)}</li>
                 <li><span>scartate: nel foglio B2C = TRUE</span>${lnk('b2c', q.esclusiB2C)}</li>
-                <li><span>da verificare: non trovate nel foglio</span>${lnk('ver', q.verify)}</li>
+                <li><span>solo nel CSV: non ancora nel foglio (conteggiate)</span>${lnk('csv', q.soloCsv)}</li>
+                <li><span>da verificare: anomalie da controllare</span>${lnk('ver', q.verify)}</li>
+                <li><span>caricate a mano come contratto differente</span>${lnk('man', q.manuali)}</li>
+                <li><span>eliminate a mano</span>${lnk('del', q.eliminate)}</li>
               </ul>
-              <p class="cg-q-sum">${fmt(q.abbinate)} + ${fmt(q.esclusiB2C)} + ${fmt(q.verify)} = ${fmt(q.abbinate + q.esclusiB2C + q.verify)}</p>
+              <p class="cg-q-sum">${fmt(q.abbinate)} + ${fmt(q.esclusiB2C)} + ${fmt(q.soloCsv)} + ${fmt(q.verify)} + ${fmt(q.manuali)} + ${fmt(q.eliminate)} = ${fmt(q.abbinate + q.esclusiB2C + q.soloCsv + q.verify + q.manuali + q.eliminate)}</p>
             </div>
             <div class="cg-q-box">
               <h4>${ok(q.okFoglio)} Foglio DATABASE</h4>
@@ -641,6 +738,9 @@
         const q = result;
         if (id === 'abb') return openModal('Trattative abbinate al foglio', q.abbinate, null, {});
         if (id === 'b2c') return openModal('Scartate: B2C = TRUE nel foglio', q.esclusiB2C, null, { verify: true });
+        if (id === 'csv') return openModal('Solo nel CSV: non ancora nel foglio avanzamento', q.soloCsv, null, { reasons: true });
+        if (id === 'man') return openModal('Caricate a mano come contratto differente', q.manuali, null, {});
+        if (id === 'del') return openModal('Trattative eliminate a mano', q.eliminate, null, { verify: true });
         if (id === 'ver') return openModal('Da verificare: non trovate nel foglio DATABASE', q.verify, null, { verify: true });
         if (id === 'solo') return openModal('Solo nel foglio Google: senza trattativa nel CSV', q.soloFoglio, null, { reasons: true });
         if (id === 'check') return openModal('Da verificare a mano', q.recs.filter(r => r.check), null, { reasons: true, origin: 'check' });
@@ -667,6 +767,15 @@
             const b = e.target.closest('[data-q]'); if (b) quadList(b.dataset.q);
         });
         ov.querySelector('#cgMList').addEventListener('click', e => {
+            const d = e.target.closest('[data-dkey]');
+            if (d) {
+                const az = d.dataset.az;
+                if (az === 'elimina' && !confirm('Eliminare questa trattativa? Non verrà più conteggiata né mostrata tra quelle da verificare (si può annullare).')) return;
+                if (!az && !confirm('Annullare la decisione presa su questa trattativa? Tornerà tra quelle da verificare.')) return;
+                if (az === 'abbina' && !confirm('Abbinare questa trattativa alla riga del foglio scelta?')) return;
+                setDecisione(decodeURIComponent(d.dataset.dkey), az, d, d.dataset.riga ? decodeURIComponent(d.dataset.riga) : null);
+                return;
+            }
             const b = e.target.closest('[data-vkey]'); if (!b) return;
             const key = decodeURIComponent(b.dataset.vkey), on = b.dataset.von === '1';
             if (!on && !confirm('Rimuovere la verifica manuale di questa pratica?')) return;
@@ -726,16 +835,17 @@
     function renderOrigin() {
         const box = ov.querySelector('#cgMOrigin');
         if (curVerify) { box.innerHTML = ''; return; }
-        const nSolo = cur.filter(r => r.solo).length, nAbb = cur.length - nSolo;
+        const nSolo = cur.filter(r => r.solo).length, nCsv = cur.filter(r => r.soloCsv).length, nAbb = cur.length - nSolo - nCsv;
         const nCheck = cur.filter(needsCheck).length, nVer = cur.filter(r => r.check && verOf(r)).length;
         const chip = (id, label, n) => `<button class="cg-chip ${curOrigin === id ? 'on' : ''}" type="button" data-origin="${id}">${label} (${fmt(n)})</button>`;
-        box.innerHTML = (nSolo || nCheck || nVer) ?
+        const origini = [nAbb, nSolo, nCsv].filter(Boolean).length;
+        box.innerHTML = (origini > 1 || nCheck || nVer) ?
             chip('', 'Tutti', cur.length) +
-            (nSolo && nAbb ? chip('abb', 'Abbinati al CSV', nAbb) + chip('solo', 'Solo nel foglio', nSolo) : '') +
+            (origini > 1 ? (nAbb ? chip('abb', 'Abbinati', nAbb) : '') + (nSolo ? chip('solo', 'Solo nel foglio', nSolo) : '') + (nCsv ? chip('csv', 'Solo nel CSV', nCsv) : '') : '') +
             (nCheck ? chip('check', '<span class="cg-info cg-info-static">i</span>Da verificare a mano', nCheck) : '') +
             (nVer ? chip('ver', '✓ Verificati a mano', nVer) : '') : '';
     }
-    const originOk = r => !curOrigin || (curOrigin === 'solo' ? r.solo : curOrigin === 'abb' ? !r.solo
+    const originOk = r => !curOrigin || (curOrigin === 'solo' ? r.solo : curOrigin === 'csv' ? r.soloCsv : curOrigin === 'abb' ? (!r.solo && !r.soloCsv)
         : curOrigin === 'check' ? needsCheck(r) : curOrigin === 'ver' ? !!(r.check && verOf(r)) : true);
 
     function noteHtml(r) {
@@ -743,6 +853,28 @@
         let h = (r.note || []).map(n => n.c === 'info'
             ? `<span class="cg-abb ${daFare ? 'cg-abb-info' : 'cg-abb-muted'}">${daFare ? '<span class="cg-info cg-info-static">i</span>' : ''}${esc(n.t)}</span>`
             : `<span class="cg-abb ${n.c === 'dup' ? 'cg-abb-dup' : ''}">${esc(n.t)}</span>`).join('');
+        if (r.dkey) {
+            const k = encodeURIComponent(r.dkey), dec = r.dec;
+            let d = '';
+            if (dec && dec.azione === 'abbina') {
+                d = `<span class="cg-verok">✓ Verificata e abbinata a mano da ${esc(dec.da)} il ${esc(whenDay(dec.at))} alle ${esc(whenTime(dec.at))}</span>`;
+                d += `<button type="button" class="cg-vlink" data-dkey="${k}" data-az="">Annulla</button>`;
+            } else if (dec) {
+                d = dec.azione === 'elimina'
+                    ? `<span class="cg-verok cg-del">✕ Eliminata da ${esc(dec.da)} il ${esc(whenDay(dec.at))} alle ${esc(whenTime(dec.at))}</span>`
+                    : `<span class="cg-verok">✓ Caricata come contratto differente da ${esc(dec.da)} il ${esc(whenDay(dec.at))} alle ${esc(whenTime(dec.at))}</span>`;
+                d += `<button type="button" class="cg-vlink" data-dkey="${k}" data-az="">Annulla</button>`;
+            } else if (r.soloCsv) {
+                d = `<span class="cg-dec"><button type="button" class="cg-vbtn cg-vbtn-del" data-dkey="${k}" data-az="elimina">Elimina</button></span>`;
+            } else {
+                d = (r.cands && r.cands.length ? `<span class="cg-dec-t">Verifica e abbina a:</span><span class="cg-dec">` +
+                        r.cands.map(c => `<button type="button" class="cg-vbtn cg-vbtn-abb" data-dkey="${k}" data-az="abbina" data-riga="${encodeURIComponent(c.key)}">${esc(c.label)}</button>`).join('') + `</span>` : '') +
+                    `<span class="cg-dec"><button type="button" class="cg-vbtn" data-dkey="${k}" data-az="contratto">Carica come contratto differente</button>` +
+                    `<button type="button" class="cg-vbtn cg-vbtn-del" data-dkey="${k}" data-az="elimina">Elimina</button></span>`;
+            }
+            if (!(meta && meta.puoModificare)) d = d.replace(/<button[^>]*>[^<]*<\/button>/g, '');
+            h += d;
+        }
         if (r.check && r.key) {
             const k = encodeURIComponent(r.key);
             h += v
@@ -753,6 +885,25 @@
             if (!(meta && meta.puoModificare)) h = h.replace(/<button type="button" class="cg-v(btn|link)"[^>]*>[^<]*<\/button>/g, '');
         }
         return h;
+    }
+
+    // Decisione su una trattativa non abbinata: 'contratto' | 'elimina' | '' (annulla)
+    async function setDecisione(key, azione, btn, riga) {
+        if (btn) btn.disabled = true;
+        try {
+            const d = await api('/verifiche', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key, verificata: !!azione, azione: azione || null, riga: riga || null })
+            });
+            meta.verifiche = d.verifiche || {};
+            // aggiorna la riga nella lista aperta e ricalcola tabella e conteggi
+            cur.forEach(r => { if (r.dkey === key) { if (azione) r.dec = meta.verifiche[key]; else delete r.dec; } });
+            renderOrigin(); renderList();
+            compute(); render(rootEl.querySelector('#cgBody'));
+        } catch (e) {
+            alert('Operazione non salvata: ' + e.message);
+            if (btn) btn.disabled = false;
+        }
     }
 
     async function setVerifica(key, on, btn) {

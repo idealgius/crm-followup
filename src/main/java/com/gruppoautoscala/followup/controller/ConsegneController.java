@@ -113,9 +113,20 @@ public class ConsegneController {
             return ResponseEntity.badRequest().body(Map.of("error", "Pratica non valida"));
         }
         boolean verificata = Boolean.TRUE.equals(body.get("verificata"));
+        Object az = body.get("azione");
+        String azione = (az instanceof String a && !a.isBlank()) ? a : null;
+        if (azione != null && !azione.equals("contratto") && !azione.equals("elimina") && !azione.equals("abbina")) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Azione non valida"));
+        }
+        // "abbina": riga del foglio scelta dall'operatore (chiave cliente|targa|mese)
+        Object rg = body.get("riga");
+        String riga = (rg instanceof String r && !r.isBlank() && r.length() <= 500) ? r : null;
+        if ("abbina".equals(azione) && riga == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Riga del foglio mancante"));
+        }
         try {
             Map<String, Object> out = new HashMap<>();
-            out.put("verifiche", consegneService.setVerifica(chiave, verificata, nomeUtente(userId)));
+            out.put("verifiche", consegneService.setVerifica(chiave, verificata, nomeUtente(userId), azione, riga));
             return ResponseEntity.ok(out);
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("error", "Salvataggio verifica non riuscito: " + e.getMessage()));

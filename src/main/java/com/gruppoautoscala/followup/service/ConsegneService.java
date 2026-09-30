@@ -153,11 +153,23 @@ public class ConsegneService {
      * pratica (cliente + targa + mese del foglio) resta la stessa.
      */
     public synchronized Map<String, Map<String, String>> setVerifica(String chiave, boolean verificata, String chi) throws Exception {
+        return setVerifica(chiave, verificata, chi, null, null);
+    }
+
+    /**
+     * Come sopra, con in piu' l'eventuale decisione presa a mano su una
+     * trattativa del CSV non trovata nel foglio: "abbina" (abbinala alla riga
+     * del foglio indicata in riga), "contratto" (contala come contratto
+     * differente) oppure "elimina" (non contarla).
+     */
+    public synchronized Map<String, Map<String, String>> setVerifica(String chiave, boolean verificata, String chi, String azione, String riga) throws Exception {
         Map<String, Map<String, String>> map = getVerifiche();
         if (verificata) {
             Map<String, String> v = new LinkedHashMap<>();
             v.put("da", chi);
             v.put("at", java.time.Instant.now().toString()); // ISO in UTC: il browser lo mostra nell'ora locale
+            if (azione != null) v.put("azione", azione);
+            if (riga != null) v.put("riga", riga);   // solo per "abbina": riga del foglio scelta
             map.put(chiave, v);
         } else {
             map.remove(chiave);
