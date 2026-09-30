@@ -3,7 +3,7 @@
    ---------------------------------------------------------------------
    Due fonti, entrambe salvate SUL SERVER (visibili a tutti, sempre
    l'ultimo aggiornamento):
-   1) CSV trattative del gestionale ("Importa trattative", solo Admin /
+   1) CSV trattative di Leadspark ("Importa trattative", solo Admin /
       Gestore / Moderatore). Il file viene letto e ridotto qui nel browser
       alle sole colonne necessarie (niente telefoni, email, CF), poi
       inviato a POST /api/consegne/trattative, che sostituisce l'import
@@ -150,7 +150,7 @@
         // gli abbinamenti piu' sicuri (targa + nome), poi quelli per nome,
         // e cosi' via. Ogni riga del foglio puo' essere usata UNA volta sola:
         // due trattative non possono piu' finire sulla stessa riga (prima
-        // succedeva con i doppioni nel gestionale e gonfiava i conteggi).
+        // succedeva con i doppioni nel CSV e gonfiava i conteggi).
         const T = tratt.map(t => {
             const dc = pd(t.chiusura);
             const tk = new Set([...toks(nameOf(t)), ...toks(t.rag)]);
@@ -213,7 +213,7 @@
         const targaCsv = t => (t.targa || t.telaio || '').trim();
 
         // Mese del contratto: vale la colonna MESE del foglio; se manca, la
-        // DATA del foglio; se manca anche quella, la data del gestionale.
+        // DATA del foglio; se manca anche quella, la data del CSV.
         // Segnala (da verificare a mano) le righe con DATA non leggibile o
         // con DATA di un mese diverso da MESE.
         function meseFoglio(g, fallback) {
@@ -250,7 +250,7 @@
                     const x = occupate.reduce((a, b) => b.dd < a.dd ? b : a);
                     const altra = presaDa.get(x.g._i);
                     base.doppione = true;
-                    base.note.push({ c: 'dup', t: `Non abbinata: la riga del foglio compatibile (${nice(x.g.cliente)}, ${x.g.tt || 'senza targa'}, ${x.g._d ? fmtD(x.g._d) : x.g.data}) è già abbinata alla trattativa di ${nice(nameOf(altra.t))}${altra.dc ? ' del ' + fmtD(altra.dc) : ''}: possibile doppione nel gestionale` });
+                    base.note.push({ c: 'dup', t: `Non abbinata: la riga del foglio compatibile (${nice(x.g.cliente)}, ${x.g.tt || 'senza targa'}, ${x.g._d ? fmtD(x.g._d) : x.g.data}) è già abbinata alla trattativa di ${nice(nameOf(altra.t))}${altra.dc ? ' del ' + fmtD(altra.dc) : ''}: possibile doppione nel CSV` });
                 } else {
                     base.note.push({ c: 'dup', t: `Non abbinata: nel foglio nessuna riga con ${targaCsv(t) ? 'targa/telaio ' + targaCsv(t) + ', ' : ''}nome "${nice(nameOf(t))}" o stessa data, consulente e modello` });
                 }
@@ -268,10 +268,10 @@
 
             // Motivo dell'abbinamento (solo quando non e' "perfetto")
             const tc = targaCsv(t), tf = (g.tt || '').trim();
-            if (how === 'nome') base.note.push({ c: 'abb', t: tc ? `Abbinata per nome: targa diversa (gestionale ${tc}, foglio ${tf || 'vuota'})` : `Abbinata per nome: targa/telaio assente nel gestionale (foglio ${tf || 'vuota'})` });
-            else if (how === 'targa/telaio' || how === 'telaio parziale') base.note.push({ c: 'abb', t: `Abbinata per ${how}: nome diverso (gestionale ${nice(nameOf(t))}, foglio ${nice(g.cliente)})` });
+            if (how === 'nome') base.note.push({ c: 'abb', t: tc ? `Abbinata per nome: targa diversa (CSV ${tc}, foglio ${tf || 'vuota'})` : `Abbinata per nome: targa/telaio assente nel CSV (foglio ${tf || 'vuota'})` });
+            else if (how === 'targa/telaio' || how === 'telaio parziale') base.note.push({ c: 'abb', t: `Abbinata per ${how}: nome diverso (CSV ${nice(nameOf(t))}, foglio ${nice(g.cliente)})` });
             else if (how === 'data + consulente + modello') base.note.push({ c: 'abb', t: `Abbinata per data, consulente e modello: nome e targa diversi (foglio ${nice(g.cliente)}, ${tf || 'senza targa'})` });
-            if (g._d && dc && fmtD(g._d) !== fmtD(dc)) base.note.push({ c: 'abb', t: `Data nel gestionale ${fmtD(dc)}, nel foglio ${fmtD(g._d)}: vale quella del foglio` });
+            if (g._d && dc && fmtD(g._d) !== fmtD(dc)) base.note.push({ c: 'abb', t: `Data nel CSV ${fmtD(dc)}, nel foglio ${fmtD(g._d)}: vale quella del foglio` });
 
             recs.push({
                 ...base, chiusura: g._d ? fmtD(g._d) : base.chiusura, m, k, stato: st || 'STATO NON INDICATO',
@@ -298,7 +298,7 @@
                 const o = cands[0];
                 note.push({ c: 'info', t: `Solo nel foglio: la trattativa compatibile di ${nice(nameOf(o.t))}${o.dc ? ' del ' + fmtD(o.dc) : ''} è già abbinata a un'altra riga del foglio: possibile doppione nel foglio` });
             } else {
-                note.push({ c: 'info', t: `Solo nel foglio: nel gestionale nessuna trattativa con ${g.tt ? 'targa/telaio ' + g.tt.trim() + ' o ' : ''}nome "${nice(g.cliente)}"` });
+                note.push({ c: 'info', t: `Solo nel foglio: nel CSV nessuna trattativa con ${g.tt ? 'targa/telaio ' + g.tt.trim() + ' o ' : ''}nome "${nice(g.cliente)}"` });
             }
             if (anom) note.push({ c: 'info', t: anom });
             soloFoglio.push({
@@ -455,7 +455,7 @@
             const canImp = meta && meta.puoImportare;
             body.innerHTML = `<div class="cg-card cg-empty">
                 <h2>Mancano ancora dei dati</h2>
-                <p>${!tratt ? (canImp ? 'Importa il CSV delle trattative dal gestionale.' : 'Le trattative non sono ancora state importate: chiedi a un amministratore.') + '<br>' : ''}${!db ? 'Il foglio DATABASE non è ancora stato letto: premi "Aggiorna dal foglio Google".' : ''}</p>
+                <p>${!tratt ? (canImp ? 'Importa il CSV delle trattative (Leadspark).' : 'Le trattative non sono ancora state importate: chiedi a un amministratore.') + '<br>' : ''}${!db ? 'Il foglio DATABASE non è ancora stato letto: premi "Aggiorna dal foglio Google".' : ''}</p>
               </div>`;
             return;
         }
