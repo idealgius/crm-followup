@@ -2589,13 +2589,27 @@ select.input-field {
        piccolo, dove il pattern occupa gran parte dell'altezza visibile
        comunque).
        */
+    /* Sfondo a linee su telefono: livello fisso a tutto schermo.
+       Il disegno viene ereditato da #mainApp, quindi restano validi
+       tema chiaro, Noleggio e Service. */
     #mainApp {
+        isolation: isolate;
         background-attachment: scroll;
+        background-size: 0 0;
     }
 
-    [data-role-theme="noleggio"] #mainApp,
-    [data-role-theme="service"] #mainApp {
-        background-attachment: scroll;
+    #mainApp::before {
+        content: "";
+        position: fixed;
+        top: 0; left: 0; right: 0;
+        height: 100vh;
+        height: 100dvh;
+        z-index: -1;
+        pointer-events: none;
+        background-image: inherit;
+        background-repeat: no-repeat;
+        background-position: center top;
+        background-size: auto 100%;
     }
 
     /* Icona sopra, etichetta sotto — le due metà del link (prima erano

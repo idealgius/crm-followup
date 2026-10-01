@@ -204,6 +204,17 @@
     d.style.transform = `rotateY(${i * 360 / N}deg) translateZ(${R}px)`;
     d.innerHTML = `<img src="${src}" alt="">`; ring.appendChild(d);
   });
+  // La rotazione della pedana e' in CSS (bh-spin) e parte al caricamento, senza legame con il
+  // capitolo: Stock risultava sfasato e si fermava con il mouse sopra. Qui la riportiamo a 0
+  // ogni volta che il capitolo diventa attivo e la forziamo in play: con play() esplicito
+  // animation-play-state (es. regola .bh-paused) non la ferma piu', come per le altre scene.
+  const stockScene = document.querySelector('#biPage .bh-scene[data-s="1"]');
+  function stockSpin() {
+    if (reduce || !stockScene || !stockScene.getAnimations) return;
+    stockScene.getAnimations({ subtree: true }).forEach(a => {
+      if (a.animationName === 'bh-spin') { a.currentTime = 0; a.play(); }
+    });
+  }
 
   /* ---------- CONSEGNE: passaggio della chiave ---------- */
   const ho = $('bh-ho'), cli = $('bh-cli'), con = $('bh-con'), fob = $('bh-fob'), fsh = $('bh-fsh'), okb = $('bh-okb');
@@ -262,11 +273,11 @@
     const iv = setInterval(() => { v = Math.min(n, v + st); el.textContent = v; if (v >= n) clearInterval(iv); }, 30); });
   const cmRun = () => { cm.classList.remove('bh-run'); void cm.offsetWidth; cm.classList.add('bh-run'); count(); };
   setInterval(() => { if (active && cur === 2 && !reduce) cmRun(); }, 9000);
-  const go0 = go; go = function (i, f) { go0(i, f); if (i === 2) cmRun(); };
+  const go0 = go; go = function (i, f) { go0(i, f); if (i === 2) cmRun(); else if (i === 1) stockSpin(); };
   // Avvio/arresto: tutto gira solo mentre la pagina BI e' visibile
   function start() {
     scale(); active = true; paused = false; settle();
-    if (cur < 0) go(0, true); else if (cur === 2) cmRun();
+    if (cur < 0) go(0, true); else if (cur === 2) cmRun(); else if (cur === 1) stockSpin();
     restart();
     if (!reduce) requestAnimationFrame(frame);
   }
