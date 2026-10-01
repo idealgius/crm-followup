@@ -164,3 +164,59 @@
 body.mh-home-on #navBrandBadge { display:none !important; }
 body.mh-home-on .navbar { position:relative; }
 body.mh-home-on .navbar #navLogo { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
+
+/* ===== Card "BI" della home: locandina con insegna e grafici animati ===== */
+/* ================= CARD "BI" DELLA HOME (stessa misura delle postazioni: 560x470) ================= */
+.mh-bi-bg{position:absolute;inset:0;background:linear-gradient(180deg,#0d1322 0%,#17203a 34%,#2a2238 52%,#15171c 64%,#121418 100%)}
+.mh-bi-stars{position:absolute;inset:0 0 50% 0;background-image:radial-gradient(1px 1px at 12% 18%,#fff8,transparent),radial-gradient(1px 1px at 32% 8%,#fff6,transparent),radial-gradient(1px 1px at 58% 22%,#fff7,transparent),radial-gradient(1.5px 1.5px at 78% 12%,#fff9,transparent),radial-gradient(1px 1px at 90% 30%,#fff5,transparent),radial-gradient(1px 1px at 46% 30%,#fff5,transparent);animation:mh-bi-tw 4s ease-in-out infinite}
+@keyframes mh-bi-tw{50%{opacity:.5}}
+.mh-bi-halo{position:absolute;left:120px;top:60px;width:420px;height:180px;border-radius:50%;background:radial-gradient(closest-side,rgba(255,196,120,.35),transparent);filter:blur(10px);animation:mh-bi-halo 5s ease-in-out infinite}
+@keyframes mh-bi-halo{50%{opacity:.6;transform:scale(1.06)}}
+.mh-bi-facade{position:absolute;left:-30px;top:58px;width:620px}
+.mh-bi-facade img{display:block;width:100%}
+/* insegna: la luce scorre SOLO sulle lettere (maschera ricavata dalla foto) e le lettere "respirano" */
+.mh-bi-letters{position:absolute;left:-30px;top:58px;width:620px;aspect-ratio:1460/440;pointer-events:none;
+  -webkit-mask-image:url('/img/macro/sede-insegna-lettere.png');mask-image:url('/img/macro/sede-insegna-lettere.png');-webkit-mask-size:100% 100%;mask-size:100% 100%;
+  background:linear-gradient(100deg,rgba(255,255,255,0) 0%,rgba(255,255,255,0) 40%,rgba(255,250,235,1) 50%,rgba(255,255,255,0) 60%,rgba(255,255,255,0) 100%) no-repeat;
+  background-size:300% 100%;background-position:120% 0;animation:mh-bi-let 5s 1s ease-in-out infinite;filter:drop-shadow(0 0 6px rgba(255,240,210,.9))}
+@keyframes mh-bi-let{0%{background-position:120% 0}40%,100%{background-position:-20% 0}}
+.mh-bi-facade img{animation:mh-bi-breath 4s ease-in-out infinite}
+@keyframes mh-bi-breath{50%{filter:brightness(1.12)}}
+/* stelle cadenti, ogni tanto */
+.mh-bi-shoot{position:absolute;left:60px;top:18px;width:90px;height:1.5px;border-radius:2px;opacity:0;transform:rotate(18deg);
+  background:linear-gradient(90deg,rgba(255,255,255,0),#fff);animation:mh-bi-shoot 9s 2s linear infinite}
+.mh-bi-shoot.mh-bi-s2{left:300px;top:8px;width:70px;animation-duration:13s;animation-delay:7s}
+@keyframes mh-bi-shoot{0%{opacity:0;transform:rotate(18deg) translateX(0)}2%{opacity:1}7%{opacity:0;transform:rotate(18deg) translateX(160px)}100%{opacity:0;transform:rotate(18deg) translateX(160px)}}
+/* piazzale con griglia prospettica */
+.mh-bi-floor{position:absolute;left:-20%;right:-20%;top:236px;height:260px;transform:perspective(380px) rotateX(58deg);transform-origin:50% 0;
+  background:repeating-linear-gradient(90deg,rgba(120,150,255,.16) 0 1px,transparent 1px 46px),repeating-linear-gradient(0deg,rgba(120,150,255,.16) 0 1px,transparent 1px 38px);
+  -webkit-mask-image:linear-gradient(180deg,#000 10%,transparent 80%);mask-image:linear-gradient(180deg,#000 10%,transparent 80%);animation:mh-bi-fl 6s linear infinite}
+@keyframes mh-bi-fl{to{background-position:0 38px,0 38px}}
+/* widget di vetro con grafici animati */
+.mh-bi-w{position:absolute;border-radius:16px;padding:10px 12px;background:rgba(255,255,255,.07);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.12);box-shadow:0 18px 30px -18px rgba(0,0,0,.8);animation:mh-bi-float 6s ease-in-out infinite}
+@keyframes mh-bi-float{50%{transform:translateY(-8px)}}
+.mh-bi-w small{display:block;font-size:9.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#aab3c2}
+.mh-bi-w b{font-size:18px;font-weight:800}
+.mh-bi-bars{display:flex;align-items:flex-end;gap:6px;height:52px;margin-top:6px}
+.mh-bi-bars i{width:13px;border-radius:4px 4px 2px 2px;background:linear-gradient(180deg,#8fb0ff,#4f6fe0);animation:mh-bi-bar 3.2s ease-in-out infinite;transform-origin:bottom}
+@keyframes mh-bi-bar{0%{height:12%}35%,80%{height:var(--h)}100%{height:12%}}
+.mh-bi-donut circle.mh-bi-v{stroke-dasharray:226;stroke-dashoffset:226;animation:mh-bi-dn 3.6s ease-in-out infinite}
+@keyframes mh-bi-dn{0%{stroke-dashoffset:226}40%,80%{stroke-dashoffset:48}100%{stroke-dashoffset:226}}
+.mh-bi-line path.mh-bi-l{stroke-dasharray:400;stroke-dashoffset:400;animation:mh-bi-ln 4s ease-in-out infinite}
+.mh-bi-line path.mh-bi-a{opacity:0;animation:mh-bi-la 4s ease-in-out infinite}
+@keyframes mh-bi-ln{0%{stroke-dashoffset:400}45%,85%{stroke-dashoffset:0}100%{stroke-dashoffset:400}}
+@keyframes mh-bi-la{0%,30%{opacity:0}50%,85%{opacity:1}100%{opacity:0}}
+.mh-bi-kpi{display:flex;align-items:center;gap:10px}
+.mh-bi-kpi .mh-bi-up{color:#34c38f;font-weight:800;font-size:12px}
+.mh-bi-info{position:absolute;left:0;right:0;bottom:0;height:150px;padding:22px 28px;display:flex;align-items:flex-end;justify-content:space-between;background:linear-gradient(180deg,rgba(18,20,24,0),rgba(18,20,24,.92) 45%)}
+.mh-bi-info .mh-bi-k{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#8e97a5;margin-bottom:6px}
+.mh-bi-info .mh-bi-k i{width:8px;height:8px;border-radius:50%;background:#f4a83a;box-shadow:0 0 12px #f4a83a}
+.mh-bi-info h2{margin:0;font-size:32px;font-weight:800;letter-spacing:-.8px}
+.mh-bi-info p{margin:6px 0 0;font-size:14px;color:#b6bdc8;max-width:36ch}
+.mh-bi-go{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.08);transition:background .3s}
+.mh-bay:hover .mh-bi-go{background:#f4a83a}
+
+
+.mh-bi-kpi .mh-bi-live{width:9px;height:9px;border-radius:50%;background:#34c38f;box-shadow:0 0 10px #34c38f;animation:mh-bi-tw 1.6s ease-in-out infinite}
+.mh-bi{--acc:var(--amber)}
+.mh-bay.mh-bi:hover{border-color:rgba(244,168,58,.45)}

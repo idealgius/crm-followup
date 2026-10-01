@@ -88,7 +88,7 @@
             const card = e.target.closest('[data-mh]');
             if (!card) return;
             if (card.getAttribute('data-mh') === 'inbound') openInbound();
-            else openConsegne();
+            else openBI();
         });
         const nav = document.querySelector('#mainApp .navbar');
         if (nav && nav.parentNode) nav.parentNode.insertBefore(root, nav.nextSibling);
@@ -101,6 +101,8 @@
         build();
         stopInboundLiveUpdates();
         hideAllPages();
+        hideBI();
+        const cgp = document.getElementById('consegnePage'); if (cgp) cgp.style.display = 'none';
         inConsegne = false;
         setNavLinksVisible(false);
         document.body.removeAttribute('data-role-theme');
@@ -123,6 +125,7 @@
     // apra, la home e l'area Consegne si chiudono e la navbar torna normale.
     function onShowPage() {
         hide();
+        hideBI();
         const consegne = document.getElementById('consegnePage');
         if (consegne) consegne.style.display = 'none';
         inConsegne = false;
@@ -134,15 +137,35 @@
         showPage(getDefaultPageForRole(role));
     }
 
+    // Pagina della macro-sezione BI (capitoli Consegne / Stock / Commerciale, vedi /js/bi-home.js)
+    function openBI() {
+        if (!canShow()) return;
+        hide();
+        stopInboundLiveUpdates();
+        hideAllPages();
+        const consegne = document.getElementById('consegnePage');
+        if (consegne) consegne.style.display = 'none';
+        inConsegne = false;
+        setNavLinksVisible(false);
+        document.body.removeAttribute('data-role-theme');
+        setBadge('BI');
+        if (window.BIHome) BIHome.show();
+        history.replaceState(null, '', window.location.pathname + '#bi');
+        sessionStorage.setItem('currentPage', 'bi');
+        window.scrollTo(0, 0);
+    }
+    function hideBI() { if (window.BIHome) BIHome.hide(); }
+
     function openConsegne() {
         if (!canShow()) return;
         hide();
+        hideBI();
         stopInboundLiveUpdates();
         hideAllPages();
         inConsegne = true;
         setNavLinksVisible(false);
         document.body.removeAttribute('data-role-theme');
-        setBadge('POWER BI');
+        setBadge('CONSEGNE');
         const page = document.getElementById('consegnePage');
         if (page) page.style.display = 'block';
         if (window.Consegne) Consegne.init();
@@ -154,6 +177,7 @@
     // Al logout: chiude tutto e ripristina la navbar per il prossimo login
     function reset() {
         hide();
+        hideBI();
         const consegne = document.getElementById('consegnePage');
         if (consegne) consegne.style.display = 'none';
         inConsegne = false;
@@ -203,74 +227,28 @@
       </div>
     </div></button>
 
-    <!-- CONSEGNE -->
-    <button class="mh-bay mh-out" type="button" data-mh="consegne" aria-label="Entra in Power BI"><div class="mh-bay-in">
-      <div class="mh-stage">
-        <div class="mh-spot"></div><div class="mh-floor"></div>
-        <div class="mh-car mh-enter" id="mh-k3"><div class="mh-body" id="mh-k3Body"><img src="/img/macro/ich-x-k3.png" alt=""><div class="mh-sheen" style="-webkit-mask-image:url('/img/macro/ich-x-k3.png');mask-image:url('/img/macro/ich-x-k3.png');animation-delay:4.5s"></div>
-          <span class="mh-glow mh-blink mh-b1"></span><span class="mh-glow mh-blink mh-b2"></span></div><img class="mh-refl" src="/img/macro/ich-x-k3.png" alt=""><div class="mh-shadow"></div></div>
-        <div class="mh-floorflash" id="mh-floorflash"></div>
-        <div class="mh-handover" id="mh-handover">
-          <img class="mh-hand mh-hand-cliente" id="mh-palm" src="/img/macro/mano-cliente-3d.png" alt="">
-          <div class="mh-fob-shadow" id="mh-fobShadow"></div>
-          <div class="mh-fob" id="mh-fob"><svg viewBox="0 0 120 110" xmlns="http://www.w3.org/2000/svg" class="fob-svg">
-  <defs>
-    <linearGradient id="mhfobside" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b3f47"/><stop offset="1" stop-color="#15171b"/></linearGradient>
-    <radialGradient id="mhfobtop" cx="30%" cy="20%" r="90%"><stop offset="0" stop-color="#8a909b"/><stop offset=".45" stop-color="#5a5f69"/><stop offset="1" stop-color="#34373e"/></radialGradient>
-    <linearGradient id="mhfobpan" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1b1e25"/><stop offset=".5" stop-color="#08090c"/><stop offset="1" stop-color="#030405"/></linearGradient>
-    <linearGradient id="mhfobgl" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset=".45" stop-color="#fff" stop-opacity=".06"/><stop offset=".46" stop-color="#fff" stop-opacity="0"/></linearGradient>
-    <linearGradient id="mhfobrim" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6d737e"/><stop offset="1" stop-color="#1a1c21"/></linearGradient>
-    <filter id="mhfobgrain" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="1.6" numOctaves="2" seed="4" result="n"/><feColorMatrix in="n" type="matrix" values="0 0 0 0 .5  0 0 0 0 .5  0 0 0 0 .5  0 0 0 .07 0"/><feComposite in2="SourceGraphic" operator="in"/></filter>
-    <filter id="mhfobglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation=".7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-    <radialGradient id="mhfobp" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#e2f9ff" stop-opacity=".95"/><stop offset="1" stop-color="#5fd0ff" stop-opacity="0"/></radialGradient>
-    <clipPath id="mhfobpc"><path d="M34,16 L86,16 Q88,16 89.5,17.5 L102,30 Q104,32 104,34 L104,64 Q104,66 102,68 L89.5,80.5 Q88,82 86,82 L34,82 Q32,82 30.5,80.5 L18,68 Q16,66 16,64 L16,34 Q16,32 18,30 L30.5,17.5 Q32,16 34,16 Z"/></clipPath>
-  </defs>
-  <!-- spessore (fianco) -->
-  <path d="M30,6 Q27,6 25,8 L8,25 Q6,27 6,30 L6,68 Q6,71 8,73 L25,90 Q27,92 30,92 L90,92 Q93,92 95,90 L112,73 Q114,71 114,68 L114,30 Q114,27 112,25 L95,8 Q93,6 90,6 Z" transform="translate(0,9)" fill="url(#mhfobside)"/>
-  <path d="M30,6 Q27,6 25,8 L8,25 Q6,27 6,30 L6,68 Q6,71 8,73 L25,90 Q27,92 30,92 L90,92 Q93,92 95,90 L112,73 Q114,71 114,68 L114,30 Q114,27 112,25 L95,8 Q93,6 90,6 Z" transform="translate(0,4.5)" fill="#2a2d33"/>
-  <!-- asola portachiavi sul fianco -->
-  <rect x="44" y="96" width="32" height="7" rx="2.5" fill="#0d0e11"/>
-  <!-- faccia superiore opaca -->
-  <path d="M30,6 Q27,6 25,8 L8,25 Q6,27 6,30 L6,68 Q6,71 8,73 L25,90 Q27,92 30,92 L90,92 Q93,92 95,90 L112,73 Q114,71 114,68 L114,30 Q114,27 112,25 L95,8 Q93,6 90,6 Z" fill="url(#mhfobtop)"/>
-  <path d="M30,6 Q27,6 25,8 L8,25 Q6,27 6,30 L6,68 Q6,71 8,73 L25,90 Q27,92 30,92 L90,92 Q93,92 95,90 L112,73 Q114,71 114,68 L114,30 Q114,27 112,25 L95,8 Q93,6 90,6 Z" fill="#000" filter="url(#mhfobgrain)"/>
-  <path d="M30,6 Q27,6 25,8 L8,25 Q6,27 6,30 L6,68 Q6,71 8,73 L25,90 Q27,92 30,92 L90,92 Q93,92 95,90 L112,73 Q114,71 114,68 L114,30 Q114,27 112,25 L95,8 Q93,6 90,6 Z" fill="none" stroke="#a9afb9" stroke-opacity=".55" stroke-width="1"/>
-  <!-- inserto nero lucido con bordo smussato -->
-  <path d="M34,16 L86,16 Q88,16 89.5,17.5 L102,30 Q104,32 104,34 L104,64 Q104,66 102,68 L89.5,80.5 Q88,82 86,82 L34,82 Q32,82 30.5,80.5 L18,68 Q16,66 16,64 L16,34 Q16,32 18,30 L30.5,17.5 Q32,16 34,16 Z" transform="translate(0,1.2)" fill="#000" opacity=".6"/>
-  <path d="M34,16 L86,16 Q88,16 89.5,17.5 L102,30 Q104,32 104,34 L104,64 Q104,66 102,68 L89.5,80.5 Q88,82 86,82 L34,82 Q32,82 30.5,80.5 L18,68 Q16,66 16,64 L16,34 Q16,32 18,30 L30.5,17.5 Q32,16 34,16 Z" fill="url(#mhfobpan)" stroke="url(#mhfobrim)" stroke-width="1.4"/>
-  <g clip-path="url(#mhfobpc)">
-    <!-- fughe tra i 4 tasti -->
-    <path d="M60,16 V82 M16,49 H104" stroke="#000" stroke-width="2.2"/>
-    <path d="M61.2,16 V82 M16,50.2 H104" stroke="#2b2f37" stroke-width=".7"/>
-    <!-- riflesso -->
-    <path d="M10,10 H112 L112,30 L10,62 Z" fill="url(#mhfobgl)"/>
-  </g>
-  <g fill="none" stroke="#f1f5fa" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" filter="url(#mhfobglow)">
-    <!-- alto sx: chiudi -->
-    <g transform="translate(40,33)"><rect x="-4.5" y="-1" width="9" height="7" rx="1.5"/><path d="M-2.3,-1 v-2.3 a2.3,2.3 0 0 1 4.6,0 v2.3"/></g>
-    <!-- alto dx: bagagliaio (auto con portellone aperto) -->
-    <g transform="translate(80,34)"><path d="M-8,4 H8 M-7,4 V1 L-4,-3 H2.5 L5,0.5"/><path d="M5,0.5 L9,-4.5"/><path d="M-7,1 H7"/></g>
-    <!-- basso sx: avvio a distanza -->
-    <g transform="translate(40,66)"><path d="M-4.2,1.8 a4.6,4.6 0 1 0 4.4,-6"/><path d="M-0.5,-6.8 l2.2,2.2 l-2.7,1.5"/></g>
-    <!-- basso dx: apri -->
-    <g transform="translate(81,66)"><rect x="-4.5" y="-1" width="9" height="7" rx="1.5"/><path d="M-2.3,-1 v-2.3 a2.3,2.3 0 0 1 4.6,-.5"/></g>
-  </g>
-  <!-- led centrale -->
-  <rect x="53" y="47.2" width="14" height="3.6" rx="1.8" fill="#15181e" stroke="#3a3f48" stroke-width=".5"/>
-  <rect class="k-led" x="55" y="48.3" width="10" height="1.4" rx=".7" fill="#ff5a5a" opacity="0"/>
-  <circle class="k-press" cx="81" cy="66" r="14" fill="url(#mhfobp)" opacity="0"/>
-</svg></div>
-          <img class="mh-hand mh-hand-consulente" id="mh-giver" src="/img/macro/mano-consulente-3d.png" alt="">
-        </div>
-        <div class="mh-badge" id="mh-badge"><i><svg width="11" height="11" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></i>Consegnata</div>
-      </div>
-      <div class="mh-info">
-        <div>
-          <div class="mh-kicker"><i></i>Consegne e analisi</div>
-          <h2>Power BI</h2>
-          <p>Tempistiche di consegna, analisi dell'avanzamento, report ed export Excel.</p>
-        </div>
-        <span class="mh-go"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
-      </div>
+    <!-- BI: locandina con l'insegna della sede e grafici animati -->
+    <button class="mh-bay mh-out mh-bi" type="button" data-mh="bi" aria-label="Entra in BI"><div class="mh-bay-in">
+      <div class="mh-bi-bg"></div>
+    <div class="mh-bi-stars"></div><div class="mh-bi-halo"></div>
+    <div class="mh-bi-facade"><img src="/img/macro/sede-insegna.png" alt="Sede Gruppo Autoscala"></div>
+    <div class="mh-bi-letters"></div><span class="mh-bi-shoot"></span><span class="mh-bi-shoot mh-bi-s2"></span>
+    <div class="mh-bi-floor"></div>
+    <div class="mh-bi-w" style="left:24px;top:218px;animation-delay:-1s"><small>Vendite per mese</small>
+      <div class="mh-bi-bars"><i style="--h:45%"></i><i style="--h:70%;animation-delay:.1s"></i><i style="--h:55%;animation-delay:.2s"></i><i style="--h:88%;animation-delay:.3s"></i><i style="--h:64%;animation-delay:.4s"></i><i style="--h:100%;animation-delay:.5s;background:linear-gradient(180deg,#ffd08a,#f4a83a)"></i></div></div>
+    <div class="mh-bi-w mh-bi-donut" style="left:190px;top:244px;padding:10px;animation-delay:-3s">
+      <svg width="96" height="96" viewBox="0 0 96 96"><circle cx="48" cy="48" r="36" fill="none" stroke="rgba(255,255,255,.12)" stroke-width="12"/>
+        <circle class="mh-bi-v" cx="48" cy="48" r="36" fill="none" stroke="#34c38f" stroke-width="12" stroke-linecap="round" transform="rotate(-90 48 48)"/>
+        <text x="48" y="46" text-anchor="middle" fill="#fff" font-size="22" font-weight="800" font-family="Inter,sans-serif">✓</text>
+        <text x="48" y="60" text-anchor="middle" fill="#aab3c2" font-size="8" font-weight="700" font-family="Inter,sans-serif">CONSEGNE</text></svg></div>
+    <div class="mh-bi-w mh-bi-line" style="left:310px;top:216px;width:226px;animation-delay:-2s"><small>Importo finanziato</small><b>Andamento</b>
+      <svg width="200" height="46" viewBox="0 0 200 46"><defs><linearGradient id="mh-bia" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4a83a" stop-opacity=".45"/><stop offset="1" stop-color="#f4a83a" stop-opacity="0"/></linearGradient></defs>
+        <path class="mh-bi-a" d="M0,38 C20,30 30,34 50,24 S90,26 110,16 S150,20 170,8 L200,6 L200,46 L0,46 Z" fill="url(#mh-bia)"/>
+        <path class="mh-bi-l" d="M0,38 C20,30 30,34 50,24 S90,26 110,16 S150,20 170,8 L200,6" fill="none" stroke="#f4a83a" stroke-width="3" stroke-linecap="round"/></svg></div>
+    <div class="mh-bi-w mh-bi-kpi" style="left:372px;top:22px;animation-delay:-4s"><span class="mh-bi-live"></span><div><small>Dati sempre aggiornati</small><b style="font-size:13px">dal foglio, ogni 5 minuti</b></div></div>
+    <div class="mh-bi-info"><div><div class="mh-bi-k"><i></i>Report e analisi</div><h2>BI</h2><p>Consegne, stock, report e analisi dei dati di vendita.</p></div>
+      <span class="mh-bi-go"><svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+  
     </div></button>
   </div>
 </div>
@@ -379,108 +357,14 @@
       const clock = document.getElementById('mh-clock'); const d = new Date(); clock.textContent = d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0');
       let phoneTimer = null, phoneFirst = null;
 
-      /* ===== consegna delle chiavi (timeline in JS) ===== */
-      const scene = document.getElementById('mh-handover'), palm = document.getElementById('mh-palm'), giver = document.getElementById('mh-giver');
-      const fob = document.getElementById('mh-fob'), fobShadow = document.getElementById('mh-fobShadow'), badge = document.getElementById('mh-badge');
-      const press = fob.querySelector('.k-press'), led = fob.querySelector('.k-led');
-      const blinks = document.querySelectorAll('.mh-out .mh-blink'), floorflash = document.getElementById('mh-floorflash');
-      const k3 = document.getElementById('mh-k3'), k3Body = document.getElementById('mh-k3Body');
-      const waves = [0, 1, 2].map(() => { const w = document.createElement('span'); w.className = 'mh-wave'; scene.appendChild(w); return w; });
-      const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
-      const ease = t => 1 - Math.pow(1 - t, 3), easeIO = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-      const seg = (t, a, b) => clamp((t - a) / (b - a));
-      const lerp = (a, b, t) => a + (b - a) * t;
-      const PERIOD = 7.4;
-      let active = false;
-      // Punti delle immagini 3D (in frazioni della foto): centro del palmo e punta delle dita
-      const PALM_PT = { x: .388, y: .487 }, TIP_PT = { x: .184, y: .146 };
-      const PALM_POS = { x: 14, y: 150 };
-      let lastSettle = -1;
-
-      function frame(now) {
-        if (!active) return;
-        const t = (now / 1000) % PERIOD;
-        const pw = palm.offsetWidth, ph = palm.offsetHeight, gw = giver.offsetWidth, gh = giver.offsetHeight, fw = fob.offsetWidth;
-        if (!pw || !gw) { requestAnimationFrame(frame); return; }
-
-        // mano del cliente: sale dal basso, accusa il peso della chiave, poi riscende
-        const up = ease(seg(t, .5, 1.4)) - ease(seg(t, 6.7, 7.3));
-        const catchDip = Math.sin(Math.PI * seg(t, 2.72, 3.15)) * 7;
-        const hold = Math.sin(Math.PI * seg(t, 3.2, 6.5)) * -2;
-        const py = PALM_POS.y + lerp(60, 0, up) + catchDip + hold;
-        const prot = lerp(8, 0, up) + catchDip * .4;
-        palm.style.transform = `translate(${PALM_POS.x}px, ${py}px) rotate(${prot}deg)`;
-        palm.style.transformOrigin = '70% 90%';
-        palm.style.opacity = clamp(up * 2.5);
-        const P = { x: PALM_POS.x + PALM_PT.x * pw, y: py + PALM_PT.y * ph };
-
-        // mano del consulente (stessa mano 3D ruotata di 180°): arriva dall'alto a sinistra,
-        // porge la chiave sopra il palmo, la lascia e si ritira
-        const tip = { x: (1 - TIP_PT.x) * gw, y: (1 - TIP_PT.y) * gh };     // punta delle dita dopo la rotazione
-        const target = { x: P.x + 4, y: P.y - 64 };
-        const start = { x: -150, y: -170 };
-        const inT = easeIO(seg(t, .25, 1.75)), down = easeIO(seg(t, 1.75, 2.4)), out = easeIO(seg(t, 2.75, 3.7));
-        let fx0 = lerp(start.x, target.x, inT), fy0 = lerp(start.y, target.y, inT) + down * 22;
-        fx0 = lerp(fx0, start.x, out); fy0 = lerp(fy0, start.y, out);
-        const tilt = lerp(-14, 0, inT) + down * 6 - out * 12;
-        giver.style.transformOrigin = '0 0';
-        giver.style.transform = `translate(${fx0 - tip.x}px, ${fy0 - tip.y}px) translate(${tip.x}px, ${tip.y}px) rotate(${tilt}deg) translate(${-tip.x}px, ${-tip.y}px) translate(${gw / 2}px, ${gh / 2}px) rotate(180deg) translate(${-gw / 2}px, ${-gh / 2}px)`;
-        giver.style.opacity = t < 3.7 ? 1 : 0;
-
-        // chiave: stretta tra le dita (dondola appena), poi lasciata cadere nel palmo
-        const release = 2.5;
-        let cx, cy, rot, sy = 1;
-        if (t < release) {
-          const swing = Math.exp(-2 * Math.max(0, t - .3)) * Math.sin(8 * t) * 14;
-          cx = fx0; cy = fy0 + 12; rot = -22 + swing + tilt * .5;
-          fobShadow.style.opacity = 0;
-        } else {
-          const f = ease(seg(t, release, release + .3));
-          const bounce = Math.sin(Math.PI * seg(t, release + .3, release + .52)) * -5;
-          cx = lerp(fx0, P.x, f); cy = lerp(fy0 + 12, P.y - 8, f) + bounce; rot = lerp(-22, -16, f) + prot * .6;
-          sy = lerp(1, .78, f);
-          fobShadow.style.opacity = f * .9;
-          fobShadow.style.transform = `translate(${P.x - 26}px, ${P.y + 8}px)`;
-        }
-        const fade = 1 - seg(t, 6.6, 7.0);
-        fob.style.transform = `translate(${cx - fw / 2}px, ${cy - fw / 2}px) rotate(${rot}deg) scaleY(${sy})`;
-        fob.style.opacity = (t < .25 ? 0 : 1) * fade;
-        fobShadow.style.opacity = parseFloat(fobShadow.style.opacity || 0) * fade;
-
-        // tasto "apri" premuto -> onde verso l'auto -> frecce che lampeggiano, l'auto si "assesta"
-        const pr = Math.sin(Math.PI * seg(t, 3.9, 4.35));
-        press.style.opacity = pr; led.style.opacity = pr;
-        const car = k3.getBoundingClientRect(), s = scene.getBoundingClientRect();
-        const k = parseFloat(getComputedStyle(scene.closest('.mh-bay')).getPropertyValue('--k')) || 1;
-        const tx = (car.left - s.left + car.width * .34) / k, ty = (car.top - s.top + car.height * .45) / k;
-        waves.forEach((w, i) => {
-          const k = seg(t, 4.05 + i * .18, 4.95 + i * .18);
-          w.style.opacity = k > 0 && k < 1 ? (1 - k) * .9 : 0;
-          w.style.left = lerp(P.x, tx, k) + 'px'; w.style.top = lerp(P.y - 16, ty, k) + 'px';
-          w.style.transform = `scale(${.6 + k * 1.4})`;
-        });
-        const bl = Math.max(Math.sin(Math.PI * seg(t, 4.75, 5.1)), Math.sin(Math.PI * seg(t, 5.25, 5.6)));
-        blinks.forEach(b => b.style.opacity = bl);
-        floorflash.style.opacity = bl * .9;
-        const cyc = Math.floor((now / 1000) / PERIOD);
-        if (t > 4.75 && lastSettle !== cyc) { lastSettle = cyc; k3Body.classList.remove('mh-settle'); void k3Body.offsetWidth; k3Body.classList.add('mh-settle'); }
-        badge.classList.toggle('mh-show', t > 5.3 && t < 6.9);
-        requestAnimationFrame(frame);
-      }
       // Avvio/arresto: le animazioni girano SOLO mentre la home e' visibile
       function start() {
         setGreeting(); scaleBays();
-        if (reduce) {
-          palm.style.transform = `translate(${PALM_POS.x}px, ${PALM_POS.y}px)`; palm.style.opacity = 1;
-          giver.style.display = 'none'; badge.classList.add('mh-show');
-          return;
-        }
+        if (reduce) return;
         replayEnter();
-        if (!active) { active = true; requestAnimationFrame(frame); }
         if (!phoneTimer) { phoneFirst = setTimeout(arrive, 1600); phoneTimer = setInterval(arrive, 3800); }
       }
       function stop() {
-        active = false;
         clearTimeout(phoneFirst); clearInterval(phoneTimer); phoneTimer = null;
       }
       return { start, stop };
@@ -493,6 +377,7 @@
         hide: hide,
         onShowPage: onShowPage,
         openConsegne: openConsegne,
+        openBI: openBI,
         reset: reset,
         isInConsegne: function () { return inConsegne; }
     };

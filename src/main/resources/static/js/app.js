@@ -107,8 +107,8 @@ const CHART_PERMISSIONS = [
     { key: 'G_SRV_STATO', group: 'Service', label: 'Distribuzione stato pratiche' },
     { key: 'G_SRV_CHIAMATE', group: 'Service', label: 'Chiamate ricevute vs appuntamenti' },
     { key: 'G_SRV_ESITO', group: 'Service', label: 'Esito appuntamenti/lavorazioni' },
-    { key: 'G_CG_TEMPI', group: 'Power BI', label: 'Tempistiche consegne' },
-    { key: 'G_CG_MOTIVI', group: 'Power BI', label: 'Da consegnare per motivo' }
+    { key: 'G_CG_TEMPI', group: 'Consegne', label: 'Tempistiche consegne' },
+    { key: 'G_CG_MOTIVI', group: 'Consegne', label: 'Da consegnare per motivo' }
 ];
 
 // true se l'utente loggato puo' vedere il grafico. Se il server non ha
@@ -554,6 +554,9 @@ window.onload = function() {
             const macroHomeOk = !openAlertId && window.MacroHome && MacroHome.canShow(data.role);
             if (macroHomeOk && urlHash === 'consegne') {
                 MacroHome.openConsegne();
+                hideLoadingOverlay();
+            } else if (macroHomeOk && urlHash === 'bi') {
+                MacroHome.openBI();
                 hideLoadingOverlay();
             } else if (macroHomeOk && !hashPage) {
                 MacroHome.show();

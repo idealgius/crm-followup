@@ -1,0 +1,150 @@
+/* =====================================================================
+   PAGINA "BI" (macro-sezione): capitoli Consegne / Stock / Commerciale
+   Classi con prefisso bh- per non toccare gli stili del CRM.
+   ===================================================================== */
+#biPage{position:relative;min-height:calc(100vh - 70px);background:#101216;color:#eceff3;font-family:Inter,system-ui,-apple-system,'Segoe UI',sans-serif}
+#biPage *,#biPage *::before,#biPage *::after{box-sizing:border-box}
+
+.bh-page{display:flex;justify-content:center;padding:40px 20px}
+.bh-frame{width:min(1120px,100%);aspect-ratio:1100/640;position:relative}
+.bh-stagewrap{position:absolute;left:0;top:0;width:1100px;height:640px;transform:scale(var(--k,1));transform-origin:0 0;--acc:#f4a83a}
+.bh-card{position:absolute;inset:0;border-radius:30px;background:linear-gradient(180deg,#1a1d23,#15171b);box-shadow:0 40px 80px -40px rgba(0,0,0,.9),inset 0 0 0 1px rgba(255,255,255,.06);overflow:hidden}
+
+/* intestazione */
+.bh-hd{position:absolute;left:40px;top:34px}
+.bh-hd small{display:block;font-size:11px;font-weight:800;letter-spacing:1.6px;color:#8e97a5}
+.bh-hd h1{margin:4px 0 0;font-size:34px;font-weight:800;letter-spacing:-.8px}
+.bh-av{position:absolute;right:40px;top:38px;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-weight:800;background:var(--acc);color:#111;transition:background .8s}
+
+/* capitoli a sinistra */
+.bh-rail{position:absolute;left:40px;top:128px;width:268px}
+.bh-ch{position:relative;display:block;width:100%;text-align:left;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;padding:11px 16px 15px 18px;border-radius:18px;transition:background .35s}
+.bh-ch:hover{background:rgba(255,255,255,.04)}
+.bh-ch.bh-on{background:rgba(255,255,255,.06)}
+.bh-ch .bh-n{font-size:12px;font-weight:800;letter-spacing:1px;color:#6f7886}
+.bh-ch .bh-t{display:block;font-size:20px;font-weight:800;letter-spacing:-.4px;margin-top:2px;color:#8e97a5;transition:color .35s}
+.bh-ch.bh-on .bh-t{color:#fff}
+.bh-ch .bh-d{display:block;font-size:12.5px;color:#7d8694;margin-top:2px}
+.bh-ch .bh-bar{position:absolute;left:18px;right:16px;bottom:8px;height:3px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden}
+.bh-ch .bh-bar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--c);border-radius:2px}
+.bh-ch.bh-on .bh-bar i{animation:bh-fill var(--dur,8s) linear forwards}
+.bh-paused .bh-ch.bh-on .bh-bar i{animation-play-state:paused}
+@keyframes bh-fill{to{width:100%}}
+.bh-sub{margin:12px 0 0;padding:0;list-style:none}
+.bh-sub li{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:12px;font-size:13px;color:#c9d0da;cursor:pointer;opacity:0;transform:translateY(6px);transition:opacity .4s,transform .4s,background .25s}
+.bh-sub li.bh-in{opacity:1;transform:none}
+.bh-sub li:hover{background:rgba(255,255,255,.05)}
+.bh-sub li i{flex:0 0 8px;width:8px;height:8px;border-radius:50%;background:var(--acc)}
+.bh-sub li span{min-width:0;flex:1 1 auto}
+.bh-sub li em{margin-left:auto;font-style:normal;font-size:10.5px;font-weight:700;color:#8e97a5;background:rgba(255,255,255,.07);padding:2px 8px;border-radius:999px;white-space:nowrap;flex:0 0 auto}
+.bh-enter{position:absolute;left:40px;bottom:36px;display:flex;align-items:center;gap:10px;height:54px;padding:0 22px;border-radius:16px;border:0;background:var(--acc);color:#111;font:inherit;font-weight:800;font-size:15px;cursor:pointer;transition:background .8s,transform .25s;box-shadow:0 16px 30px -14px var(--acc)}
+.bh-enter:hover{transform:translateX(3px)}
+.bh-back{position:absolute;left:196px;top:56px;height:36px;padding:0 14px;border-radius:12px;font-size:13px;border:0;background:rgba(255,255,255,.06);color:#eceff3;font:inherit;font-weight:700;cursor:pointer}
+
+/* palco */
+.bh-stage{position:absolute;left:320px;top:30px;right:30px;bottom:30px;border-radius:24px;overflow:hidden;background:#121418;box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+.bh-spot{position:absolute;inset:-10% -10% 30%;background:radial-gradient(55% 70% at 50% 0%,var(--tint),transparent 70%);transition:background 1s}
+.bh-floor{position:absolute;left:-10%;right:-10%;top:58%;bottom:-20%;background:linear-gradient(180deg,#1d2128 0%,#121418 70%);border-top:1px solid rgba(255,255,255,.05)}
+.bh-floor::after{content:"";position:absolute;inset:0;background:radial-gradient(45% 50% at 50% 0%,var(--tint),transparent 70%);opacity:.7;transition:background 1s}
+.bh-scene{position:absolute;inset:0;opacity:0;pointer-events:none}
+.bh-scene.bh-on{opacity:1}
+/* transizione: un fascio di luce attraversa il palco e "rivela" la scena nuova */
+.bh-beam{position:absolute;top:-10%;bottom:-10%;width:160px;left:-200px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.08) 30%,rgba(255,255,255,.55) 50%,rgba(255,255,255,.08) 70%,transparent);filter:blur(6px);pointer-events:none;z-index:20}
+.bh-beam.bh-go{animation:bh-beam .9s cubic-bezier(.6,0,.3,1)}
+@keyframes bh-beam{from{left:-200px}to{left:110%}}
+.bh-scene.bh-reveal{animation:bh-reveal .9s cubic-bezier(.6,0,.3,1)}
+@keyframes bh-reveal{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+.bh-scene.bh-hide{animation:bh-hide .9s cubic-bezier(.6,0,.3,1) forwards}
+@keyframes bh-hide{from{clip-path:inset(0 0 0 0);opacity:1}to{clip-path:inset(0 0 0 100%);opacity:1}}
+.bh-cap{position:absolute;left:28px;top:24px;z-index:5;font-size:11px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;color:#aab3c2;display:flex;align-items:center;gap:8px}
+.bh-cap i{width:7px;height:7px;border-radius:50%;background:var(--acc);box-shadow:0 0 10px var(--acc)}
+
+/* CONSEGNE */
+.bh-k3{position:absolute;left:330px;top:205px;width:385px}
+.bh-k3 .bh-body{position:relative;animation:bh-idle 5s ease-in-out infinite}
+.bh-k3 .bh-body.bh-settle{animation:bh-settle .7s ease-out}
+@keyframes bh-idle{50%{transform:translateY(-1.5px)}}
+@keyframes bh-settle{30%{transform:translateY(3px)}65%{transform:translateY(-1px)}}
+.bh-k3 img{display:block;width:100%;filter:drop-shadow(0 26px 22px rgba(0,0,0,.65))}
+.bh-k3 .bh-refl{position:absolute;left:0;top:96%;width:100%;transform:scaleY(-1);opacity:.14;filter:blur(1.5px);-webkit-mask-image:linear-gradient(to top,rgba(0,0,0,.9),transparent 45%);mask-image:linear-gradient(to top,rgba(0,0,0,.9),transparent 45%)}
+.bh-k3 .bh-bl{position:absolute;border-radius:50%;opacity:0;mix-blend-mode:screen;background:radial-gradient(closest-side,rgba(255,190,90,1),rgba(255,150,40,.55) 45%,transparent)}
+.bh-ho{position:absolute;left:96px;top:150px;width:300px;height:420px}
+.bh-ho .bh-hand{position:absolute;left:0;top:0;filter:drop-shadow(0 22px 22px rgba(0,0,0,.6));will-change:transform}
+.bh-ho .bh-cli{width:205px}.bh-ho .bh-con{width:185px}
+.bh-ho .bh-fob{position:absolute;left:0;top:0;width:62px;will-change:transform}
+.bh-ho .bh-fob svg{display:block;width:100%;filter:drop-shadow(0 6px 6px rgba(0,0,0,.5))}
+.bh-ho .bh-fsh{position:absolute;left:0;top:0;width:62px;height:16px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.45),transparent);opacity:0}
+.bh-ho .bh-wave{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:2.5px solid rgba(140,215,255,.95);opacity:0}
+.bh-ok{position:absolute;right:26px;top:22px;z-index:6;display:flex;align-items:center;gap:7px;padding:8px 13px;border-radius:999px;background:rgba(20,22,26,.8);border:1px solid rgba(52,195,143,.5);font-weight:700;font-size:13px;opacity:0;transform:translateY(-8px);transition:.4s}
+.bh-ok.bh-show{opacity:1;transform:none}
+.bh-ok i{width:18px;height:18px;border-radius:50%;background:#34c38f;display:grid;place-items:center}
+
+/* STOCK: pedana girevole con i marchi */
+.bh-turn{position:absolute;left:50%;top:44%;width:0;height:0;perspective:1100px}
+.bh-ring{position:absolute;left:0;top:0;transform-style:preserve-3d;transform:rotateX(-12deg) rotateY(0deg);animation:bh-spin 40s linear infinite}
+.bh-paused .bh-ring{animation-play-state:paused}
+@keyframes bh-spin{to{transform:rotateX(-12deg) rotateY(-360deg)}}
+.bh-plq{position:absolute;left:-46px;top:-46px;width:92px;height:92px;border-radius:22px;display:grid;place-items:center;
+  background:linear-gradient(160deg,#ffffff,#e6e9ee);box-shadow:0 18px 26px -14px rgba(0,0,0,.7),inset 0 0 0 1px rgba(255,255,255,.7);backface-visibility:hidden}
+.bh-plq img{max-width:72%;max-height:62%;object-fit:contain}
+.bh-disc{position:absolute;left:50%;top:70%;width:560px;height:120px;margin-left:-280px;border-radius:50%;
+  background:radial-gradient(closest-side,rgba(63,207,174,.28),rgba(63,207,174,.06) 70%,transparent);box-shadow:0 0 0 2px rgba(63,207,174,.25) inset}
+.bh-disc::before{content:"";position:absolute;inset:16% 10%;border-radius:50%;border:1.5px dashed rgba(63,207,174,.35)}
+@keyframes bh-dash{to{transform:rotate(360deg)}}
+.bh-chip{position:absolute;left:50%;bottom:34px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;padding:9px 16px;border-radius:999px;background:rgba(20,22,26,.8);border:1px solid rgba(63,207,174,.45);font-size:13px;font-weight:700}
+.bh-chip i{width:8px;height:8px;border-radius:50%;background:#3fcfae;box-shadow:0 0 10px #3fcfae;animation:bh-tw 1.6s ease-in-out infinite}
+@keyframes bh-tw{50%{opacity:.3}}
+/* COMMERCIALE: abitacolo digitale con i dati (lead, vendite, noleggio) */
+.bh-ck{position:absolute;inset:0;background:linear-gradient(180deg,#0b0c12 0%,#0e0f13 40%,#120c0a 100%)}
+.bh-ck-sky{position:absolute;left:0;right:0;top:0;height:140px;background:linear-gradient(180deg,#2a3150 0%,#3a3550 55%,#5a3b3a 100%)}
+.bh-ck-sky svg{position:absolute;inset:0;width:100%;height:100%}
+.bh-ck-dash{position:absolute;left:-20px;right:-20px;top:112px;height:230px;border-radius:40px 40px 10px 10px;background:linear-gradient(180deg,#17181d,#0d0e11);box-shadow:0 -2px 0 rgba(255,255,255,.06),0 30px 40px -20px rgba(0,0,0,.9)}
+.bh-ck-disp{position:absolute;left:44px;right:44px;top:26px;height:156px;border-radius:16px;background:linear-gradient(180deg,#07080b,#0b0c10);box-shadow:inset 0 0 0 1px rgba(255,255,255,.07),inset 0 10px 30px rgba(255,122,26,.05);display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:10px;padding:14px 16px;color:#f4f1ec}
+.bh-ck-disp small{display:block;font-size:9.5px;font-weight:800;letter-spacing:1.3px;color:#ff9a4d}
+.bh-ck-disp b{display:block;font-size:34px;font-weight:800;letter-spacing:-1px;line-height:1.05;font-variant-numeric:tabular-nums}
+.bh-ck-p em{font-style:normal;font-size:11px;font-weight:700;color:#5fd39b}
+.bh-ck-spark{width:100%;height:40px;margin-top:4px}
+.bh-ck-spark path{fill:none;stroke:#ff9a4d;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:240;stroke-dashoffset:240}
+.bh-ck-g{position:relative;text-align:center}
+.bh-ck-g svg{width:100%;height:96px}
+.bh-ck-arc{stroke-dasharray:283;stroke-dashoffset:283}
+.bh-ck-needle{transform-origin:110px 118px;transform:rotate(-90deg)}
+.bh-ck-gv{position:absolute;left:0;right:0;top:52px;display:flex;justify-content:center;align-items:baseline;gap:2px}
+.bh-ck-gv b{font-size:26px}.bh-ck-gv span{font-size:13px;color:#ffb37a;font-weight:700}
+.bh-ck-g small{margin-top:4px}
+.bh-ck-r{display:grid;grid-template-rows:1fr 1fr;gap:8px}
+.bh-ck-p2{display:grid;grid-template-columns:1fr auto;align-items:end;gap:2px 8px}
+.bh-ck-p2 small{grid-column:1/-1}
+.bh-ck-p2 b{font-size:24px}
+.bh-ck-bars{display:flex;align-items:flex-end;gap:3px;height:28px}
+.bh-ck-bars i{width:7px;border-radius:2px;background:linear-gradient(180deg,#ffb37a,#ff6a1a);height:10%}
+.bh-ck-bars.bh-rent i{background:linear-gradient(180deg,#9fd0ff,#3d82e0)}
+.bh-ck-strip{position:absolute;left:30px;right:30px;bottom:30px;height:3px;border-radius:3px;background:linear-gradient(90deg,transparent,#ff6a1a 15%,#ffb37a 50%,#ff6a1a 85%,transparent);box-shadow:0 0 18px 4px rgba(255,106,26,.55);animation:bh-ck-glow 3.5s ease-in-out infinite}
+@keyframes bh-ck-glow{50%{opacity:.6;box-shadow:0 0 10px 2px rgba(255,106,26,.35)}}
+.bh-ck-console{position:absolute;left:50%;top:330px;width:250px;height:260px;margin-left:-125px;background:linear-gradient(180deg,#1a1b20,#0b0c0f);clip-path:polygon(18% 0,82% 0,100% 100%,0 100%);box-shadow:inset 0 0 0 1px rgba(255,255,255,.05)}
+.bh-ck-console::before,.bh-ck-console::after{content:"";position:absolute;top:0;bottom:0;width:2px;background:linear-gradient(180deg,rgba(255,106,26,.9),rgba(255,106,26,.1));box-shadow:0 0 12px rgba(255,106,26,.7)}
+.bh-ck-console::before{left:18%;transform:skewX(-11deg);transform-origin:top}
+.bh-ck-console::after{right:18%;transform:skewX(11deg);transform-origin:top}
+.bh-ck-keys{position:absolute;left:30%;right:30%;top:22px;display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.bh-ck-keys i{height:16px;border-radius:5px;background:#24262c;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.bh-ck-keys i.bh-lit{background:#3a2516;box-shadow:inset 0 0 0 1px rgba(255,140,60,.6),0 0 10px rgba(255,106,26,.5)}
+.bh-ck-knob{position:absolute;left:50%;top:150px;width:58px;height:58px;margin-left:-29px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#3a3c44,#121317);box-shadow:0 0 0 4px #0b0c0f,0 0 0 6px rgba(255,106,26,.6),0 0 22px rgba(255,106,26,.45)}
+.bh-ck-knob span{position:absolute;left:50%;top:6px;width:3px;height:14px;margin-left:-1.5px;border-radius:2px;background:#ff9a4d;transform-origin:50% 23px;animation:bh-ck-knob 6s ease-in-out infinite}
+@keyframes bh-ck-knob{0%,100%{transform:rotate(-40deg)}50%{transform:rotate(60deg)}}
+.bh-ck-wheel{position:absolute;right:-120px;top:330px;width:330px;height:330px;filter:drop-shadow(0 20px 30px rgba(0,0,0,.8))}
+.bh-ck-seat{position:absolute;bottom:-20px;width:150px;height:120px;border-radius:40px 40px 0 0;border:2px solid rgba(255,106,26,.75);border-bottom:0;box-shadow:0 0 18px rgba(255,106,26,.45);background:linear-gradient(180deg,rgba(150,30,30,.35),rgba(60,10,10,.2))}
+.bh-ck-seat.bh-l{left:40px}.bh-ck-seat.bh-r{right:40px;display:none}
+/* avvio: i dati "si accendono" */
+.bh-ck.bh-run .bh-ck-spark path{animation:bh-ck-draw 1.6s .4s ease-out forwards}
+@keyframes bh-ck-draw{to{stroke-dashoffset:0}}
+.bh-ck.bh-run .bh-ck-arc{animation:bh-ck-arc 1.8s .3s cubic-bezier(.2,.8,.2,1) forwards}
+@keyframes bh-ck-arc{to{stroke-dashoffset:62}}
+.bh-ck.bh-run .bh-ck-needle{animation:bh-ck-nd 1.8s .3s cubic-bezier(.2,.8,.2,1) forwards}
+@keyframes bh-ck-nd{to{transform:rotate(50deg)}}
+.bh-ck.bh-run .bh-ck-bars i{animation:bh-ck-bar .9s cubic-bezier(.2,.8,.2,1) forwards}
+.bh-ck.bh-run .bh-ck-bars i:nth-child(2){animation-delay:.1s}.bh-ck.bh-run .bh-ck-bars i:nth-child(3){animation-delay:.2s}.bh-ck.bh-run .bh-ck-bars i:nth-child(4){animation-delay:.3s}.bh-ck.bh-run .bh-ck-bars i:nth-child(5){animation-delay:.4s}
+@keyframes bh-ck-bar{to{height:var(--h)}}
+.bh-cm-chip{border-color:rgba(155,123,255,.5)}
+.bh-cm-chip i{background:#9b7bff;box-shadow:0 0 10px #9b7bff}
+.bh-enter.bh-off{opacity:.45;cursor:default;box-shadow:none}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}

@@ -482,10 +482,10 @@
           <div class="cg-band-top">
             <div>
               <div class="cg-back-row">
-                <button type="button" class="cg-back" onclick="MacroHome.show()">&larr; Home</button>
+                <button type="button" class="cg-back" onclick="MacroHome.openBI()">&larr; BI</button>
               </div>
-              <h1>Power BI</h1>
-              <p>Consegne, tempistiche e analisi dell'avanzamento</p>
+              <h1>Consegne</h1>
+              <p>Tempistiche di consegna e analisi dell'avanzamento</p>
             </div>
             <div class="cg-actions">
               <label class="cg-btn" id="cgImportLbl" style="display:none">Importa trattative (CSV)<input type="file" accept=".csv,text/csv" id="cgFileTratt" hidden></label>
