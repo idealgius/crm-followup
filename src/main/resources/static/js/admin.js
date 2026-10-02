@@ -214,7 +214,8 @@ const PERMISSION_SECTIONS = [
     // Chi non ce l'ha entra direttamente in In bound.
     { key: 'CONSEGNE', icon: '🔑', label: 'BI (selezione area)' },
     // NUOVO: area Stock (macro-sezione BI). Solo lettura = vede; Completo = importa il file.
-    { key: 'STOCK', icon: '🚘', label: 'Stock' }
+    { key: 'STOCK', icon: '🚘', label: 'Stock' },
+    { key: 'ALLERT', icon: '🔔', label: 'Allert (Completo = gestisce · Admin = anche riapre i gestiti)' }
 ];
 
 const ACCESS_LEVEL_META = {

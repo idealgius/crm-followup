@@ -307,13 +307,26 @@ function isAlertPendingForCurrentUser(log) {
     return !!log && hasAcquistoAlert(log) && log.acquistoAlertStatus !== 'GESTITA' && canSeeAlertPopup(log);
 }
 
+// NUOVO: gestione degli Allert dal permesso "ALLERT" (pagina Permessi):
+//   Nessuno / Solo lettura = vede soltanto
+//   Completo               = gestisce (in gestione, gestita, note, destinatari, mail)
+//   Admin                  = come Completo e in piu' puo' RIAPRIRE un allert gestito
+// Se i permessi non sono ancora caricati vale la regola di prima per ruolo
+// (Back Office gestisce, dal Moderatore in su gestisce e riapre).
+function alertAccessLevel() {
+    if (!currentUser) return 'NONE';
+    if (typeof myEffectivePermissions !== 'undefined' && myEffectivePermissions && myEffectivePermissions.ALLERT) return myEffectivePermissions.ALLERT;
+    const r = currentUser.role;
+    if (r === 'MODERATORE' || r === 'GESTORE' || r === 'ADMIN') return 'ADMIN_FULL';
+    if (r === 'BACK_OFFICE') return 'FULL';
+    return 'NONE';
+}
 function canManageAlerts() {
-    // NUOVO ruolo BACKOFFICE: stesso potere del Moderatore per la gestione
-    // allert Info Acquisto — ma NON per l'eliminazione/modifica dei contatti
-    // altrui (quella resta gestita separatamente in renderContactRow, dove
-    // BACKOFFICE non viene aggiunto alla lista dei ruoli con pieni poteri,
-    // quindi può modificare/eliminare solo i propri, come un UTENTE/BDC).
-    return currentUser && (currentUser.role === 'MODERATORE' || currentUser.role === 'GESTORE' || currentUser.role === 'ADMIN' || currentUser.role === 'BACK_OFFICE');
+    const a = alertAccessLevel();
+    return a === 'FULL' || a === 'ADMIN_FULL';
+}
+function canReopenAlerts() {
+    return alertAccessLevel() === 'ADMIN_FULL';
 }
 // L'allert è condiviso da Info Acquisto effettuato, Pratica Leasing e
 // Pratica Finanziamento — stesso meccanismo, tre categorie.
@@ -2127,6 +2140,12 @@ async function openAlertFromLink(id) {
 }
 
 function openAcquistoAlertModal(id) {
+    // passando a un altro allert con una nota scritta e non salvata: prima si sceglie cosa farne
+    if (acquistoAlertModalId && id !== acquistoAlertModalId && ['acquistoAlertNoteGestione', 'acquistoAlertNoteGestita'].some(alertNoteDirty)) {
+        alertNotesGuard('passare a un altro allert').then(ok => { if (ok) openAcquistoAlertModal(id); });
+        return;
+    }
+    if (id !== acquistoAlertModalId) alertNoteSaved = {};
     const log = contactLogs.find(l => l.id === id)
         || lastDetailItems.find(l => l.id === id)
         || customerHistoryCache.find(l => l.id === id);
@@ -2450,16 +2469,32 @@ function refreshAcquistoAlertModalDisplay(log) {
 
     const noteGestioneEl = document.getElementById('acquistoAlertNoteGestione');
     const noteGestitaEl = document.getElementById('acquistoAlertNoteGestita');
-    if (noteGestioneEl && document.activeElement !== noteGestioneEl) noteGestioneEl.value = log.acquistoAlertNoteGestione || '';
-    if (noteGestitaEl && document.activeElement !== noteGestitaEl) noteGestitaEl.value = log.acquistoAlertNoteGestita || '';
+    if (noteGestioneEl && document.activeElement !== noteGestioneEl && !alertNoteDirty('acquistoAlertNoteGestione')) noteGestioneEl.value = log.acquistoAlertNoteGestione || '';
+    if (noteGestitaEl && document.activeElement !== noteGestitaEl && !alertNoteDirty('acquistoAlertNoteGestita')) noteGestitaEl.value = log.acquistoAlertNoteGestita || '';
 
     const readOnly = !canManageAlerts();
     if (noteGestioneEl) noteGestioneEl.disabled = readOnly;
     if (noteGestitaEl) noteGestitaEl.disabled = readOnly;
+    // Allert gia' GESTITO: "In gestione" e "Rimuovi gestione" lo riaprirebbero,
+    // quindi compaiono solo a chi ha il permesso di riaprire (Admin sugli Allert).
+    const bloccatoGestito = log.acquistoAlertStatus === 'GESTITA' && !canReopenAlerts();
     ['acquistoAlertBtnInGestione','acquistoAlertBtnGestita','acquistoAlertBtnRimuovi'].forEach(elId => {
         const el = document.getElementById(elId);
-        if (el) el.style.display = readOnly ? 'none' : 'inline-block';
+        const nascondi = readOnly || (bloccatoGestito && elId !== 'acquistoAlertBtnGestita');
+        if (el) el.style.display = nascondi ? 'none' : 'inline-block';
     });
+    ensureAlertNoteControls();
+    let lockMsg = document.getElementById('acquistoAlertLockedNote');
+    const gestitaBtn = document.getElementById('acquistoAlertBtnGestita');
+    if (!lockMsg && gestitaBtn) {
+        lockMsg = document.createElement('div');
+        lockMsg.id = 'acquistoAlertLockedNote';
+        lockMsg.style.cssText = 'display:none;margin:4px 0 12px;padding:9px 12px;border-radius:8px;font-size:12px;background:rgba(0,200,83,0.08);border:1px solid rgba(0,200,83,0.35);color:var(--text-secondary)';
+        lockMsg.textContent = '🔒 Allert gestito: può riaprirlo solo chi ha il permesso (di default dal Moderatore in su). La nota di chiusura resta modificabile.';
+        gestitaBtn.parentNode.insertBefore(lockMsg, gestitaBtn);
+    }
+    if (lockMsg) lockMsg.style.display = (!readOnly && bloccatoGestito) ? 'block' : 'none';
+    ['acquistoAlertNoteGestione', 'acquistoAlertNoteGestita'].forEach(f => syncAlertNoteState(f, log));
     const readOnlyNote = document.getElementById('acquistoAlertReadOnlyNote');
     if (readOnlyNote) readOnlyNote.style.display = readOnly ? 'block' : 'none';
 
@@ -2561,25 +2596,29 @@ function renderAlertTaskbar() {
     `).join('');
 }
 
-function restoreAlertWindow(id) {
+async function restoreAlertWindow(id) {
+    if (id !== acquistoAlertModalId && !(await alertNotesGuard('passare a un altro allert'))) return;
     openAcquistoAlertModal(id);
 }
 
-function closeAlertWindowFromTaskbar(id) {
+async function closeAlertWindowFromTaskbar(id) {
+    if (acquistoAlertModalId === id && !(await alertNotesGuard('chiudere'))) return;
     alertTaskbar = alertTaskbar.filter(w => w.id !== id);
-    if (acquistoAlertModalId === id) closeAcquistoAlertModal();
+    if (acquistoAlertModalId === id) closeAcquistoAlertModal(null, true);
     renderAlertTaskbar();
 }
 
 // Riduce l'allert attualmente aperto a una linguetta nella taskbar in
 // basso, SENZA chiuderlo — resta raggiungibile con un clic.
-function minimizeAcquistoAlertModal() {
+async function minimizeAcquistoAlertModal() {
+    if (!(await alertNotesGuard('ridurre la finestra'))) return;
     const modal = document.getElementById('acquistoAlertModal');
     if (modal) modal.style.display = 'none';
 }
 
-function closeAcquistoAlertModal(event) {
+async function closeAcquistoAlertModal(event, skipGuard) {
     if (event && event.target.id !== 'acquistoAlertModal') return;
+    if (!skipGuard && !(await alertNotesGuard('chiudere'))) return;
     const modal = document.getElementById('acquistoAlertModal');
     if (modal) modal.style.display = 'none';
     // Chiudere per davvero (✕) rimuove anche la linguetta dalla taskbar,
@@ -2589,10 +2628,15 @@ function closeAcquistoAlertModal(event) {
     acquistoAlertModalId = null;
     acquistoAlertNoteGestioneVisible = false;
     acquistoAlertNoteGestitaVisible = false;
+    alertNoteSaved = {};
 }
 
 async function setAcquistoAlertStatus(status) {
     if (!acquistoAlertModalId || !canManageAlerts()) return;
+    // le note scritte e non ancora salvate si salvano prima del cambio di stato
+    for (const f of ['acquistoAlertNoteGestione', 'acquistoAlertNoteGestita']) {
+        if (alertNoteDirty(f) && !(await saveAcquistoAlertNote(f, true))) return;
+    }
     if (status === 'IN_GESTIONE') { acquistoAlertNoteGestioneVisible = true; }
     else if (status === 'GESTITA') { acquistoAlertNoteGestitaVisible = true; }
     else { acquistoAlertNoteGestioneVisible = false; acquistoAlertNoteGestitaVisible = false; }
@@ -2610,22 +2654,130 @@ async function setAcquistoAlertStatus(status) {
     }
 }
 
-async function saveAcquistoAlertNote(field) {
-    if (!acquistoAlertModalId || !canManageAlerts()) return;
+// ===== NOTE DELL'ALLERT: salvataggio esplicito =====
+// Prima la nota si salvava da sola uscendo dal campo, e non si capiva se era
+// stata salvata (o la si poteva cancellare per sbaglio e chiudere). Ora:
+//  - sotto ogni nota c'e' "💾 Salva nota" (attivo solo se ci sono modifiche)
+//    e lo stato: "Modifiche non salvate" / "✓ Salvata alle hh:mm";
+//  - Ctrl+Invio salva;
+//  - chiudendo, riducendo o passando a un altro allert con modifiche non
+//    salvate compare una scelta: Salva e continua / Non salvare / Torna alla nota;
+//  - svuotare una nota gia' salvata chiede conferma prima di cancellarla.
+let alertNoteSaved = {};      // campo -> testo salvato sul server
+function alertNoteDirty(field) {
+    const el = document.getElementById(field);
+    if (!el || !(field in alertNoteSaved)) return false;
+    const row = el.closest('[id$="Row"]');
+    if (row && row.style.display === 'none') return false;
+    return el.value.trim() !== (alertNoteSaved[field] || '').trim();
+}
+function ensureAlertNoteControls() {
+    ['acquistoAlertNoteGestione', 'acquistoAlertNoteGestita'].forEach(field => {
+        const ta = document.getElementById(field);
+        if (!ta || ta.dataset.saveCtl) return;
+        ta.dataset.saveCtl = '1';
+        ta.removeAttribute('onblur');                 // niente piu' salvataggio automatico uscendo dal campo
+        const bar = document.createElement('div');
+        bar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:6px;flex-wrap:wrap';
+        bar.innerHTML = `<span id="${field}State" style="font-size:12px;font-weight:700"></span>
+            <button type="button" id="${field}Save" class="btn-sede" style="padding:7px 14px;font-weight:800">💾 Salva nota</button>`;
+        ta.insertAdjacentElement('afterend', bar);
+        bar.querySelector('button').addEventListener('click', () => saveAcquistoAlertNote(field));
+        ta.addEventListener('input', () => updateAlertNoteState(field));
+        ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveAcquistoAlertNote(field); } });
+    });
+}
+function syncAlertNoteState(field, log) {
+    if (!log) return;
+    if (!alertNoteDirty(field)) alertNoteSaved[field] = log[field] || '';
+    updateAlertNoteState(field);
+}
+function updateAlertNoteState(field, savedNow) {
+    const st = document.getElementById(field + 'State'), btn = document.getElementById(field + 'Save'), ta = document.getElementById(field);
+    if (!st || !btn || !ta) return;
+    const dirty = alertNoteDirty(field);
+    btn.disabled = !dirty || ta.disabled;
+    btn.style.opacity = btn.disabled ? '0.45' : '1';
+    btn.style.cursor = btn.disabled ? 'default' : 'pointer';
+    btn.style.display = ta.disabled ? 'none' : '';
+    if (dirty) { st.style.color = '#f0c040'; st.textContent = '● Modifiche non salvate'; }
+    else if (savedNow) { st.style.color = '#00c853'; st.textContent = '✓ Nota salvata alle ' + new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }); }
+    else if ((alertNoteSaved[field] || '').trim()) { st.style.color = 'var(--text-secondary)'; st.textContent = '✓ Nota salvata'; }
+    else { st.style.color = 'var(--text-secondary)'; st.textContent = ''; }
+}
+async function saveAcquistoAlertNote(field, silent) {
+    if (!acquistoAlertModalId || !canManageAlerts()) return false;
     const el = document.getElementById(field);
     const value = el ? el.value.trim() : '';
+    if (!value && (alertNoteSaved[field] || '').trim() && !silent
+        && !confirm('La nota è vuota: vuoi cancellare la nota salvata?')) return false;
+    const btn = document.getElementById(field + 'Save');
+    if (btn) { btn.disabled = true; btn.textContent = 'Salvataggio…'; }
     try {
         const res = await fetch(`/api/contacts/${acquistoAlertModalId}`, {
             method: 'PATCH', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ [field]: value || null })
         });
-        if (!res.ok) return;
+        if (!res.ok) {
+            const data = await res.json().catch(() => null);
+            alert('Nota NON salvata: ' + (data?.error || 'errore ' + res.status));
+            return false;
+        }
         const updatedLog = await res.json();
-        applyUpdatedLogEverywhere(updatedLog);
+        alertNoteSaved[field] = updatedLog[field] || '';
+        // la nota e' salvata: un eventuale errore nel ridisegnare la pagina non deve farla sembrare persa
+        try { applyUpdatedLogEverywhere(updatedLog); } catch (e) { console.error('Aggiornamento vista dopo salvataggio nota:', e); }
+        try { refreshAcquistoAlertModalDisplay(updatedLog); } catch (e) { console.error(e); }
+        updateAlertNoteState(field, true);
+        return true;
     } catch (err) {
         console.error('Errore salvataggio nota allert:', err);
+        alert('Nota NON salvata: errore di connessione. Riprova.');
+        return false;
+    } finally {
+        if (btn) btn.textContent = '💾 Salva nota';
+        updateAlertNoteState(field, false);
+        const st = document.getElementById(field + 'State');
+        if (st && !alertNoteDirty(field) && (alertNoteSaved[field] || '').trim()) {
+            st.style.color = '#00c853';
+            st.textContent = '✓ Nota salvata alle ' + new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+        }
     }
 }
+// Scelta quando ci sono note non salvate: true = si puo' procedere
+function alertNotesGuard(azione) {
+    const dirty = ['acquistoAlertNoteGestione', 'acquistoAlertNoteGestita'].filter(alertNoteDirty);
+    if (!dirty.length) return Promise.resolve(true);
+    return new Promise(resolve => {
+        const box = document.createElement('div');
+        box.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px';
+        box.innerHTML = `<div style="background:var(--card-bg,#1a1d26);color:var(--text-primary,#fff);border:1.5px solid #f0c040;border-radius:14px;max-width:420px;width:100%;padding:20px 22px;box-shadow:0 20px 50px rgba(0,0,0,.5)">
+            <div style="font-size:16px;font-weight:800;margin-bottom:6px">📝 Nota non salvata</div>
+            <div style="font-size:13px;color:var(--text-secondary,#aab);margin-bottom:16px">Hai scritto una nota che non è ancora salvata. Cosa vuoi fare prima di ${azione}?</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <button type="button" data-a="save" class="btn-gold" style="width:100%;background:linear-gradient(135deg,#00c853,#00913c);color:#fff">💾 Salva la nota e continua</button>
+              <button type="button" data-a="discard" class="btn-secondary" style="width:100%">Non salvare</button>
+              <button type="button" data-a="back" class="btn-secondary" style="width:100%">↩ Torna alla nota</button>
+            </div></div>`;
+        document.body.appendChild(box);
+        box.addEventListener('click', async e => {
+            const b = e.target.closest('[data-a]'); if (!b) return;
+            const a = b.dataset.a;
+            if (a === 'save') {
+                b.disabled = true; b.textContent = 'Salvataggio…';
+                for (const f of dirty) { if (!(await saveAcquistoAlertNote(f, true))) { box.remove(); resolve(false); return; } }
+                box.remove(); resolve(true);
+            } else if (a === 'discard') {
+                dirty.forEach(f => { const el = document.getElementById(f); if (el) el.value = alertNoteSaved[f] || ''; updateAlertNoteState(f); });
+                box.remove(); resolve(true);
+            } else { box.remove(); const el = document.getElementById(dirty[0]); if (el) el.focus(); resolve(false); }
+        });
+    });
+}
+// uscendo dalla pagina con una nota non salvata il browser chiede conferma
+window.addEventListener('beforeunload', e => {
+    if (['acquistoAlertNoteGestione', 'acquistoAlertNoteGestita'].some(alertNoteDirty)) { e.preventDefault(); e.returnValue = ''; }
+});
 
 function applyUpdatedLogEverywhere(updatedLog) {
     const idx = contactLogs.findIndex(l => l.id === updatedLog.id);

@@ -6,6 +6,7 @@ import com.gruppoautoscala.followup.repository.UserRepository;
 import com.gruppoautoscala.followup.service.AlertMailService;
 import com.gruppoautoscala.followup.service.ContactLogService;
 import com.gruppoautoscala.followup.service.ExcelExportService;
+import com.gruppoautoscala.followup.service.RolePermissionService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
@@ -33,6 +34,19 @@ public class ContactLogController {
 
     @Autowired
     private AlertMailService alertMailService;
+
+    // NUOVO: permesso "ALLERT" (pagina Permessi): Completo = gestisce gli allert,
+    // Admin = gestisce e puo' anche riaprire quelli gia' gestiti.
+    @Autowired
+    private RolePermissionService rolePermissionService;
+
+    private String alertAccess(Long userId, String role) {
+        return rolePermissionService.getEffectiveAccess(userId, role, "ALLERT");
+    }
+
+    // campi che riguardano solo la gestione dell'allert (stato, note, destinatari)
+    private static final java.util.Set<String> ALERT_MGMT_KEYS = java.util.Set.of(
+            "acquistoAlertStatus", "acquistoAlertNoteGestione", "acquistoAlertNoteGestita", "alertNotifyAll", "alertRecipientIds");
 
     // Iniettato da WebSocketConfig — invia messaggi ai client sottoscritti a
     // un topic (es. /topic/contacts). Se non è configurato correttamente
@@ -411,13 +425,25 @@ public class ContactLogController {
         // La gestione dell'Allert (stato + note) è riservata a MODERATORE, GESTORE, ADMIN
         // e ora anche BACK_OFFICE (stesso potere del Moderatore su questo fronte),
         // separatamente dal normale controllo di modifica/proprietà del contatto qui sotto.
+        // NUOVO: ora il controllo usa il permesso "ALLERT" della pagina Permessi
+        // (di default: Back Office = Completo, Moderatore/Gestore/Admin = Admin).
+        // Anche il cambio dei destinatari dal popup di gestione (richiesta fatta
+        // SOLO di campi allert) segue questo permesso.
         boolean isTouchingAlertManagement = body.containsKey("acquistoAlertStatus")
                 || body.containsKey("acquistoAlertNoteGestione")
-                || body.containsKey("acquistoAlertNoteGestita");
+                || body.containsKey("acquistoAlertNoteGestita")
+                || (!body.isEmpty() && ALERT_MGMT_KEYS.containsAll(body.keySet()));
         if (isTouchingAlertManagement) {
-            boolean canManageAlert = "ADMIN".equals(role) || "GESTORE".equals(role) || "MODERATORE".equals(role) || "BACK_OFFICE".equals(role);
-            if (!canManageAlert) {
-                return ResponseEntity.status(403).body(Map.of("error", "Solo Moderatore, Gestore o Admin possono gestire l'Allert"));
+            String acc = alertAccess(userId, role);
+            if (!rolePermissionService.hasAtLeast(acc, "FULL")) {
+                return ResponseEntity.status(403).body(Map.of("error", "Non hai il permesso per gestire gli Allert"));
+            }
+            // Un allert GESTITO si puo' riaprire (rimetterlo in gestione o togliere
+            // la gestione) solo con il permesso Allert = Admin (di default dal Moderatore in su).
+            if (body.containsKey("acquistoAlertStatus") && "GESTITA".equals(log.getAcquistoAlertStatus())
+                    && !"GESTITA".equals(body.get("acquistoAlertStatus"))
+                    && !rolePermissionService.hasAtLeast(acc, "ADMIN_FULL")) {
+                return ResponseEntity.status(403).body(Map.of("error", "Questo Allert è già gestito: può riaprirlo solo un Moderatore o superiore"));
             }
         } else {
             if (!"ADMIN".equals(role) && !"GESTORE".equals(role) && !log.getUser().getId().equals(userId)) {
@@ -589,9 +615,8 @@ public class ContactLogController {
         Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "Utente non trovato"));
         String role = userOpt.get().getRole();
-        boolean canManageAlert = "ADMIN".equals(role) || "GESTORE".equals(role) || "MODERATORE".equals(role) || "BACK_OFFICE".equals(role);
-        if (!canManageAlert) {
-            return ResponseEntity.status(403).body(Map.of("error", "Solo Moderatore, Gestore o Admin possono inviare la mail dell'Allert"));
+        if (!rolePermissionService.hasAtLeast(alertAccess(userId, role), "FULL")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Non hai il permesso per gestire gli Allert"));
         }
 
         Optional<ContactLog> logOpt = contactLogService.getById(id);
