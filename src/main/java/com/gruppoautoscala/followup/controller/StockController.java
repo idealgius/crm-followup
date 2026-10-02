@@ -49,7 +49,7 @@ public class StockController {
     private static final int MAX_RIGHE = 20000;
     private static final String CHIAVE_STORICO = "STOCK_STORICO";
     private static final int MAX_FOTO = 400;
-    private static final String[][] CAMPI_STORICO = { {"tipo", "tipo"}, {"stato", "stato"}, {"carburante", "carburante"}, {"marca", "marca"} };
+    private static final String[][] CAMPI_STORICO = { {"tipo", "tipo"}, {"stato", "stato"}, {"carburante", "carburante"}, {"marca", "marca"}, {"sede", "sede"} };
 
     @Autowired
     private ConsegneDatasetRepository repository;

@@ -112,7 +112,8 @@ const CHART_PERMISSIONS = [
     { key: 'G_ST_TIPO', group: 'Stock', label: 'Nuove, usate e Km 0' },
     { key: 'G_ST_STATO', group: 'Stock', label: 'Disponibili, prenotate e vendute' },
     { key: 'G_ST_MOTORE', group: 'Stock', label: 'Per motorizzazione' },
-    { key: 'G_ST_MARCHI', group: 'Stock', label: 'Per marchio' }
+    { key: 'G_ST_MARCHI', group: 'Stock', label: 'Per marchio' },
+    { key: 'G_ST_SEDE', group: 'Stock', label: 'Per sede' }
 ];
 
 // true se l'utente loggato puo' vedere il grafico. Se il server non ha

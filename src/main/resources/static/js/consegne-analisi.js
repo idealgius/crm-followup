@@ -224,14 +224,17 @@
         return { voci, base: B.length, B };
     }
     // mesi del periodo filtrato (per il grafico a linee)
+    // Mesi del periodo per i grafici a linee. I mesi FUTURI vengono esclusi: sono date scritte
+    // male nel foglio (es. 27/04/2029) e allungherebbero il grafico con mesi vuoti.
+    const NOW_KEY = (() => { const d = new Date(); return d.getFullYear() * 100 + d.getMonth() + 1; })();
     function monthKeys(R) {
-        const ks = [...new Set(R.filter(r => r.dataFiltro).map(r => r.dataFiltro.getFullYear() * 100 + r.dataFiltro.getMonth() + 1))].sort((a, b) => a - b);
+        const ks = [...new Set(R.filter(r => r.dataFiltro).map(r => r.dataFiltro.getFullYear() * 100 + r.dataFiltro.getMonth() + 1))].filter(k => k <= NOW_KEY).sort((a, b) => a - b);
         return ks;
     }
     const mkLabel = k => MESI[k % 100].slice(0, 3) + ' ' + String(Math.floor(k / 100)).slice(2);
     function monthly(voci, R, keyOf) {
         const ks = monthKeys(R);
-        const top = voci.filter(v => v.label !== 'Altri').slice(0, 6);
+        const top = voci;   // tutte le voci (la legenda permette di nascondere quelle che non servono)
         return { labels: ks.map(mkLabel), series: top.map(v => ({ nome: v.label, valori: ks.map(k => v.list.filter(r => r.dataFiltro && (r.dataFiltro.getFullYear() * 100 + r.dataFiltro.getMonth() + 1) === k).length) })) };
     }
 
@@ -375,6 +378,11 @@
         cfg.options.onClick = (ev, els) => { if (els && els.length) chartClick(c, agg, R, chartTypes[c.id], els[0]); };
         cfg.options.onHover = (ev, els) => { if (ev.native && ev.native.target) ev.native.target.style.cursor = els && els.length ? 'pointer' : 'default'; };
         card.querySelector('.cg-an-chart').classList.toggle('dn', chartTypes[c.id] === 'doughnut');   // spazio per la legenda prima di disegnare
+        // barre orizzontali: il riquadro si allunga per far stare tutte le voci con il loro nome
+        const box = card.querySelector('.cg-an-canvas');
+        const nSerie = cfg.type === 'line' ? cfg.data.datasets.length : 0;
+        box.style.height = (cfg.type === 'bar' && cfg.options.indexAxis === 'y') ? Math.max(250, agg.voci.length * 26 + 60) + 'px'
+            : nSerie > 4 ? (250 + Math.ceil(nSerie / 4) * 24) + 'px' : '';   // linee: spazio per la legenda senza schiacciare il grafico
         const chart = new Chart(canvas, cfg);
         charts.set(c.id, chart);
         renderLegend(c, agg, chart, chartTypes[c.id]);
@@ -404,7 +412,7 @@
         return { ink: dark ? '#c9d2de' : '#44505e', grid: dark ? 'rgba(255,255,255,.07)' : 'rgba(0,0,0,.06)' };
     }
     // voci mostrate come serie nel grafico a linee
-    const lineVoci = (c, agg) => c.special === 'importoMese' ? [] : agg.voci.filter(v => v.label !== 'Altri').slice(0, 6);
+    const lineVoci = (c, agg) => c.special === 'importoMese' ? [] : agg.voci;
     function chartClick(c, agg, R, type, el0) {
         const baseInfo = { n: agg.base, label: c.money ? 'finanziati' : c.base === 'tutti' ? '(annullate comprese)' : c.base === 'dc' ? 'da consegnare' : 'validi' };
         const titolo = c.t.split(':')[0];
@@ -423,6 +431,22 @@
         }
         openList(`${titolo} · ${lbl(v.label)}${extra}`, list, baseInfo);
     }
+    // numero · % disegnati in fondo a ogni barra
+    const anBarLabels = {
+        id: 'anBarLabels',
+        afterDatasetsDraw(chart) {
+            const o = chart.options.plugins.anBarLabels; if (!o) return;
+            const { ctx } = chart, ds = chart.data.datasets[0], meta = chart.getDatasetMeta(0);
+            ctx.save(); ctx.font = '600 11px Inter, system-ui, sans-serif'; ctx.fillStyle = o.color; ctx.textBaseline = 'middle';
+            meta.data.forEach((el, i) => {
+                const v = ds.data[i]; if (!v) return;
+                const t = `${o.money ? euro(v) : A().fmt(v)} · ${pctS(v, o.tot)}`;
+                if (o.horiz) { ctx.textAlign = 'left'; ctx.fillText(t, el.x + 6, el.y); }
+                else { ctx.textAlign = 'center'; ctx.fillText(t, el.x, el.y - 10); }
+            });
+            ctx.restore();
+        }
+    };
     function chartConfig(c, agg, R, type) {
         const th = themeInk();
         const labels = agg.voci.map(v => lbl(v.label));
@@ -456,22 +480,43 @@
                 const ks = monthKeys(agg.B);
                 mm = { labels: ks.map(mkLabel), series: lineVoci(c, agg).map(v => ({ nome: v.label, valori: ks.map(k => Math.round(v.list.filter(r => mkOf(r) === k).reduce((s2, r) => s2 + r.importo, 0) * 100) / 100) })) };
             } else if (c.special === 'consulenti') {
-                const top = agg.voci.slice(0, 6);
+                const top = agg.voci;
                 const ks = monthKeys(R);
                 mm = { labels: ks.map(mkLabel), series: top.map(v => ({ nome: v.label, valori: ks.map(k => v.list.filter(r => r.esito !== 'Annullate' && r.dataFiltro && (r.dataFiltro.getFullYear() * 100 + r.dataFiltro.getMonth() + 1) === k).length) })) };
             } else mm = monthly(agg.voci, R);
-            return { type: 'line', data: { labels: mm.labels, datasets: mm.series.map((s, i) => ({ label: lbl(s.nome), data: s.valori, borderColor: colorOf(s.nome, i), backgroundColor: colorOf(s.nome, i) + '22', tension: .35, pointRadius: 3, fill: mm.series.length === 1 })) },
-                options: { ...common, scales: axes } };
+            // Curva "monotona": passa per i punti senza scendere o salire oltre i valori veri (prima la curva
+            // ammorbidita poteva andare sotto/sopra tra un mese e l'altro). L'ultimo tratto, se e' il mese
+            // in corso (quindi ancora incompleto), e' tratteggiato e l'etichetta dice "in corso".
+            const lastK = c.special === 'importoMese' ? (agg.voci.length ? agg.voci[agg.voci.length - 1].key : null) : monthKeys(c.money ? agg.B : R).slice(-1)[0];
+            const inCorso = lastK === NOW_KEY;
+            const labs = mm.labels.map((l, i) => (inCorso && i === mm.labels.length - 1) ? l + ' (in corso)' : l);
+            const lastIdx = mm.labels.length - 1;
+            return { type: 'line', data: { labels: labs, datasets: mm.series.map((s, i) => ({ label: lbl(s.nome), data: s.valori, borderColor: colorOf(s.nome, i), backgroundColor: colorOf(s.nome, i) + '22',
+                    cubicInterpolationMode: 'monotone', tension: .3, pointRadius: 3, pointHoverRadius: 5, fill: mm.series.length === 1,
+                    segment: { borderDash: ctx => (inCorso && ctx.p1DataIndex === lastIdx) ? [5, 4] : undefined } })) },
+                options: { ...common, scales: { ...axes, x: { ...axes.x, ticks: { ...axes.x.ticks, maxRotation: 0, autoSkip: true } } } } };
         }
+        // COLONNE. Con piu' di 6 voci (o nomi lunghi) le barre diventano ORIZZONTALI: i nomi stanno
+        // a sinistra, dritti e tutti leggibili, e il riquadro si allunga quanto serve (vedi drawCat).
+        // Accanto a ogni barra: numero e percentuale.
+        const short = (t, n) => (t.length > n ? t.slice(0, n - 1) + '…' : t);
+        const horiz = agg.voci.length > 6 || labels.some(l => l.length > 16);
+        const tot = c.money ? agg.tot : agg.base;
+        const valAxis = { beginAtZero: true, ticks: { color: th.ink, precision: 0, callback: c.money ? (v => (v >= 1000 ? (v / 1000).toLocaleString('it-IT') + 'k' : v) + '€') : undefined }, grid: { color: th.grid } };
+        const catAxis = { ticks: { color: th.ink, font: { size: 11 }, autoSkip: false, maxRotation: 0, callback: function (v) { return short(String(this.getLabelForValue(v)), horiz ? 34 : 16); } }, grid: { display: false } };
         if (type === 'bar' && c.special === 'consulenti') {
             const ser = [['Consegnate', 'Consegnate', '#34c38f'], ['In lavorazione', 'Da consegnare', '#f4a83a'], ['Annullate', 'Annullate', '#e5484d']];
-            return { type: 'bar', data: { labels, datasets: ser.map(([l, e, col]) => ({ label: l, data: agg.voci.map(v => v.list.filter(r => r.esito === e).length), backgroundColor: col, borderRadius: 4, stack: 's' })) },
-                options: { ...common, scales: { x: { ...axes.x, stacked: true }, y: { ...axes.y, stacked: true } } } };
+            return { type: 'bar', data: { labels, datasets: ser.map(([l, e, col]) => ({ label: l, data: agg.voci.map(v => v.list.filter(r => r.esito === e).length), backgroundColor: col, borderRadius: 4, stack: 's', maxBarThickness: 22 })) },
+                options: { ...common, indexAxis: 'y', scales: { x: { ...valAxis, stacked: true }, y: { ...catAxis, stacked: true } },
+                    plugins: { ...common.plugins, legend: { ...common.plugins.legend, position: 'top' } } } };
         }
         const data = agg.voci.map(val);
         if (type === 'bar') {
-            return { type: 'bar', data: { labels, datasets: [{ label: c.money ? 'Totale finanziato' : 'Contratti', data, backgroundColor: agg.voci.map((v, i) => colorOf(v.label, i)), borderRadius: 6, maxBarThickness: 46 }] },
-                options: { ...common, plugins: { ...common.plugins, legend: { display: false } }, scales: axes } };
+            return { type: 'bar', data: { labels, datasets: [{ label: c.money ? 'Totale finanziato' : 'Contratti', data, backgroundColor: agg.voci.map((v, i) => colorOf(v.label, i)), borderRadius: 6, maxBarThickness: horiz ? 22 : 46 }] },
+                options: { ...common, indexAxis: horiz ? 'y' : 'x', layout: { padding: horiz ? { right: 96 } : { top: 20 } },
+                    plugins: { ...common.plugins, legend: { display: false }, anBarLabels: { tot, money: !!c.money, color: th.ink, horiz } },
+                    scales: horiz ? { x: valAxis, y: catAxis } : { x: catAxis, y: valAxis } },
+                plugins: [anBarLabels] };
         }
         return { type: 'doughnut', data: { labels, datasets: [{ data, backgroundColor: agg.voci.map((v, i) => colorOf(v.label, i)), borderWidth: 2, borderColor: document.documentElement.getAttribute('data-theme') === 'dark' ? '#1a212c' : '#fff', hoverOffset: 6 }] },
             options: { ...common, cutout: '62%' } };

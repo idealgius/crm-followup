@@ -326,7 +326,8 @@
 
     function match(r, f) {
         return (!f.stato || r.stato === f.stato) && (!f.tipo || r.tipo === f.tipo) && (!f.marca || r.marca === f.marca)
-            && (!f.carb || (f.carb === '__none' ? !r.carburante : r.carburante === f.carb));
+            && (!f.carb || (f.carb === '__none' ? !r.carburante : r.carburante === f.carb))
+            && (!f.sede || (f.sede === '__none' ? !r.sede : r.sede === f.sede));
     }
 
     function render(msg) {
@@ -367,6 +368,7 @@
           <div class="cg-card ${vede('G_ST_STATO') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Disponibili, prenotate e vendute</h2><p class="cg-hint" data-hint="stChStato"></p></div>${typeBtns('stChStato')}</div><div class="st-chart-box"><canvas id="stChStato"></canvas></div></div>
           <div class="cg-card ${vede('G_ST_MOTORE') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Per motorizzazione</h2><p class="cg-hint" data-hint="stChMotore"></p></div>${typeBtns('stChMotore')}</div><div class="st-chart-box"><canvas id="stChMotore"></canvas></div></div>
           <div class="cg-card ${vede('G_ST_MARCHI') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Per marchio</h2><p class="cg-hint" data-hint="stChMarchi"></p></div>${typeBtns('stChMarchi')}</div><div class="st-chart-box"><canvas id="stChMarchi"></canvas></div></div>
+          <div class="cg-card st-wide ${vede('G_ST_SEDE') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Per sede</h2><p class="cg-hint" data-hint="stChSede"></p></div>${typeBtns('stChSede')}</div><div class="st-chart-box" data-box="stChSede"><canvas id="stChSede"></canvas></div></div>
         </div>
         <div class="cg-card" id="stBrandsCard" style="margin-top:16px">
           <h2>Marchi</h2><p class="cg-hint">In ordine alfabetico · clicca un marchio per vedere modelli e vetture</p>
@@ -418,7 +420,7 @@
     function destroyCharts() { charts.forEach(c => { try { c.destroy(); } catch (e) { /* già distrutto */ } }); charts = []; }
     // ===== grafici: ciambella / colonne / linee (scelta ricordata nel browser) =====
     const LS_TIPI = 'stock_grafici_v1';
-    const DEF_TIPI = { stChTipo: 'doughnut', stChStato: 'doughnut', stChMotore: 'bar', stChMarchi: 'bar' };
+    const DEF_TIPI = { stChTipo: 'doughnut', stChStato: 'doughnut', stChMotore: 'bar', stChMarchi: 'bar', stChSede: 'bar' };
     let tipiGrafico = (() => { try { return { ...DEF_TIPI, ...JSON.parse(localStorage.getItem(LS_TIPI) || '{}') }; } catch (e) { return { ...DEF_TIPI }; } })();
     const ICO = {
         doughnut: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/><path d="M12 4v4.5"/></svg>',
@@ -455,6 +457,8 @@
             colors: { 'Disponibile': '#5cc6a7', 'Prenotata': '#e8a13a', 'Venduta': '#8f7bd6' }, hint: 'Clicca per vedere le vetture' };
         if (id === 'stChMotore') return { voci: sortedDesc(count(rows, r => r.carburante || '__none')).map(([k, n]) => [k, n, k === '__none' ? 'Non indicata' : k]),
             key: 'carb', get: r => r.carburante || '__none', colors: {}, hint: 'Dalla colonna Carburante · clicca per vedere le vetture' };
+        if (id === 'stChSede') return { voci: sortedDesc(count(rows, r => r.sede || '__none')).map(([k, n]) => [k, n, k === '__none' ? 'Non indicata' : k]),
+            key: 'sede', get: r => r.sede || '__none', colors: {}, hint: 'Dove si trovano le vetture (colonna Sede / Ubicazione) · clicca per vedere le vetture' };
         return { voci: sortedDesc(count(rows, r => r.marca)).slice(0, 12).map(([k, n]) => [k, n, k]), key: 'marca', get: r => r.marca, colors: {},
             hint: 'I 12 marchi con più vetture · clicca per vedere le vetture' };
     }
@@ -464,10 +468,14 @@
         const ink1 = getComputedStyle(rootEl).getPropertyValue('--cg-ink').trim() || '#1f2d3d';
         const grid = getComputedStyle(rootEl).getPropertyValue('--cg-line').trim() || '#e3e8ef';
         const tot = rows.length;
-        ['stChTipo', 'stChStato', 'stChMotore', 'stChMarchi'].forEach((id, gi) => {
+        ['stChTipo', 'stChStato', 'stChMotore', 'stChMarchi', 'stChSede'].forEach((id, gi) => {
             const el = rootEl.querySelector('#' + id); if (!el) return;
             const d = chartData(id), tipo = tipiGrafico[id];
-            const col = (k, i) => d.colors[k] || (id === 'stChMotore' && tipo !== 'doughnut' ? '#4d8fd6' : id === 'stChMarchi' && tipo !== 'doughnut' ? '#5cc6a7' : PALETTE[i % PALETTE.length]);
+            const col = (k, i) => d.colors[k] || (id === 'stChMotore' && tipo !== 'doughnut' ? '#4d8fd6' : id === 'stChMarchi' && tipo !== 'doughnut' ? '#5cc6a7' : id === 'stChSede' && tipo !== 'doughnut' ? '#e8a13a' : PALETTE[i % PALETTE.length]);
+            // barre orizzontali con tante voci: il riquadro si allunga per mostrarle tutte con il nome
+            const boxEl = el.parentElement;
+            boxEl.style.height = (tipo === 'bar' && d.voci.length > 5) ? Math.max(290, d.voci.length * 26 + 50) + 'px'
+                : (tipo !== 'bar' && d.voci.length > 9) ? (290 + Math.ceil(d.voci.length / 3) * 22) + 'px' : '';   // legenda lunga sotto il grafico
             const hint = rootEl.querySelector(`[data-hint="${id}"]`);
             if (hint) hint.textContent = tipo === 'line' ? 'Ingressi in stock mese per mese (data ingresso) · clicca un punto' : d.hint;
             const open = (k, label, extra) => openList(label, { [d.key]: k, ...(extra || {}) });
@@ -475,7 +483,7 @@
             if (tipo === 'line') {
                 // andamento tra un import e l'altro: ogni import salva una "fotografia" dei conteggi
                 // (una per giorno). Linee dritte tra un punto e l'altro: se il valore non cambia, la linea resta piatta.
-                const campo = { tipo: 'tipo', stato: 'stato', carb: 'carburante', marca: 'marca' }[d.key];
+                const campo = { tipo: 'tipo', stato: 'stato', carb: 'carburante', marca: 'marca', sede: 'sede' }[d.key];
                 const storico = (meta && Array.isArray(meta.storico)) ? meta.storico : [];
                 const top = d.voci.slice(0, 6);
                 const lab = f => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(f.at || ''); return m ? `${m[3]}/${m[2]}/${m[1].slice(2)}` : '—'; };
@@ -497,7 +505,7 @@
                 cfg = { type: 'doughnut',
                     data: { labels: d.voci.map(v => `${v[2]} · ${fmt(v[1])} (${pctS(v[1], tot)})`), datasets: [{ data: d.voci.map(v => v[1]), backgroundColor: d.voci.map((v, i) => d.colors[v[0]] || PALETTE[i % PALETTE.length]), borderWidth: 0 }] },
                     options: { maintainAspectRatio: false, cutout: '58%',
-                        plugins: { legend: { position: d.voci.length > 4 ? 'right' : 'bottom', labels: { color: ink, usePointStyle: true, padding: 10, boxWidth: 8, font: { size: 11.5 } } },
+                        plugins: { legend: { position: d.voci.length > 4 && d.voci.length <= 9 ? 'right' : 'bottom', labels: { color: ink, usePointStyle: true, padding: 10, boxWidth: 8, font: { size: 11.5 } } },
                             tooltip: { callbacks: { label: c => ` ${fmt(c.parsed)} vetture · ${pctS(c.parsed, tot)}` } } },
                         onClick: (ev, els) => { if (els.length) { const v = d.voci[els[0].index]; open(v[0], v[2]); } } } };
             } else {
@@ -510,8 +518,10 @@
                         plugins: { legend: { display: false }, stBarLabels: { on: true, tot, color: ink1 },
                             tooltip: { callbacks: { label: c => ` ${fmt(c.parsed[horiz ? 'x' : 'y'])} vetture · ${pctS(c.parsed[horiz ? 'x' : 'y'], tot)}` } } },
                         scales: horiz
-                            ? { x: { beginAtZero: true, suggestedMax: maxV * 1.08, ticks: { color: ink, precision: 0 }, grid: { color: grid } }, y: { ticks: { color: ink }, grid: { display: false } } }
-                            : { y: { beginAtZero: true, suggestedMax: maxV * 1.12, ticks: { color: ink, precision: 0 }, grid: { color: grid } }, x: { ticks: { color: ink }, grid: { display: false } } },
+                            ? { x: { beginAtZero: true, suggestedMax: maxV * 1.08, ticks: { color: ink, precision: 0 }, grid: { color: grid } },
+                                y: { ticks: { color: ink, autoSkip: false, callback: function (v) { const t = String(this.getLabelForValue(v)); return t.length > 30 ? t.slice(0, 29) + '…' : t; } }, grid: { display: false } } }
+                            : { y: { beginAtZero: true, suggestedMax: maxV * 1.12, ticks: { color: ink, precision: 0 }, grid: { color: grid } },
+                                x: { ticks: { color: ink, autoSkip: false, maxRotation: 0, callback: function (v) { const t = String(this.getLabelForValue(v)); return t.length > 16 ? t.slice(0, 15) + '…' : t; } }, grid: { display: false } } },
                         onClick: (ev, els) => { if (els.length) { const v = d.voci[els[0].index]; open(v[0], v[2]); } } },
                     plugins: [barLabels] };
             }
@@ -668,13 +678,14 @@
         const th = (label, k) => `<th><button type="button" class="st-sort ${sk === k ? 'on' : ''}" data-sort="${k}">${label} ${sk === k ? (sd === 1 ? '↑' : '↓') : '↕'}</button></th>`;
         const shown = list.slice(0, view.limit);
         body.innerHTML = `<div class="cg-scroll"><table class="cg-list"><thead><tr>
-            ${showM ? th('Marchio', 'marca') : ''}${th('Modello / Versione', 'modello')}<th>Tipo</th><th>Motorizzazione</th><th>Targa / Telaio</th>${th('Km', 'km')}${th('Giorni', 'giorni')}${th('Prezzo', 'listino')}<th>Stato</th></tr></thead><tbody>
+            ${showM ? th('Marchio', 'marca') : ''}${th('Modello / Versione', 'modello')}<th>Tipo</th><th>Motorizzazione</th><th>Targa / Telaio</th>${th('Sede', 'sede')}${th('Km', 'km')}${th('Giorni', 'giorni')}${th('Prezzo', 'listino')}<th>Stato</th></tr></thead><tbody>
             ${shown.map(r => `<tr class="st-row" data-i="${r._i}">
                 ${showM ? `<td class="cg-cl">${esc(r.marca)}</td>` : ''}
                 <td class="${showM ? '' : 'cg-cl'}">${esc(r.modello)}${r.versione ? `<span class="st-sub">${esc(r.versione)}</span>` : ''}</td>
                 <td>${esc(r.tipo || '')}${r.categoria ? `<span class="st-sub">${esc(r.categoria)}</span>` : ''}</td>
                 <td>${esc(r.carburante || '')}</td>
                 <td class="st-mono">${esc(r.targa || '')}${r.targa && r.telaio ? '<br>' : ''}${esc(r.telaio || '')}</td>
+                <td>${esc(r.sede || '')}</td>
                 <td>${r.km ? fmt(r.km) : ''}</td>
                 <td>${r.giorni != null ? fmt(r.giorni) : ''}</td>
                 <td>${eur(r.listino)}${r.prezzoVenduto ? `<span class="st-sub">venduta ${eur(r.prezzoVenduto)}</span>` : ''}</td>
