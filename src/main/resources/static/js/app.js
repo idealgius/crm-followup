@@ -108,7 +108,11 @@ const CHART_PERMISSIONS = [
     { key: 'G_SRV_CHIAMATE', group: 'Service', label: 'Chiamate ricevute vs appuntamenti' },
     { key: 'G_SRV_ESITO', group: 'Service', label: 'Esito appuntamenti/lavorazioni' },
     { key: 'G_CG_TEMPI', group: 'Consegne', label: 'Tempistiche consegne' },
-    { key: 'G_CG_MOTIVI', group: 'Consegne', label: 'Da consegnare per motivo' }
+    { key: 'G_CG_MOTIVI', group: 'Consegne', label: 'Da consegnare per motivo' },
+    { key: 'G_ST_TIPO', group: 'Stock', label: 'Nuove, usate e Km 0' },
+    { key: 'G_ST_STATO', group: 'Stock', label: 'Disponibili, prenotate e vendute' },
+    { key: 'G_ST_MOTORE', group: 'Stock', label: 'Per motorizzazione' },
+    { key: 'G_ST_MARCHI', group: 'Stock', label: 'Per marchio' }
 ];
 
 // true se l'utente loggato puo' vedere il grafico. Se il server non ha

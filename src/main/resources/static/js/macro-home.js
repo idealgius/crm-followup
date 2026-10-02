@@ -27,6 +27,7 @@
     let root = null;
     let scene = null;
     let inConsegne = false;
+    let inStock = false;
 
     // La selezione area (e l'area Consegne) la vede SOLO chi ha il permesso
     // CONSEGNE (pagina Permessi per Ruolo / per Operatore; default:
@@ -54,6 +55,8 @@
         });
         const consegne = document.getElementById('consegnePage');
         if (consegne) consegne.style.display = 'none';
+        const stockP = document.getElementById('stockPage');
+        if (stockP) stockP.style.display = 'none';
         document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
     }
 
@@ -103,7 +106,7 @@
         hideAllPages();
         hideBI();
         const cgp = document.getElementById('consegnePage'); if (cgp) cgp.style.display = 'none';
-        inConsegne = false;
+        inConsegne = false; inStock = false;
         setNavLinksVisible(false);
         document.body.removeAttribute('data-role-theme');
         setBadge('HOME');
@@ -128,7 +131,9 @@
         hideBI();
         const consegne = document.getElementById('consegnePage');
         if (consegne) consegne.style.display = 'none';
-        inConsegne = false;
+        const stockP = document.getElementById('stockPage');
+        if (stockP) stockP.style.display = 'none';
+        inConsegne = false; inStock = false;
         setNavLinksVisible(true);
     }
 
@@ -145,7 +150,7 @@
         hideAllPages();
         const consegne = document.getElementById('consegnePage');
         if (consegne) consegne.style.display = 'none';
-        inConsegne = false;
+        inConsegne = false; inStock = false;
         setNavLinksVisible(false);
         document.body.removeAttribute('data-role-theme');
         setBadge('BI');
@@ -162,7 +167,7 @@
         hideBI();
         stopInboundLiveUpdates();
         hideAllPages();
-        inConsegne = true;
+        inConsegne = true; inStock = false;
         setNavLinksVisible(false);
         document.body.removeAttribute('data-role-theme');
         setBadge('CONSEGNE');
@@ -174,13 +179,40 @@
         window.scrollTo(0, 0);
     }
 
+    // Area Stock (capitolo 02 della BI): pagina #stockPage, contenuto costruito da /js/stock-home.js.
+    // Serve il permesso STOCK (almeno "Solo lettura") oltre a quello di accesso alla BI.
+    function canStock() {
+        if (!canShow()) return false;
+        const a = hasAccess('STOCK');
+        return !!a && a !== 'NONE';
+    }
+    function openStock() {
+        if (!canStock()) return;
+        hide();
+        hideBI();
+        stopInboundLiveUpdates();
+        hideAllPages();
+        inConsegne = false; inStock = true;
+        setNavLinksVisible(false);
+        document.body.removeAttribute('data-role-theme');
+        setBadge('STOCK');
+        const page = document.getElementById('stockPage');
+        if (page) page.style.display = 'block';
+        if (window.StockHome) StockHome.init();
+        history.replaceState(null, '', window.location.pathname + '#stock');
+        sessionStorage.setItem('currentPage', 'stock');
+        window.scrollTo(0, 0);
+    }
+
     // Al logout: chiude tutto e ripristina la navbar per il prossimo login
     function reset() {
         hide();
         hideBI();
         const consegne = document.getElementById('consegnePage');
         if (consegne) consegne.style.display = 'none';
-        inConsegne = false;
+        const stockP = document.getElementById('stockPage');
+        if (stockP) stockP.style.display = 'none';
+        inConsegne = false; inStock = false;
         setNavLinksVisible(true);
     }
 
@@ -378,7 +410,10 @@
         onShowPage: onShowPage,
         openConsegne: openConsegne,
         openBI: openBI,
+        openStock: openStock,
+        canStock: canStock,
         reset: reset,
-        isInConsegne: function () { return inConsegne; }
+        isInConsegne: function () { return inConsegne || inStock; },
+        isInStock: function () { return inStock; }
     };
 })();

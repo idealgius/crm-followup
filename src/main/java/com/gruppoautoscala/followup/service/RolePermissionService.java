@@ -53,7 +53,9 @@ public class RolePermissionService {
     public static final List<String> SECTIONS = List.of(
         "DASHBOARD", "FOLLOWUPS", "WAITING", "CONTACTS", "PROMO", "ADMIN", "RENT", "SERVICE", "GRAFICI", "VEICOLI", "PREVENTIVI",
         // NUOVO: area Consegne + selezione area dopo il login
-        "CONSEGNE"
+        "CONSEGNE",
+        // NUOVO: area Stock (capitolo 02 della BI)
+        "STOCK"
     );
     // ===== NUOVO: PERMESSI DEI GRAFICI =====
     // Un grafico e' una "sezione" come le altre, salvata nella stessa tabella
@@ -69,7 +71,9 @@ public class RolePermissionService {
         "G_PV_MARCHE", "G_PV_OPERATORE", "G_PV_CONSULENTE", "G_PV_TRATTATIVE", "G_PV_ESITO",
         "G_RENT_STATO", "G_RENT_FONTE", "G_RENT_MARCHI", "G_RENT_INFO",
         "G_SRV_STATO", "G_SRV_CHIAMATE", "G_SRV_ESITO",
-        "G_CG_TEMPI", "G_CG_MOTIVI"
+        "G_CG_TEMPI", "G_CG_MOTIVI",
+        // Stock
+        "G_ST_TIPO", "G_ST_STATO", "G_ST_MOTORE", "G_ST_MARCHI"
     );
 
     private static boolean isValidKey(String key) {
@@ -109,6 +113,7 @@ public class RolePermissionService {
             "GRAFICI", "FULL", "PREVENTIVI", "FULL"
         ));
         moderatoreDefaults.put("CONSEGNE", "FULL");
+        moderatoreDefaults.put("STOCK", "FULL");
         DEFAULTS.put("MODERATORE", moderatoreDefaults);
         Map<String, String> gestoreDefaults = new HashMap<>(Map.of(
             "DASHBOARD", "ADMIN_FULL", "FOLLOWUPS", "ADMIN_FULL", "WAITING", "ADMIN_FULL",
@@ -116,6 +121,7 @@ public class RolePermissionService {
             "ADMIN", "ADMIN_FULL", "GRAFICI", "ADMIN_FULL", "PREVENTIVI", "ADMIN_FULL"
         ));
         gestoreDefaults.put("CONSEGNE", "ADMIN_FULL");
+        gestoreDefaults.put("STOCK", "ADMIN_FULL");
         DEFAULTS.put("GESTORE", gestoreDefaults);
         Map<String, String> adminDefaults = new HashMap<>();
         adminDefaults.put("DASHBOARD", "ADMIN_FULL");
@@ -130,6 +136,7 @@ public class RolePermissionService {
         adminDefaults.put("VEICOLI", "ADMIN_FULL");
         adminDefaults.put("PREVENTIVI", "ADMIN_FULL");
         adminDefaults.put("CONSEGNE", "ADMIN_FULL");
+        adminDefaults.put("STOCK", "ADMIN_FULL");
         DEFAULTS.put("ADMIN", adminDefaults);
         DEFAULTS.put("NOLEGGIO", Map.of("RENT", "FULL"));
         DEFAULTS.put("SERVICE", Map.of("SERVICE", "FULL"));

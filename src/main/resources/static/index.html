@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="/css/macro-home.css">
     <link rel="stylesheet" href="/css/bi-home.css">
     <link rel="stylesheet" href="/css/consegne.css">
+    <link rel="stylesheet" href="/css/stock-home.css">
     <!-- NUOVO: grafici nascosti dai permessi (vedi applyChartPermissions in app.js) -->
     <style>.chart-perm-hidden { display: none !important; }</style>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -166,6 +167,12 @@
          costruito da /js/consegne.js dentro #consegneRoot. -->
     <div id="consegnePage" class="page" style="display:none">
         <div id="consegneRoot"></div>
+    </div>
+
+    <!-- NUOVO: AREA STOCK — capitolo 02 della BI. Si apre da MacroHome.openStock()
+         (vedi /js/macro-home.js); il contenuto lo costruisce /js/stock-home.js. -->
+    <div id="stockPage" class="page" style="display:none">
+        <div id="stockRoot"></div>
     </div>
 
     <!-- DASHBOARD -->
@@ -2608,6 +2615,7 @@
 <script src="/js/bi-home.js"></script>
 <script src="/js/consegne.js"></script>
 <script src="/js/consegne-analisi.js"></script>
+<script src="/js/stock-home.js"></script>
 <script src="/js/graphmenu.js"></script>
 <script src="/js/multiselect.js"></script>
 </body>

@@ -212,7 +212,9 @@ const PERMISSION_SECTIONS = [
     { key: 'VEICOLI', icon: '🚙', label: 'Vetture in Consegna' },
     // NUOVO: area Consegne (tempistiche) + selezione area dopo il login.
     // Chi non ce l'ha entra direttamente in In bound.
-    { key: 'CONSEGNE', icon: '🔑', label: 'BI (selezione area)' }
+    { key: 'CONSEGNE', icon: '🔑', label: 'BI (selezione area)' },
+    // NUOVO: area Stock (macro-sezione BI). Solo lettura = vede; Completo = importa il file.
+    { key: 'STOCK', icon: '🚘', label: 'Stock' }
 ];
 
 const ACCESS_LEVEL_META = {

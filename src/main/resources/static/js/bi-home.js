@@ -22,7 +22,7 @@
 
     <nav class="bh-rail">
       <button class="bh-ch" data-c="0" type="button" style="--c:#f4a83a"><span class="bh-n">01</span><span class="bh-t">Consegne</span><span class="bh-d">Tempistiche, analisi e verifiche</span><span class="bh-bar"><i></i></span></button>
-      <button class="bh-ch" data-c="1" type="button" style="--c:#3fcfae"><span class="bh-n">02</span><span class="bh-t">Stock</span><span class="bh-d">Prossimamente</span><span class="bh-bar"><i></i></span></button>
+      <button class="bh-ch" data-c="1" type="button" style="--c:#3fcfae"><span class="bh-n">02</span><span class="bh-t">Stock</span><span class="bh-d">Giacenza, marchi e motorizzazioni</span><span class="bh-bar"><i></i></span></button>
       <button class="bh-ch" data-c="2" type="button" style="--c:#ff7a1a"><span class="bh-n">03</span><span class="bh-t">Commerciale</span><span class="bh-d">Prossimamente</span><span class="bh-bar"><i></i></span></button>
       <ul class="bh-sub" id="bh-sub"></ul>
     </nav>
@@ -88,10 +88,10 @@
 
       <!-- STOCK -->
       <div class="bh-scene" data-s="1">
-        <div class="bh-cap"><i></i>I nostri marchi · prossimamente</div>
+        <div class="bh-cap"><i></i>I nostri marchi · stock</div>
         <div class="bh-disc"></div>
         <div class="bh-turn"><div class="bh-ring" id="bh-ring"></div></div>
-        <div class="bh-chip"><i></i>Prossimamente</div>
+        <div class="bh-chip"><i></i>Vetture in stock</div>
       </div>
       <!-- COMMERCIALE (grafica provvisoria, da definire) -->
       <div class="bh-scene" data-s="2">
@@ -155,7 +155,7 @@
 
   const CH = [
     { acc: '#f4a83a', tint: 'rgba(244,168,58,.28)', sub: [['Tempistiche consegne'], ['Analisi avanzamento'], ['Verifiche e quadratura']] },
-    { acc: '#3fcfae', tint: 'rgba(63,207,174,.26)', sub: [['Vetture in stock', 'In arrivo'], ['Per marchio e modello', 'In arrivo'], ['Giacenza', 'In arrivo']], off: true },
+    { acc: '#3fcfae', tint: 'rgba(63,207,174,.26)', sub: [['Panoramica e grafici'], ['Per marchio e modello'], ['Disponibili, prenotate, vendute']], off: !(window.MacroHome && MacroHome.canStock && MacroHome.canStock()) },
     { acc: '#ff7a1a', tint: 'rgba(255,106,26,.18)', sub: [['Lead e Origine', 'In arrivo'], ['Vendite', 'In arrivo'], ['Noleggio', 'In arrivo']], off: true }
   ];
   const DUR = 9000;
@@ -298,7 +298,10 @@
         // azioni
         root.addEventListener('click', e => {
             if (e.target.closest('#bh-enter')) {
-                if (!e.target.closest('#bh-enter').classList.contains('bh-off')) openTab('tempi');
+                if (!e.target.closest('#bh-enter').classList.contains('bh-off')) {
+                    const act = root.querySelector('.bh-ch.bh-on');
+                    if (act && act.dataset.c === '1') MacroHome.openStock(); else openTab('tempi');
+                }
                 return;
             }
             if (e.target.closest('.bh-back')) { if (window.MacroHome) MacroHome.show(); return; }
@@ -306,6 +309,7 @@
             if (li) {
                 const [c, k] = li.dataset.sub.split('|').map(Number);
                 if (c === 0) openTab(k === 1 ? 'analisi' : 'tempi');
+                else if (c === 1 && window.MacroHome && MacroHome.canStock && MacroHome.canStock()) MacroHome.openStock();
             }
         });
         scene = initScene();
