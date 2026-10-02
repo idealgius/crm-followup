@@ -364,11 +364,11 @@
             <span class="cg-num">${fmt(marchi.size)}</span><span class="cg-sub">Vai all'elenco per marchio</span></button>
         </div>
         <div class="st-charts">
-          <div class="cg-card ${vede('G_ST_TIPO') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Nuove, usate e Km 0</h2><p class="cg-hint" data-hint="stChTipo"></p></div>${typeBtns('stChTipo')}</div><div class="st-chart-box"><canvas id="stChTipo"></canvas></div></div>
-          <div class="cg-card ${vede('G_ST_STATO') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Disponibili, prenotate e vendute</h2><p class="cg-hint" data-hint="stChStato"></p></div>${typeBtns('stChStato')}</div><div class="st-chart-box"><canvas id="stChStato"></canvas></div></div>
-          <div class="cg-card ${vede('G_ST_MOTORE') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Per motorizzazione</h2><p class="cg-hint" data-hint="stChMotore"></p></div>${typeBtns('stChMotore')}</div><div class="st-chart-box"><canvas id="stChMotore"></canvas></div></div>
-          <div class="cg-card ${vede('G_ST_MARCHI') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Per marchio</h2><p class="cg-hint" data-hint="stChMarchi"></p></div>${typeBtns('stChMarchi')}</div><div class="st-chart-box"><canvas id="stChMarchi"></canvas></div></div>
-          <div class="cg-card st-wide ${vede('G_ST_SEDE') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Per sede</h2><p class="cg-hint" data-hint="stChSede"></p></div>${typeBtns('stChSede')}</div><div class="st-chart-box" data-box="stChSede"><canvas id="stChSede"></canvas></div></div>
+          <div class="cg-card ${vede('G_ST_TIPO') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Nuove, usate e Km 0</h2><p class="cg-hint" data-hint="stChTipo"></p></div><div class="cg-an-hbtns">${vociBtn('stChTipo')}${typeBtns('stChTipo')}</div></div><div class="st-chart-box"><canvas id="stChTipo"></canvas></div></div>
+          <div class="cg-card ${vede('G_ST_STATO') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Disponibili, prenotate e vendute</h2><p class="cg-hint" data-hint="stChStato"></p></div><div class="cg-an-hbtns">${vociBtn('stChStato')}${typeBtns('stChStato')}</div></div><div class="st-chart-box"><canvas id="stChStato"></canvas></div></div>
+          <div class="cg-card ${vede('G_ST_MOTORE') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Per motorizzazione</h2><p class="cg-hint" data-hint="stChMotore"></p></div><div class="cg-an-hbtns">${vociBtn('stChMotore')}${typeBtns('stChMotore')}</div></div><div class="st-chart-box"><canvas id="stChMotore"></canvas></div></div>
+          <div class="cg-card ${vede('G_ST_MARCHI') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Per marchio</h2><p class="cg-hint" data-hint="stChMarchi"></p></div><div class="cg-an-hbtns">${vociBtn('stChMarchi')}${typeBtns('stChMarchi')}</div></div><div class="st-chart-box"><canvas id="stChMarchi"></canvas></div></div>
+          <div class="cg-card st-wide ${vede('G_ST_SEDE') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Per sede</h2><p class="cg-hint" data-hint="stChSede"></p></div><div class="cg-an-hbtns">${vociBtn('stChSede')}${typeBtns('stChSede')}</div></div><div class="st-chart-box" data-box="stChSede"><canvas id="stChSede"></canvas></div></div>
         </div>
         <div class="cg-card" id="stBrandsCard" style="margin-top:16px">
           <h2>Marchi</h2><p class="cg-hint">In ordine alfabetico · clicca un marchio per vedere modelli e vetture</p>
@@ -378,6 +378,7 @@
         body.querySelectorAll('.cg-kpi[data-f]').forEach(b => b.addEventListener('click', () => openList(b.dataset.t, JSON.parse(b.dataset.f))));
         body.querySelector('#stGoBrands').addEventListener('click', () => body.querySelector('#stBrandsCard').scrollIntoView({ behavior: 'smooth', block: 'start' }));
         drawCharts();
+        bindVoci(body);
         body.querySelectorAll('[data-ct]').forEach(btn => btn.addEventListener('click', () => {
             const [id, t] = btn.dataset.ct.split('|'); tipiGrafico[id] = t;
             try { localStorage.setItem(LS_TIPI, JSON.stringify(tipiGrafico)); } catch (e) { /* non bloccante */ }
@@ -428,6 +429,45 @@
         line: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 3 5-7 4 4"/></svg>'
     };
     const NOMI = { doughnut: 'Ciambella', bar: 'Colonne', line: 'Linee' };
+    // ===== menu "Voci" su ogni grafico: mostra / nascondi le voci =====
+    const hiddenSt = {};
+    function vociBtn(id) {
+        return `<div class="cg-an-voci" data-voci="${id}"><button type="button" class="cg-an-voci-btn">Voci ▾</button><div class="cg-an-voci-pop"></div></div>`;
+    }
+    function fillVoci(id) {
+        const box = rootEl.querySelector(`.cg-an-voci[data-voci="${id}"]`); if (!box) return;
+        const hid = hiddenSt[id] || new Set(), voci = chartData(id).voci;
+        const nHid = voci.filter(v => hid.has(v[0])).length;
+        const b = box.querySelector('.cg-an-voci-btn');
+        b.textContent = nHid ? `Voci ${voci.length - nHid}/${voci.length} ▾` : 'Voci ▾'; b.classList.toggle('on', nHid > 0);
+        if (!box.classList.contains('open')) return;
+        box.querySelector('.cg-an-voci-pop').innerHTML = `
+            <div class="cg-an-voci-all"><button type="button" data-vall="1">Mostra tutte</button><button type="button" data-vall="0">Nascondi tutte</button></div>
+            ${voci.map(v => `<label><input type="checkbox" data-vv="${esc(v[0])}" ${hid.has(v[0]) ? '' : 'checked'}><span>${esc(v[2])}</span></label>`).join('')}`;
+    }
+    function bindVoci(body) {
+        if (body.dataset.vociBound) return;
+        body.dataset.vociBound = '1';
+        body.addEventListener('click', e => {
+            const box = e.target.closest('.cg-an-voci');
+            if (!box) { body.querySelectorAll('.cg-an-voci.open').forEach(x => x.classList.remove('open')); return; }
+            const id = box.dataset.voci;
+            if (e.target.closest('.cg-an-voci-btn')) {
+                const open = box.classList.contains('open');
+                body.querySelectorAll('.cg-an-voci.open').forEach(x => x.classList.remove('open'));
+                if (!open) { box.classList.add('open'); fillVoci(id); }
+                return;
+            }
+            const all = e.target.closest('[data-vall]');
+            if (all) { hiddenSt[id] = all.dataset.vall === '1' ? new Set() : new Set(chartData(id).voci.map(v => v[0])); destroyCharts(); drawCharts(); }
+        });
+        body.addEventListener('change', e => {
+            const cb = e.target.closest('.cg-an-voci [data-vv]'); if (!cb) return;
+            const id = cb.closest('.cg-an-voci').dataset.voci, hid = hiddenSt[id] = hiddenSt[id] || new Set();
+            if (cb.checked) hid.delete(cb.dataset.vv); else hid.add(cb.dataset.vv);
+            destroyCharts(); drawCharts();
+        });
+    }
     function typeBtns(id) {
         return `<div class="cg-an-types">${Object.keys(ICO).map(t => `<button type="button" title="${NOMI[t]}" class="${tipiGrafico[id] === t ? 'on' : ''}" data-ct="${id}|${t}">${ICO[t]}</button>`).join('')}</div>`;
     }
@@ -470,7 +510,12 @@
         const tot = rows.length;
         ['stChTipo', 'stChStato', 'stChMotore', 'stChMarchi', 'stChSede'].forEach((id, gi) => {
             const el = rootEl.querySelector('#' + id); if (!el) return;
-            const d = chartData(id), tipo = tipiGrafico[id];
+            const d0 = chartData(id), tipo = tipiGrafico[id];
+            const hid = hiddenSt[id] || new Set();
+            const d = hid.size ? { ...d0, voci: d0.voci.filter(v => !hid.has(v[0])) } : d0;
+            const idxOf = new Map(d0.voci.map((v, i) => [v[0], i]));   // colore fisso per voce anche con voci nascoste
+            fillVoci(id);
+            if (!d.voci.length) { el.parentElement.style.height = ''; return; }   // tutte nascoste: grafico vuoto
             const col = (k, i) => d.colors[k] || (id === 'stChMotore' && tipo !== 'doughnut' ? '#4d8fd6' : id === 'stChMarchi' && tipo !== 'doughnut' ? '#5cc6a7' : id === 'stChSede' && tipo !== 'doughnut' ? '#e8a13a' : PALETTE[i % PALETTE.length]);
             // barre orizzontali con tante voci: il riquadro si allunga per mostrarle tutte con il nome
             const boxEl = el.parentElement;
@@ -493,7 +538,7 @@
                 cfg = { type: 'line',
                     data: { labels: storico.map(lab),
                         datasets: top.map(([k, n, l], i) => ({ label: `${l} · ${fmt(n)}`, data: storico.map(f => (f[campo] && f[campo][k]) || 0),
-                            borderColor: d.colors[k] || PALETTE[i % PALETTE.length], backgroundColor: d.colors[k] || PALETTE[i % PALETTE.length],
+                            borderColor: d.colors[k] || PALETTE[idxOf.get(k) % PALETTE.length], backgroundColor: d.colors[k] || PALETTE[idxOf.get(k) % PALETTE.length],
                             tension: 0, pointRadius: 4, pointHoverRadius: 6, borderWidth: 2.5 })) },
                     options: { maintainAspectRatio: false,
                         plugins: { legend: { position: 'bottom', labels: { color: ink, usePointStyle: true, boxWidth: 8, padding: 12 } },
@@ -503,7 +548,7 @@
                         onClick: (ev, els) => { if (els.length) { const v = top[els[0].datasetIndex]; open(v[0], v[2]); } } } };
             } else if (tipo === 'doughnut') {
                 cfg = { type: 'doughnut',
-                    data: { labels: d.voci.map(v => `${v[2]} · ${fmt(v[1])} (${pctS(v[1], tot)})`), datasets: [{ data: d.voci.map(v => v[1]), backgroundColor: d.voci.map((v, i) => d.colors[v[0]] || PALETTE[i % PALETTE.length]), borderWidth: 0 }] },
+                    data: { labels: d.voci.map(v => `${v[2]} · ${fmt(v[1])} (${pctS(v[1], tot)})`), datasets: [{ data: d.voci.map(v => v[1]), backgroundColor: d.voci.map((v, i) => d.colors[v[0]] || PALETTE[idxOf.get(v[0]) % PALETTE.length]), borderWidth: 0 }] },
                     options: { maintainAspectRatio: false, cutout: '58%',
                         plugins: { legend: { position: d.voci.length > 4 && d.voci.length <= 9 ? 'right' : 'bottom', labels: { color: ink, usePointStyle: true, padding: 10, boxWidth: 8, font: { size: 11.5 } } },
                             tooltip: { callbacks: { label: c => ` ${fmt(c.parsed)} vetture · ${pctS(c.parsed, tot)}` } } },
@@ -512,7 +557,7 @@
                 const horiz = d.voci.length > 5;
                 const maxV = Math.max(...d.voci.map(v => v[1]), 1);
                 cfg = { type: 'bar',
-                    data: { labels: d.voci.map(v => v[2]), datasets: [{ data: d.voci.map(v => v[1]), backgroundColor: d.voci.map((v, i) => col(v[0], i)), borderRadius: 6, maxBarThickness: 46 }] },
+                    data: { labels: d.voci.map(v => v[2]), datasets: [{ data: d.voci.map(v => v[1]), backgroundColor: d.voci.map((v, i) => col(v[0], idxOf.get(v[0]))), borderRadius: 6, maxBarThickness: 46 }] },
                     options: { indexAxis: horiz ? 'y' : 'x', maintainAspectRatio: false,
                         layout: { padding: horiz ? { right: 70 } : { top: 18 } },
                         plugins: { legend: { display: false }, stBarLabels: { on: true, tot, color: ink1 },

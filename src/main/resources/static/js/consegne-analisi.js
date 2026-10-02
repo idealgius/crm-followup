@@ -327,7 +327,7 @@
         el.querySelector('#anGrid').innerHTML = visibili().map(c => `
           <article class="cg-card cg-an-card ${c.special === 'consulenti' || c.id === 'stato' ? 'wide' : ''}" data-cat="${c.id}">
             <header><div><h3>${c.t}</h3><p class="cg-hint" data-sub="${c.id}"></p></div>
-              <div class="cg-an-types">${Object.keys(TYPES).map(t => `<button type="button" title="${TYPES[t]}" class="${chartTypes[c.id] === t ? 'on' : ''}" data-type="${t}" data-cat="${c.id}">${ICON[t]}</button>`).join('')}</div></header>
+              <div class="cg-an-hbtns">${vociBtn(c.id)}<div class="cg-an-types">${Object.keys(TYPES).map(t => `<button type="button" title="${TYPES[t]}" class="${chartTypes[c.id] === t ? 'on' : ''}" data-type="${t}" data-cat="${c.id}">${ICON[t]}</button>`).join('')}</div></div></header>
             <div class="cg-an-chart"><div class="cg-an-canvas"><canvas id="anc_${c.id}"></canvas></div><ul class="cg-an-legend" data-legend="${c.id}"></ul></div>
             <div class="cg-an-table" data-table="${c.id}"></div>
           </article>`).join('');
@@ -372,33 +372,96 @@
         // grafico
         const canvas = card.querySelector('canvas');
         if (charts.has(c.id)) { charts.get(c.id).destroy(); charts.delete(c.id); }
+        updateVociBtn(c.id, agg);
         if (typeof Chart === 'undefined' || !agg.voci.length) return;
-        const cfg = chartConfig(c, agg, R, chartTypes[c.id]);
+        // voci nascoste dal menu "Voci": il grafico mostra solo le altre (il report sotto resta completo)
+        const hid = hiddenVoci[c.id] || new Set();
+        const gAgg = { ...agg, voci: hid.size ? agg.voci.filter(v => !hid.has(v.label)) : agg.voci, colorIdx: new Map(agg.voci.map((v, i) => [v.label, i])) };
+        const emptyMsg = card.querySelector('.cg-an-empty');
+        if (emptyMsg) emptyMsg.remove();
+        if (!gAgg.voci.length) {
+            card.querySelector('.cg-an-canvas').insertAdjacentHTML('afterbegin', '<p class="cg-hint cg-an-empty" style="position:absolute;inset:0;display:grid;place-items:center;margin:0">Tutte le voci sono nascoste: scegline qualcuna dal menu "Voci".</p>');
+            renderLegend(c, gAgg, null, chartTypes[c.id]);
+            return;
+        }
+        const cfg = chartConfig(c, gAgg, R, chartTypes[c.id]);
         // clic su una parte del grafico -> scheda con l'elenco dei contratti
-        cfg.options.onClick = (ev, els) => { if (els && els.length) chartClick(c, agg, R, chartTypes[c.id], els[0]); };
+        cfg.options.onClick = (ev, els) => { if (els && els.length) chartClick(c, gAgg, R, chartTypes[c.id], els[0]); };
         cfg.options.onHover = (ev, els) => { if (ev.native && ev.native.target) ev.native.target.style.cursor = els && els.length ? 'pointer' : 'default'; };
         card.querySelector('.cg-an-chart').classList.toggle('dn', chartTypes[c.id] === 'doughnut');   // spazio per la legenda prima di disegnare
         // barre orizzontali: il riquadro si allunga per far stare tutte le voci con il loro nome
         const box = card.querySelector('.cg-an-canvas');
         const nSerie = cfg.type === 'line' ? cfg.data.datasets.length : 0;
-        box.style.height = (cfg.type === 'bar' && cfg.options.indexAxis === 'y') ? Math.max(250, agg.voci.length * 26 + 60) + 'px'
+        box.style.height = (cfg.type === 'bar' && cfg.options.indexAxis === 'y') ? Math.max(250, gAgg.voci.length * 26 + 60) + 'px'
             : nSerie > 4 ? (250 + Math.ceil(nSerie / 4) * 24) + 'px' : '';   // linee: spazio per la legenda senza schiacciare il grafico
         const chart = new Chart(canvas, cfg);
         charts.set(c.id, chart);
-        renderLegend(c, agg, chart, chartTypes[c.id]);
+        renderLegend(c, gAgg, chart, chartTypes[c.id]);
+    }
+
+    // ===== Menu "Voci" su ogni grafico: scegli quali voci mostrare =====
+    // "Nascondi tutte" e poi spunta solo quelle che ti servono (es. due consulenti).
+    // La scelta vale per quel grafico finche' resti nella pagina.
+    const hiddenVoci = {};
+    function vociBtn(id) {
+        return `<div class="cg-an-voci" data-voci="${id}"><button type="button" class="cg-an-voci-btn">Voci ▾</button><div class="cg-an-voci-pop"></div></div>`;
+    }
+    function updateVociBtn(id, agg) {
+        const box = el.querySelector(`.cg-an-voci[data-voci="${id}"]`); if (!box) return;
+        const hid = hiddenVoci[id] || new Set();
+        const nHid = agg.voci.filter(v => hid.has(v.label)).length;
+        const b = box.querySelector('.cg-an-voci-btn');
+        b.textContent = nHid ? `Voci ${agg.voci.length - nHid}/${agg.voci.length} ▾` : 'Voci ▾';
+        b.classList.toggle('on', nHid > 0);
+        if (box.classList.contains('open')) fillVociPop(id);
+    }
+    function fillVociPop(id) {
+        const box = el.querySelector(`.cg-an-voci[data-voci="${id}"]`), card = el.querySelector(`.cg-an-card[data-cat="${id}"]`);
+        if (!box || !card || !card._agg) return;
+        const hid = hiddenVoci[id] || new Set(), esc = A().esc;
+        box.querySelector('.cg-an-voci-pop').innerHTML = `
+            <div class="cg-an-voci-all"><button type="button" data-vall="1">Mostra tutte</button><button type="button" data-vall="0">Nascondi tutte</button></div>
+            ${card._agg.voci.map(v => `<label><input type="checkbox" data-vv="${esc(v.label)}" ${hid.has(v.label) ? '' : 'checked'}><span>${esc(lbl(v.label))}</span></label>`).join('')}`;
+    }
+    function onVociEvent(e) {
+        const box = e.target.closest('.cg-an-voci'); if (!box) return false;
+        const id = box.dataset.voci, cat = CATS.find(c => c.id === id);
+        if (e.type === 'click') {
+            if (e.target.closest('.cg-an-voci-btn')) {
+                const open = box.classList.contains('open');
+                el.querySelectorAll('.cg-an-voci.open').forEach(x => x.classList.remove('open'));
+                if (!open) { box.classList.add('open'); fillVociPop(id); }
+                return true;
+            }
+            const all = e.target.closest('[data-vall]');
+            if (all) {
+                const card = el.querySelector(`.cg-an-card[data-cat="${id}"]`);
+                hiddenVoci[id] = all.dataset.vall === '1' ? new Set() : new Set(card._agg.voci.map(v => v.label));
+                drawCat(cat, filtered());
+                return true;
+            }
+            return true;   // clic dentro il menu: non deve chiuderlo ne' aprire altro
+        }
+        const cb = e.target.closest('[data-vv]');
+        if (cb) {
+            const hid = hiddenVoci[id] = hiddenVoci[id] || new Set();
+            if (cb.checked) hid.delete(cb.dataset.vv); else hid.add(cb.dataset.vv);
+            drawCat(cat, filtered());
+        }
+        return true;
     }
 
     // Legenda della ciambella: tutte le voci, scorrevole se sono tante; clic = nascondi/mostra la fetta
     function renderLegend(c, agg, chart, type) {
         const card = el.querySelector(`.cg-an-card[data-cat="${c.id}"]`);
         const box = card.querySelector('[data-legend]'), wrap = card.querySelector('.cg-an-chart');
-        const on = type === 'doughnut' && chart;
+        const on = type === 'doughnut' && !!chart;
         wrap.classList.toggle('dn', !!on);
         if (!on) { box.innerHTML = ''; return; }
         const api = A(), tot = c.money ? agg.tot : agg.base;
         box.innerHTML = agg.voci.map((v, i) => {
             const n = c.money ? v.sum : v.n;
-            return `<li data-leg="${i}" title="${api.esc(lbl(v.label))}"><i style="background:${colorOf(v.label, i)}"></i><span>${api.esc(lbl(v.label))}</span><b>${c.money ? euro(n) : api.fmt(n)}</b><em>${pctS(n, tot)}</em></li>`;
+            return `<li data-leg="${i}" title="${api.esc(lbl(v.label))}"><i style="background:${colorOf(v.label, agg.colorIdx && agg.colorIdx.has(v.label) ? agg.colorIdx.get(v.label) : i)}"></i><span>${api.esc(lbl(v.label))}</span><b>${c.money ? euro(n) : api.fmt(n)}</b><em>${pctS(n, tot)}</em></li>`;
         }).join('');
         box.onclick = e => {
             const li = e.target.closest('[data-leg]'); if (!li) return;
@@ -448,6 +511,8 @@
         }
     };
     function chartConfig(c, agg, R, type) {
+        // colori fissi per voce anche quando alcune sono nascoste dal menu "Voci"
+        const colorOfV = (label, i) => colorOf(label, agg.colorIdx && agg.colorIdx.has(label) ? agg.colorIdx.get(label) : i);
         const th = themeInk();
         const labels = agg.voci.map(v => lbl(v.label));
         const val = v => c.money ? Math.round(v.sum * 100) / 100 : v.n;
@@ -491,7 +556,7 @@
             const inCorso = lastK === NOW_KEY;
             const labs = mm.labels.map((l, i) => (inCorso && i === mm.labels.length - 1) ? l + ' (in corso)' : l);
             const lastIdx = mm.labels.length - 1;
-            return { type: 'line', data: { labels: labs, datasets: mm.series.map((s, i) => ({ label: lbl(s.nome), data: s.valori, borderColor: colorOf(s.nome, i), backgroundColor: colorOf(s.nome, i) + '22',
+            return { type: 'line', data: { labels: labs, datasets: mm.series.map((s, i) => ({ label: lbl(s.nome), data: s.valori, borderColor: colorOfV(s.nome, i), backgroundColor: colorOfV(s.nome, i) + '22',
                     cubicInterpolationMode: 'monotone', tension: .3, pointRadius: 3, pointHoverRadius: 5, fill: mm.series.length === 1,
                     segment: { borderDash: ctx => (inCorso && ctx.p1DataIndex === lastIdx) ? [5, 4] : undefined } })) },
                 options: { ...common, scales: { ...axes, x: { ...axes.x, ticks: { ...axes.x.ticks, maxRotation: 0, autoSkip: true } } } } };
@@ -512,13 +577,13 @@
         }
         const data = agg.voci.map(val);
         if (type === 'bar') {
-            return { type: 'bar', data: { labels, datasets: [{ label: c.money ? 'Totale finanziato' : 'Contratti', data, backgroundColor: agg.voci.map((v, i) => colorOf(v.label, i)), borderRadius: 6, maxBarThickness: horiz ? 22 : 46 }] },
+            return { type: 'bar', data: { labels, datasets: [{ label: c.money ? 'Totale finanziato' : 'Contratti', data, backgroundColor: agg.voci.map((v, i) => colorOfV(v.label, i)), borderRadius: 6, maxBarThickness: horiz ? 22 : 46 }] },
                 options: { ...common, indexAxis: horiz ? 'y' : 'x', layout: { padding: horiz ? { right: 96 } : { top: 20 } },
                     plugins: { ...common.plugins, legend: { display: false }, anBarLabels: { tot, money: !!c.money, color: th.ink, horiz } },
                     scales: horiz ? { x: valAxis, y: catAxis } : { x: catAxis, y: valAxis } },
                 plugins: [anBarLabels] };
         }
-        return { type: 'doughnut', data: { labels, datasets: [{ data, backgroundColor: agg.voci.map((v, i) => colorOf(v.label, i)), borderWidth: 2, borderColor: document.documentElement.getAttribute('data-theme') === 'dark' ? '#1a212c' : '#fff', hoverOffset: 6 }] },
+        return { type: 'doughnut', data: { labels, datasets: [{ data, backgroundColor: agg.voci.map((v, i) => colorOfV(v.label, i)), borderWidth: 2, borderColor: document.documentElement.getAttribute('data-theme') === 'dark' ? '#1a212c' : '#fff', hoverOffset: 6 }] },
             options: { ...common, cutout: '62%' } };
     }
 
@@ -532,6 +597,8 @@
         A().openModal(title, list.map(toRecord), base ? { n: base.n, label: base.label } : null, { reasons: true });
     }
     function onClick(e) {
+        if (onVociEvent(e)) return;
+        if (!e.target.closest('.cg-an-voci')) el.querySelectorAll('.cg-an-voci.open').forEach(x => x.classList.remove('open'));
         const t = e.target.closest('[data-type]');
         if (t) {
             chartTypes[t.dataset.cat] = t.dataset.type; saveTypes();
@@ -573,6 +640,7 @@
         }
     }
     function onChange(e) {
+        if (e.target.closest('.cg-an-voci')) { onVociEvent(e); return; }
         const f = e.target.closest('[data-f]');
         if (f) { F[f.dataset.f] = f.value; update(); return; }
         const gv = e.target.closest('[data-gv]');

@@ -268,3 +268,17 @@ table.cg-list { width:100%; border-collapse:collapse; min-width:900px; }
 .cg-an-legend li em { font-style:normal; font-size:11px; color:var(--cg-ink-2); min-width:42px; text-align:right; }
 .cg-an-legend li.off span, .cg-an-legend li.off b { text-decoration:line-through; opacity:.45; }
 @media (max-width:520px) { .cg-an-chart.dn { display:block; } .cg-an-chart.dn .cg-an-legend { max-height:180px; margin-top:8px; } }
+/* menu "Voci" sui grafici (Analisi e Stock): mostra / nascondi le voci */
+.cg-an-hbtns { display:flex; gap:6px; align-items:center; flex-shrink:0; }
+.cg-an-voci { position:relative; }
+.cg-an-voci-btn { height:34px; padding:0 11px; border-radius:10px; border:0; background:var(--cg-grey-soft); color:var(--cg-ink-2) !important; font-weight:700; font-size:12px !important; cursor:pointer; white-space:nowrap; }
+.cg-an-voci-btn.on { background:var(--cg-band); color:#fff !important; }
+.cg-an-voci-pop { display:none; position:absolute; right:0; top:100%; margin-top:6px; z-index:40; width:260px; max-height:320px; overflow:auto; padding:8px;
+  background:var(--cg-card); border:1px solid var(--cg-line); border-radius:12px; box-shadow:var(--cg-shadow); text-align:left; }
+.cg-an-voci.open .cg-an-voci-pop { display:block; }
+.cg-an-voci-pop label { display:flex; align-items:center; gap:8px; padding:5px 6px; border-radius:8px; font-size:12.5px; cursor:pointer; color:var(--cg-ink); }
+.cg-an-voci-pop label:hover { background:var(--cg-grey-soft); }
+.cg-an-voci-pop input[type="checkbox"] { flex:none; width:15px; height:15px; margin:0; accent-color:var(--cg-teal); }
+.cg-an-voci-all { position:sticky; top:-8px; display:flex; gap:6px; padding-bottom:6px; margin-bottom:4px; background:var(--cg-card); border-bottom:1px solid var(--cg-line); }
+.cg-an-voci-all button { flex:1; border:0; border-radius:8px; padding:7px; background:var(--cg-grey-soft); color:var(--cg-ink) !important; font-weight:700; font-size:12px !important; cursor:pointer; }
+.cg-an-canvas { position:relative; }
