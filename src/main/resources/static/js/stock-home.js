@@ -473,16 +473,25 @@
             const open = (k, label, extra) => openList(label, { [d.key]: k, ...(extra || {}) });
             let cfg;
             if (tipo === 'line') {
-                // andamento: vetture entrate in stock per mese, una linea per voce (le 6 piu' numerose)
-                const months = [...new Set(rows.filter(r => r.inizio).map(r => r.inizio.slice(0, 7)))].sort().slice(-12);
+                // andamento tra un import e l'altro: ogni import salva una "fotografia" dei conteggi
+                // (una per giorno). Linee dritte tra un punto e l'altro: se il valore non cambia, la linea resta piatta.
+                const campo = { tipo: 'tipo', stato: 'stato', carb: 'carburante', marca: 'marca' }[d.key];
+                const storico = (meta && Array.isArray(meta.storico)) ? meta.storico : [];
                 const top = d.voci.slice(0, 6);
+                const lab = f => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(f.at || ''); return m ? `${m[3]}/${m[2]}/${m[1].slice(2)}` : '—'; };
+                if (hint) hint.textContent = storico.length > 1
+                    ? `Andamento tra gli import (${storico.length} caricamenti) · clicca un punto`
+                    : 'Per vedere l\'andamento servono almeno due import in giorni diversi: ogni import viene ricordato';
                 cfg = { type: 'line',
-                    data: { labels: months.map(m => MESI3[+m.slice(5, 7) - 1] + ' ' + m.slice(2, 4)),
-                        datasets: top.map(([k, n, lab], i) => ({ label: `${lab} · ${fmt(n)}`, data: months.map(m => rows.filter(r => d.get(r) === k && (r.inizio || '').startsWith(m)).length),
-                            borderColor: col(k, i) === '#4d8fd6' || col(k, i) === '#5cc6a7' ? PALETTE[i % PALETTE.length] : col(k, i), backgroundColor: 'transparent', tension: .35, pointRadius: 3 })) },
+                    data: { labels: storico.map(lab),
+                        datasets: top.map(([k, n, l], i) => ({ label: `${l} · ${fmt(n)}`, data: storico.map(f => (f[campo] && f[campo][k]) || 0),
+                            borderColor: d.colors[k] || PALETTE[i % PALETTE.length], backgroundColor: d.colors[k] || PALETTE[i % PALETTE.length],
+                            tension: 0, pointRadius: 4, pointHoverRadius: 6, borderWidth: 2.5 })) },
                     options: { maintainAspectRatio: false,
-                        plugins: { legend: { position: 'bottom', labels: { color: ink, usePointStyle: true, boxWidth: 8, padding: 12 } } },
-                        scales: { x: { ticks: { color: ink }, grid: { display: false } }, y: { beginAtZero: true, ticks: { color: ink, precision: 0 }, grid: { color: grid } } },
+                        plugins: { legend: { position: 'bottom', labels: { color: ink, usePointStyle: true, boxWidth: 8, padding: 12 } },
+                            tooltip: { callbacks: { title: it => { const f = storico[it[0].dataIndex]; return `Import del ${lab(f)}${f.da ? ' · ' + f.da : ''}`; },
+                                label: c => { const f = storico[c.dataIndex]; return ` ${c.dataset.label.split(' · ')[0]}: ${fmt(c.parsed.y)} · ${pctS(c.parsed.y, f.totale || 0)}`; } } } },
+                        scales: { x: { offset: storico.length < 3, ticks: { color: ink }, grid: { display: false } }, y: { beginAtZero: true, ticks: { color: ink, precision: 0 }, grid: { color: grid } } },
                         onClick: (ev, els) => { if (els.length) { const v = top[els[0].datasetIndex]; open(v[0], v[2]); } } } };
             } else if (tipo === 'doughnut') {
                 cfg = { type: 'doughnut',
@@ -546,15 +555,23 @@
             if (btn) { const box = btn.parentElement, op = box.classList.contains('open'); filt.querySelectorAll('.st-ms.open').forEach(m => m.classList.remove('open')); if (!op) box.classList.add('open'); return; }
             const all = e.target.closest('[data-all]');
             if (all) { view.sel[all.dataset.all] = new Set(); renderList(all.dataset.all); return; }
-            if (e.target.closest('#stReset')) { view.sel = {}; view.rng = {}; renderList(); }
+            if (e.target.closest('#stReset')) { view.sel = {}; view.rng = {}; view.psq = {}; renderList(); }
         });
         filt.addEventListener('change', e => {
             const cb = e.target.closest('input[data-ms]');
             if (cb) { const k = cb.dataset.ms; view.sel[k] = view.sel[k] || new Set(); if (cb.checked) view.sel[k].add(cb.value); else view.sel[k].delete(cb.value); renderList(k); return; }
         });
         filt.addEventListener('input', e => {
+            const ps = e.target.closest('input[data-ps]');
+            if (ps) { view.psq = view.psq || {}; view.psq[ps.dataset.ps] = ps.value; applyPopSearch(ps); return; }
             const r = e.target.closest('input[data-rng]');
             if (r) { const v = r.value === '' ? null : Number(r.value); view.rng[r.dataset.rng] = v; clearTimeout(view._t); view._t = setTimeout(() => renderList('__keep', r.dataset.rng), 300); }
+        });
+        filt.addEventListener('keydown', e => {
+            const ps = e.target.closest('input[data-ps]'); if (!ps || e.key !== 'Enter') return;
+            e.preventDefault();
+            const vis = [...ps.closest('.st-pop').querySelectorAll('label[data-n]')].filter(l => l.style.display !== 'none');
+            if (vis.length === 1) vis[0].querySelector('input').click();
         });
         document.addEventListener('click', e => { if (ov && !e.target.closest('.st-ms')) ov.querySelectorAll('.st-ms.open').forEach(m => m.classList.remove('open')); });
     }
@@ -563,7 +580,7 @@
     function openList(title, f) {
         ensureModal();
         view = { base: rows.filter(r => match(r, f)), title, f, stato: '', tipo: '', q: '', hasMarca: !!f.marca,
-            sel: {}, rng: {}, sort: { k: '', dir: 1 }, limit: 200 };
+            sel: {}, rng: {}, psq: {}, sort: { k: '', dir: 1 }, limit: 200 };
         ov.querySelector('#stMSearch').value = '';
         ov.querySelector('#stMList').style.display = '';
         ov.querySelector('#stMDet').style.display = 'none';
@@ -581,14 +598,25 @@
             const cnt = count(b, r => r[k] || '—'); if (cnt.size < 2) return '';
             const sel = view.sel[k] || new Set();
             return `<div class="st-ms ${openKey === k ? 'open' : ''}"><button type="button" class="${sel.size ? 'on' : ''}">${label}${sel.size ? ` (${sel.size})` : ''} ▾</button>
-              <div class="st-pop">${[...cnt.keys()].sort(cmp).map(v => `<label><input type="checkbox" data-ms="${k}" value="${esc(v)}" ${sel.has(v) ? 'checked' : ''}><span>${v === '—' ? 'Non indicato' : esc(v)}</span><em>${fmt(cnt.get(v))}</em></label>`).join('')}
+              <div class="st-pop"><input type="search" class="st-psearch" data-ps="${k}" placeholder="Cerca ${label.toLowerCase()}…" autocomplete="off">
+              ${[...cnt.keys()].sort(cmp).map(v => `<label data-n="${esc(norm(v === '—' ? 'Non indicato' : v))}"><input type="checkbox" data-ms="${k}" value="${esc(v)}" ${sel.has(v) ? 'checked' : ''}><span>${v === '—' ? 'Non indicato' : esc(v)}</span><em>${fmt(cnt.get(v))}</em></label>`).join('')}
+              <p class="st-pnone" style="display:none">Nessun risultato</p>
               <button type="button" class="st-all" data-all="${k}">Tutti</button></div></div>`;
         }).join('');
         const rng = RNG.map(([k, label]) => `<div class="st-rng"><small>${label}</small><span>
             <input type="number" min="0" placeholder="da" data-rng="${k}_min" value="${view.rng[k + '_min'] ?? ''}">
             <input type="number" min="0" placeholder="a" data-rng="${k}_max" value="${view.rng[k + '_max'] ?? ''}"></span></div>`).join('');
         filt.innerHTML = ms + rng + '<button type="button" class="st-reset" id="stReset">Azzera filtri</button>';
+        // ricerca dentro i menu: si mantiene quando l'elenco si ridisegna
+        filt.querySelectorAll('[data-ps]').forEach(i => { i.value = (view.psq && view.psq[i.dataset.ps]) || ''; applyPopSearch(i); });
+        if (openKey && view.psq && view.psq[openKey]) { const i = filt.querySelector(`[data-ps="${openKey}"]`); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }
         if (focusRng) { const i = filt.querySelector(`[data-rng="${focusRng}"]`); if (i) { i.focus(); const l = i.value.length; try { i.setSelectionRange(l, l); } catch (e) { /* number */ } } }
+    }
+    // filtra le voci di un menu: senza accenti e maiuscole, basta una parte del nome ("cit" -> Citroën)
+    function applyPopSearch(input) {
+        const q = norm(input.value), pop = input.closest('.st-pop'); let n = 0;
+        pop.querySelectorAll('label[data-n]').forEach(l => { const ok = !q || l.dataset.n.includes(q); l.style.display = ok ? '' : 'none'; if (ok) n++; });
+        pop.querySelector('.st-pnone').style.display = n ? 'none' : '';
     }
     function passFilters(r) {
         for (const [k] of MS) { const sel = view.sel[k]; if (sel && sel.size && !sel.has(r[k] || '—')) return false; }
