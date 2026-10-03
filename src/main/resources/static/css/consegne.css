@@ -282,3 +282,7 @@ table.cg-list { width:100%; border-collapse:collapse; min-width:900px; }
 .cg-an-voci-all { position:sticky; top:-8px; display:flex; gap:6px; padding-bottom:6px; margin-bottom:4px; background:var(--cg-card); border-bottom:1px solid var(--cg-line); }
 .cg-an-voci-all button { flex:1; border:0; border-radius:8px; padding:7px; background:var(--cg-grey-soft); color:var(--cg-ink) !important; font-weight:700; font-size:12px !important; cursor:pointer; }
 .cg-an-canvas { position:relative; }
+/* selettore Riepilogo / Dettaglio (Metodo di pagamento, Stock per sede) */
+.cg-an-mode { display:flex; gap:3px; background:var(--cg-grey-soft); border-radius:10px; padding:3px; }
+.cg-an-mode button { height:28px; padding:0 10px; border:0; border-radius:8px; background:transparent; color:var(--cg-ink-2) !important; font-weight:700; font-size:12px !important; cursor:pointer; }
+.cg-an-mode button.on { background:var(--cg-card); color:var(--cg-ink) !important; box-shadow:0 1px 3px rgba(0,0,0,.15); }

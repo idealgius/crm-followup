@@ -33,12 +33,14 @@
     const PALETTE = ['#5b8cff', '#f4a83a', '#34c38f', '#e5484d', '#9b7bff', '#2bb3c0', '#ff7eb6', '#8d99ae', '#c9a227', '#6c5ce7', '#00b894', '#fd79a8', '#636e72', '#e17055'];
     const TYPES = { doughnut: 'Ciambella', bar: 'Colonne', line: 'Linee' };
     // colori fissi per le voci con un significato (verde = ok, ambra = in corso, rosso = annullata, grigio = assente)
-    const FIXED = { 'Consegnate': '#34c38f', 'Da consegnare': '#f4a83a', 'Annullate': '#e5484d', 'Installato': '#34c38f', 'Non installato': '#a4adba',
+    const FIXED = { 'Finanziamenti': '#5b8cff', 'Consegnate': '#34c38f', 'Da consegnare': '#f4a83a', 'Annullate': '#e5484d', 'Installato': '#34c38f', 'Non installato': '#a4adba',
         'Non venduta': '#a4adba', 'Non specificato': '#c3c9d2', 'Non indicato': '#d5d9df', 'Contanti': '#8d99ae', 'Altri': '#b2bec3' };
     const colorOf = (label, i) => FIXED[label] || PALETTE[i % PALETTE.length];
     // i valori del foglio in MAIUSCOLO (stati) si mostrano "Normali"; nomi e marchi restano come sono
     const lbl = v => (String(v) === String(v).toUpperCase() && /[A-Z]{3}/.test(String(v))) ? A().cap(v) : String(v);
     const LS_TYPES = 'consegne_analisi_grafici_v1';
+    // Metodo di pagamento: 'riepilogo' = Finanziamenti contro Contanti; 'dettaglio' = ogni finanziaria
+    let finMode = 'riepilogo';
     const LS_VIS = 'consegne_analisi_visibili_v1';
     let nascosti = new Set();   // categorie tolte dal filtro "Grafici" (ricordate nel browser)
     const visibili = () => CATS.filter(c => !nascosti.has(c.id));
@@ -162,7 +164,7 @@
         { id: 'dc', t: 'Vetture da consegnare: stato', base: 'dc', get: r => r.stato },
         { id: 'consulenti', t: 'Consulenti: vendite, consegnate, in lavorazione, annullate', base: 'tutti', get: r => r.vend, special: 'consulenti' },
         { id: 'stato', t: 'Stato (annullate comprese)', base: 'tutti', get: r => r.stato },
-        { id: 'fin', t: 'Metodo di pagamento', base: 'validi', get: r => r.fin, special: 'pagamento' },
+        { id: 'fin', t: 'Metodo di pagamento', base: 'validi', get: r => (finMode === 'dettaglio' || ['Contanti', 'Non specificato', 'Non indicato'].includes(r.fin)) ? r.fin : 'Finanziamenti', special: 'pagamento' },
         { id: 'importo', t: 'Importo finanziato per finanziaria', base: 'validi', special: 'importo', money: true },
         { id: 'importoMese', t: 'Finanziamenti per mese: numero e totale', base: 'validi', special: 'importoMese', money: true },
         { id: 'canale', t: 'Tipologia (Nuovo, Km0, Usato)', base: 'validi', get: r => r.canale, order: ['Nuovo', 'Km0', 'Usato', 'Non specificato'] },
@@ -214,7 +216,8 @@
         else if (cat.sortNum) voci.sort((a, b) => (parseInt(a.label) || 999) - (parseInt(b.label) || 999));
         else voci.sort((a, b) => b.n - a.n);
         if (cat.special === 'pagamento') {
-            const coda = ['Contanti', 'Non indicato', 'Non specificato'];
+            const coda = ['Finanziamenti', 'Contanti', 'Non indicato', 'Non specificato'];
+            if (finMode !== 'dettaglio') { voci.sort((a, b) => coda.indexOf(a.label) - coda.indexOf(b.label)); return { voci, base: B.length, B }; }
             voci = voci.filter(v => !coda.includes(v.label)).concat(coda.map(l => voci.find(v => v.label === l)).filter(Boolean));
         }
         if (cat.top && voci.length > cat.top) {
@@ -327,7 +330,7 @@
         el.querySelector('#anGrid').innerHTML = visibili().map(c => `
           <article class="cg-card cg-an-card ${c.special === 'consulenti' || c.id === 'stato' ? 'wide' : ''}" data-cat="${c.id}">
             <header><div><h3>${c.t}</h3><p class="cg-hint" data-sub="${c.id}"></p></div>
-              <div class="cg-an-hbtns">${vociBtn(c.id)}<div class="cg-an-types">${Object.keys(TYPES).map(t => `<button type="button" title="${TYPES[t]}" class="${chartTypes[c.id] === t ? 'on' : ''}" data-type="${t}" data-cat="${c.id}">${ICON[t]}</button>`).join('')}</div></div></header>
+              <div class="cg-an-hbtns">${c.special === 'pagamento' ? `<div class="cg-an-mode"><button type="button" data-finmode="riepilogo" class="${finMode !== 'dettaglio' ? 'on' : ''}">Riepilogo</button><button type="button" data-finmode="dettaglio" class="${finMode === 'dettaglio' ? 'on' : ''}">Dettaglio</button></div>` : ''}${vociBtn(c.id)}<div class="cg-an-types">${Object.keys(TYPES).map(t => `<button type="button" title="${TYPES[t]}" class="${chartTypes[c.id] === t ? 'on' : ''}" data-type="${t}" data-cat="${c.id}">${ICON[t]}</button>`).join('')}</div></div></header>
             <div class="cg-an-chart"><div class="cg-an-canvas"><canvas id="anc_${c.id}"></canvas></div><ul class="cg-an-legend" data-legend="${c.id}"></ul></div>
             <div class="cg-an-table" data-table="${c.id}"></div>
           </article>`).join('');
@@ -356,6 +359,10 @@
             });
             table = `<table><thead><tr><th>Consulente</th><th>Vendite</th><th>Consegnate</th><th>In lavorazione</th><th>Annullate</th><th>% annullate</th></tr></thead><tbody>` +
                 righe.map((x, i) => `<tr data-row="${c.id}|${i}"><td><i style="background:${colorOf(x.v.label, i)}"></i>${api.esc(x.v.label)}</td><td>${api.fmt(x.val)}</td><td>${api.fmt(x.cons)}</td><td>${api.fmt(x.dcn)}</td><td>${api.fmt(x.an)}</td><td>${pctS(x.an, x.v.n)}</td></tr>`).join('') + `</tbody></table>`;
+        } else if (c.special === 'pagamento' && finMode !== 'dettaglio') {
+            table = `<table><thead><tr><th>Voce</th><th>Contratti</th><th>%</th></tr></thead><tbody>` +
+                agg.voci.map((v, i) => `<tr data-row="${c.id}|${i}"><td><i style="background:${colorOf(v.label, i)}"></i>${api.esc(lbl(v.label))}</td><td>${api.fmt(v.n)}</td><td>${pctS(v.n, agg.base)}</td></tr>`).join('') +
+                `</tbody></table><p class="cg-hint" style="margin-top:6px">Passa a "Dettaglio" per vedere i contanti a confronto con ogni singola finanziaria.</p>`;
         } else if (c.special === 'pagamento') {
             const fins = agg.voci.filter(v => !['Contanti', 'Non specificato', 'Non indicato'].includes(v.label));
             const nf = fins.reduce((s, v) => s + v.n, 0);
@@ -597,6 +604,14 @@
         A().openModal(title, list.map(toRecord), base ? { n: base.n, label: base.label } : null, { reasons: true });
     }
     function onClick(e) {
+        const fm = e.target.closest('[data-finmode]');
+        if (fm) {
+            finMode = fm.dataset.finmode;
+            fm.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === fm));
+            hiddenVoci.fin = new Set();
+            drawCat(CATS.find(c => c.id === 'fin'), filtered());
+            return;
+        }
         if (onVociEvent(e)) return;
         if (!e.target.closest('.cg-an-voci')) el.querySelectorAll('.cg-an-voci.open').forEach(x => x.classList.remove('open'));
         const t = e.target.closest('[data-type]');

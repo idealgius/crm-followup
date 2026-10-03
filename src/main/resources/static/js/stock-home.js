@@ -77,6 +77,34 @@
         const i = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
         return i ? i[0] : '';
     }
+    // ===== UBICAZIONE: dalla colonna Sede ai gruppi richiesti =====
+    // Gruppo Autoscala  -> Agnano (Showroom, Expo Village Superiore/Inferiore), Casamarciano, Salerno, Senza sede
+    // Autoscala         -> Capodichino, Caserta, In uso / Demo
+    // Carrozzeria       -> ogni carrozzeria ("cars group scotellaro" = Carrozzeria Scodellaro)
+    // Altre lavorazioni -> lavaggi, gommisti, officine
+    // C/O Altri Dealer  -> tutto il resto
+    // In arrivo         -> sezione a parte
+    const UBIC_ORDINE = ['Gruppo Autoscala', 'Autoscala', 'Carrozzeria', 'Altre lavorazioni', 'C/O Altri Dealer', 'In arrivo'];
+    const UBIC_DET_ORDINE = ['Agnano · Showroom', 'Agnano · Expo Village Superiore', 'Agnano · Expo Village Inferiore', 'Casamarciano', 'Salerno', 'Senza sede', 'Capodichino', 'Caserta', 'In uso / Demo'];
+    function ubicazione(raw) {
+        const n = norm(raw);
+        if (!n) return { g: 'Gruppo Autoscala', d: 'Senza sede' };
+        if (n.includes('inarrivo')) return { g: 'In arrivo', d: 'In arrivo' };
+        if (n.includes('village') && n.includes('super')) return { g: 'Gruppo Autoscala', d: 'Agnano · Expo Village Superiore' };
+        if (n.includes('village') && n.includes('infer')) return { g: 'Gruppo Autoscala', d: 'Agnano · Expo Village Inferiore' };
+        if (n.includes('casamarciano')) return { g: 'Gruppo Autoscala', d: 'Casamarciano' };
+        if (n.includes('salerno')) return { g: 'Gruppo Autoscala', d: 'Salerno' };
+        if (n.includes('showroom') || n.includes('agnano') || n === 'gruppoautoscala') return { g: 'Gruppo Autoscala', d: 'Agnano · Showroom' };
+        if (n.includes('capodichino')) return { g: 'Autoscala', d: 'Capodichino' };
+        if (n.includes('caserta')) return { g: 'Autoscala', d: 'Caserta' };
+        if (n.includes('inusoscala') || n.includes('demo')) return { g: 'Autoscala', d: 'In uso / Demo' };
+        if (n.includes('scotellaro') || n.includes('scodellaro')) return { g: 'Carrozzeria', d: 'Carrozzeria Scodellaro' };
+        if (n.includes('carrozzeria')) return { g: 'Carrozzeria', d: titleCase(String(raw).replace(/\s+/g, ' ').trim()) };
+        if (/lavaggio|gomm|vern|officin/.test(n)) return { g: 'Altre lavorazioni', d: titleCase(String(raw).replace(/\s+/g, ' ').trim()) };
+        return { g: 'C/O Altri Dealer', d: titleCase(String(raw).replace(/\s+/g, ' ').trim()) };
+    }
+    const ordDet = (a, b) => { const ia = UBIC_DET_ORDINE.indexOf(a), ib = UBIC_DET_ORDINE.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); };
+
     function titleCase(s) {
         return s.toLowerCase().replace(/(^|[\s\-\/'])([a-zà-ÿ])/g, (m, a, b) => a + b.toUpperCase());
     }
@@ -287,7 +315,7 @@
 
     function applyServerData(d) {
         meta = d;
-        rows = (d.stock && Array.isArray(d.stock.rows) ? d.stock.rows : []).map((r, i) => ({ ...r, _i: i }));
+        rows = (d.stock && Array.isArray(d.stock.rows) ? d.stock.rows : []).map((r, i) => { const u = ubicazione(r.sede); return { ...r, _i: i, ubic: u.g, ubicDet: u.d }; });
     }
 
     async function reload(msg) {
@@ -327,7 +355,8 @@
     function match(r, f) {
         return (!f.stato || r.stato === f.stato) && (!f.tipo || r.tipo === f.tipo) && (!f.marca || r.marca === f.marca)
             && (!f.carb || (f.carb === '__none' ? !r.carburante : r.carburante === f.carb))
-            && (!f.sede || (f.sede === '__none' ? !r.sede : r.sede === f.sede));
+            && (!f.sede || (f.sede === '__none' ? !r.sede : r.sede === f.sede))
+            && (!f.ubic || r.ubic === f.ubic) && (!f.ubicDet || r.ubicDet === f.ubicDet);
     }
 
     function render(msg) {
@@ -340,52 +369,157 @@
                 <p>${canImp ? 'Usa "Importa stock (Excel)" in alto per caricare il file: lo vedranno tutti.' : 'Chi ha il permesso completo sullo Stock deve ancora caricare il file.'}</p></div>`;
             return;
         }
-        const tot = rows.length;
-        const tipo = count(rows, r => r.tipo), stato = count(rows, r => r.stato || '—');
-        const marchi = count(rows, r => r.marca);
-        const kpi = (icon, bg, label, n, f, sub) => `<button type="button" class="cg-kpi" data-f='${esc(JSON.stringify(f))}' data-t="${esc(label)}">
+        body.innerHTML = `<div class="st-layout">
+            <aside class="st-side"><nav id="stNav" aria-label="Viste dello stock"></nav></aside>
+            <div class="st-sidesel"><label>Vista <select id="stSel"></select></label></div>
+            <div class="st-main" id="stMain"></div></div>`;
+        renderNav();
+        showView(curView || initialView());
+    }
+
+    // ===== MENU A SINISTRA: le viste dello stock =====
+    let curView = null;
+    const LS_VIEW = 'stock_vista_v1';
+    const SECTION_ICON = { 'Gruppo Autoscala': '🏢', 'Autoscala': '🏬', 'Carrozzeria': '🔧', 'Altre lavorazioni': '🧽', 'C/O Altri Dealer': '🤝', 'In arrivo': '🚚' };
+    const SECTION_NAME = { 'Carrozzeria': 'Carrozzerie' };
+    const NAV_SUB = ['Gruppo Autoscala', 'Autoscala'];      // sezioni con le sedi elencate nel menu
+    function initialView() {
+        const h = window.__stockLinkView || decodeURIComponent((location.hash.split('/')[1] || ''));
+        window.__stockLinkView = null;   // link aperto da un collega (#stock/<vista>): vale una volta
+        if (h) return h;
+        try { return localStorage.getItem(LS_VIEW) || 'panoramica'; } catch (e) { return 'panoramica'; }
+    }
+    function viewLabel(key) {
+        if (key === 'panoramica') return 'Panoramica';
+        if (key === 'marchi') return 'Marchi';
+        if (key === 'tutte') return 'Tutte le vetture';
+        if (key.startsWith('g:')) return SECTION_NAME[key.slice(2)] || key.slice(2);
+        if (key.startsWith('d:')) return key.slice(2).split('|')[1];
+        return key;
+    }
+    function renderNav() {
+        const item = (key, icon, label, n, sub) => `<button type="button" class="st-nav-i ${sub ? 'sub' : ''}" data-view="${esc(key)}">
+            <span class="st-nav-ic">${icon}</span><span class="st-nav-l">${esc(label)}</span><b>${fmt(n)}</b></button>`;
+        let h = item('panoramica', '📊', 'Panoramica', rows.length) + '<div class="st-nav-t">Dove sono le vetture</div>';
+        UBIC_ORDINE.forEach(g => {
+            const list = rows.filter(r => r.ubic === g); if (!list.length) return;
+            h += item('g:' + g, SECTION_ICON[g] || '•', SECTION_NAME[g] || g, list.length);
+            if (NAV_SUB.includes(g)) [...count(list, r => r.ubicDet)].sort((a, b) => ordDet(a[0], b[0]) || b[1] - a[1])
+                .forEach(([d, n]) => { h += item('d:' + g + '|' + d, '', d, n, true); });
+        });
+        h += '<div class="st-nav-t">Elenchi</div>' + item('marchi', '🏷️', 'Marchi', new Set(rows.map(r => r.marca)).size) + item('tutte', '📋', 'Tutte le vetture', rows.length);
+        const nav = rootEl.querySelector('#stNav'); nav.innerHTML = h;
+        nav.onclick = e => { const b = e.target.closest('[data-view]'); if (b) showView(b.dataset.view); };
+        // telefono: lo stesso menu come tendina
+        const sel = rootEl.querySelector('#stSel');
+        sel.innerHTML = [...nav.querySelectorAll('[data-view]')].map(b => `<option value="${esc(b.dataset.view)}">${b.classList.contains('sub') ? '\u00a0\u00a0\u00a0· ' : ''}${esc(b.querySelector('.st-nav-l').textContent)} (${b.querySelector('b').textContent})</option>`).join('');
+        sel.onchange = () => showView(sel.value);
+    }
+    function showView(key) {
+        // vista non piu' valida (es. sezione sparita dopo un nuovo import): panoramica
+        const valid = key === 'panoramica' || key === 'marchi' || key === 'tutte'
+            || (key.startsWith('g:') && rows.some(r => r.ubic === key.slice(2)))
+            || (key.startsWith('d:') && rows.some(r => r.ubic + '|' + r.ubicDet === key.slice(2)));
+        if (!valid) key = 'panoramica';
+        curView = key;
+        try { localStorage.setItem(LS_VIEW, key); } catch (e) { /* */ }
+        history.replaceState(null, '', location.pathname + '#stock/' + encodeURIComponent(key));
+        rootEl.querySelectorAll('.st-nav-i').forEach(b => b.classList.toggle('on', b.dataset.view === key || (key.startsWith('d:') && b.dataset.view === 'g:' + key.slice(2).split('|')[0] && !NAV_SUB.includes(key.slice(2).split('|')[0]))));
+        const sel = rootEl.querySelector('#stSel'); if (sel) sel.value = key;
+        destroyCharts();
+        const main = rootEl.querySelector('#stMain');
+        main.scrollTop = 0;
+        if (key === 'panoramica') return viewPanoramica(main);
+        if (key === 'marchi') { scope = rows; scopeAll = true; main.innerHTML = `<div class="cg-card"><h2>Marchi</h2><p class="cg-hint">In ordine alfabetico · clicca un marchio per vedere modelli e vetture</p><div class="st-brands" id="stBrands"></div></div>`; drawBrands(); return; }
+        if (key === 'tutte') { scope = rows; scopeAll = true; main.innerHTML = ''; mountList(main, 'Tutte le vetture', {}); return; }
+        const [g, d] = key.slice(2).split('|');
+        viewSezione(main, g, key.startsWith('d:') ? d : null);
+    }
+    const kpiHtml = (icon, bg, label, n, f, sub) => `<button type="button" class="cg-kpi" data-f='${esc(JSON.stringify(f))}' data-t="${esc(label)}">
             <span class="cg-k-top">${label}<span class="cg-dot" style="background:${bg}">${icon}</span></span>
             <span class="cg-num">${fmt(n)}</span><span class="cg-sub">${sub}</span></button>`;
-        const pc = n => tot ? Math.round(n / tot * 100) + '% del totale' : '';
-        const nD = stato.get('Disponibile') || 0, nP = stato.get('Prenotata') || 0, nV = stato.get('Venduta') || 0;
-
-        body.innerHTML = `
-        <div class="cg-kpis">
-          ${kpi('🚗', 'var(--cg-teal-soft)', 'Totale vetture', tot, {}, `${fmt(nD)} disponibili · ${fmt(nP)} prenotate · ${fmt(nV)} vendute`)}
-          ${kpi('✨', 'var(--cg-teal-soft)', 'Nuove', tipo.get('Nuova') || 0, { tipo: 'Nuova' }, pc(tipo.get('Nuova') || 0))}
-          ${kpi('🔁', 'var(--cg-amber-soft)', 'Usate', tipo.get('Usata') || 0, { tipo: 'Usata' }, pc(tipo.get('Usata') || 0))}
-          ${kpi('🏁', 'var(--cg-violet-soft)', 'Km 0', tipo.get('Km 0') || 0, { tipo: 'Km 0' }, pc(tipo.get('Km 0') || 0))}
-        </div>
-        <div class="cg-kpis st-kpis2">
-          ${kpi('✅', 'var(--cg-teal-soft)', 'Disponibili', nD, { stato: 'Disponibile' }, pc(nD))}
-          ${kpi('🔖', 'var(--cg-amber-soft)', 'Prenotate', nP, { stato: 'Prenotata' }, pc(nP))}
-          ${kpi('🤝', 'var(--cg-violet-soft)', 'Vendute', nV, { stato: 'Venduta' }, pc(nV))}
-          <button type="button" class="cg-kpi" id="stGoBrands"><span class="cg-k-top">Marchi<span class="cg-dot" style="background:var(--cg-grey-soft)">🏷️</span></span>
-            <span class="cg-num">${fmt(marchi.size)}</span><span class="cg-sub">Vai all'elenco per marchio</span></button>
-        </div>
-        <div class="st-charts">
-          <div class="cg-card ${vede('G_ST_TIPO') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Nuove, usate e Km 0</h2><p class="cg-hint" data-hint="stChTipo"></p></div><div class="cg-an-hbtns">${vociBtn('stChTipo')}${typeBtns('stChTipo')}</div></div><div class="st-chart-box"><canvas id="stChTipo"></canvas></div></div>
-          <div class="cg-card ${vede('G_ST_STATO') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Disponibili, prenotate e vendute</h2><p class="cg-hint" data-hint="stChStato"></p></div><div class="cg-an-hbtns">${vociBtn('stChStato')}${typeBtns('stChStato')}</div></div><div class="st-chart-box"><canvas id="stChStato"></canvas></div></div>
-          <div class="cg-card ${vede('G_ST_MOTORE') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Per motorizzazione</h2><p class="cg-hint" data-hint="stChMotore"></p></div><div class="cg-an-hbtns">${vociBtn('stChMotore')}${typeBtns('stChMotore')}</div></div><div class="st-chart-box"><canvas id="stChMotore"></canvas></div></div>
-          <div class="cg-card ${vede('G_ST_MARCHI') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Per marchio</h2><p class="cg-hint" data-hint="stChMarchi"></p></div><div class="cg-an-hbtns">${vociBtn('stChMarchi')}${typeBtns('stChMarchi')}</div></div><div class="st-chart-box"><canvas id="stChMarchi"></canvas></div></div>
-          <div class="cg-card st-wide ${vede('G_ST_SEDE') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Per sede</h2><p class="cg-hint" data-hint="stChSede"></p></div><div class="cg-an-hbtns">${vociBtn('stChSede')}${typeBtns('stChSede')}</div></div><div class="st-chart-box" data-box="stChSede"><canvas id="stChSede"></canvas></div></div>
-        </div>
-        <div class="cg-card" id="stBrandsCard" style="margin-top:16px">
-          <h2>Marchi</h2><p class="cg-hint">In ordine alfabetico · clicca un marchio per vedere modelli e vetture</p>
-          <div class="st-brands" id="stBrands"></div>
-        </div>`;
-
-        body.querySelectorAll('.cg-kpi[data-f]').forEach(b => b.addEventListener('click', () => openList(b.dataset.t, JSON.parse(b.dataset.f))));
-        body.querySelector('#stGoBrands').addEventListener('click', () => body.querySelector('#stBrandsCard').scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    const chartCard = (id, title, perm, wide, extra, noLine) => `<div class="cg-card ${wide ? 'st-wide' : ''} ${vede(perm) ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>${title}</h2><p class="cg-hint" data-hint="${id}"></p></div><div class="cg-an-hbtns">${extra || ''}${vociBtn(id)}${typeBtns(id, noLine)}</div></div><div class="st-chart-box"><canvas id="${id}"></canvas></div></div>`;
+    function bindView(main, baseF) {
+        main.querySelectorAll('.cg-kpi[data-f]').forEach(b => b.addEventListener('click', () => openList(b.dataset.t, { ...baseF, ...JSON.parse(b.dataset.f) })));
         drawCharts();
-        bindVoci(body);
-        body.querySelectorAll('[data-ct]').forEach(btn => btn.addEventListener('click', () => {
+        bindVoci(main);
+        const sm = main.querySelector('#stSedeMode');
+        if (sm) sm.addEventListener('click', e => {
+            const b = e.target.closest('[data-sm]'); if (!b) return;
+            sedeMode = b.dataset.sm; hiddenSt.stChSede = new Set();
+            sm.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+            destroyCharts(); drawCharts();
+        });
+        main.querySelectorAll('[data-ct]').forEach(btn => btn.addEventListener('click', () => {
             const [id, t] = btn.dataset.ct.split('|'); tipiGrafico[id] = t;
             try { localStorage.setItem(LS_TIPI, JSON.stringify(tipiGrafico)); } catch (e) { /* non bloccante */ }
             btn.parentElement.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === btn));
             destroyCharts(); drawCharts();
         }));
-        drawBrands();
+    }
+    // PANORAMICA: il riepilogo di sempre (riquadri e grafici dell'intero stock)
+    function viewPanoramica(main) {
+        scope = rows; scopeAll = true; sedeForceDet = false;
+        const tot = rows.length;
+        const tipo = count(rows, r => r.tipo), stato = count(rows, r => r.stato || '—');
+        const pc = n => tot ? Math.round(n / tot * 100) + '% del totale' : '';
+        const nD = stato.get('Disponibile') || 0, nP = stato.get('Prenotata') || 0, nV = stato.get('Venduta') || 0;
+        main.innerHTML = `
+        <div class="st-vhead"><h2>Panoramica</h2><p>Tutto lo stock · ${fmt(tot)} vetture</p></div>
+        <div class="cg-kpis">
+          ${kpiHtml('🚗', 'var(--cg-teal-soft)', 'Totale vetture', tot, {}, `${fmt(nD)} disponibili · ${fmt(nP)} prenotate · ${fmt(nV)} vendute`)}
+          ${kpiHtml('✨', 'var(--cg-teal-soft)', 'Nuove', tipo.get('Nuova') || 0, { tipo: 'Nuova' }, pc(tipo.get('Nuova') || 0))}
+          ${kpiHtml('🔁', 'var(--cg-amber-soft)', 'Usate', tipo.get('Usata') || 0, { tipo: 'Usata' }, pc(tipo.get('Usata') || 0))}
+          ${kpiHtml('🏁', 'var(--cg-violet-soft)', 'Km 0', tipo.get('Km 0') || 0, { tipo: 'Km 0' }, pc(tipo.get('Km 0') || 0))}
+        </div>
+        <div class="cg-kpis st-kpis2">
+          ${kpiHtml('✅', 'var(--cg-teal-soft)', 'Disponibili', nD, { stato: 'Disponibile' }, pc(nD))}
+          ${kpiHtml('🔖', 'var(--cg-amber-soft)', 'Prenotate', nP, { stato: 'Prenotata' }, pc(nP))}
+          ${kpiHtml('🤝', 'var(--cg-violet-soft)', 'Vendute', nV, { stato: 'Venduta' }, pc(nV))}
+          <button type="button" class="cg-kpi" data-goview="marchi"><span class="cg-k-top">Marchi<span class="cg-dot" style="background:var(--cg-grey-soft)">🏷️</span></span>
+            <span class="cg-num">${fmt(new Set(rows.map(r => r.marca)).size)}</span><span class="cg-sub">Apri la vista Marchi</span></button>
+        </div>
+        <div class="st-charts">
+          ${chartCard('stChTipo', 'Nuove, usate e Km 0', 'G_ST_TIPO')}
+          ${chartCard('stChStato', 'Disponibili, prenotate e vendute', 'G_ST_STATO')}
+          ${chartCard('stChMotore', 'Per motorizzazione', 'G_ST_MOTORE')}
+          ${chartCard('stChMarchi', 'Per marchio', 'G_ST_MARCHI')}
+          ${chartCard('stChSede', 'Per sede', 'G_ST_SEDE', true, `<div class="cg-an-mode" id="stSedeMode"><button type="button" data-sm="g" class="${sedeMode === 'g' ? 'on' : ''}">Riepilogo</button><button type="button" data-sm="d" class="${sedeMode === 'd' ? 'on' : ''}">Dettaglio</button></div>`)}
+        </div>`;
+        main.querySelector('[data-goview]').addEventListener('click', () => showView('marchi'));
+        bindView(main, {});
+    }
+    // SEZIONE (es. Carrozzerie) o singola SEDE (es. Agnano · Showroom): riquadri, grafici, elenco
+    function viewSezione(main, g, d) {
+        const baseF = d ? { ubic: g, ubicDet: d } : { ubic: g };
+        scope = rows.filter(r => match(r, baseF)); scopeAll = false; sedeForceDet = true;
+        const tot = scope.length, stato = count(scope, r => r.stato || '—'), tipo = count(scope, r => r.tipo);
+        const nD = stato.get('Disponibile') || 0, nP = stato.get('Prenotata') || 0, nV = stato.get('Venduta') || 0;
+        const gg = scope.filter(r => r.giorni != null), media = gg.length ? Math.round(gg.reduce((a, r) => a + r.giorni, 0) / gg.length) : null;
+        const pc = n => tot ? Math.round(n / tot * 100) + '% della sezione' : '';
+        const titolo = d ? d : (SECTION_NAME[g] || g);
+        const det = d ? [] : [...count(scope, r => r.ubicDet)].sort((a, b) => ordDet(a[0], b[0]) || b[1] - a[1]);
+        main.innerHTML = `
+        <div class="st-vhead">${d ? `<button type="button" class="st-crumb" data-goview="g:${esc(g)}">${SECTION_ICON[g] || ''} ${esc(SECTION_NAME[g] || g)}</button><span class="st-crumb-sep">›</span>` : ''}
+          <h2>${SECTION_ICON[g] && !d ? SECTION_ICON[g] + ' ' : ''}${esc(titolo)}</h2>
+          <p>${fmt(tot)} vetture · ${pctS(tot, rows.length)} dello stock</p></div>
+        <div class="cg-kpis">
+          ${kpiHtml('🚗', 'var(--cg-teal-soft)', 'Vetture', tot, {}, `${fmt(tipo.get('Nuova') || 0)} nuove · ${fmt(tipo.get('Usata') || 0)} usate · ${fmt(tipo.get('Km 0') || 0)} Km 0`)}
+          ${kpiHtml('✅', 'var(--cg-teal-soft)', 'Disponibili', nD, { stato: 'Disponibile' }, pc(nD))}
+          ${kpiHtml('🔖', 'var(--cg-amber-soft)', 'Prenotate', nP, { stato: 'Prenotata' }, pc(nP))}
+          ${kpiHtml('🤝', 'var(--cg-violet-soft)', 'Vendute', nV, { stato: 'Venduta' }, pc(nV))}
+        </div>
+        ${media != null ? `<p class="cg-hint" style="margin:10px 2px 0">Giacenza media: <b>${fmt(media)} giorni</b> in stock</p>` : ''}
+        ${det.length > 1 ? `<div class="cg-card" style="margin-top:14px"><h2>${g === 'Carrozzeria' ? 'Carrozzerie' : g === 'C/O Altri Dealer' ? 'Dealer' : 'Sedi'}</h2>
+            <div class="st-detchips">${det.map(([k, n]) => `<button type="button" data-goview="d:${esc(g)}|${esc(k)}"><span>${esc(k)}</span><b>${fmt(n)}</b><em>${pctS(n, tot)}</em></button>`).join('')}</div></div>` : ''}
+        <div class="st-charts">
+          ${chartCard('stChMarchi', 'Per marchio', 'G_ST_MARCHI', false, '', true)}
+          ${det.length > 1 ? chartCard('stChSede', g === 'Carrozzeria' ? 'Per carrozzeria' : 'Per sede', 'G_ST_SEDE', false, '', true) : chartCard('stChStato', 'Disponibili, prenotate e vendute', 'G_ST_STATO', false, '', true)}
+        </div>
+        <div class="st-list-slot"></div>`;
+        main.querySelectorAll('[data-goview]').forEach(b => b.addEventListener('click', () => showView(b.dataset.goview)));
+        bindView(main, baseF);
+        mountList(main.querySelector('.st-list-slot'), 'Vetture · ' + titolo, baseF);
     }
 
     function drawBrands() {
@@ -431,6 +565,9 @@
     const NOMI = { doughnut: 'Ciambella', bar: 'Colonne', line: 'Linee' };
     // ===== menu "Voci" su ogni grafico: mostra / nascondi le voci =====
     const hiddenSt = {};
+    let sedeMode = 'g';   // grafico "Per sede": g = gruppi (riepilogo), d = sedi in dettaglio
+    // vista corrente del menu a sinistra: i grafici lavorano sulle sole vetture della vista
+    let scope = [], scopeAll = true, sedeForceDet = false;
     function vociBtn(id) {
         return `<div class="cg-an-voci" data-voci="${id}"><button type="button" class="cg-an-voci-btn">Voci ▾</button><div class="cg-an-voci-pop"></div></div>`;
     }
@@ -468,8 +605,26 @@
             destroyCharts(); drawCharts();
         });
     }
-    function typeBtns(id) {
-        return `<div class="cg-an-types">${Object.keys(ICO).map(t => `<button type="button" title="${NOMI[t]}" class="${tipiGrafico[id] === t ? 'on' : ''}" data-ct="${id}|${t}">${ICO[t]}</button>`).join('')}</div>`;
+    function drawUbic(body) {
+        const box = body.querySelector('#stUbic'); if (!box) return;
+        const tot = rows.length;
+        box.innerHTML = UBIC_ORDINE.map(g => {
+            const list = rows.filter(r => r.ubic === g); if (!list.length) return '';
+            const det = [...count(list, r => r.ubicDet)].sort((a, b) => ordDet(a[0], b[0]) || b[1] - a[1]);
+            const dispo = list.filter(r => r.stato === 'Disponibile').length;
+            return `<div class="st-ubic-g">
+                <button type="button" class="st-ubic-h" data-ug="${esc(g)}"><span>${esc(g)}</span><b>${fmt(list.length)}</b><em>${pctS(list.length, tot)} · ${fmt(dispo)} disponibili</em></button>
+                ${det.length > 1 || det[0][0] !== g ? `<div class="st-ubic-d">${det.map(([k, n]) => `<button type="button" data-ug="${esc(g)}" data-ud="${esc(k)}"><span>${esc(k)}</span><b>${fmt(n)}</b></button>`).join('')}</div>` : ''}
+            </div>`;
+        }).join('');
+        box.onclick = e => {
+            const b = e.target.closest('[data-ug]'); if (!b) return;
+            const f = { ubic: b.dataset.ug }; if (b.dataset.ud) f.ubicDet = b.dataset.ud;
+            openList(b.dataset.ud ? `${b.dataset.ug} · ${b.dataset.ud}` : b.dataset.ug, f);
+        };
+    }
+    function typeBtns(id, noLine) {
+        return `<div class="cg-an-types">${Object.keys(ICO).filter(t => !(noLine && t === 'line')).map(t => `<button type="button" title="${NOMI[t]}" class="${tipiGrafico[id] === t ? 'on' : ''}" data-ct="${id}|${t}">${ICO[t]}</button>`).join('')}</div>`;
     }
     const pctS = (n, tot) => tot ? (Math.round(n / tot * 1000) / 10).toLocaleString('it-IT') + '%' : '0%';
     const MESI3 = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
@@ -491,26 +646,31 @@
     };
     // dati di ogni grafico: voci [chiave, numero, etichetta] + filtro per aprire l'elenco
     function chartData(id) {
-        if (id === 'stChTipo') return { voci: sortedDesc(count(rows, r => r.tipo)).map(([k, n]) => [k, n, k]), key: 'tipo', get: r => r.tipo,
+        if (id === 'stChTipo') return { voci: sortedDesc(count(scope, r => r.tipo)).map(([k, n]) => [k, n, k]), key: 'tipo', get: r => r.tipo,
             colors: { 'Nuova': '#5cc6a7', 'Usata': '#e8a13a', 'Km 0': '#8f7bd6' }, hint: 'Clicca per vedere le vetture' };
-        if (id === 'stChStato') return { voci: sortedDesc(count(rows, r => r.stato || '—')).map(([k, n]) => [k, n, k]), key: 'stato', get: r => r.stato || '—',
+        if (id === 'stChStato') return { voci: sortedDesc(count(scope, r => r.stato || '—')).map(([k, n]) => [k, n, k]), key: 'stato', get: r => r.stato || '—',
             colors: { 'Disponibile': '#5cc6a7', 'Prenotata': '#e8a13a', 'Venduta': '#8f7bd6' }, hint: 'Clicca per vedere le vetture' };
-        if (id === 'stChMotore') return { voci: sortedDesc(count(rows, r => r.carburante || '__none')).map(([k, n]) => [k, n, k === '__none' ? 'Non indicata' : k]),
+        if (id === 'stChMotore') return { voci: sortedDesc(count(scope, r => r.carburante || '__none')).map(([k, n]) => [k, n, k === '__none' ? 'Non indicata' : k]),
             key: 'carb', get: r => r.carburante || '__none', colors: {}, hint: 'Dalla colonna Carburante · clicca per vedere le vetture' };
-        if (id === 'stChSede') return { voci: sortedDesc(count(rows, r => r.sede || '__none')).map(([k, n]) => [k, n, k === '__none' ? 'Non indicata' : k]),
-            key: 'sede', get: r => r.sede || '__none', colors: {}, hint: 'Dove si trovano le vetture (colonna Sede / Ubicazione) · clicca per vedere le vetture' };
-        return { voci: sortedDesc(count(rows, r => r.marca)).slice(0, 12).map(([k, n]) => [k, n, k]), key: 'marca', get: r => r.marca, colors: {},
-            hint: 'I 12 marchi con più vetture · clicca per vedere le vetture' };
+        if (id === 'stChSede') {
+            if (sedeMode === 'g' && !sedeForceDet) return { voci: UBIC_ORDINE.map(g => [g, scope.filter(r => r.ubic === g).length, g]).filter(v => v[1]), key: 'ubic', get: r => r.ubic,
+                colors: { 'Gruppo Autoscala': '#2c7be5', 'Autoscala': '#5cc6a7', 'Carrozzeria': '#e5484d', 'Altre lavorazioni': '#9b7bff', 'C/O Altri Dealer': '#e8a13a', 'In arrivo': '#8d99ae' },
+                hint: 'Gruppo Autoscala, Autoscala, carrozzerie, altre lavorazioni, altri dealer e in arrivo · clicca per vedere le vetture', mapRaw: raw => ubicazione(raw).g };
+            return { voci: sortedDesc(count(scope, r => r.ubicDet)).map(([k, n]) => [k, n, k]), key: 'ubicDet', get: r => r.ubicDet, colors: {},
+                hint: 'Ogni sede in dettaglio · clicca per vedere le vetture', mapRaw: raw => ubicazione(raw).d };
+        }
+        return { voci: sortedDesc(count(scope, r => r.marca)).slice(0, scopeAll ? 12 : 40).map(([k, n]) => [k, n, k]), key: 'marca', get: r => r.marca, colors: {},
+            hint: scopeAll ? 'I 12 marchi con più vetture · clicca per vedere le vetture' : 'I marchi di questa sezione · clicca per vedere le vetture' };
     }
     function drawCharts() {
         if (typeof Chart === 'undefined') return;
         const ink = getComputedStyle(rootEl).getPropertyValue('--cg-ink-2').trim() || '#6b7a8c';
         const ink1 = getComputedStyle(rootEl).getPropertyValue('--cg-ink').trim() || '#1f2d3d';
         const grid = getComputedStyle(rootEl).getPropertyValue('--cg-line').trim() || '#e3e8ef';
-        const tot = rows.length;
+        const tot = scope.length;
         ['stChTipo', 'stChStato', 'stChMotore', 'stChMarchi', 'stChSede'].forEach((id, gi) => {
             const el = rootEl.querySelector('#' + id); if (!el) return;
-            const d0 = chartData(id), tipo = tipiGrafico[id];
+            const d0 = chartData(id), tipo = (!scopeAll && tipiGrafico[id] === 'line') ? 'bar' : tipiGrafico[id];
             const hid = hiddenSt[id] || new Set();
             const d = hid.size ? { ...d0, voci: d0.voci.filter(v => !hid.has(v[0])) } : d0;
             const idxOf = new Map(d0.voci.map((v, i) => [v[0], i]));   // colore fisso per voce anche con voci nascoste
@@ -537,7 +697,10 @@
                     : 'Per vedere l\'andamento servono almeno due import in giorni diversi: ogni import viene ricordato';
                 cfg = { type: 'line',
                     data: { labels: storico.map(lab),
-                        datasets: top.map(([k, n, l], i) => ({ label: `${l} · ${fmt(n)}`, data: storico.map(f => (f[campo] && f[campo][k]) || 0),
+                        datasets: top.map(([k, n, l], i) => ({ label: `${l} · ${fmt(n)}`,
+                            data: storico.map(f => d.mapRaw
+                                ? Object.entries(f.sede || {}).reduce((a, [raw, v]) => a + (d.mapRaw(raw === '—' ? '' : raw) === k ? v : 0), 0)
+                                : ((f[campo] && f[campo][k]) || 0)),
                             borderColor: d.colors[k] || PALETTE[idxOf.get(k) % PALETTE.length], backgroundColor: d.colors[k] || PALETTE[idxOf.get(k) % PALETTE.length],
                             tension: 0, pointRadius: 4, pointHoverRadius: 6, borderWidth: 2.5 })) },
                     options: { maintainAspectRatio: false,
@@ -575,77 +738,107 @@
     }
 
     /* ================= modale: elenco vetture e scheda ================= */
-    function ensureModal() {
-        if (ov) return;
-        ov = document.createElement('div');
-        ov.className = 'cg-ov';
-        ov.innerHTML = `<div class="cg-modal" role="dialog" aria-modal="true">
+    // ===== ELENCO VETTURE: nella finestra oppure direttamente nella pagina =====
+    // Lo stesso elenco (ricerca, filtri, ordinamento, scheda) puo' stare in una finestra
+    // sopra la pagina (clic su riquadri e grafici) oppure dentro la pagina (viste del menu
+    // a sinistra). Ogni contenitore ha il suo stato (root._view).
+    let ovModal = null;
+    const listMarkup = embedded => `
             <div class="cg-m-head"><div><h3 id="stMTitle"></h3><div class="cg-stat" id="stMStat"></div></div>
-              <button type="button" class="cg-x" id="stMClose" aria-label="Chiudi">✕</button></div>
+              ${embedded ? '' : '<button type="button" class="cg-x" id="stMClose" aria-label="Chiudi">✕</button>'}</div>
             <div id="stMList">
               <div class="cg-m-tools"><input type="search" id="stMSearch" placeholder="Cerca modello, versione, targa, telaio, cliente…">
                 <div class="cg-chips" id="stMStato"></div><div class="cg-chips" id="stMTipo"></div>
                 <div class="st-fbar" id="stMFilt"></div></div>
               <div class="cg-m-body" id="stMBody"></div>
             </div>
-            <div id="stMDet" style="display:none"></div>
-          </div>`;
-        document.body.appendChild(ov);
-        ov.addEventListener('click', e => { if (e.target === ov) closeModal(); });
-        ov.querySelector('#stMClose').addEventListener('click', closeModal);
-        document.addEventListener('keydown', e => { if (e.key === 'Escape' && ov.classList.contains('open')) closeModal(); });
-        ov.querySelector('#stMSearch').addEventListener('input', e => { view.q = e.target.value; renderList(); });
-        ov.querySelector('#stMStato').addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (b) { view.stato = b.dataset.v; renderList(); } });
-        ov.querySelector('#stMTipo').addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (b) { view.tipo = b.dataset.v; renderList(); } });
-        ov.querySelector('#stMBody').addEventListener('click', e => {
+            <div id="stMDet" style="display:none"></div>`;
+    function wireList(root) {
+        const use = fn => e => { ov = root; view = root._view; fn(e); };
+        const filt = root.querySelector('#stMFilt');
+        root.querySelector('#stMSearch').addEventListener('input', use(e => { view.q = e.target.value; renderList(); }));
+        root.querySelector('#stMStato').addEventListener('click', use(e => { const b = e.target.closest('[data-v]'); if (b) { view.stato = b.dataset.v; renderList(); } }));
+        root.querySelector('#stMTipo').addEventListener('click', use(e => { const b = e.target.closest('[data-v]'); if (b) { view.tipo = b.dataset.v; renderList(); } }));
+        root.querySelector('#stMBody').addEventListener('click', use(e => {
             const so = e.target.closest('[data-sort]');
             if (so) { const k = so.dataset.sort; view.sort = { k, dir: view.sort.k === k ? -view.sort.dir : (['listino', 'km', 'giorni'].includes(k) ? -1 : 1) }; renderList(); return; }
             if (e.target.closest('#stMore')) { view.limit += 200; renderList(); return; }
             const tr = e.target.closest('tr[data-i]'); if (tr) showDetail(+tr.dataset.i);
-        });
+        }));
         // filtri: menu a tendina (piu' scelte) e intervalli prezzo / km / giorni
-        const filt = ov.querySelector('#stMFilt');
-        filt.addEventListener('click', e => {
+        filt.addEventListener('click', use(e => {
             const btn = e.target.closest('.st-ms > button');
             if (btn) { const box = btn.parentElement, op = box.classList.contains('open'); filt.querySelectorAll('.st-ms.open').forEach(m => m.classList.remove('open')); if (!op) box.classList.add('open'); return; }
             const all = e.target.closest('[data-all]');
             if (all) { view.sel[all.dataset.all] = new Set(); renderList(all.dataset.all); return; }
             if (e.target.closest('#stReset')) { view.sel = {}; view.rng = {}; view.psq = {}; renderList(); }
-        });
-        filt.addEventListener('change', e => {
+        }));
+        filt.addEventListener('change', use(e => {
             const cb = e.target.closest('input[data-ms]');
             if (cb) { const k = cb.dataset.ms; view.sel[k] = view.sel[k] || new Set(); if (cb.checked) view.sel[k].add(cb.value); else view.sel[k].delete(cb.value); renderList(k); return; }
-        });
-        filt.addEventListener('input', e => {
+        }));
+        filt.addEventListener('input', use(e => {
             const ps = e.target.closest('input[data-ps]');
             if (ps) { view.psq = view.psq || {}; view.psq[ps.dataset.ps] = ps.value; applyPopSearch(ps); return; }
             const r = e.target.closest('input[data-rng]');
             if (r) { const v = r.value === '' ? null : Number(r.value); view.rng[r.dataset.rng] = v; clearTimeout(view._t); view._t = setTimeout(() => renderList('__keep', r.dataset.rng), 300); }
-        });
-        filt.addEventListener('keydown', e => {
+        }));
+        filt.addEventListener('keydown', use(e => {
             const ps = e.target.closest('input[data-ps]'); if (!ps || e.key !== 'Enter') return;
             e.preventDefault();
             const vis = [...ps.closest('.st-pop').querySelectorAll('label[data-n]')].filter(l => l.style.display !== 'none');
             if (vis.length === 1) vis[0].querySelector('input').click();
-        });
-        document.addEventListener('click', e => { if (ov && !e.target.closest('.st-ms')) ov.querySelectorAll('.st-ms.open').forEach(m => m.classList.remove('open')); });
+        }));
     }
-    function closeModal() { if (ov) ov.classList.remove('open'); }
-
-    function openList(title, f) {
-        ensureModal();
+    let docBound = false;
+    function bindDocClick() {
+        if (docBound) return; docBound = true;
+        document.addEventListener('click', e => { if (ov && !e.target.closest('.st-ms')) ov.querySelectorAll('.st-ms.open').forEach(m => m.classList.remove('open')); });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape' && ovModal && ovModal.classList.contains('open')) closeModal(); });
+    }
+    function ensureModal() {
+        bindDocClick();
+        if (!ovModal) {
+            ovModal = document.createElement('div');
+            ovModal.className = 'cg-ov';
+            ovModal.innerHTML = `<div class="cg-modal" role="dialog" aria-modal="true">${listMarkup(false)}</div>`;
+            document.body.appendChild(ovModal);
+            ovModal.addEventListener('click', e => { if (e.target === ovModal) closeModal(); });
+            ovModal.querySelector('#stMClose').addEventListener('click', closeModal);
+            wireList(ovModal);
+        }
+        ov = ovModal;
+    }
+    function closeModal() { if (ovModal) ovModal.classList.remove('open'); }
+    function startList(title, f) {
         view = { base: rows.filter(r => match(r, f)), title, f, stato: '', tipo: '', q: '', hasMarca: !!f.marca,
             sel: {}, rng: {}, psq: {}, sort: { k: '', dir: 1 }, limit: 200 };
+        ov._view = view;
         ov.querySelector('#stMSearch').value = '';
         ov.querySelector('#stMList').style.display = '';
         ov.querySelector('#stMDet').style.display = 'none';
         renderList();
-        ov.classList.add('open');
-        ov.querySelector('#stMSearch').focus();
+    }
+    function openList(title, f) {
+        ensureModal();
+        startList(title, f);
+        ovModal.classList.add('open');
+        ovModal.querySelector('#stMSearch').focus();
+    }
+    // elenco dentro la pagina (viste del menu a sinistra)
+    function mountList(el, title, f) {
+        bindDocClick();
+        const root = document.createElement('div');
+        root.className = 'cg-card st-embed';
+        root.innerHTML = listMarkup(true);
+        el.appendChild(root);
+        wireList(root);
+        ov = root;
+        startList(title, f);
     }
 
     // campi filtrabili con menu a tendina
-    const MS = [['marca', 'Marchio'], ['modello', 'Modello'], ['carburante', 'Motorizzazione'], ['sede', 'Sede'], ['fornitore', 'Fornitore']];
+    const MS = [['marca', 'Marchio'], ['modello', 'Modello'], ['carburante', 'Motorizzazione'], ['ubic', 'Ubicazione'], ['ubicDet', 'Sede'], ['fornitore', 'Fornitore']];
     const RNG = [['listino', 'Prezzo €'], ['km', 'Km'], ['giorni', 'Giorni in stock']];
     function renderFilters(openKey, focusRng) {
         const b = view.base, filt = ov.querySelector('#stMFilt');
@@ -723,14 +916,14 @@
         const th = (label, k) => `<th><button type="button" class="st-sort ${sk === k ? 'on' : ''}" data-sort="${k}">${label} ${sk === k ? (sd === 1 ? '↑' : '↓') : '↕'}</button></th>`;
         const shown = list.slice(0, view.limit);
         body.innerHTML = `<div class="cg-scroll"><table class="cg-list"><thead><tr>
-            ${showM ? th('Marchio', 'marca') : ''}${th('Modello / Versione', 'modello')}<th>Tipo</th><th>Motorizzazione</th><th>Targa / Telaio</th>${th('Sede', 'sede')}${th('Km', 'km')}${th('Giorni', 'giorni')}${th('Prezzo', 'listino')}<th>Stato</th></tr></thead><tbody>
+            ${showM ? th('Marchio', 'marca') : ''}${th('Modello / Versione', 'modello')}<th>Tipo</th><th>Motorizzazione</th><th>Targa / Telaio</th>${th('Sede', 'ubicDet')}${th('Km', 'km')}${th('Giorni', 'giorni')}${th('Prezzo', 'listino')}<th>Stato</th></tr></thead><tbody>
             ${shown.map(r => `<tr class="st-row" data-i="${r._i}">
                 ${showM ? `<td class="cg-cl">${esc(r.marca)}</td>` : ''}
                 <td class="${showM ? '' : 'cg-cl'}">${esc(r.modello)}${r.versione ? `<span class="st-sub">${esc(r.versione)}</span>` : ''}</td>
                 <td>${esc(r.tipo || '')}${r.categoria ? `<span class="st-sub">${esc(r.categoria)}</span>` : ''}</td>
                 <td>${esc(r.carburante || '')}</td>
                 <td class="st-mono">${esc(r.targa || '')}${r.targa && r.telaio ? '<br>' : ''}${esc(r.telaio || '')}</td>
-                <td>${esc(r.sede || '')}</td>
+                <td>${esc(r.ubicDet || '')}<span class="st-sub">${esc(r.ubic || '')}</span></td>
                 <td>${r.km ? fmt(r.km) : ''}</td>
                 <td>${r.giorni != null ? fmt(r.giorni) : ''}</td>
                 <td>${eur(r.listino)}${r.prezzoVenduto ? `<span class="st-sub">venduta ${eur(r.prezzoVenduto)}</span>` : ''}</td>
@@ -767,8 +960,9 @@
         </div>`;
         ov.querySelector('#stMList').style.display = 'none';
         det.style.display = '';
+        const listRoot = ov;
         det.querySelector('#stBack').addEventListener('click', () => {
-            det.style.display = 'none'; ov.querySelector('#stMList').style.display = '';
+            det.style.display = 'none'; listRoot.querySelector('#stMList').style.display = '';
         });
     }
 

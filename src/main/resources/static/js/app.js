@@ -560,6 +560,10 @@ window.onload = function() {
             if (macroHomeOk && urlHash === 'consegne') {
                 MacroHome.openConsegne();
                 hideLoadingOverlay();
+            } else if (macroHomeOk && (urlHash === 'stock' || urlHash.startsWith('stock/')) && MacroHome.openStock) {
+                window.__stockLinkView = decodeURIComponent(urlHash.split('/')[1] || '');
+                MacroHome.openStock();
+                hideLoadingOverlay();
             } else if (macroHomeOk && urlHash === 'bi') {
                 MacroHome.openBI();
                 hideLoadingOverlay();
