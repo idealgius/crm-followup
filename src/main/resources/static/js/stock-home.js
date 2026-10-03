@@ -78,23 +78,24 @@
         return i ? i[0] : '';
     }
     // ===== UBICAZIONE: dalla colonna Sede ai gruppi richiesti =====
-    // Gruppo Autoscala  -> Agnano (Showroom, Expo Village Superiore/Inferiore), Casamarciano, Salerno, Senza sede
+    // Gruppo Autoscala  -> ogni sede del gruppo SEPARATA, con il nome come nel file
+    //                      (Showroom Agnano, Expo Village Superiore/Inferiore, C/To Dep. Village,
+    //                      Gruppo Auto Scala, Casamarciano, Salerno...) + "Senza sede"
     // Autoscala         -> Capodichino, Caserta, In uso / Demo
     // Carrozzeria       -> ogni carrozzeria ("cars group scotellaro" = Carrozzeria Scodellaro)
     // Altre lavorazioni -> lavaggi, gommisti, officine
     // C/O Altri Dealer  -> tutto il resto
     // In arrivo         -> sezione a parte
     const UBIC_ORDINE = ['Gruppo Autoscala', 'Autoscala', 'Carrozzeria', 'Altre lavorazioni', 'C/O Altri Dealer', 'In arrivo'];
-    const UBIC_DET_ORDINE = ['Agnano · Showroom', 'Agnano · Expo Village Superiore', 'Agnano · Expo Village Inferiore', 'Casamarciano', 'Salerno', 'Senza sede', 'Capodichino', 'Caserta', 'In uso / Demo'];
+    const UBIC_DET_ORDINE = ['Capodichino', 'Caserta', 'In uso / Demo'];
+    const nomeSede = raw => titleCase(String(raw).replace(/\s+/g, ' ').trim());
     function ubicazione(raw) {
         const n = norm(raw);
         if (!n) return { g: 'Gruppo Autoscala', d: 'Senza sede' };
         if (n.includes('inarrivo')) return { g: 'In arrivo', d: 'In arrivo' };
-        if (n.includes('village') && n.includes('super')) return { g: 'Gruppo Autoscala', d: 'Agnano · Expo Village Superiore' };
-        if (n.includes('village') && n.includes('infer')) return { g: 'Gruppo Autoscala', d: 'Agnano · Expo Village Inferiore' };
-        if (n.includes('casamarciano')) return { g: 'Gruppo Autoscala', d: 'Casamarciano' };
-        if (n.includes('salerno')) return { g: 'Gruppo Autoscala', d: 'Salerno' };
-        if (n.includes('showroom') || n.includes('agnano') || n === 'gruppoautoscala') return { g: 'Gruppo Autoscala', d: 'Agnano · Showroom' };
+        // sedi del Gruppo Autoscala: nessun accorpamento, ognuna con il suo nome
+        if (n.includes('village') || n.includes('casamarciano') || n.includes('salerno') || n.includes('showroom') || n.includes('agnano')
+            || n.startsWith('gruppoautoscala')) return { g: 'Gruppo Autoscala', d: nomeSede(raw) };
         if (n.includes('capodichino')) return { g: 'Autoscala', d: 'Capodichino' };
         if (n.includes('caserta')) return { g: 'Autoscala', d: 'Caserta' };
         if (n.includes('inusoscala') || n.includes('demo')) return { g: 'Autoscala', d: 'In uso / Demo' };
@@ -103,7 +104,8 @@
         if (/lavaggio|gomm|vern|officin/.test(n)) return { g: 'Altre lavorazioni', d: titleCase(String(raw).replace(/\s+/g, ' ').trim()) };
         return { g: 'C/O Altri Dealer', d: titleCase(String(raw).replace(/\s+/g, ' ').trim()) };
     }
-    const ordDet = (a, b) => { const ia = UBIC_DET_ORDINE.indexOf(a), ib = UBIC_DET_ORDINE.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); };
+    // ordine: prima le voci fisse (Autoscala), "Senza sede" sempre in fondo, il resto per numero di vetture
+    const ordDet = (a, b) => { const ia = a === 'Senza sede' ? 999 : UBIC_DET_ORDINE.indexOf(a), ib = b === 'Senza sede' ? 999 : UBIC_DET_ORDINE.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); };
 
     function titleCase(s) {
         return s.toLowerCase().replace(/(^|[\s\-\/'])([a-zà-ÿ])/g, (m, a, b) => a + b.toUpperCase());
