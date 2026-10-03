@@ -190,3 +190,25 @@
   .st-sidesel label { display:flex; align-items:center; gap:10px; font-weight:800; font-size:13px; }
   .st-sidesel select { flex:1; height:40px; border-radius:12px; border:1.5px solid var(--cg-line); background:var(--cg-card); color:var(--cg-ink); padding:0 10px; font:inherit; font-weight:700; }
 }
+
+/* ===== impaginazione Stock: niente sovrapposizione con la fascia blu, larghezza piena ===== */
+#stockRoot .cg-band { padding-bottom:22px; border-radius:0 0 0 32px; }
+#stockRoot .cg-band-top, #stockRoot .cg-src { max-width:1720px; margin-left:auto; margin-right:auto; }
+#stockRoot .cg-wrap { max-width:1720px; margin-top:20px; }
+.st-side { top:80px; scrollbar-width:thin; scrollbar-color:var(--cg-line) transparent; }
+.st-side::-webkit-scrollbar { width:6px; }
+.st-side::-webkit-scrollbar-thumb { background:var(--cg-line); border-radius:6px; }
+.st-side::-webkit-scrollbar-track { background:transparent; }
+.st-vhead { margin-top:4px; }
+/* sezioni estendibili del menu */
+.st-nav-row { display:flex; align-items:center; gap:2px; }
+.st-nav-row .st-nav-i { flex:1; min-width:0; }
+.st-nav-tog { flex:none; width:28px; height:30px; border:0; border-radius:8px; background:none; color:var(--cg-ink-2); cursor:pointer; font-size:13px; transition:transform .2s ease, background .2s; }
+.st-nav-tog:hover { background:var(--cg-grey-soft); }
+.st-nav-grp.open .st-nav-tog { transform:rotate(90deg); }
+.st-nav-subs { display:none; margin:2px 0 6px 14px; padding-left:8px; border-left:2px solid var(--cg-line); }
+.st-nav-grp.open .st-nav-subs { display:block; }
+.st-nav-subs .st-nav-i.sub { padding:6px 10px; }
+.st-nav-subs .st-nav-ic { display:none; }
+.st-nav-subs .st-nav-i.sub { font-size:12.5px; font-weight:600; }
+.st-layout { grid-template-columns:290px minmax(0,1fr); }

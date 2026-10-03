@@ -384,7 +384,8 @@
     const LS_VIEW = 'stock_vista_v1';
     const SECTION_ICON = { 'Gruppo Autoscala': '🏢', 'Autoscala': '🏬', 'Carrozzeria': '🔧', 'Altre lavorazioni': '🧽', 'C/O Altri Dealer': '🤝', 'In arrivo': '🚚' };
     const SECTION_NAME = { 'Carrozzeria': 'Carrozzerie' };
-    const NAV_SUB = ['Gruppo Autoscala', 'Autoscala'];      // sezioni con le sedi elencate nel menu
+    // sezioni con le voci di dettaglio elencate (ed estendibili) nel menu: tutte quelle che ne hanno piu' di una
+    const NAV_SUB = ['Gruppo Autoscala', 'Autoscala', 'Carrozzeria', 'Altre lavorazioni', 'C/O Altri Dealer'];
     function initialView() {
         const h = window.__stockLinkView || decodeURIComponent((location.hash.split('/')[1] || ''));
         window.__stockLinkView = null;   // link aperto da un collega (#stock/<vista>): vale una volta
@@ -399,19 +400,39 @@
         if (key.startsWith('d:')) return key.slice(2).split('|')[1];
         return key;
     }
+    // sezioni del menu aperte (si ricordano nel browser)
+    const LS_NAV = 'stock_menu_aperti_v1';
+    const navOpen = new Set((() => { try { return JSON.parse(localStorage.getItem(LS_NAV) || '[]'); } catch (e) { return []; } })());
+    function toggleGrp(g, forceOpen) {
+        if (forceOpen) navOpen.add(g); else if (navOpen.has(g)) navOpen.delete(g); else navOpen.add(g);
+        try { localStorage.setItem(LS_NAV, JSON.stringify([...navOpen])); } catch (e) { /* */ }
+        const el = rootEl.querySelector(`.st-nav-grp[data-grp="${CSS.escape(g)}"]`);
+        if (el) { el.classList.toggle('open', navOpen.has(g)); el.querySelector('.st-nav-tog').setAttribute('aria-expanded', navOpen.has(g)); }
+    }
     function renderNav() {
         const item = (key, icon, label, n, sub) => `<button type="button" class="st-nav-i ${sub ? 'sub' : ''}" data-view="${esc(key)}">
             <span class="st-nav-ic">${icon}</span><span class="st-nav-l">${esc(label)}</span><b>${fmt(n)}</b></button>`;
         let h = item('panoramica', '📊', 'Panoramica', rows.length) + '<div class="st-nav-t">Dove sono le vetture</div>';
         UBIC_ORDINE.forEach(g => {
             const list = rows.filter(r => r.ubic === g); if (!list.length) return;
-            h += item('g:' + g, SECTION_ICON[g] || '•', SECTION_NAME[g] || g, list.length);
-            if (NAV_SUB.includes(g)) [...count(list, r => r.ubicDet)].sort((a, b) => ordDet(a[0], b[0]) || b[1] - a[1])
-                .forEach(([d, n]) => { h += item('d:' + g + '|' + d, '', d, n, true); });
+            if (!NAV_SUB.includes(g)) { h += item('g:' + g, SECTION_ICON[g] || '•', SECTION_NAME[g] || g, list.length); return; }
+            // sezione "estendibile": le sedi si vedono solo aprendo la freccia (o entrando nella sezione)
+            const open = navOpen.has(g);
+            h += `<div class="st-nav-grp ${open ? 'open' : ''}" data-grp="${esc(g)}">
+                <div class="st-nav-row">${item('g:' + g, SECTION_ICON[g] || '•', SECTION_NAME[g] || g, list.length)}
+                  <button type="button" class="st-nav-tog" data-tog="${esc(g)}" aria-expanded="${open}" aria-label="Mostra le sedi">▸</button></div>
+                <div class="st-nav-subs">${[...count(list, r => r.ubicDet)].sort((a, b) => ordDet(a[0], b[0]) || b[1] - a[1])
+                    .map(([d, n]) => item('d:' + g + '|' + d, '', d, n, true)).join('')}</div></div>`;
         });
         h += '<div class="st-nav-t">Elenchi</div>' + item('marchi', '🏷️', 'Marchi', new Set(rows.map(r => r.marca)).size) + item('tutte', '📋', 'Tutte le vetture', rows.length);
         const nav = rootEl.querySelector('#stNav'); nav.innerHTML = h;
-        nav.onclick = e => { const b = e.target.closest('[data-view]'); if (b) showView(b.dataset.view); };
+        nav.onclick = e => {
+            const t = e.target.closest('[data-tog]');
+            if (t) { toggleGrp(t.dataset.tog); return; }
+            const b = e.target.closest('[data-view]'); if (!b) return;
+            if (b.dataset.view.startsWith('g:') && NAV_SUB.includes(b.dataset.view.slice(2))) toggleGrp(b.dataset.view.slice(2), true);
+            showView(b.dataset.view);
+        };
         // telefono: lo stesso menu come tendina
         const sel = rootEl.querySelector('#stSel');
         sel.innerHTML = [...nav.querySelectorAll('[data-view]')].map(b => `<option value="${esc(b.dataset.view)}">${b.classList.contains('sub') ? '\u00a0\u00a0\u00a0· ' : ''}${esc(b.querySelector('.st-nav-l').textContent)} (${b.querySelector('b').textContent})</option>`).join('');
@@ -425,6 +446,7 @@
         if (!valid) key = 'panoramica';
         curView = key;
         try { localStorage.setItem(LS_VIEW, key); } catch (e) { /* */ }
+        if (key.startsWith('d:')) { const g = key.slice(2).split('|')[0]; if (NAV_SUB.includes(g) && !navOpen.has(g)) toggleGrp(g, true); }
         history.replaceState(null, '', location.pathname + '#stock/' + encodeURIComponent(key));
         rootEl.querySelectorAll('.st-nav-i').forEach(b => b.classList.toggle('on', b.dataset.view === key || (key.startsWith('d:') && b.dataset.view === 'g:' + key.slice(2).split('|')[0] && !NAV_SUB.includes(key.slice(2).split('|')[0]))));
         const sel = rootEl.querySelector('#stSel'); if (sel) sel.value = key;
