@@ -56,4 +56,17 @@ public class FollowUp {
     // follow-up.
     @Column(name = "trattativa_link", length = 500)
     private String trattativaLink;
+
+    // NUOVO: vettura della trattativa (dall'import CSV delle trattative o
+    // inserita a mano).
+    @Column(length = 100)
+    private String marca;
+
+    @Column(length = 255)
+    private String modello;
+
+    // NUOVO: true se creato dall'import CSV — in pagina compare
+    // "Creato da Import da <utente che ha importato>".
+    @Column(name = "imported")
+    private Boolean imported = false;
 }

@@ -2,8 +2,8 @@ let searchTimeout = null;
 const collapsedSections = new Set();
 
 const CONSULTANTI_LIST = [
-    'Ambrosino Luca','Capitelli Silvio','Castaldo Marco','Castaldo Roberto',
-    'Filosa Claudio','Fiore Guido','Gerardi Claudio','Giordano Luca',
+    'Ambrosino Luca','Bruno Simone','Capitelli Silvio','Castaldo Marco','Castaldo Roberto',
+    'Del Villano Pasquale','Filosa Claudio','Fiore Guido','Gerardi Claudio','Giordano Luca',
     'Montuori Francesco','Palumbo Enrico','Scala Rosario',
     'Zaritto Davide','Zuppa Mattia'
 ];
@@ -160,8 +160,9 @@ function renderFollowUpCard(fu, steps) {
                         ${fu.customer.phone ? (fu.customer.email ? ' · ' : '') + '📞 ' + fu.customer.phone : ''}
                         ${fu.customer.emailOnly ? ' · <span style="color:#f0c040;font-weight:800">SOLO EMAIL</span>' : ''}
                     </div>
+                    ${fu.marca || fu.modello ? `<div style="font-size:12px;margin-top:4px">🚗 <strong>${escFu(fu.marca || '')}</strong> ${escFu(fu.modello || '')}</div>` : ''}
                     <div style="font-size:11px;color:var(--text-secondary);margin-top:4px">
-                        Creato da <strong>${fu.user?.fullName || 'N/D'}</strong>
+                        Creato da <strong>${fu.imported ? 'Import da ' : ''}${fu.user?.fullName || 'N/D'}</strong>
                         ${fu.lastModifiedBy ? ` · ultima modifica di <strong>${fu.lastModifiedBy.fullName}</strong>${fu.lastModifiedAt ? ' (' + formatDateTime(fu.lastModifiedAt) + ')' : ''}` : ''}
                         ${fu.trattativaLink ? ` · <a href="${fu.trattativaLink}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#4a90d9">📎 Trattativa</a>` : ''}
                     </div>
@@ -237,7 +238,7 @@ function renderStepCard(step, followUpId, emailOnly) {
         <div class="step-outcome outcome-${outcomeClass}">
             ${formatOutcome(step.outcome, step.stepNumber, isSendOnly)}
         </div>
-        ${executedAt ? `<div class="step-timestamp">🕐 ${executedAt}${step.executedBy ? ' · 👤 ' + step.executedBy.fullName : ''}</div>` : ''}
+        ${executedAt ? `<div class="step-timestamp">🕐 ${executedAt}${step.executedBy ? ' · 👤 ' + (step.imported ? 'Import da ' : '') + step.executedBy.fullName : ''}</div>` : ''}
         ${readOnly ? '' : `
         <div style="display:flex;gap:5px;margin-bottom:8px">
             ${isSendOnly ? (isChannelChoice ? renderSendButtons(step, followUpId, isSent) : `
@@ -503,6 +504,8 @@ async function createFollowUp() {
     const consultant = document.getElementById('fuConsultant').value;
     const emailOnly = document.getElementById('fuEmailOnly').checked;
     const trattativaLink = document.getElementById('fuTrattativaLink')?.value?.trim() || '';
+    const marca = document.getElementById('fuMarca')?.value?.trim() || '';
+    const modello = document.getElementById('fuModello')?.value?.trim() || '';
 
     if (!fullName || !workDate || !consultant) {
         alert('Nome cliente, data e consulente sono obbligatori');
@@ -535,7 +538,7 @@ async function createFollowUp() {
         const res = await fetch('/api/followups', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fullName, email, phone, workDate, emailOnly, consultantName: consultant, trattativaLink })
+            body: JSON.stringify({ fullName, email, phone, workDate, emailOnly, consultantName: consultant, trattativaLink, marca, modello })
         });
 
         if (!res.ok) {
@@ -564,7 +567,7 @@ function hideNewFollowUp() {
     document.getElementById('newFollowUpForm').style.display = 'none';
     document.getElementById('fuFullName').value = '';
     document.getElementById('fuEmail').value = '';
-    document.getElementById('fuPhone').value = '';
+    document.getElementById('fuPhone').value = ''; if (document.getElementById('fuMarca')) { document.getElementById('fuMarca').value = ''; document.getElementById('fuModello').value = ''; }
     document.getElementById('fuEmailOnly').checked = false;
     document.getElementById('fuConsultant').value = '';
     const linkInput = document.getElementById('fuTrattativaLink');
@@ -729,4 +732,272 @@ async function printFollowUpsByConsultant() {
     </body></html>`);
     win.document.close();
     win.print();
+}
+
+/* =====================================================================
+   IMPORT DEI FOLLOW-UP DAL CSV DELLE TRATTATIVE (Leadspark)
+   ---------------------------------------------------------------------
+   Colonne usate: Data trattativa (= giorno del follow-up), Venditore
+   (= consulente: se non e' in CONSULTANTI_LIST la riga si salta), Nome
+   cliente + Cognome Cliente, Tel.1 Cliente, Email1 Cliente, Marca, Modello,
+   Note Cliente (esiti degli step).
+
+   Note Cliente, lette in ordine:
+     05/10            -> data delle azioni che seguono (anno corrente)
+     nr, non risponde, non raggiungibile, non disponibile, occupato, nd
+                      -> prossimo step di CHIAMATA (1, 2, poi 4) = ❌
+     wh / whatsapp    -> step 3 = WhatsApp inviato
+     mail             -> step 3 = Mail inviata
+     altro testo      -> prossimo step di chiamata = ✅ risponde, con la nota
+   Esito della scheda: Risponde se il cliente ha risposto; Non risponde se
+   tutti e 4 gli step sono stati fatti senza risposta.
+   ===================================================================== */
+const escFu = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fuNorm = s => String(s ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').trim().split(/\s+/).filter(Boolean).sort().join(' ');
+
+function fuTitle(s) {
+    s = String(s || '').replace(/\s+/g, ' ').trim();
+    if (s && s === s.toUpperCase()) s = s.toLowerCase().replace(/(^|[\s'’-])(\p{L})/gu, (m, a, b) => a + b.toUpperCase());
+    return s;
+}
+function fuPhone(p) {
+    let d = String(p || '').replace(/\D/g, '');
+    if (d.startsWith('0039')) d = d.slice(4); else if (d.startsWith('39') && d.length > 10) d = d.slice(2);
+    return d;
+}
+function fuEmail(e) {
+    e = String(e || '').trim();
+    if (!e || /^no@|^nomail|^no\.mail|^nessuna/i.test(e)) return '';   // segnaposto tipo NO@MAIL.COM
+    return e.toLowerCase();
+}
+// consulente del CSV ("Pasquale Del Villano") -> nome della lista ("Del Villano Pasquale")
+function fuConsultant(v) {
+    const k = fuNorm(v);
+    return CONSULTANTI_LIST.find(c => fuNorm(c) === k) || null;
+}
+
+function parseCsvSemicolon(text) {
+    text = text.replace(/^\uFEFF/, '').replace(/^\s*\n/, '');
+    const sep = (text.split('\n')[0].match(/;/g) || []).length >= (text.split('\n')[0].match(/,/g) || []).length ? ';' : ',';
+    const rows = []; let row = [], cur = '', q = false;
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (q) { if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+        else if (ch === '"') q = true;
+        else if (ch === sep) { row.push(cur); cur = ''; }
+        else if (ch === '\n' || ch === '\r') { if (ch === '\r' && text[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; }
+        else cur += ch;
+    }
+    if (cur || row.length) { row.push(cur); rows.push(row); }
+    const head = (rows.shift() || []).map(h => h.trim());
+    return rows.filter(r => r.some(c => c.trim())).map(r => Object.fromEntries(head.map((h, i) => [h, (r[i] || '').trim()])));
+}
+
+// Note Cliente -> azioni sugli step + esito della scheda
+function parseFollowUpNote(note, workDate) {
+    const year = new Date().getFullYear();
+    let date = workDate;
+    const actions = [], callSteps = [1, 2, 4];
+    let i = 0; const txt = String(note || '');
+    const KW = /^(non\s+risponde|non\s+raggiungibile|non\s+disponibile|occupato|n\.?\s?r\.?|nd|whatsapp|wh|wa|e-?mail|mail)(?![a-zàèéìòù0-9])/i;
+    const DT = /^(\d{1,2})\s*\/\s*(\d{1,2})(?:\s*\/\s*(\d{2,4}))?/;
+    const nextCall = () => callSteps.find(n => !actions.some(a => a.step === n));
+    while (i < txt.length) {
+        const rest = txt.slice(i);
+        const sp = /^[\s,;.\-–|:]+/.exec(rest); if (sp) { i += sp[0].length; continue; }
+        const d = DT.exec(rest);
+        if (d) {
+            const y = d[3] ? (d[3].length === 2 ? 2000 + +d[3] : +d[3]) : year;
+            const dd = new Date(Date.UTC(y, +d[2] - 1, +d[1]));
+            if (!isNaN(dd)) date = dd.toISOString().slice(0, 10);
+            i += d[0].length; continue;
+        }
+        let k = KW.exec(rest);
+        // una parola chiave conta solo se dopo c'e' la fine, una data o un'altra parola chiave
+        // ("Non disponibile fino a lunedi', richiamare" e' una frase: il cliente ha risposto)
+        if (k) { const dopo = rest.slice(k[0].length).replace(/^[\s,;.\-–|:]+/, ''); if (dopo && !DT.test(dopo) && !KW.test(dopo)) k = null; }
+        if (k) {
+            const w = k[1].toLowerCase().replace(/\s+/g, ' ');
+            if (/^(wh|wa|whatsapp)$/.test(w)) { if (!actions.some(a => a.step === 3)) actions.push({ step: 3, outcome: 'SENT_WHATSAPP', date }); }
+            else if (/mail$/.test(w)) { if (!actions.some(a => a.step === 3)) actions.push({ step: 3, outcome: 'SENT_MAIL', date }); }
+            else { const n = nextCall(); if (n) actions.push({ step: n, outcome: 'NO_ANSWER', date }); }
+            i += k[0].length; continue;
+        }
+        // testo libero = il cliente ha risposto: fino alla prossima data (o alla fine)
+        const m = /\d{1,2}\s*\/\s*\d{1,2}/.exec(rest);
+        const free = (m ? rest.slice(0, m.index) : rest).trim();
+        i += m ? m.index : rest.length;
+        if (free) { const n = nextCall(); if (n) actions.push({ step: n, outcome: 'ANSWERED', date, notes: free }); }
+    }
+    const answered = actions.some(a => a.outcome === 'ANSWERED');
+    const allDone = [1, 2, 3, 4].every(n => actions.some(a => a.step === n));
+    return { actions: actions.sort((a, b) => a.step - b.step), status: answered ? 'RESPONDED' : allDone ? 'ABANDONED' : 'IN_PROGRESS' };
+}
+
+function openFollowUpImport() {
+    let inp = document.getElementById('fuImportFile');
+    if (!inp) {
+        inp = document.createElement('input');
+        inp.type = 'file'; inp.accept = '.csv,text/csv'; inp.id = 'fuImportFile'; inp.style.display = 'none';
+        document.body.appendChild(inp);
+        inp.addEventListener('change', () => { const f = inp.files[0]; inp.value = ''; if (f) readFollowUpCsv(f); });
+    }
+    inp.click();
+}
+
+async function readFollowUpCsv(file) {
+    const buf = await file.arrayBuffer();
+    let text = new TextDecoder('utf-8').decode(buf);
+    if (text.includes('\uFFFD')) text = new TextDecoder('windows-1252').decode(buf);   // file salvati da Excel
+    const csv = parseCsvSemicolon(text);
+    const col = (r, ...names) => { for (const n of names) { const k = Object.keys(r).find(h => h.toLowerCase() === n.toLowerCase()); if (k && r[k]) return r[k]; } return ''; };
+    const rows = [], scartate = [];
+    csv.forEach((r, i) => {
+        const vend = col(r, 'Venditore');
+        const cons = fuConsultant(vend);
+        const fullName = fuTitle([col(r, 'Nome cliente'), col(r, 'Cognome Cliente')].filter(Boolean).join(' ')) || fuTitle(col(r, 'Rag. Sociale Cliente'));
+        const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(col(r, 'Data trattativa'));
+        if (!cons) { scartate.push({ fullName, motivo: vend ? `consulente "${vend}" non in lista` : 'senza consulente' }); return; }
+        if (!m) { scartate.push({ fullName, motivo: 'data trattativa non valida' }); return; }
+        const workDate = `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+        const note = col(r, 'Note Cliente');
+        const p = parseFollowUpNote(note, workDate);
+        rows.push({ key: 'r' + i, workDate, consultantName: cons, fullName, phone: fuPhone(col(r, 'Tel.1 Cliente', 'Tel.2 Cliente')),
+            email: fuEmail(col(r, 'Email1 Cliente', 'Email2 Cliente')), marca: col(r, 'Marca'), modello: col(r, 'Modello'),
+            note, actions: p.actions, status: p.status, action: 'create' });
+    });
+    if (!rows.length) { alert('Nessuna riga da importare' + (scartate.length ? ` (${scartate.length} scartate: consulente non in lista o data mancante)` : '.')); return; }
+    let dups = {};
+    try {
+        const res = await fetch('/api/followups/import/check', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rows: rows.map(r => ({ key: r.key, workDate: r.workDate, fullName: r.fullName, phone: r.phone })) }) });
+        if (!res.ok) { const e = await res.json().catch(() => ({})); alert('Import non disponibile: ' + (e.error || res.status)); return; }
+        dups = (await res.json()).duplicates || {};
+    } catch (e) { alert('Errore di connessione'); return; }
+    rows.forEach(r => { if (dups[r.key]) { r.dups = dups[r.key]; r.action = 'skip'; } });
+    showFollowUpImportPreview(rows, scartate);
+}
+
+function showFollowUpImportPreview(rows, scartate) {
+    const ICON = { NO_ANSWER: '<span title="Non risponde" style="color:#ff5252">❌</span>', ANSWERED: '<span title="Risponde">✅</span>',
+        SENT_WHATSAPP: '<span title="WhatsApp inviato">💬</span>', SENT_MAIL: '<span title="Mail inviata">✉️</span>' };
+    const STATO = { RESPONDED: '<b style="color:#00c853">Risponde</b>', ABANDONED: '<b style="color:#ff5252">Non risponde</b>', IN_PROGRESS: '<span style="color:var(--text-secondary)">In corso</span>' };
+    const fmtD = d => d ? d.slice(8, 10) + '/' + d.slice(5, 7) : '';
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px';
+    const nDup = rows.filter(r => r.dups).length;
+    ov.innerHTML = `<div style="background:var(--card-bg,#1a1d26);color:var(--text-primary,#fff);border:1px solid var(--border-color,#333);border-radius:16px;width:min(1180px,100%);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+      <div style="padding:18px 22px;border-bottom:1px solid var(--border-color,#333);display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div><div style="font-size:18px;font-weight:800">📥 Import follow-up dalle trattative</div>
+          <div style="font-size:13px;color:var(--text-secondary);margin-top:4px">${rows.length} da importare${nDup ? ` · <b style="color:#f0c040">${nDup} già presenti nello stesso giorno</b> (scegli cosa fare)` : ''}${scartate.length ? ` · ${scartate.length} saltate` : ''}</div></div>
+        <button type="button" data-x class="btn-secondary" style="padding:6px 12px">✕</button></div>
+      <div style="overflow:auto;padding:12px 22px;flex:1">
+        ${nDup ? `<div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;font-size:12px">Per tutti i già presenti:
+            <button type="button" class="btn-small" data-all="skip">Salta</button><button type="button" class="btn-small" data-all="update">Aggiorna</button><button type="button" class="btn-small" data-all="create">Crea comunque</button></div>` : ''}
+        <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+          <thead><tr style="text-align:left;color:var(--text-secondary);font-size:11px">
+            <th style="padding:6px">Giorno</th><th style="padding:6px">Cliente</th><th style="padding:6px">Consulente</th><th style="padding:6px">Vettura</th>
+            <th style="padding:6px;text-align:center">1</th><th style="padding:6px;text-align:center">2</th><th style="padding:6px;text-align:center">3</th><th style="padding:6px;text-align:center">4</th>
+            <th style="padding:6px">Esito</th><th style="padding:6px">Note</th><th style="padding:6px">Azione</th></tr></thead>
+          <tbody>${rows.map((r, i) => `<tr style="border-top:1px solid var(--border-color,#333);${r.dups ? 'background:rgba(240,192,64,.07)' : ''}">
+            <td style="padding:6px">${fmtD(r.workDate)}</td>
+            <td style="padding:6px"><b>${escFu(r.fullName)}</b><div style="color:var(--text-secondary);font-size:11px">${escFu(r.phone)}${r.email ? ' · ' + escFu(r.email) : ''}</div></td>
+            <td style="padding:6px">${escFu(r.consultantName)}</td>
+            <td style="padding:6px">${escFu(r.marca)} <span style="color:var(--text-secondary)">${escFu((r.modello || '').slice(0, 40))}</span></td>
+            ${[1, 2, 3, 4].map(n => { const a = r.actions.find(x => x.step === n); return `<td style="padding:6px;text-align:center" title="${a ? fmtD(a.date) : 'in attesa'}">${a ? ICON[a.outcome] : '<span style="color:var(--text-secondary)">·</span>'}</td>`; }).join('')}
+            <td style="padding:6px">${STATO[r.status]}</td>
+            <td style="padding:6px;max-width:220px;color:var(--text-secondary);font-size:11px">${escFu((r.note || '').slice(0, 90))}${(r.note || '').length > 90 ? '…' : ''}</td>
+            <td style="padding:6px">${r.dups ? `<select data-act="${i}" class="input-dark" style="font-size:12px;padding:4px 6px">
+                <option value="skip" ${r.action === 'skip' ? 'selected' : ''}>Salta</option>
+                <option value="update" ${r.action === 'update' ? 'selected' : ''}>Aggiorna esistente</option>
+                <option value="create" ${r.action === 'create' ? 'selected' : ''}>Crea comunque</option></select>
+                <div style="font-size:10.5px;color:#f0c040;margin-top:3px">Già presente: ${escFu(r.dups[0].fullName)} · ${escFu(r.dups[0].consultantName || '')}</div>` : '<span style="color:#00c853;font-size:11px;font-weight:700">Nuovo</span>'}</td>
+          </tr>`).join('')}</tbody></table>
+        ${scartate.length ? `<details style="margin-top:12px;font-size:12px;color:var(--text-secondary)"><summary style="cursor:pointer">${scartate.length} righe saltate</summary>
+            <ul style="margin:6px 0 0 18px">${scartate.map(x => `<li>${escFu(x.fullName)}: ${escFu(x.motivo)}</li>`).join('')}</ul></details>` : ''}
+        <p style="font-size:11.5px;color:var(--text-secondary);margin-top:10px">Legenda: ❌ non risponde · ✅ risponde · 💬 WhatsApp inviato · ✉️ mail inviata · · in attesa. Le schede compariranno come "Creato da Import da ${escFu(currentUser?.fullName || '')}".</p>
+      </div>
+      <div style="padding:14px 22px;border-top:1px solid var(--border-color,#333);display:flex;justify-content:flex-end;gap:10px">
+        <button type="button" data-x class="btn-secondary" style="padding:10px 18px">Annulla</button>
+        <button type="button" data-go class="btn-gold" style="padding:10px 22px">Importa</button></div></div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener('change', e => { const s = e.target.closest('[data-act]'); if (s) { const r = rows[+s.dataset.act]; r.action = s.value; r.updateId = s.value === 'update' ? r.dups[0].id : null; } });
+    ov.addEventListener('click', async e => {
+        if (e.target === ov || e.target.closest('[data-x]')) { ov.remove(); return; }
+        const all = e.target.closest('[data-all]');
+        if (all) { rows.forEach((r, i) => { if (r.dups) { r.action = all.dataset.all; r.updateId = r.action === 'update' ? r.dups[0].id : null; const s = ov.querySelector(`[data-act="${i}"]`); if (s) s.value = r.action; } }); return; }
+        const go = e.target.closest('[data-go]');
+        if (!go) return;
+        go.disabled = true; go.textContent = 'Importazione…';
+        try {
+            const res = await fetch('/api/followups/import', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rows: rows.map(r => ({ ...r, dups: undefined })) }) });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) { alert('Import non riuscito: ' + (d.error || res.status)); go.disabled = false; go.textContent = 'Importa'; return; }
+            ov.remove();
+            alert(`Import completato: ${d.creati} creati, ${d.aggiornati} aggiornati, ${d.saltati} saltati${(d.errori || []).length ? '\n\nErrori:\n' + d.errori.join('\n') : ''}`);
+            if (typeof loadFollowUps === 'function') loadFollowUps();
+        } catch (err) { alert('Errore di connessione'); go.disabled = false; go.textContent = 'Importa'; }
+    });
+}
+
+
+/* =====================================================================
+   EXPORT EXCEL DEI FOLLOW-UP: un giorno o un periodo
+   File: Riepilogo per consulente + un foglio per ogni consulente con tutti
+   i suoi clienti (vettura, esito, i 4 step con data/ora, note) + "Tutti".
+   ===================================================================== */
+function openFollowUpExport() {
+    const iso = d => d.toISOString().slice(0, 10);
+    const day = document.getElementById('workDateFilter')?.value || iso(new Date());
+    const cons = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('consultantFilterMulti') : [];
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px';
+    ov.innerHTML = `<div style="background:var(--card-bg,#1a1d26);color:var(--text-primary,#fff);border:1px solid var(--border-color,#333);border-radius:16px;width:min(480px,100%);padding:20px 22px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+        <div style="font-size:18px;font-weight:800;margin-bottom:4px">📊 Export Excel follow-up</div>
+        <div style="font-size:12.5px;color:var(--text-secondary);margin-bottom:14px">Un foglio di riepilogo, un foglio per ogni consulente con clienti, vettura, esiti degli step e note, e un foglio con tutti.</div>
+        <div style="display:flex;gap:10px;margin-bottom:10px">
+          <label style="flex:1;font-size:12px;font-weight:700">Dal<input type="date" id="fuExFrom" class="input-dark" value="${day}" style="width:100%;margin-top:4px"></label>
+          <label style="flex:1;font-size:12px;font-weight:700">Al<input type="date" id="fuExTo" class="input-dark" value="${day}" style="width:100%;margin-top:4px"></label></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+          <button type="button" class="btn-small" data-q="day">Giorno selezionato</button><button type="button" class="btn-small" data-q="week">Questa settimana</button>
+          <button type="button" class="btn-small" data-q="month">Questo mese</button><button type="button" class="btn-small" data-q="prev">Mese scorso</button></div>
+        <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-bottom:16px;${cons.length ? '' : 'opacity:.5'}">
+          <input type="checkbox" id="fuExCons" ${cons.length ? 'checked' : 'disabled'}> Solo i consulenti filtrati${cons.length ? ` (${cons.length}: ${escFu(cons.join(', '))})` : ' (nessun filtro attivo: tutti)'}</label>
+        <p id="fuExMsg" style="font-size:12px;color:#ff5252;margin:0 0 8px;min-height:14px"></p>
+        <div style="display:flex;justify-content:flex-end;gap:10px">
+          <button type="button" data-x class="btn-secondary" style="padding:10px 18px">Annulla</button>
+          <button type="button" data-go class="btn-gold" style="padding:10px 22px">⬇ Scarica Excel</button></div></div>`;
+    document.body.appendChild(ov);
+    const set = (a, b) => { ov.querySelector('#fuExFrom').value = iso(a); ov.querySelector('#fuExTo').value = iso(b); };
+    ov.addEventListener('click', async e => {
+        if (e.target === ov || e.target.closest('[data-x]')) { ov.remove(); return; }
+        const q = e.target.closest('[data-q]');
+        if (q) {
+            const t = new Date(day + 'T12:00:00');
+            if (q.dataset.q === 'day') set(t, t);
+            if (q.dataset.q === 'week') { const m = new Date(t); m.setDate(t.getDate() - ((t.getDay() + 6) % 7)); const d = new Date(m); d.setDate(m.getDate() + 6); set(m, d); }
+            if (q.dataset.q === 'month') set(new Date(t.getFullYear(), t.getMonth(), 1, 12), new Date(t.getFullYear(), t.getMonth() + 1, 0, 12));
+            if (q.dataset.q === 'prev') set(new Date(t.getFullYear(), t.getMonth() - 1, 1, 12), new Date(t.getFullYear(), t.getMonth(), 0, 12));
+            return;
+        }
+        const go = e.target.closest('[data-go]'); if (!go) return;
+        const from = ov.querySelector('#fuExFrom').value, to = ov.querySelector('#fuExTo').value;
+        if (!from || !to) { ov.querySelector('#fuExMsg').textContent = 'Scegli le date.'; return; }
+        const params = new URLSearchParams({ from, to });
+        if (ov.querySelector('#fuExCons').checked && cons.length) params.set('consultants', cons.join(','));
+        go.disabled = true; go.textContent = 'Preparazione…';
+        try {
+            const res = await fetch('/api/followups/export?' + params.toString());
+            if (!res.ok) { const d = await res.json().catch(() => ({})); ov.querySelector('#fuExMsg').textContent = d.error || 'Export non riuscito'; return; }
+            const blob = await res.blob();
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `followup_${from}${to !== from ? '_' + to : ''}.xlsx`;
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+            ov.remove();
+        } catch (err) { ov.querySelector('#fuExMsg').textContent = 'Errore di connessione'; }
+        finally { go.disabled = false; go.textContent = '⬇ Scarica Excel'; }
+    });
 }

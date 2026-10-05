@@ -184,8 +184,8 @@
                 <input type="date" id="statsTo" class="input-dark">
                 <select id="statsConsultant" class="input-dark" onchange="loadStats()">
                     <option value="">Tutti i consulenti</option>
-                    <option>Ambrosino Luca</option><option>Capitelli Silvio</option><option>Castaldo Marco</option>
-                    <option>Castaldo Roberto</option><option>Filosa Claudio</option><option>Fiore Guido</option>
+                    <option>Ambrosino Luca</option><option>Bruno Simone</option><option>Capitelli Silvio</option><option>Castaldo Marco</option>
+                    <option>Castaldo Roberto</option><option>Del Villano Pasquale</option><option>Filosa Claudio</option><option>Fiore Guido</option>
                     <option>Gerardi Claudio</option><option>Giordano Luca</option><option>Montuori Francesco</option>
                     <option>Palumbo Enrico</option><option>Scala Rosario</option><option>Zaritto Davide</option>
                     <option>Zuppa Mattia</option>
@@ -315,6 +315,8 @@
 
                 <button onclick="loadFollowUps()" class="btn-gold">CARICA</button>
                 <button onclick="showNewFollowUp()" class="btn-primary" style="width:auto;padding:10px 20px">+ NUOVO</button>
+                <button onclick="openFollowUpImport()" class="btn-secondary" style="padding:10px 20px" title="Importa i follow-up dal CSV delle trattative">📥 IMPORTA CSV</button>
+                <button onclick="openFollowUpExport()" class="btn-secondary" style="padding:10px 20px" title="Esporta in Excel i follow-up di un giorno o di un periodo">📊 EXCEL</button>
                 <button onclick="printFollowUpsByConsultant()" class="btn-secondary" style="padding:10px 20px">🖨️ STAMPA</button>
             </div>
         </div>
@@ -323,8 +325,8 @@
                 <input type="text" id="searchInput" placeholder="🔍 Cerca cliente per nome o numero..." class="input-field" style="margin-bottom:0;flex:1" oninput="searchFollowUps(this.value)">
                 <select id="searchConsultantFilter" class="input-dark" onchange="searchFollowUps(document.getElementById('searchInput').value)" style="min-width:180px">
                     <option value="">Tutti i consulenti</option>
-                    <option>Ambrosino Luca</option><option>Capitelli Silvio</option><option>Castaldo Marco</option>
-                    <option>Castaldo Roberto</option><option>Filosa Claudio</option><option>Fiore Guido</option>
+                    <option>Ambrosino Luca</option><option>Bruno Simone</option><option>Capitelli Silvio</option><option>Castaldo Marco</option>
+                    <option>Castaldo Roberto</option><option>Del Villano Pasquale</option><option>Filosa Claudio</option><option>Fiore Guido</option>
                     <option>Gerardi Claudio</option><option>Giordano Luca</option><option>Montuori Francesco</option>
                     <option>Palumbo Enrico</option><option>Scala Rosario</option><option>Zaritto Davide</option>
                     <option>Zuppa Mattia</option>
@@ -341,11 +343,12 @@
                 <input type="text" id="fuFullName" placeholder="Cognome e Nome Cliente *" class="input-field">
                 <input type="email" id="fuEmail" placeholder="Email Cliente (opzionale)" class="input-field">
                 <input type="text" id="fuPhone" placeholder="Cellulare (opzionale)" class="input-field">
+                <div style="display:flex;gap:8px"><input type="text" id="fuMarca" placeholder="Marca (opzionale)" class="input-field" style="flex:1"><input type="text" id="fuModello" placeholder="Modello (opzionale)" class="input-field" style="flex:2"></div>
                 <input type="date" id="fuWorkDate" class="input-field">
                 <select id="fuConsultant" class="input-field">
                     <option value="">Seleziona Consulente *</option>
-                    <option>Ambrosino Luca</option><option>Capitelli Silvio</option><option>Castaldo Marco</option>
-                    <option>Castaldo Roberto</option><option>Filosa Claudio</option><option>Fiore Guido</option>
+                    <option>Ambrosino Luca</option><option>Bruno Simone</option><option>Capitelli Silvio</option><option>Castaldo Marco</option>
+                    <option>Castaldo Roberto</option><option>Del Villano Pasquale</option><option>Filosa Claudio</option><option>Fiore Guido</option>
                     <option>Gerardi Claudio</option><option>Giordano Luca</option><option>Montuori Francesco</option>
                     <option>Palumbo Enrico</option><option>Scala Rosario</option><option>Zaritto Davide</option>
                     <option>Zuppa Mattia</option>
@@ -872,8 +875,8 @@
                         <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">CONSULENTE (opzionale)</label>
                         <select id="editContactAcquistoConsulente" class="input-field">
                             <option value="">Seleziona consulente</option>
-                            <option>Ambrosino Luca</option><option>Capitelli Silvio</option><option>Castaldo Marco</option>
-                            <option>Castaldo Roberto</option><option>Crispo Raffaele</option><option>Filosa Claudio</option>
+                            <option>Ambrosino Luca</option><option>Bruno Simone</option><option>Capitelli Silvio</option><option>Castaldo Marco</option>
+                            <option>Castaldo Roberto</option><option>Crispo Raffaele</option><option>Del Villano Pasquale</option><option>Filosa Claudio</option>
                             <option>Fiore Guido</option><option>Gerardi Claudio</option><option>Giordano Luca</option>
                             <option>Imperato Ciro</option><option>Montuori Francesco</option><option>Palumbo Enrico</option>
                             <option>Scala Rosario</option><option>Sementa Francesco</option><option>Zaritto Davide</option>
@@ -1153,8 +1156,8 @@
                         <label style="font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:1px;display:block;margin-bottom:6px">CONSULENTE (opzionale)</label>
                         <select id="contactAcquistoConsulente" class="input-field">
                             <option value="">Seleziona consulente</option>
-                            <option>Ambrosino Luca</option><option>Capitelli Silvio</option><option>Castaldo Marco</option>
-                            <option>Castaldo Roberto</option><option>Crispo Raffaele</option><option>Filosa Claudio</option>
+                            <option>Ambrosino Luca</option><option>Bruno Simone</option><option>Capitelli Silvio</option><option>Castaldo Marco</option>
+                            <option>Castaldo Roberto</option><option>Crispo Raffaele</option><option>Del Villano Pasquale</option><option>Filosa Claudio</option>
                             <option>Fiore Guido</option><option>Gerardi Claudio</option><option>Giordano Luca</option>
                             <option>Imperato Ciro</option><option>Montuori Francesco</option><option>Palumbo Enrico</option>
                             <option>Scala Rosario</option><option>Sementa Francesco</option><option>Zaritto Davide</option>

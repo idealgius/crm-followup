@@ -10,6 +10,10 @@ import com.gruppoautoscala.followup.repository.FollowUpStepRepository;
 import com.gruppoautoscala.followup.repository.UserRepository;
 import com.gruppoautoscala.followup.service.FollowUpService;
 import com.gruppoautoscala.followup.service.RecallFollowUpService;
+import com.gruppoautoscala.followup.service.FollowUpExcelService;
+import com.gruppoautoscala.followup.service.RolePermissionService;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -32,6 +36,37 @@ public class FollowUpController {
     @Autowired private FollowUpStepRepository followUpStepRepository;
     @Autowired private FollowUpRepository followUpRepository;
     @Autowired private RecallFollowUpService recallFollowUpService;
+    @Autowired private FollowUpExcelService followUpExcelService;
+    @Autowired private RolePermissionService rolePermissionService;
+
+    // NUOVO: export Excel dei follow-up di un giorno o di un periodo
+    // (Riepilogo + un foglio per consulente + "Tutti").
+    // GET /api/followups/export?from=2026-10-01&to=2026-10-05&consultants=Scala Rosario,Fiore Guido
+    @GetMapping("/export")
+    public ResponseEntity<?> exportExcel(@RequestParam String from, @RequestParam(required = false) String to,
+                                         @RequestParam(required = false) String consultants, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        String role = (String) session.getAttribute("userRole");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        if (!rolePermissionService.hasAtLeast(rolePermissionService.getEffectiveAccess(userId, role, "FOLLOWUPS"), "READ_ONLY"))
+            return ResponseEntity.status(403).body(Map.of("error", "Non hai il permesso per i Follow-up"));
+        try {
+            LocalDate dal = LocalDate.parse(from), al = (to == null || to.isBlank()) ? dal : LocalDate.parse(to);
+            if (al.isBefore(dal)) { LocalDate t = dal; dal = al; al = t; }
+            if (dal.plusDays(366).isBefore(al)) return ResponseEntity.badRequest().body(Map.of("error", "Periodo troppo lungo (massimo un anno)"));
+            Set<String> cons = new LinkedHashSet<>();
+            if (consultants != null) for (String c : consultants.split(",")) if (!c.isBlank()) cons.add(c.trim());
+            String chi = userRepository.findById(userId).map(User::getFullName).orElse(null);
+            byte[] xlsx = followUpExcelService.export(dal, al, cons, chi);
+            String nome = "followup_" + dal + (al.equals(dal) ? "" : "_" + al) + ".xlsx";
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + nome + "\"")
+                    .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                    .body(xlsx);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Export non riuscito: " + e.getMessage()));
+        }
+    }
 
     @GetMapping
     public ResponseEntity<?> getByDate(@RequestParam String date, HttpSession session) {
@@ -65,6 +100,10 @@ public class FollowUpController {
             m.put("consultantName", fu.getConsultantName());
             // NUOVO: link trattativa (icona 📎 nel form).
             m.put("trattativaLink", fu.getTrattativaLink());
+            // NUOVO: vettura e provenienza (import CSV)
+            m.put("marca", fu.getMarca());
+            m.put("modello", fu.getModello());
+            m.put("imported", Boolean.TRUE.equals(fu.getImported()));
 
             Map<String, Object> customer = new LinkedHashMap<>();
             customer.put("id", fu.getCustomer().getId());
@@ -102,6 +141,7 @@ public class FollowUpController {
                     sm.put("outcome", s.getOutcome());
                     sm.put("notes", s.getNotes());
                     sm.put("executedAt", s.getExecutedAt() != null ? s.getExecutedAt().toString() : null);
+                    sm.put("imported", Boolean.TRUE.equals(s.getImported()));
                     // NUOVO: chi ha segnato l'ultima volta questo step.
                     if (s.getExecutedBy() != null) {
                         Map<String, Object> execBy = new LinkedHashMap<>();
@@ -158,8 +198,12 @@ public class FollowUpController {
         String trattativaLink = (String) body.get("trattativaLink");
         if (trattativaLink != null && !trattativaLink.isBlank()) {
             followUp.setTrattativaLink(trattativaLink.trim());
-            followUp = followUpService.save(followUp);
         }
+        // NUOVO: marca e modello (facoltativi)
+        String marca = (String) body.get("marca"), modello = (String) body.get("modello");
+        if (marca != null && !marca.isBlank()) followUp.setMarca(marca.trim());
+        if (modello != null && !modello.isBlank()) followUp.setModello(modello.trim());
+        followUp = followUpService.save(followUp);
 
         return ResponseEntity.ok(followUp);
     }
@@ -203,6 +247,8 @@ public class FollowUpController {
             followUp.setConsultantName((String) body.get("consultantName"));
         if (body.containsKey("trattativaLink"))
             followUp.setTrattativaLink((String) body.get("trattativaLink"));
+        if (body.containsKey("marca")) followUp.setMarca((String) body.get("marca"));
+        if (body.containsKey("modello")) followUp.setModello((String) body.get("modello"));
 
         // NUOVO: traccia chi ha fatto l'ultima modifica e quando.
         userRepository.findById(userId).ifPresent(followUp::setLastModifiedBy);
@@ -246,6 +292,8 @@ public class FollowUpController {
             step.setExecutedAt(LocalDateTime.now(ITALY_ZONE));
             userRepository.findById(userId).ifPresent(step::setExecutedBy);
         }
+        // modificato a mano: non e' piu' "dall'import"
+        step.setImported(false);
         return ResponseEntity.ok(followUpStepRepository.save(step));
     }
 }

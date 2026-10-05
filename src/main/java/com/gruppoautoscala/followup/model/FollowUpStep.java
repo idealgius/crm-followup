@@ -44,4 +44,9 @@ public class FollowUpStep {
     @ManyToOne
     @JoinColumn(name = "executed_by_id")
     private User executedBy;
+
+    // NUOVO: true se l'esito e' stato scritto dall'import CSV (in pagina:
+    // "Import da <utente>"). Torna false appena qualcuno modifica lo step.
+    @Column(name = "imported")
+    private Boolean imported = false;
 }
