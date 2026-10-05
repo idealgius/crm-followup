@@ -212,3 +212,17 @@
 .st-nav-subs .st-nav-ic { display:none; }
 .st-nav-subs .st-nav-i.sub { font-size:12.5px; font-weight:600; }
 .st-layout { grid-template-columns:290px minmax(0,1fr); }
+
+/* riquadro Giacenza: grafico + report affiancati */
+.st-giac-grid { display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1fr); gap:18px; align-items:start; margin-top:8px; }
+.st-giac-media { margin:4px 0 10px; font-size:13.5px; color:var(--cg-ink-2); }
+.st-giac-media b { font-size:20px; color:var(--cg-ink); margin-left:6px; }
+.st-giac-media span { font-size:12px; }
+.st-giac-t { width:100%; border-collapse:collapse; font-size:13px; }
+.st-giac-t th { text-align:right; font-size:11px; color:var(--cg-ink-2); padding:6px 8px; border-bottom:1.5px solid var(--cg-line); }
+.st-giac-t th:first-child, .st-giac-t td:first-child { text-align:left; }
+.st-giac-t td { text-align:right; padding:8px; border-bottom:1px solid var(--cg-line); }
+.st-giac-t tr[data-giac] { cursor:pointer; }
+.st-giac-t tr[data-giac]:hover td { background:var(--cg-grey-soft); }
+.st-giac-t td i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:8px; }
+@media (max-width:1000px) { .st-giac-grid { grid-template-columns:1fr; } }

@@ -88,6 +88,10 @@
     // In arrivo         -> sezione a parte
     const UBIC_ORDINE = ['Gruppo Autoscala', 'Autoscala', 'Carrozzeria', 'Altre lavorazioni', 'C/O Altri Dealer', 'In arrivo'];
     const UBIC_DET_ORDINE = ['Capodichino', 'Caserta', 'In uso / Demo'];
+    // ===== GIACENZA: fasce di giorni in stock =====
+    const GIAC = [['0-30', '0-30 gg', 0, 30, '#34c38f'], ['31-60', '31-60 gg', 31, 60, '#8fd17a'], ['61-90', '61-90 gg', 61, 90, '#e8c13a'],
+        ['91-180', '91-180 gg', 91, 180, '#e8a13a'], ['181-365', '181-365 gg', 181, 365, '#e5734d'], ['365+', '> 365 gg', 366, Infinity, '#e5484d']];
+    const giacKey = r => { if (r.giorni == null || r.giorni === '') return 'nd'; const g = Number(r.giorni); const b = GIAC.find(x => g >= x[2] && g <= x[3]); return b ? b[0] : 'nd'; };
     const nomeSede = raw => titleCase(String(raw).replace(/\s+/g, ' ').trim());
     function ubicazione(raw) {
         const n = norm(raw);
@@ -358,7 +362,8 @@
         return (!f.stato || r.stato === f.stato) && (!f.tipo || r.tipo === f.tipo) && (!f.marca || r.marca === f.marca)
             && (!f.carb || (f.carb === '__none' ? !r.carburante : r.carburante === f.carb))
             && (!f.sede || (f.sede === '__none' ? !r.sede : r.sede === f.sede))
-            && (!f.ubic || r.ubic === f.ubic) && (!f.ubicDet || r.ubicDet === f.ubicDet);
+            && (!f.ubic || r.ubic === f.ubic) && (!f.ubicDet || r.ubicDet === f.ubicDet)
+            && (!f.giac || giacKey(r) === f.giac);
     }
 
     function render(msg) {
@@ -462,8 +467,11 @@
     const kpiHtml = (icon, bg, label, n, f, sub) => `<button type="button" class="cg-kpi" data-f='${esc(JSON.stringify(f))}' data-t="${esc(label)}">
             <span class="cg-k-top">${label}<span class="cg-dot" style="background:${bg}">${icon}</span></span>
             <span class="cg-num">${fmt(n)}</span><span class="cg-sub">${sub}</span></button>`;
+    const giacCard = noLine => `<div class="cg-card st-wide ${vede('G_ST_GIAC') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Giacenza</h2><p class="cg-hint" data-hint="stChGiac"></p></div><div class="cg-an-hbtns">${vociBtn('stChGiac')}${typeBtns('stChGiac', noLine)}</div></div>
+        <div class="st-giac-grid"><div class="st-chart-box"><canvas id="stChGiac"></canvas></div><div class="st-giac-rep" data-rep="stChGiac"></div></div></div>`;
     const chartCard = (id, title, perm, wide, extra, noLine) => `<div class="cg-card ${wide ? 'st-wide' : ''} ${vede(perm) ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>${title}</h2><p class="cg-hint" data-hint="${id}"></p></div><div class="cg-an-hbtns">${extra || ''}${vociBtn(id)}${typeBtns(id, noLine)}</div></div><div class="st-chart-box"><canvas id="${id}"></canvas></div></div>`;
     function bindView(main, baseF) {
+        currentBaseF = baseF || {};
         main.querySelectorAll('.cg-kpi[data-f]').forEach(b => b.addEventListener('click', () => openList(b.dataset.t, { ...baseF, ...JSON.parse(b.dataset.f) })));
         drawCharts();
         bindVoci(main);
@@ -508,6 +516,7 @@
           ${chartCard('stChStato', 'Disponibili, prenotate e vendute', 'G_ST_STATO')}
           ${chartCard('stChMotore', 'Per motorizzazione', 'G_ST_MOTORE')}
           ${chartCard('stChMarchi', 'Per marchio', 'G_ST_MARCHI')}
+          ${giacCard(false)}
           ${chartCard('stChSede', 'Per sede', 'G_ST_SEDE', true, `<div class="cg-an-mode" id="stSedeMode"><button type="button" data-sm="g" class="${sedeMode === 'g' ? 'on' : ''}">Riepilogo</button><button type="button" data-sm="d" class="${sedeMode === 'd' ? 'on' : ''}">Dettaglio</button></div>`)}
         </div>`;
         main.querySelector('[data-goview]').addEventListener('click', () => showView('marchi'));
@@ -533,12 +542,12 @@
           ${kpiHtml('🔖', 'var(--cg-amber-soft)', 'Prenotate', nP, { stato: 'Prenotata' }, pc(nP))}
           ${kpiHtml('🤝', 'var(--cg-violet-soft)', 'Vendute', nV, { stato: 'Venduta' }, pc(nV))}
         </div>
-        ${media != null ? `<p class="cg-hint" style="margin:10px 2px 0">Giacenza media: <b>${fmt(media)} giorni</b> in stock</p>` : ''}
         ${det.length > 1 ? `<div class="cg-card" style="margin-top:14px"><h2>${g === 'Carrozzeria' ? 'Carrozzerie' : g === 'C/O Altri Dealer' ? 'Dealer' : 'Sedi'}</h2>
             <div class="st-detchips">${det.map(([k, n]) => `<button type="button" data-goview="d:${esc(g)}|${esc(k)}"><span>${esc(k)}</span><b>${fmt(n)}</b><em>${pctS(n, tot)}</em></button>`).join('')}</div></div>` : ''}
         <div class="st-charts">
           ${chartCard('stChMarchi', 'Per marchio', 'G_ST_MARCHI', false, '', true)}
           ${det.length > 1 ? chartCard('stChSede', g === 'Carrozzeria' ? 'Per carrozzeria' : 'Per sede', 'G_ST_SEDE', false, '', true) : chartCard('stChStato', 'Disponibili, prenotate e vendute', 'G_ST_STATO', false, '', true)}
+          ${giacCard(true)}
         </div>
         <div class="st-list-slot"></div>`;
         main.querySelectorAll('[data-goview]').forEach(b => b.addEventListener('click', () => showView(b.dataset.goview)));
@@ -676,6 +685,13 @@
             colors: { 'Disponibile': '#5cc6a7', 'Prenotata': '#e8a13a', 'Venduta': '#8f7bd6' }, hint: 'Clicca per vedere le vetture' };
         if (id === 'stChMotore') return { voci: sortedDesc(count(scope, r => r.carburante || '__none')).map(([k, n]) => [k, n, k === '__none' ? 'Non indicata' : k]),
             key: 'carb', get: r => r.carburante || '__none', colors: {}, hint: 'Dalla colonna Carburante · clicca per vedere le vetture' };
+        if (id === 'stChGiac') {
+            const voci = GIAC.map(b => [b[0], scope.filter(r => giacKey(r) === b[0]).length, b[1]]);
+            const nd = scope.filter(r => giacKey(r) === 'nd').length;
+            if (nd) voci.push(['nd', nd, 'Senza data']);
+            return { voci: voci.filter(v => v[1]), key: 'giac', get: giacKey, colors: Object.fromEntries(GIAC.map(b => [b[0], b[4]]).concat([['nd', '#8d99ae']])),
+                hint: 'Da quanti giorni le vetture sono in stock · clicca una fascia per vedere le vetture', ordered: true };
+        }
         if (id === 'stChSede') {
             if (sedeMode === 'g' && !sedeForceDet) return { voci: UBIC_ORDINE.map(g => [g, scope.filter(r => r.ubic === g).length, g]).filter(v => v[1]), key: 'ubic', get: r => r.ubic,
                 colors: { 'Gruppo Autoscala': '#2c7be5', 'Autoscala': '#5cc6a7', 'Carrozzeria': '#e5484d', 'Altre lavorazioni': '#9b7bff', 'C/O Altri Dealer': '#e8a13a', 'In arrivo': '#8d99ae' },
@@ -686,13 +702,29 @@
         return { voci: sortedDesc(count(scope, r => r.marca)).slice(0, scopeAll ? 12 : 40).map(([k, n]) => [k, n, k]), key: 'marca', get: r => r.marca, colors: {},
             hint: scopeAll ? 'I 12 marchi con più vetture · clicca per vedere le vetture' : 'I marchi di questa sezione · clicca per vedere le vetture' };
     }
+    // report della giacenza: fascia, vetture, %, giorni medi, disponibili
+    function drawGiacReport() {
+        const box = rootEl.querySelector('[data-rep="stChGiac"]'); if (!box) return;
+        const conG = scope.filter(r => r.giorni != null && r.giorni !== '');
+        const media = conG.length ? Math.round(conG.reduce((a, r) => a + Number(r.giorni), 0) / conG.length) : null;
+        const righe = GIAC.map(b => [b, scope.filter(r => giacKey(r) === b[0])]).concat([[['nd', 'Senza data', 0, 0, '#8d99ae'], scope.filter(r => giacKey(r) === 'nd')]]).filter(x => x[1].length);
+        box.innerHTML = `<p class="st-giac-media">Giacenza media <b>${media != null ? fmt(media) + ' giorni' : '—'}</b>${conG.length < scope.length ? ` <span>(su ${fmt(conG.length)} vetture con data di ingresso)</span>` : ''}</p>
+            <table class="st-giac-t"><thead><tr><th>Fascia</th><th>Vetture</th><th>%</th><th>Giorni medi</th><th>Disponibili</th></tr></thead><tbody>
+            ${righe.map(([b, l]) => { const g = l.filter(r => r.giorni != null && r.giorni !== ''); const m = g.length ? Math.round(g.reduce((a, r) => a + Number(r.giorni), 0) / g.length) : null;
+                return `<tr data-giac="${b[0]}"><td><i style="background:${b[4]}"></i>${b[1]}</td><td>${fmt(l.length)}</td><td>${pctS(l.length, scope.length)}</td><td>${m != null ? fmt(m) : '—'}</td><td>${fmt(l.filter(r => r.stato === 'Disponibile').length)}</td></tr>`; }).join('')}
+            </tbody></table>`;
+        box.onclick = e => { const tr = e.target.closest('tr[data-giac]'); if (!tr) return; const b = righe.find(x => x[0][0] === tr.dataset.giac);
+            openList('Giacenza · ' + b[0][1], { ...(currentBaseF || {}), giac: tr.dataset.giac }); };
+    }
+    let currentBaseF = {};
     function drawCharts() {
         if (typeof Chart === 'undefined') return;
         const ink = getComputedStyle(rootEl).getPropertyValue('--cg-ink-2').trim() || '#6b7a8c';
         const ink1 = getComputedStyle(rootEl).getPropertyValue('--cg-ink').trim() || '#1f2d3d';
         const grid = getComputedStyle(rootEl).getPropertyValue('--cg-line').trim() || '#e3e8ef';
         const tot = scope.length;
-        ['stChTipo', 'stChStato', 'stChMotore', 'stChMarchi', 'stChSede'].forEach((id, gi) => {
+        ['stChTipo', 'stChStato', 'stChMotore', 'stChMarchi', 'stChSede', 'stChGiac'].forEach((id, gi) => {
+            if (id === 'stChGiac') drawGiacReport();
             const el = rootEl.querySelector('#' + id); if (!el) return;
             const d0 = chartData(id), tipo = (!scopeAll && tipiGrafico[id] === 'line') ? 'bar' : tipiGrafico[id];
             const hid = hiddenSt[id] || new Set();
@@ -703,7 +735,7 @@
             const col = (k, i) => d.colors[k] || (id === 'stChMotore' && tipo !== 'doughnut' ? '#4d8fd6' : id === 'stChMarchi' && tipo !== 'doughnut' ? '#5cc6a7' : id === 'stChSede' && tipo !== 'doughnut' ? '#e8a13a' : PALETTE[i % PALETTE.length]);
             // barre orizzontali con tante voci: il riquadro si allunga per mostrarle tutte con il nome
             const boxEl = el.parentElement;
-            boxEl.style.height = (tipo === 'bar' && d.voci.length > 5) ? Math.max(290, d.voci.length * 26 + 50) + 'px'
+            boxEl.style.height = (tipo === 'bar' && d.voci.length > 5 && !d.ordered) ? Math.max(290, d.voci.length * 26 + 50) + 'px'
                 : (tipo !== 'bar' && d.voci.length > 9) ? (290 + Math.ceil(d.voci.length / 3) * 22) + 'px' : '';   // legenda lunga sotto il grafico
             const hint = rootEl.querySelector(`[data-hint="${id}"]`);
             if (hint) hint.textContent = tipo === 'line' ? 'Ingressi in stock mese per mese (data ingresso) · clicca un punto' : d.hint;
@@ -712,7 +744,7 @@
             if (tipo === 'line') {
                 // andamento tra un import e l'altro: ogni import salva una "fotografia" dei conteggi
                 // (una per giorno). Linee dritte tra un punto e l'altro: se il valore non cambia, la linea resta piatta.
-                const campo = { tipo: 'tipo', stato: 'stato', carb: 'carburante', marca: 'marca', sede: 'sede' }[d.key];
+                const campo = { tipo: 'tipo', stato: 'stato', carb: 'carburante', marca: 'marca', sede: 'sede', giac: 'giac' }[d.key];
                 const storico = (meta && Array.isArray(meta.storico)) ? meta.storico : [];
                 const top = d.voci.slice(0, 6);
                 const lab = f => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(f.at || ''); return m ? `${m[3]}/${m[2]}/${m[1].slice(2)}` : '—'; };
@@ -741,7 +773,7 @@
                             tooltip: { callbacks: { label: c => ` ${fmt(c.parsed)} vetture · ${pctS(c.parsed, tot)}` } } },
                         onClick: (ev, els) => { if (els.length) { const v = d.voci[els[0].index]; open(v[0], v[2]); } } } };
             } else {
-                const horiz = d.voci.length > 5;
+                const horiz = d.voci.length > 5 && !d.ordered;
                 const maxV = Math.max(...d.voci.map(v => v[1]), 1);
                 cfg = { type: 'bar',
                     data: { labels: d.voci.map(v => v[2]), datasets: [{ data: d.voci.map(v => v[1]), backgroundColor: d.voci.map((v, i) => col(v[0], idxOf.get(v[0]))), borderRadius: 6, maxBarThickness: 46 }] },

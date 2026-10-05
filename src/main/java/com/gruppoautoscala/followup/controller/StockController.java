@@ -163,6 +163,18 @@ public class StockController {
             }
             foto.put(c[0], m);
         }
+        // fasce di giacenza (giorni in stock al momento dell'import)
+        Map<String, Integer> giac = new LinkedHashMap<>();
+        for (Object o : righe) {
+            Object g = (o instanceof Map<?, ?> r) ? r.get("giorni") : null;
+            String k = "nd";
+            if (g instanceof Number n) {
+                double d = n.doubleValue();
+                k = d <= 30 ? "0-30" : d <= 60 ? "31-60" : d <= 90 ? "61-90" : d <= 180 ? "91-180" : d <= 365 ? "181-365" : "365+";
+            }
+            giac.merge(k, 1, Integer::sum);
+        }
+        foto.put("giac", giac);
         return foto;
     }
 

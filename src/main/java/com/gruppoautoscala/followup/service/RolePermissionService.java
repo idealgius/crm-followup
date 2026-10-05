@@ -75,7 +75,7 @@ public class RolePermissionService {
         "G_SRV_STATO", "G_SRV_CHIAMATE", "G_SRV_ESITO",
         "G_CG_TEMPI", "G_CG_MOTIVI",
         // Stock
-        "G_ST_TIPO", "G_ST_STATO", "G_ST_MOTORE", "G_ST_MARCHI", "G_ST_SEDE"
+        "G_ST_TIPO", "G_ST_STATO", "G_ST_MOTORE", "G_ST_MARCHI", "G_ST_SEDE", "G_ST_GIAC"
     );
 
     private static boolean isValidKey(String key) {
