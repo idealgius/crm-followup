@@ -87,6 +87,8 @@ public class FollowUpAnalyticsController {
                         sm.put("outcome", s.getOutcome());
                         sm.put("at", s.getExecutedAt() != null ? s.getExecutedAt().toString() : null);
                         sm.put("by", s.getExecutedBy() != null ? s.getExecutedBy().getFullName() : null);
+                        // c'e' una nota sullo step (es. risposta al WhatsApp / alla mail)
+                        sm.put("hasNotes", s.getNotes() != null && !s.getNotes().isBlank());
                         return sm;
                     }).collect(Collectors.toList()));
             RecallFollowUp r = rfuByFu.get(f.getId());
