@@ -749,6 +749,7 @@ async function printFollowUpsByConsultant() {
      wh / whatsapp    -> step 3 = WhatsApp inviato
      mail             -> step 3 = Mail inviata
      altro testo      -> prossimo step di chiamata = ✅ risponde, con la nota
+     FISS. APP. 10/05 12:00 -> appuntamento fissato (flag Appuntamento) e risponde
    Esito della scheda: Risponde se il cliente ha risposto; Non risponde se
    tutti e 4 gli step sono stati fatti senza risposta.
    ===================================================================== */
@@ -798,7 +799,16 @@ function parseFollowUpNote(note, workDate) {
     const year = new Date().getFullYear();
     let date = workDate;
     const actions = [], callSteps = [1, 2, 4];
-    let i = 0; const txt = String(note || '');
+    // "FISS. APP. 10/05 12:00" = appuntamento fissato: si segna l'appuntamento e il cliente ha risposto.
+    // La data dopo FISS. APP. e' quella dell'APPUNTAMENTO, non delle azioni: la riscrivo come testo
+    // (10-05) cosi' non viene letta come data degli step.
+    let hasAppointment = false;
+    const APP = /fiss(?:ato|\.)?\s*app(?:untamento|\.)?(?:\s*(?:per|il|:|-))?\s*(?:(\d{1,2})\s*\/\s*(\d{1,2})(?:\s*\/\s*\d{2,4})?)?\s*(?:ore|h|alle)?\s*(\d{1,2}[:.]\d{2})?/ig;
+    const txt0 = String(note || '').replace(APP, (m, g, mm, ora) => {
+        hasAppointment = true;
+        return 'Appuntamento fissato' + (g ? ` il ${g.padStart(2, '0')}-${mm.padStart(2, '0')}` : '') + (ora ? ` alle ${ora.replace('.', ':')}` : '') + '.';
+    });
+    let i = 0; const txt = txt0;
     const KW = /^(non\s+risponde|non\s+raggiungibile|non\s+disponibile|occupato|n\.?\s?r\.?|nd|whatsapp|wh|wa|e-?mail|mail)(?![a-zàèéìòù0-9])/i;
     const DT = /^(\d{1,2})\s*\/\s*(\d{1,2})(?:\s*\/\s*(\d{2,4}))?/;
     const nextCall = () => callSteps.find(n => !actions.some(a => a.step === n));
@@ -815,7 +825,7 @@ function parseFollowUpNote(note, workDate) {
         let k = KW.exec(rest);
         // una parola chiave conta solo se dopo c'e' la fine, una data o un'altra parola chiave
         // ("Non disponibile fino a lunedi', richiamare" e' una frase: il cliente ha risposto)
-        if (k) { const dopo = rest.slice(k[0].length).replace(/^[\s,;.\-–|:]+/, ''); if (dopo && !DT.test(dopo) && !KW.test(dopo)) k = null; }
+        if (k) { const dopo = rest.slice(k[0].length).replace(/^[\s,;.\-–|:]+/, ''); if (dopo && !DT.test(dopo) && !KW.test(dopo) && !/^appuntamento fissato/i.test(dopo)) k = null; }
         if (k) {
             const w = k[1].toLowerCase().replace(/\s+/g, ' ');
             if (/^(wh|wa|whatsapp)$/.test(w)) { if (!actions.some(a => a.step === 3)) actions.push({ step: 3, outcome: 'SENT_WHATSAPP', date }); }
@@ -831,7 +841,8 @@ function parseFollowUpNote(note, workDate) {
     }
     const answered = actions.some(a => a.outcome === 'ANSWERED');
     const allDone = [1, 2, 3, 4].every(n => actions.some(a => a.step === n));
-    return { actions: actions.sort((a, b) => a.step - b.step), status: answered ? 'RESPONDED' : allDone ? 'ABANDONED' : 'IN_PROGRESS' };
+    return { actions: actions.sort((a, b) => a.step - b.step), hasAppointment,
+        status: (answered || hasAppointment) ? 'RESPONDED' : allDone ? 'ABANDONED' : 'IN_PROGRESS' };
 }
 
 function openFollowUpImport() {
@@ -864,7 +875,7 @@ async function readFollowUpCsv(file) {
         const p = parseFollowUpNote(note, workDate);
         rows.push({ key: 'r' + i, workDate, consultantName: cons, fullName, phone: fuPhone(col(r, 'Tel.1 Cliente', 'Tel.2 Cliente')),
             email: fuEmail(col(r, 'Email1 Cliente', 'Email2 Cliente')), marca: col(r, 'Marca'), modello: col(r, 'Modello'),
-            note, actions: p.actions, status: p.status, action: 'create' });
+            note, actions: p.actions, status: p.status, hasAppointment: p.hasAppointment, action: 'create' });
     });
     if (!rows.length) { alert('Nessuna riga da importare' + (scartate.length ? ` (${scartate.length} scartate: consulente non in lista o data mancante)` : '.')); return; }
     let dups = {};
@@ -905,7 +916,7 @@ function showFollowUpImportPreview(rows, scartate) {
             <td style="padding:6px">${escFu(r.consultantName)}</td>
             <td style="padding:6px">${escFu(r.marca)} <span style="color:var(--text-secondary)">${escFu((r.modello || '').slice(0, 40))}</span></td>
             ${[1, 2, 3, 4].map(n => { const a = r.actions.find(x => x.step === n); return `<td style="padding:6px;text-align:center" title="${a ? fmtD(a.date) : 'in attesa'}">${a ? ICON[a.outcome] : '<span style="color:var(--text-secondary)">·</span>'}</td>`; }).join('')}
-            <td style="padding:6px">${STATO[r.status]}</td>
+            <td style="padding:6px">${STATO[r.status]}${r.hasAppointment ? '<div style="font-size:11px;color:#5b8cff;font-weight:700;margin-top:2px">📅 Appuntamento</div>' : ''}</td>
             <td style="padding:6px;max-width:220px;color:var(--text-secondary);font-size:11px">${escFu((r.note || '').slice(0, 90))}${(r.note || '').length > 90 ? '…' : ''}</td>
             <td style="padding:6px">${r.dups ? `<select data-act="${i}" class="input-dark" style="font-size:12px;padding:4px 6px">
                 <option value="skip" ${r.action === 'skip' ? 'selected' : ''}>Salta</option>

@@ -181,6 +181,8 @@ public class FollowUpImportController {
                         followUpStepRepository.save(st);
                     }
                 }
+                // "FISS. APP." nelle note: appuntamento fissato
+                if (Boolean.TRUE.equals(r.get("hasAppointment"))) fu.setHasAppointment(true);
                 String prev = fu.getStatus();
                 String stato = str(r.get("status"));
                 if (stato != null && !"IN_PROGRESS".equals(stato)) fu.setStatus(stato);
