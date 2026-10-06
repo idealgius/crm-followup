@@ -88,6 +88,8 @@ async function loadStats() {
 
         loadRecallFollowUpCalendar();
         loadDailyReport();
+        // NUOVO: analisi follow-up (dashboard-fu.js)
+        if (window.FuAnalysis) FuAnalysis.load(from, to, consultant);
 
     } catch (err) {
         console.error('Errore caricamento statistiche:', err);

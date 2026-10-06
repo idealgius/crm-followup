@@ -31,6 +31,10 @@ public interface RecallFollowUpStepRepository extends JpaRepository<RecallFollow
 
     List<RecallFollowUpStep> findByRecallFollowUpAndStepNumber(RecallFollowUp recallFollowUp, Integer stepNumber);
 
+    // NUOVO (dashboard): tutti i tentativi di piu' cicli Recall in una query
+    @Query("SELECT s FROM RecallFollowUpStep s WHERE s.recallFollowUp IN :rfus")
+    List<RecallFollowUpStep> findByRecallFollowUpIn(@Param("rfus") List<RecallFollowUp> rfus);
+
     // NUOVO (fix performance report giornaliero): query mirata + JOIN FETCH
     // per evitare N+1 su recallFollowUp -> originalFollowUp -> customer.
     @Query("SELECT s FROM RecallFollowUpStep s " +

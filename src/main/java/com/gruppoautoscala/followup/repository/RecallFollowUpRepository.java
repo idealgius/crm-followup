@@ -20,4 +20,8 @@ public interface RecallFollowUpRepository extends JpaRepository<RecallFollowUp, 
            "JOIN FETCH fu.user " +
            "WHERE r.originalFollowUp = :originalFollowUp")
     Optional<RecallFollowUp> findByOriginalFollowUp(@Param("originalFollowUp") FollowUp originalFollowUp);
+
+    // NUOVO (dashboard): i cicli Recall dei follow-up di un periodo, in una query
+    @Query("SELECT r FROM RecallFollowUp r WHERE r.originalFollowUp IN :fus")
+    java.util.List<RecallFollowUp> findByOriginalFollowUpIn(@Param("fus") java.util.List<FollowUp> fus);
 }

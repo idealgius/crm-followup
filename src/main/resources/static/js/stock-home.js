@@ -824,14 +824,22 @@
         // filtri: menu a tendina (piu' scelte) e intervalli prezzo / km / giorni
         filt.addEventListener('click', use(e => {
             const btn = e.target.closest('.st-ms > button');
-            if (btn) { const box = btn.parentElement, op = box.classList.contains('open'); filt.querySelectorAll('.st-ms.open').forEach(m => m.classList.remove('open')); if (!op) box.classList.add('open'); return; }
+            if (btn) { const box = btn.parentElement, op = box.classList.contains('open'); filt.querySelectorAll('.st-ms.open').forEach(m => m.classList.remove('open')); if (!op) { box.classList.add('open'); placePop(box); } return; }
             const all = e.target.closest('[data-all]');
-            if (all) { view.sel[all.dataset.all] = new Set(); renderList(all.dataset.all); return; }
+            if (all) { delete view.sel[all.dataset.all]; renderList(all.dataset.all); return; }
+            const none = e.target.closest('[data-none]');
+            if (none) { view.sel[none.dataset.none] = new Set(); renderList(none.dataset.none); return; }
             if (e.target.closest('#stReset')) { view.sel = {}; view.rng = {}; view.psq = {}; renderList(); }
         }));
         filt.addEventListener('change', use(e => {
             const cb = e.target.closest('input[data-ms]');
-            if (cb) { const k = cb.dataset.ms; view.sel[k] = view.sel[k] || new Set(); if (cb.checked) view.sel[k].add(cb.value); else view.sel[k].delete(cb.value); renderList(k); return; }
+            if (cb) {
+                const k = cb.dataset.ms, tutte = [...count(view.base, r => r[k] || '—').keys()];
+                const sel = view.sel[k] || new Set(tutte);
+                if (cb.checked) sel.add(cb.value); else sel.delete(cb.value);
+                if (tutte.every(v => sel.has(v))) delete view.sel[k]; else view.sel[k] = sel;   // tutte spuntate = nessun filtro
+                renderList(k); return;
+            }
         }));
         filt.addEventListener('input', use(e => {
             const ps = e.target.closest('input[data-ps]');
@@ -843,7 +851,7 @@
             const ps = e.target.closest('input[data-ps]'); if (!ps || e.key !== 'Enter') return;
             e.preventDefault();
             const vis = [...ps.closest('.st-pop').querySelectorAll('label[data-n]')].filter(l => l.style.display !== 'none');
-            if (vis.length === 1) vis[0].querySelector('input').click();
+            if (vis.length) { view.sel[ps.dataset.ps] = new Set(vis.map(l => l.querySelector('input').value)); renderList(ps.dataset.ps); }
         }));
     }
     let docBound = false;
@@ -900,22 +908,50 @@
         const b = view.base, filt = ov.querySelector('#stMFilt');
         const ms = MS.filter(([k]) => !(k === 'marca' && view.hasMarca)).map(([k, label]) => {
             const cnt = count(b, r => r[k] || '—'); if (cnt.size < 2) return '';
-            const sel = view.sel[k] || new Set();
-            return `<div class="st-ms ${openKey === k ? 'open' : ''}"><button type="button" class="${sel.size ? 'on' : ''}">${label}${sel.size ? ` (${sel.size})` : ''} ▾</button>
-              <div class="st-pop"><input type="search" class="st-psearch" data-ps="${k}" placeholder="Cerca ${label.toLowerCase()}…" autocomplete="off">
-              ${[...cnt.keys()].sort(cmp).map(v => `<label data-n="${esc(norm(v === '—' ? 'Non indicato' : v))}"><input type="checkbox" data-ms="${k}" value="${esc(v)}" ${sel.has(v) ? 'checked' : ''}><span>${v === '—' ? 'Non indicato' : esc(v)}</span><em>${fmt(cnt.get(v))}</em></label>`).join('')}
-              <p class="st-pnone" style="display:none">Nessun risultato</p>
-              <button type="button" class="st-all" data-all="${k}">Tutti</button></div></div>`;
+            // view.sel[k] = voci VISIBILI (undefined = tutte): all'inizio sono tutte spuntate
+            // e si tolgono quelle che non interessano
+            const sel = view.sel[k];
+            const nOn = sel ? [...cnt.keys()].filter(v => sel.has(v)).length : cnt.size;
+            const filtrato = nOn < cnt.size;
+            return `<div class="st-ms ${openKey === k ? 'open' : ''}"><button type="button" class="${filtrato ? 'on' : ''}">${label}${filtrato ? ` (${nOn}/${cnt.size})` : ''} ▾</button>
+              <div class="st-pop">
+                <div class="st-pop-top"><input type="search" class="st-psearch" data-ps="${k}" placeholder="Cerca ${label.toLowerCase()}…" autocomplete="off">
+                  <div class="st-pop-all"><button type="button" data-all="${k}">Seleziona tutti</button><button type="button" data-none="${k}">Deseleziona tutti</button></div></div>
+                <div class="st-pop-list">
+                ${[...cnt.keys()].sort(cmp).map(v => `<label data-n="${esc(norm(v === '—' ? 'Non indicato' : v))}"><input type="checkbox" data-ms="${k}" value="${esc(v)}" ${!sel || sel.has(v) ? 'checked' : ''}><span>${v === '—' ? 'Non indicato' : esc(v)}</span><em>${fmt(cnt.get(v))}</em></label>`).join('')}
+                <p class="st-pnone" style="display:none">Nessun risultato</p></div></div></div>`;
         }).join('');
         const rng = RNG.map(([k, label]) => `<div class="st-rng"><small>${label}</small><span>
             <input type="number" min="0" placeholder="da" data-rng="${k}_min" value="${view.rng[k + '_min'] ?? ''}">
             <input type="number" min="0" placeholder="a" data-rng="${k}_max" value="${view.rng[k + '_max'] ?? ''}"></span></div>`).join('');
         filt.innerHTML = ms + rng + '<button type="button" class="st-reset" id="stReset">Azzera filtri</button>';
+        // posizione calcolata dopo che l'elenco si e' ridisegnato (la finestra puo' cambiare altezza)
+        const aperto = filt.querySelector('.st-ms.open'); if (aperto) { placePop(aperto); requestAnimationFrame(() => placePop(aperto)); }
         // ricerca dentro i menu: si mantiene quando l'elenco si ridisegna
         filt.querySelectorAll('[data-ps]').forEach(i => { i.value = (view.psq && view.psq[i.dataset.ps]) || ''; applyPopSearch(i); });
         if (openKey && view.psq && view.psq[openKey]) { const i = filt.querySelector(`[data-ps="${openKey}"]`); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }
         if (focusRng) { const i = filt.querySelector(`[data-rng="${focusRng}"]`); if (i) { i.focus(); const l = i.value.length; try { i.setSelectionRange(l, l); } catch (e) { /* number */ } } }
     }
+    // Il menu aperto si posiziona sullo SCHERMO (non dentro la finestra): cosi' non viene
+    // tagliato quando l'elenco delle vetture e' corto o vuoto (es. "Deseleziona tutti").
+    function placePop(box) {
+        const pop = box.querySelector('.st-pop'), r = box.querySelector('button').getBoundingClientRect();
+        const w = Math.min(320, window.innerWidth - 16);
+        const sotto = window.innerHeight - r.bottom - 12, sopra = r.top - 12;
+        const suSopra = sotto < 240 && sopra > sotto;
+        const h = Math.max(160, Math.min(400, suSopra ? sopra : sotto));
+        pop.style.width = w + 'px';
+        pop.style.maxHeight = h + 'px';
+        // se un contenitore ha una trasformazione (es. l'animazione della finestra), "fixed"
+        // e' relativo a quel contenitore: tolgo il suo scostamento
+        let cb = box.parentElement, dx = 0, dy = 0;
+        while (cb && cb !== document.body) { const t = getComputedStyle(cb); if (t.transform !== 'none' || t.filter !== 'none' || t.perspective !== 'none') { const q = cb.getBoundingClientRect(); dx = q.left; dy = q.top; break; } cb = cb.parentElement; }
+        pop.style.left = (Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) - dx) + 'px';
+        pop.style.top = suSopra ? '' : (r.bottom + 6 - dy) + 'px';
+        pop.style.bottom = suSopra ? ((cb && cb !== document.body ? cb.getBoundingClientRect().bottom : window.innerHeight) - r.top + 6) + 'px' : '';
+    }
+    window.addEventListener('resize', () => { const b = document.querySelector('.st-ms.open'); if (b) placePop(b); });
+    document.addEventListener('scroll', e => { const b = document.querySelector('.st-ms.open'); if (b && !e.target.closest?.('.st-pop')) placePop(b); }, true);
     // filtra le voci di un menu: senza accenti e maiuscole, basta una parte del nome ("cit" -> Citroën)
     function applyPopSearch(input) {
         const q = norm(input.value), pop = input.closest('.st-pop'); let n = 0;
@@ -923,7 +959,7 @@
         pop.querySelector('.st-pnone').style.display = n ? 'none' : '';
     }
     function passFilters(r) {
-        for (const [k] of MS) { const sel = view.sel[k]; if (sel && sel.size && !sel.has(r[k] || '—')) return false; }
+        for (const [k] of MS) { const sel = view.sel[k]; if (sel && !sel.has(r[k] || '—')) return false; }
         for (const [k] of RNG) {
             const v = r[k], mn = view.rng[k + '_min'], mx = view.rng[k + '_max'];
             if ((mn != null || mx != null) && (v == null)) return false;

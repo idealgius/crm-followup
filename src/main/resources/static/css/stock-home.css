@@ -226,3 +226,19 @@
 .st-giac-t tr[data-giac]:hover td { background:var(--cg-grey-soft); }
 .st-giac-t td i { display:inline-block; width:10px; height:10px; border-radius:3px; margin-right:8px; }
 @media (max-width:1000px) { .st-giac-grid { grid-template-columns:1fr; } }
+
+/* ===== menu dei filtri: ricerca e "seleziona/deseleziona tutti" fissi in alto, elenco che scorre sotto ===== */
+.st-ms .st-pop { display:none; flex-direction:column; padding:0; width:300px; max-height:380px; overflow:hidden; }
+.st-ms.open .st-pop { display:flex; }
+.st-pop-top { padding:8px 8px 6px; border-bottom:1px solid var(--cg-line); background:var(--cg-card); }
+.cg-m-tools .st-pop .st-psearch, .st-pop .st-psearch { position:static; margin:0 0 6px; box-shadow:none; }
+.st-pop-all { display:flex; gap:6px; }
+.st-pop-all button { flex:1; border:0; border-radius:8px; padding:6px; background:var(--cg-grey-soft); color:var(--cg-ink) !important; font-weight:700; font-size:11.5px !important; cursor:pointer; }
+.st-pop-all button:hover { background:var(--cg-line); }
+.st-pop-list { overflow:auto; padding:6px 8px 8px; flex:1; scrollbar-width:thin; scrollbar-color:var(--cg-line) transparent; }
+.st-pop-list::-webkit-scrollbar { width:6px; }
+.st-pop-list::-webkit-scrollbar-thumb { background:var(--cg-line); border-radius:6px; }
+.st-pop-list::-webkit-scrollbar-track { background:transparent; }
+.st-pop .st-all { display:none; }
+/* menu aperto fissato allo schermo (posizione calcolata in placePop): mai tagliato dalla finestra */
+.st-ms.open .st-pop { position:fixed; margin-top:0; z-index:10080; }
