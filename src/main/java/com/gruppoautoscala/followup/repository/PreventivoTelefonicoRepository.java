@@ -32,4 +32,13 @@ public interface PreventivoTelefonicoRepository extends JpaRepository<Preventivo
     // Deduplica import: controlla se esiste gia' un preventivo per questo
     // identificativo lead prima di crearne uno nuovo.
     java.util.Optional<PreventivoTelefonico> findBySourceLeadId(String sourceLeadId);
+
+    // NUOVO: preventivi "in sospeso" — ancora nello stato iniziale GENERATO e
+    // caricati PRIMA di :limite (inizio di oggi): dal giorno dopo il caricamento
+    // in poi, weekend compreso. I piu' vecchi per primi.
+    @Query("SELECT p FROM PreventivoTelefonico p " +
+           "JOIN FETCH p.user " +
+           "WHERE p.status = 'GENERATO' AND p.createdAt < :limite " +
+           "ORDER BY p.createdAt ASC")
+    List<PreventivoTelefonico> findInSospeso(@Param("limite") LocalDateTime limite);
 }

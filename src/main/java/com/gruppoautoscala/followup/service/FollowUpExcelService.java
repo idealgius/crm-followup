@@ -43,7 +43,20 @@ public class FollowUpExcelService {
     @Autowired private FollowUpStepRepository followUpStepRepository;
 
     public byte[] export(LocalDate from, LocalDate to, Set<String> consulenti, String generatoDa) throws Exception {
-        List<FollowUp> fus = followUpRepository.findByWorkDateBetween(from, to).stream()
+        return export(from, to, consulenti, generatoDa, false);
+    }
+
+    // perCaricamento = true: solo i follow-up INSERITI o IMPORTATI tra "from" e "to"
+    // (data di caricamento), qualunque sia il giorno del follow-up.
+    // createdAt e' salvato con l'ora del server: i limiti del giorno italiano
+    // vengono convertiti nel fuso del server.
+    public byte[] export(LocalDate from, LocalDate to, Set<String> consulenti, String generatoDa, boolean perCaricamento) throws Exception {
+        List<FollowUp> base = perCaricamento
+                ? followUpRepository.findByCreatedAtRange(
+                        from.atStartOfDay(ITALY).withZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime(),
+                        to.plusDays(1).atStartOfDay(ITALY).withZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime())
+                : followUpRepository.findByWorkDateBetween(from, to);
+        List<FollowUp> fus = base.stream()
                 .filter(f -> consulenti == null || consulenti.isEmpty() || consulenti.contains(nz(f.getConsultantName())))
                 .sorted(Comparator.comparing(FollowUp::getWorkDate).thenComparing(f -> nz(f.getCustomer().getFullName()).toLowerCase()))
                 .collect(Collectors.toList());
@@ -55,7 +68,7 @@ public class FollowUpExcelService {
 
         try (XSSFWorkbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Styles st = new Styles(wb);
-            String periodo = from.equals(to) ? from.format(D) : from.format(D) + " - " + to.format(D);
+            String periodo = (perCaricamento ? "caricati " : "") + (from.equals(to) ? (perCaricamento ? "il " : "") + from.format(D) : (perCaricamento ? "dal " : "") + from.format(D) + (perCaricamento ? " al " : " - ") + to.format(D));
 
             // ---------- Riepilogo ----------
             Sheet rs = wb.createSheet("Riepilogo");
@@ -113,7 +126,7 @@ public class FollowUpExcelService {
         r++;
         List<String> head = new ArrayList<>();
         if (conConsulente) head.add("Consulente");
-        head.addAll(List.of("Data", "Cliente", "Telefono", "Email", "Vettura", "Esito", "Appuntamento",
+        head.addAll(List.of("Data", "Caricato il", "Cliente", "Telefono", "Email", "Vettura", "Esito", "Appuntamento",
                 "Step 1 · Chiamata mattina", "Step 2 · Chiamata pomeriggio", "Step 3 · WhatsApp / Mail", "Step 4 · Chiamata GG3",
                 "Note", "Creato da"));
         Row h = sh.createRow(r++);
@@ -127,6 +140,7 @@ public class FollowUpExcelService {
             CellStyle t = zebra ? st.textZ : st.text, w = zebra ? st.wrapZ : st.wrap;
             if (conConsulente) cell(row, c++, nz(f.getConsultantName()), t);
             cell(row, c++, f.getWorkDate().format(D), t);
+            cell(row, c++, f.getCreatedAt() != null ? f.getCreatedAt().atZone(ZoneId.systemDefault()).withZoneSameInstant(ITALY).format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")) : "", t);
             cell(row, c++, nz(f.getCustomer().getFullName()), zebra ? st.textBZ : st.textB);
             cell(row, c++, nz(f.getCustomer().getPhone()), t);
             cell(row, c++, nz(f.getCustomer().getEmail()), t);
@@ -158,10 +172,10 @@ public class FollowUpExcelService {
             cell(row, c++, (Boolean.TRUE.equals(f.getImported()) ? "Import da " : "") + (f.getUser() != null ? f.getUser().getFullName() : ""), t);
             zebra = !zebra;
         }
-        int[] widths = conConsulente ? new int[]{22, 12, 24, 16, 28, 34, 14, 13, 24, 24, 24, 24, 60, 26}
-                                     : new int[]{12, 24, 16, 28, 34, 14, 13, 24, 24, 24, 24, 60, 26};
+        int[] widths = conConsulente ? new int[]{22, 12, 17, 24, 16, 28, 34, 14, 13, 24, 24, 24, 24, 60, 26}
+                                     : new int[]{12, 17, 24, 16, 28, 34, 14, 13, 24, 24, 24, 24, 60, 26};
         for (int i = 0; i < widths.length; i++) sh.setColumnWidth(i, widths[i] * 256);
-        sh.createFreezePane(conConsulente ? 3 : 2, firstData);
+        sh.createFreezePane(conConsulente ? 4 : 3, firstData);
         if (r > firstData) sh.setAutoFilter(new CellRangeAddress(firstData - 1, r - 1, 0, head.size() - 1));
         sh.getPrintSetup().setLandscape(true);
         sh.setFitToPage(true);

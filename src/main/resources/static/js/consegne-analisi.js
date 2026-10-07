@@ -507,7 +507,7 @@
         afterDatasetsDraw(chart) {
             const o = chart.options.plugins.anBarLabels; if (!o) return;
             const { ctx } = chart, ds = chart.data.datasets[0], meta = chart.getDatasetMeta(0);
-            ctx.save(); ctx.font = '600 11px Inter, system-ui, sans-serif'; ctx.fillStyle = o.color; ctx.textBaseline = 'middle';
+            ctx.save(); ctx.font = '600 11px Inter, system-ui, sans-serif'; ctx.fillStyle = document.documentElement.getAttribute('data-theme') === 'dark' ? '#e8edf3' : '#1f2d3d'; ctx.textBaseline = 'middle';   // colore del tema attuale
             meta.data.forEach((el, i) => {
                 const v = ds.data[i]; if (!v) return;
                 const t = `${o.money ? euro(v) : A().fmt(v)} · ${pctS(v, o.tot)}`;
@@ -788,5 +788,11 @@
     function refresh() {
         if (el && el.style.display !== 'none' && el.dataset.ready) { csvSig = null; show(el); }
     }
+    // Cambio tema (giorno / notte): ridisegno i grafici con i colori del nuovo tema
+    new MutationObserver(() => {
+        if (!el || !el.offsetParent || !rows.length) return;
+        requestAnimationFrame(() => renderGrid(filtered()));
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
     window.ConsegneAnalisi = { show, refresh };
 })();

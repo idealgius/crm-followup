@@ -44,7 +44,8 @@ public class FollowUpController {
     // GET /api/followups/export?from=2026-10-01&to=2026-10-05&consultants=Scala Rosario,Fiore Guido
     @GetMapping("/export")
     public ResponseEntity<?> exportExcel(@RequestParam String from, @RequestParam(required = false) String to,
-                                         @RequestParam(required = false) String consultants, HttpSession session) {
+                                         @RequestParam(required = false) String consultants,
+                                         @RequestParam(required = false, defaultValue = "giorno") String modo, HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");
         String role = (String) session.getAttribute("userRole");
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
@@ -57,8 +58,9 @@ public class FollowUpController {
             Set<String> cons = new LinkedHashSet<>();
             if (consultants != null) for (String c : consultants.split(",")) if (!c.isBlank()) cons.add(c.trim());
             String chi = userRepository.findById(userId).map(User::getFullName).orElse(null);
-            byte[] xlsx = followUpExcelService.export(dal, al, cons, chi);
-            String nome = "followup_" + dal + (al.equals(dal) ? "" : "_" + al) + ".xlsx";
+            boolean caricati = "caricati".equals(modo);   // solo quelli inseriti/importati nelle date scelte
+            byte[] xlsx = followUpExcelService.export(dal, al, cons, chi, caricati);
+            String nome = "followup_" + (caricati ? "caricati_" : "") + dal + (al.equals(dal) ? "" : "_" + al) + ".xlsx";
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + nome + "\"")
                     .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))

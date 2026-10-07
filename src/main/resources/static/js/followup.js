@@ -960,32 +960,72 @@ function showFollowUpImportPreview(rows, scartate) {
    ===================================================================== */
 function openFollowUpExport() {
     const iso = d => d.toISOString().slice(0, 10);
-    const day = document.getElementById('workDateFilter')?.value || iso(new Date());
-    const cons = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('consultantFilterMulti') : [];
+    const oggi = iso(new Date());
+    const day = document.getElementById('workDateFilter')?.value || oggi;
+    const filtrati = typeof getMultiSelectValues === 'function' ? getMultiSelectValues('consultantFilterMulti') : [];
     const ov = document.createElement('div');
     ov.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px';
-    ov.innerHTML = `<div style="background:var(--card-bg,#1a1d26);color:var(--text-primary,#fff);border:1px solid var(--border-color,#333);border-radius:16px;width:min(480px,100%);padding:20px 22px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
-        <div style="font-size:18px;font-weight:800;margin-bottom:4px">📊 Export Excel follow-up</div>
-        <div style="font-size:12.5px;color:var(--text-secondary);margin-bottom:14px">Un foglio di riepilogo, un foglio per ogni consulente con clienti, vettura, esiti degli step e note, e un foglio con tutti.</div>
-        <div style="display:flex;gap:10px;margin-bottom:10px">
+    const opt = (name, val, chk, title, sub) => `<label class="fuex-opt"><input type="radio" name="${name}" value="${val}" ${chk ? 'checked' : ''}><span><b>${title}</b><em>${sub}</em></span></label>`;
+    ov.innerHTML = `<style>
+      .fuex-box{background:var(--card-bg,#1a1d26);color:var(--text-primary,#fff);border:1px solid var(--border-color,#333);border-radius:16px;width:min(560px,100%);max-height:92vh;overflow:auto;padding:20px 22px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+      .fuex-sec{margin-top:16px} .fuex-sec>h4{margin:0 0 8px;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--text-secondary)}
+      .fuex-opt{display:flex;gap:10px;align-items:flex-start;padding:9px 11px;border:1px solid var(--border-color,#333);border-radius:10px;margin-bottom:6px;cursor:pointer}
+      .fuex-opt:has(input:checked){border-color:#f0c040;background:rgba(240,192,64,.07)}
+      .fuex-opt input{margin-top:3px} .fuex-opt b{display:block;font-size:13.5px} .fuex-opt em{display:block;font-style:normal;font-size:12px;color:var(--text-secondary);margin-top:2px}
+      .fuex-cons{display:none;margin-top:6px;border:1px solid var(--border-color,#333);border-radius:10px;overflow:hidden}
+      .fuex-cons.on{display:block} .fuex-cons-top{display:flex;gap:6px;padding:8px;border-bottom:1px solid var(--border-color,#333)}
+      .fuex-cons-top input{flex:1;min-width:0} .fuex-cons-list{max-height:200px;overflow:auto;padding:6px 8px;columns:2;column-gap:10px}
+      .fuex-cons-list label{display:flex;gap:7px;align-items:center;font-size:12.5px;padding:4px 2px;break-inside:avoid;cursor:pointer}
+    </style>
+    <div class="fuex-box">
+      <div style="font-size:18px;font-weight:800">📊 Export Excel follow-up</div>
+      <div style="font-size:12.5px;color:var(--text-secondary);margin-top:4px">Riepilogo + un foglio per ogni consulente (clienti, vettura, esiti degli step, note) + un foglio con tutti.</div>
+      <div class="fuex-sec"><h4>Cosa esportare</h4>
+        ${opt('fuexModo', 'giorno', true, 'Follow-up del giorno / periodo', 'Tutti i follow-up con data nel periodo scelto')}
+        ${opt('fuexModo', 'caricati', false, 'Solo quelli caricati nel giorno / periodo', 'Solo i follow-up inseriti o importati in quelle date (es. "caricati oggi"), qualunque sia il giorno del follow-up')}
+      </div>
+      <div class="fuex-sec"><h4 id="fuExDateTitle">Giorno del follow-up</h4>
+        <div style="display:flex;gap:10px">
           <label style="flex:1;font-size:12px;font-weight:700">Dal<input type="date" id="fuExFrom" class="input-dark" value="${day}" style="width:100%;margin-top:4px"></label>
           <label style="flex:1;font-size:12px;font-weight:700">Al<input type="date" id="fuExTo" class="input-dark" value="${day}" style="width:100%;margin-top:4px"></label></div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
-          <button type="button" class="btn-small" data-q="day">Giorno selezionato</button><button type="button" class="btn-small" data-q="week">Questa settimana</button>
-          <button type="button" class="btn-small" data-q="month">Questo mese</button><button type="button" class="btn-small" data-q="prev">Mese scorso</button></div>
-        <label style="display:flex;gap:8px;align-items:center;font-size:12.5px;margin-bottom:16px;${cons.length ? '' : 'opacity:.5'}">
-          <input type="checkbox" id="fuExCons" ${cons.length ? 'checked' : 'disabled'}> Solo i consulenti filtrati${cons.length ? ` (${cons.length}: ${escFu(cons.join(', '))})` : ' (nessun filtro attivo: tutti)'}</label>
-        <p id="fuExMsg" style="font-size:12px;color:#ff5252;margin:0 0 8px;min-height:14px"></p>
-        <div style="display:flex;justify-content:flex-end;gap:10px">
-          <button type="button" data-x class="btn-secondary" style="padding:10px 18px">Annulla</button>
-          <button type="button" data-go class="btn-gold" style="padding:10px 22px">⬇ Scarica Excel</button></div></div>`;
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+          <button type="button" class="btn-small" data-q="oggi">Oggi</button><button type="button" class="btn-small" data-q="day">Giorno selezionato</button>
+          <button type="button" class="btn-small" data-q="week">Questa settimana</button><button type="button" class="btn-small" data-q="month">Questo mese</button><button type="button" class="btn-small" data-q="prev">Mese scorso</button></div>
+      </div>
+      <div class="fuex-sec"><h4>Consulenti</h4>
+        ${opt('fuexCons', 'tutti', !filtrati.length, 'Tutti i consulenti', 'Un foglio per ognuno')}
+        ${opt('fuexCons', 'scelti', !!filtrati.length, 'Solo i consulenti che scelgo', filtrati.length ? `Già selezionati quelli filtrati nella pagina (${filtrati.length})` : 'Scegli dall\'elenco qui sotto')}
+        <div class="fuex-cons ${filtrati.length ? 'on' : ''}" id="fuExConsBox">
+          <div class="fuex-cons-top"><input type="search" class="input-dark" id="fuExConsQ" placeholder="Cerca consulente…" style="padding:6px 10px">
+            <button type="button" class="btn-small" data-ca="1">Tutti</button><button type="button" class="btn-small" data-ca="0">Nessuno</button></div>
+          <div class="fuex-cons-list">${CONSULTANTI_LIST.map(c => `<label data-n="${c.toLowerCase()}"><input type="checkbox" value="${c}" ${filtrati.includes(c) ? 'checked' : ''}>${c}</label>`).join('')}</div>
+        </div>
+      </div>
+      <p id="fuExMsg" style="font-size:12px;color:#ff5252;margin:12px 0 0;min-height:14px"></p>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:8px">
+        <button type="button" data-x class="btn-secondary" style="padding:10px 18px">Annulla</button>
+        <button type="button" data-go class="btn-gold" style="padding:10px 22px">⬇ Scarica Excel</button></div>
+    </div>`;
     document.body.appendChild(ov);
-    const set = (a, b) => { ov.querySelector('#fuExFrom').value = iso(a); ov.querySelector('#fuExTo').value = iso(b); };
+    const $ = sel => ov.querySelector(sel);
+    const set = (a, b) => { $('#fuExFrom').value = iso(a); $('#fuExTo').value = iso(b); };
+    ov.addEventListener('change', e => {
+        if (e.target.name === 'fuexModo') {
+            const car = e.target.value === 'caricati';
+            $('#fuExDateTitle').textContent = car ? 'Giorno di caricamento (inserimento / import)' : 'Giorno del follow-up';
+            if (car) { $('#fuExFrom').value = oggi; $('#fuExTo').value = oggi; }
+        }
+        if (e.target.name === 'fuexCons') $('#fuExConsBox').classList.toggle('on', e.target.value === 'scelti');
+    });
+    $('#fuExConsQ').addEventListener('input', e => { const q = e.target.value.toLowerCase(); ov.querySelectorAll('.fuex-cons-list label').forEach(l => { l.style.display = !q || l.dataset.n.includes(q) ? '' : 'none'; }); });
     ov.addEventListener('click', async e => {
         if (e.target === ov || e.target.closest('[data-x]')) { ov.remove(); return; }
+        const ca = e.target.closest('[data-ca]');
+        if (ca) { ov.querySelectorAll('.fuex-cons-list input').forEach(i => { if (i.closest('label').style.display !== 'none') i.checked = ca.dataset.ca === '1'; }); return; }
         const q = e.target.closest('[data-q]');
         if (q) {
             const t = new Date(day + 'T12:00:00');
+            if (q.dataset.q === 'oggi') { const o = new Date(); set(o, o); }
             if (q.dataset.q === 'day') set(t, t);
             if (q.dataset.q === 'week') { const m = new Date(t); m.setDate(t.getDate() - ((t.getDay() + 6) % 7)); const d = new Date(m); d.setDate(m.getDate() + 6); set(m, d); }
             if (q.dataset.q === 'month') set(new Date(t.getFullYear(), t.getMonth(), 1, 12), new Date(t.getFullYear(), t.getMonth() + 1, 0, 12));
@@ -993,22 +1033,26 @@ function openFollowUpExport() {
             return;
         }
         const go = e.target.closest('[data-go]'); if (!go) return;
-        const from = ov.querySelector('#fuExFrom').value, to = ov.querySelector('#fuExTo').value;
-        if (!from || !to) { ov.querySelector('#fuExMsg').textContent = 'Scegli le date.'; return; }
-        const params = new URLSearchParams({ from, to });
-        if (ov.querySelector('#fuExCons').checked && cons.length) params.set('consultants', cons.join(','));
-        go.disabled = true; go.textContent = 'Preparazione…';
+        const from = $('#fuExFrom').value, to = $('#fuExTo').value;
+        const modo = ov.querySelector('input[name="fuexModo"]:checked').value;
+        const scelti = ov.querySelector('input[name="fuexCons"]:checked').value === 'scelti';
+        const cons = [...ov.querySelectorAll('.fuex-cons-list input:checked')].map(i => i.value);
+        if (!from || !to) { $('#fuExMsg').textContent = 'Scegli le date.'; return; }
+        if (scelti && !cons.length) { $('#fuExMsg').textContent = 'Scegli almeno un consulente (o "Tutti i consulenti").'; return; }
+        const params = new URLSearchParams({ from, to, modo });
+        if (scelti) params.set('consultants', cons.join(','));
+        go.disabled = true; go.textContent = 'Preparazione…'; $('#fuExMsg').textContent = '';
         try {
             const res = await fetch('/api/followups/export?' + params.toString());
-            if (!res.ok) { const d = await res.json().catch(() => ({})); ov.querySelector('#fuExMsg').textContent = d.error || 'Export non riuscito'; return; }
+            if (!res.ok) { const d = await res.json().catch(() => ({})); $('#fuExMsg').textContent = d.error || 'Export non riuscito'; return; }
             const blob = await res.blob();
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = `followup_${from}${to !== from ? '_' + to : ''}.xlsx`;
+            a.download = `followup_${modo === 'caricati' ? 'caricati_' : ''}${from}${to !== from ? '_' + to : ''}.xlsx`;
             document.body.appendChild(a); a.click(); a.remove();
             setTimeout(() => URL.revokeObjectURL(a.href), 2000);
             ov.remove();
-        } catch (err) { ov.querySelector('#fuExMsg').textContent = 'Errore di connessione'; }
+        } catch (err) { $('#fuExMsg').textContent = 'Errore di connessione'; }
         finally { go.disabled = false; go.textContent = '⬇ Scarica Excel'; }
     });
 }

@@ -165,7 +165,7 @@
 
     const ink = () => getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#98a6b6';
     const ink1 = () => getComputedStyle(document.body).color || '#e8edf3';
-    const grid = 'rgba(140,150,170,.15)';
+    const gridC = () => document.documentElement.getAttribute('data-theme') === 'light' ? 'rgba(0,0,0,.08)' : 'rgba(140,150,170,.15)';
     const barLabels = {
         id: 'dfuBarLabels',
         afterDatasetsDraw(ch) {
@@ -204,7 +204,7 @@
             cfg = { type: 'line', data: { labels: P.keys.map(P.label), datasets: voci.map(v => ({ label: v.label, data: P.keys.map(k => v.list.filter(r => P.keyOf(r.workDate) === k).length),
                     borderColor: v.color, backgroundColor: v.color, tension: 0, pointRadius: 3, borderWidth: 2.2 })) },
                 options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: ink(), usePointStyle: true, boxWidth: 8, padding: 12 } } },
-                    scales: { x: { ticks: { color: ink(), maxRotation: 0, autoSkip: true }, grid: { display: false } }, y: { beginAtZero: true, ticks: { color: ink(), precision: 0 }, grid: { color: grid } } },
+                    scales: { x: { ticks: { color: ink(), maxRotation: 0, autoSkip: true }, grid: { display: false } }, y: { beginAtZero: true, ticks: { color: ink(), precision: 0 }, grid: { color: gridC() } } },
                     onClick: (e, els) => { if (!els.length) return; const v = voci[els[0].datasetIndex], k = P.keys[els[0].index];
                         showList(`${c.t} · ${v.label} · ${P.label(k)}`, v.list.filter(r => P.keyOf(r.workDate) === k)); } } };
         } else if (c.id === 'cons' && tipo === 'bar') {
@@ -214,7 +214,7 @@
                     .concat([{ label: 'Appuntamenti', data: voci.map(v => v.list.filter(r => r.appointment).length), backgroundColor: '#f4c84a', stack: 'a', borderRadius: 4, maxBarThickness: 8 }]) },
                 options: { indexAxis: 'y', maintainAspectRatio: false,
                     plugins: { legend: { position: 'top', labels: { color: ink(), usePointStyle: true, boxWidth: 8 } }, tooltip: { callbacks: { label: t => ` ${t.dataset.label}: ${fmt(t.raw)} · ${pct(t.raw, voci[t.dataIndex].list.length)}` } } },
-                    scales: { x: { stacked: true, beginAtZero: true, ticks: { color: ink(), precision: 0 }, grid: { color: grid } }, y: { stacked: true, ticks: { color: ink(), autoSkip: false }, grid: { display: false } } },
+                    scales: { x: { stacked: true, beginAtZero: true, ticks: { color: ink(), precision: 0 }, grid: { color: gridC() } }, y: { stacked: true, ticks: { color: ink(), autoSkip: false }, grid: { display: false } } },
                     onClick: (e, els) => { if (!els.length) return; const v = voci[els[0].index], s = els[0].datasetIndex;
                         if (s === 3) showList(`${v.label} · appuntamenti`, v.list.filter(r => r.appointment)); else showList(`${v.label} · ${ser[s][0]}`, v.list.filter(ser[s][1])); } } };
         } else {
@@ -224,8 +224,8 @@
                     plugins: { legend: { display: false }, dfuBarLabels: tipo === 'bar' ? { tot: base } : false,
                         tooltip: { callbacks: { label: t => ` ${fmt(t.raw)} clienti · ${pct(t.raw, base)}` } } },
                     scales: tipo === 'bar' ? (horiz
-                        ? { x: { beginAtZero: true, ticks: { color: ink(), precision: 0 }, grid: { color: grid } }, y: { ticks: { color: ink(), autoSkip: false }, grid: { display: false } } }
-                        : { y: { beginAtZero: true, ticks: { color: ink(), precision: 0 }, grid: { color: grid } }, x: { ticks: { color: ink(), autoSkip: false, maxRotation: 0, callback: function (v) { const s = String(this.getLabelForValue(v)); return s.length > 14 ? s.slice(0, 13) + '…' : s; } }, grid: { display: false } } }) : {},
+                        ? { x: { beginAtZero: true, ticks: { color: ink(), precision: 0 }, grid: { color: gridC() } }, y: { ticks: { color: ink(), autoSkip: false }, grid: { display: false } } }
+                        : { y: { beginAtZero: true, ticks: { color: ink(), precision: 0 }, grid: { color: gridC() } }, x: { ticks: { color: ink(), autoSkip: false, maxRotation: 0, callback: function (v) { const s = String(this.getLabelForValue(v)); return s.length > 14 ? s.slice(0, 13) + '…' : s; } }, grid: { display: false } } }) : {},
                     onClick: (e, els) => { if (els.length) open(voci[els[0].index]); } },
                 plugins: [barLabels] };
         }
@@ -393,6 +393,10 @@
         if (document.getElementById('dfuStyle')) return;
         const st = document.createElement('style'); st.id = 'dfuStyle'; st.textContent = CSS; document.head.appendChild(st);
     }
+
+    // Cambio tema (giorno / notte): ridisegno con i colori del nuovo tema
+    new MutationObserver(() => { if (boxEl && boxEl.offsetParent && rows.length) requestAnimationFrame(render); })
+        .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
     window.FuAnalysis = { load };
 })();

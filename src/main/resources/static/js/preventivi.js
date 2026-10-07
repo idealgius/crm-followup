@@ -220,6 +220,16 @@ function preventivoRef(p) {
 const TERMINAL_STATUSES = ['NON_INTERESSATO', 'CHIUSA', 'FALLITA'];
 const TERMINAL_ICONS = { NON_INTERESSATO: '🙅', CHIUSA: '✅', FALLITA: '❌' };
 
+// NUOVO: preventivo "in sospeso" = ancora GENERATO dal giorno dopo il caricamento
+// (weekend compreso). Restituisce i giorni di attesa, oppure 0 se non e' in sospeso.
+function preventivoGiorniSospeso(p) {
+    if (p.status !== 'GENERATO' || !p.createdAt) return 0;
+    const oggi = new Date(); oggi.setHours(0, 0, 0, 0);
+    const c = new Date(p.createdAt.split('T')[0] + 'T00:00:00');
+    const g = Math.round((oggi - c) / 864e5);
+    return g >= 1 ? g : 0;
+}
+
 function renderPreventiviList(tipo, containerId, countId) {
     const container = document.getElementById(containerId);
     const countEl = document.getElementById(countId);
@@ -300,12 +310,16 @@ function renderPreventiviList(tipo, containerId, countId) {
                 <button onclick="event.stopPropagation();changePreventivoStatus(${p.id},'FALLITA')" class="preventivo-pill-btn outline-red">❌ Fallita</button>`;
         }
 
-        return `<div class="preventivo-card ${cardClass}" data-preventivo-id="${p.id}" onclick="togglePreventivoDetail(${p.id})">
+        const giorniSosp = preventivoGiorniSospeso(p);
+        const sospesoBadge = giorniSosp
+            ? `<span class="pvs-badge ${giorniSosp >= 3 ? 'alto' : ''}" title="Ancora in 'Preventivo telefonico generato' dal giorno dopo il caricamento" style="margin-left:8px">⏰ In sospeso da ${giorniSosp} ${giorniSosp === 1 ? 'giorno' : 'giorni'}</span>`
+            : '';
+        return `<div class="preventivo-card ${cardClass} ${giorniSosp ? 'pvs-sospeso' + (giorniSosp >= 3 ? ' alto' : '') : ''}" data-preventivo-id="${p.id}" onclick="togglePreventivoDetail(${p.id})">
             <div class="preventivo-header">
                 <div class="preventivo-client">
                     <div class="preventivo-avatar ${cardClass}">${initials}</div>
                     <div>
-                        <div class="preventivo-name-row"><span class="preventivo-name">${p.clienteNome} ${p.clienteCognome}</span><span class="preventivo-ref">${preventivoRef(p)}</span></div>
+                        <div class="preventivo-name-row"><span class="preventivo-name">${p.clienteNome} ${p.clienteCognome}</span><span class="preventivo-ref">${preventivoRef(p)}</span>${sospesoBadge}</div>
                         <div class="preventivo-meta">${metaLine1}</div>
                         <div class="preventivo-meta">${metaLine2}</div>
                     </div>

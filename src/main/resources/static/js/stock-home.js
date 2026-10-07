@@ -667,7 +667,7 @@
         afterDatasetsDraw(chart) {
             const o = chart.options.plugins.stBarLabels; if (!o || !o.on) return;
             const { ctx } = chart, ds = chart.data.datasets[0], meta = chart.getDatasetMeta(0);
-            ctx.save(); ctx.font = '600 11px Inter, system-ui, sans-serif'; ctx.fillStyle = o.color; ctx.textBaseline = 'middle';
+            ctx.save(); ctx.font = '600 11px Inter, system-ui, sans-serif'; ctx.fillStyle = (rootEl && getComputedStyle(rootEl).getPropertyValue('--cg-ink').trim()) || o.color; ctx.textBaseline = 'middle';   // colore letto al momento: giusto anche dopo il cambio tema
             meta.data.forEach((el, i) => {
                 const v = ds.data[i]; if (!v) return;
                 const t = `${fmt(v)} · ${pctS(v, o.tot)}`;
@@ -1066,6 +1066,13 @@
         if (!rows.length) rootEl.querySelector('#stBody').innerHTML = '<div class="cg-card cg-empty"><p>Caricamento stock…</p></div>';
         reload();
     }
+
+    // Cambio tema (giorno / notte): i grafici vanno ridisegnati con i colori del nuovo tema
+    // (testi, numeri sulle barre, griglie), altrimenti restano quelli del tema precedente.
+    new MutationObserver(() => {
+        if (!rootEl || !rootEl.offsetParent || !charts.length) return;
+        requestAnimationFrame(() => { destroyCharts(); drawCharts(); });
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
     window.StockHome = { init };
 })();

@@ -31,6 +31,10 @@ public interface FollowUpRepository extends JpaRepository<FollowUp, Long> {
     @Query("SELECT f FROM FollowUp f JOIN FETCH f.customer JOIN FETCH f.user WHERE f.workDate BETWEEN :from AND :to")
     List<FollowUp> findByWorkDateBetween(@Param("from") LocalDate from, @Param("to") LocalDate to);
 
+    // NUOVO (export "caricati in quel giorno"): follow-up inseriti o importati tra due istanti
+    @Query("SELECT f FROM FollowUp f JOIN FETCH f.customer JOIN FETCH f.user WHERE f.createdAt >= :from AND f.createdAt < :to")
+    List<FollowUp> findByCreatedAtRange(@Param("from") java.time.LocalDateTime from, @Param("to") java.time.LocalDateTime to);
+
     @Query("SELECT f FROM FollowUp f JOIN FETCH f.customer JOIN FETCH f.user WHERE f.user = :user AND f.workDate BETWEEN :from AND :to")
     List<FollowUp> findByUserAndWorkDateBetween(@Param("user") User user, @Param("from") LocalDate from, @Param("to") LocalDate to);
 
