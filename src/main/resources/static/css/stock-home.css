@@ -242,3 +242,40 @@
 .st-pop .st-all { display:none; }
 /* menu aperto fissato allo schermo (posizione calcolata in placePop): mai tagliato dalla finestra */
 .st-ms.open .st-pop { position:fixed; margin-top:0; z-index:10080; }
+
+/* ===== Giacenza per marchio e vetture critiche ===== */
+.st-gm-sum { margin:6px 0 10px; font-size:13px; color:var(--cg-ink-2); }
+.st-gm-sum b { color:var(--cg-ink); }
+.st-gm-sum .st-gm-warn { color:#e5484d; }
+.st-gm-rows { display:flex; flex-direction:column; }
+.st-gm-row { border-bottom:1px solid var(--cg-line); }
+.st-gm-head { width:100%; display:grid; grid-template-columns:minmax(150px,1.1fr) minmax(120px,2fr) 70px minmax(150px,1.2fr) 18px; gap:12px; align-items:center;
+  border:0; background:none; color:inherit; font:inherit; text-align:left; padding:10px 6px; cursor:pointer; border-radius:10px; }
+.st-gm-head:hover { background:var(--cg-grey-soft); }
+.st-gm-name { font-weight:800; font-size:13.5px; min-width:0; }
+.st-gm-name em { display:block; font-style:normal; font-weight:500; font-size:11.5px; color:var(--cg-ink-2); margin-top:2px; }
+.st-gm-bar { height:12px; border-radius:6px; background:var(--cg-grey-soft); overflow:hidden; }
+.st-gm-bar i { display:block; height:100%; border-radius:6px; }
+.st-gm-val { text-align:right; font-size:14px; }
+.st-gm-tags { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+.st-gm-tag { font-size:11px; font-weight:800; padding:3px 8px; border-radius:999px; background:rgba(240,160,48,.16); color:#d98a1e; white-space:nowrap; }
+.st-gm-tag.crit { background:rgba(229,72,77,.15); color:#e5484d; }
+.st-gm-arr { color:var(--cg-ink-2); transition:transform .2s; }
+.st-gm-row.open .st-gm-arr { transform:rotate(90deg); }
+.st-gm-det { display:none; padding:4px 6px 14px 6px; }
+.st-gm-row.open .st-gm-det { display:block; }
+.st-gm-det h4 { margin:12px 0 6px; font-size:12px; letter-spacing:.6px; text-transform:uppercase; color:var(--cg-ink-2); }
+.st-gm-det h4 small { text-transform:none; letter-spacing:0; font-weight:500; }
+.st-gm-it { display:block; width:100%; text-align:left; border:1.5px solid var(--cg-line); background:var(--cg-bg); color:inherit; font:inherit; border-radius:12px; padding:9px 12px; margin-bottom:6px; cursor:pointer; }
+.st-gm-it:hover { border-color:var(--cg-teal); }
+.st-gm-it.crit { border-color:rgba(229,72,77,.45); background:rgba(229,72,77,.06); }
+.st-gm-it > b { display:block; font-size:13px; }
+.st-gm-it > b small { font-weight:500; color:var(--cg-ink-2); }
+.st-gm-it > span { display:block; font-size:12px; color:var(--cg-ink-2); margin-top:2px; }
+.st-gm-it > span b { color:var(--cg-ink); }
+.st-gm-it ul { margin:6px 0 0 16px; padding:0; font-size:12px; }
+.st-gm-it li { margin:2px 0; }
+.st-gm-all { border:0; background:none; color:var(--cg-teal); font-weight:700; cursor:pointer; padding:6px 0; font-size:12.5px; }
+@media (max-width:760px) { .st-gm-head { grid-template-columns:1fr 70px 18px; } .st-gm-bar, .st-gm-tags { display:none; } }
+.st-gm-top { display:flex; justify-content:flex-end; margin:4px 0 -26px; }
+@media (max-width:760px) { .st-gm-top { margin:6px 0; justify-content:flex-start; } }

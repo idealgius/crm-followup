@@ -15,6 +15,27 @@
       del preventivo nella pagina.
    Si aggiorna ogni 5 minuti e ogni volta che si ricarica la pagina Preventivi.
    ===================================================================== */
+// ===== Contenitore comune degli avvisi in basso a sinistra =====
+// Visibile SOLO nella macro-area "In bound" (dashboard, follow-up, registro
+// contatti, preventivi, ...): nascosto nella Home di selezione area e nelle
+// pagine BI (Consegne, Stock).
+window.InboundAvvisi = window.InboundAvvisi || (function () {
+    const INBOUND = ['dashboardPage', 'followupsPage', 'waitingPage', 'contactsPage', 'promoPage',
+        'adminPage', 'rentPage', 'servicePage', 'veicoliPage', 'preventiviPage', 'allChartsPage'];
+    let el = null;
+    function inInbound() {
+        if (document.body.classList.contains('mh-home-on')) return false;
+        return INBOUND.some(id => { const p = document.getElementById(id); return p && p.style.display !== 'none' && p.offsetParent !== null; });
+    }
+    function box() {
+        if (!el) { el = document.createElement('div'); el.id = 'inbAvvisi'; document.body.appendChild(el); aggiorna(); }
+        return el;
+    }
+    function aggiorna() { if (el) el.classList.toggle('off', !inInbound()); }
+    setInterval(aggiorna, 700);
+    return { box, aggiorna, inInbound };
+})();
+
 (function () {
     let dati = { count: 0, items: [] }, timer = null;
     const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -39,8 +60,8 @@
         const chiuso = sessionStorage.getItem('pvs_chiuso') === String(dati.count);
         if (dati.count && !chiuso) {
             if (!chip) {
-                chip = document.createElement('div'); chip.id = 'pvsChip';
-                document.body.appendChild(chip);
+                chip = document.createElement('div'); chip.id = 'pvsChip'; chip.className = 'inb-avviso';
+                window.InboundAvvisi.box().appendChild(chip);
                 chip.addEventListener('click', e => {
                     if (e.target.closest('[data-x]')) { sessionStorage.setItem('pvs_chiuso', String(dati.count)); chip.remove(); return; }
                     apriElenco();
@@ -126,13 +147,15 @@
         if (document.getElementById('pvsStyle')) return;
         const st = document.createElement('style'); st.id = 'pvsStyle';
         st.textContent = `
-#pvsChip { position:fixed; left:18px; bottom:18px; z-index:9000; display:flex; align-items:center; gap:10px; max-width:360px; padding:12px 12px 12px 14px; border-radius:14px; cursor:pointer;
+#inbAvvisi { position:fixed; left:18px; bottom:18px; z-index:9000; display:flex; flex-direction:column; gap:10px; max-width:370px; }
+#inbAvvisi.off { display:none; }
+.inb-avviso { display:flex; align-items:center; gap:10px; padding:12px 12px 12px 14px; border-radius:14px; cursor:pointer;
   background:var(--bg-card,#141822); color:var(--text-primary,#eef2f7); border:1.5px solid #f0a030; box-shadow:0 14px 34px -12px rgba(0,0,0,.6); animation:pvsIn .35s ease-out; }
-#pvsChip:hover { border-color:#ffc35a; }
-#pvsChip b { display:block; font-size:13px; }
-#pvsChip em { display:block; font-style:normal; font-size:11.5px; color:var(--text-secondary,#98a2b3); margin-top:2px; }
-#pvsChip button { border:0; background:transparent; color:var(--text-secondary,#98a2b3); cursor:pointer; font-size:14px; padding:4px 6px; border-radius:8px; align-self:flex-start; }
-#pvsChip button:hover { background:rgba(140,150,170,.15); }
+.inb-avviso:hover { border-color:#ffc35a; }
+.inb-avviso b { display:block; font-size:13px; }
+.inb-avviso em { display:block; font-style:normal; font-size:11.5px; color:var(--text-secondary,#98a2b3); margin-top:2px; }
+.inb-avviso button { border:0; background:transparent; color:var(--text-secondary,#98a2b3); cursor:pointer; font-size:14px; padding:4px 6px; border-radius:8px; align-self:flex-start; }
+.inb-avviso button:hover { background:rgba(140,150,170,.15); }
 .pvs-ico { font-size:20px; }
 @keyframes pvsIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
 #pvsBanner { display:flex; align-items:center; gap:14px; margin:4px 0 16px; padding:12px 16px; border-radius:14px; border:1.5px solid rgba(240,160,48,.55); background:rgba(240,160,48,.1); }
@@ -157,7 +180,7 @@
 .pvs-vuoto { padding:30px; text-align:center; color:var(--text-secondary,#98a2b3); }
 .preventivo-card.pvs-sospeso { box-shadow:inset 4px 0 0 #f0a030; }
 .preventivo-card.pvs-sospeso.alto { box-shadow:inset 4px 0 0 #ff5a5f; }
-@media (max-width:700px) { #pvsChip { right:18px; max-width:none; } .pvs-list th:nth-child(5), .pvs-list td:nth-child(5) { display:none; } }`;
+@media (max-width:700px) { #inbAvvisi { right:18px; max-width:none; } .pvs-list th:nth-child(5), .pvs-list td:nth-child(5) { display:none; } }`;
         document.head.appendChild(st);
     }
 

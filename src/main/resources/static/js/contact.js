@@ -2780,6 +2780,7 @@ window.addEventListener('beforeunload', e => {
 });
 
 function applyUpdatedLogEverywhere(updatedLog) {
+    clearTimeout(allertSospesiTimer); allertSospesiTimer = setTimeout(aggiornaAvvisoAllert, 600);   // avviso allert in sospeso
     const idx = contactLogs.findIndex(l => l.id === updatedLog.id);
     if (idx !== -1) contactLogs[idx] = updatedLog;
     const filteredIdx = contactLogsFiltered.findIndex(l => l.id === updatedLog.id);
@@ -4500,3 +4501,144 @@ function confermaRegistraChiamata() {
         if (numEl) numEl.value = numero || '';
     }, 200);
 }
+
+
+// ============================================================
+// NUOVO: AVVISO "ALLERT IN SOSPESO" in basso a sinistra (area In bound)
+// ------------------------------------------------------------
+// Come l'avviso dei preventivi in sospeso: "🔔 N allert in sospeso" con
+// gli allert ancora DA GESTIRE o IN GESTIONE, su tutto lo storico
+// (/api/contacts/alerts-storico, stesso elenco del pulsante 🔔 ALLERT).
+//   - dal MODERATORE in su: TUTTI gli allert in sospeso, a prescindere
+//     da chi siano i destinatari;
+//   - tutti gli altri: solo quelli che li riguardano (stessa regola del
+//     popup: isAlertPendingForCurrentUser).
+// Si mostra nel contenitore comune degli avvisi (InboundAvvisi, definito in
+// preventivi-sospesi.js), visibile solo nell'area In bound. Clic -> elenco;
+// "Apri" apre la finestra di gestione dell'allert (openAcquistoAlertModal).
+// Si aggiorna ogni 2 minuti e dopo ogni modifica a un contatto.
+// ============================================================
+let allertSospesi = [];
+let allertSospesiTimer = null;
+function allertSospesoVisibile(log) {
+    if (!log || !hasAcquistoAlert(log) || log.acquistoAlertStatus === 'GESTITA') return false;
+    const r = currentUser?.role;
+    if (r === 'MODERATORE' || r === 'GESTORE' || r === 'ADMIN') return true;
+    return isAlertPendingForCurrentUser(log);
+}
+const allertQuando = l => l.acquistoAlertSegnalatoAt || l.contactDate || '';
+function allertGiorni(l) {
+    const d = allertQuando(l).slice(0, 10); if (!d) return 0;
+    const oggi = new Date(); oggi.setHours(0, 0, 0, 0);
+    return Math.max(0, Math.round((oggi - new Date(d + 'T00:00:00')) / 864e5));
+}
+async function aggiornaAvvisoAllert() {
+    if (!currentUser) return;
+    try {
+        const res = await fetch('/api/contacts/alerts-storico');
+        if (!res.ok) return;
+        allertSospesi = (await res.json()).filter(allertSospesoVisibile)
+            .sort((a, b) => allertQuando(a).localeCompare(allertQuando(b)));
+        disegnaAvvisoAllert();
+        const m = document.getElementById('allertSospesiModal');
+        if (m && m.style.display === 'flex') apriElencoAllertSospesi();
+    } catch (err) { /* riprova al prossimo giro */ }
+}
+function disegnaAvvisoAllert() {
+    stiliAvvisoAllert();
+    let chip = document.getElementById('allertSospesiChip');
+    const da = allertSospesi.filter(l => !l.acquistoAlertStatus || l.acquistoAlertStatus === 'DA_GESTIRE').length;
+    const inG = allertSospesi.length - da, firma = `${da}|${inG}`;
+    if (allertSospesi.length && sessionStorage.getItem('allert_sospesi_chiuso') !== firma) {
+        if (!chip) {
+            chip = document.createElement('div'); chip.id = 'allertSospesiChip'; chip.className = 'as-chip';
+            const box = window.InboundAvvisi ? window.InboundAvvisi.box() : document.body;
+            box.prepend(chip);
+            chip.addEventListener('click', e => {
+                if (e.target.closest('[data-x]')) { sessionStorage.setItem('allert_sospesi_chiuso', chip.dataset.firma); chip.remove(); return; }
+                apriElencoAllertSospesi();
+            });
+        }
+        chip.dataset.firma = firma;
+        chip.innerHTML = `<span class="as-ico">🔔</span><span><b>${allertSospesi.length} allert in sospeso</b>
+            <em>${da ? `⚪ ${da} da gestire` : ''}${da && inG ? ' · ' : ''}${inG ? `🟡 ${inG} in gestione` : ''} · clicca per l'elenco</em></span>
+            <button type="button" data-x title="Nascondi">✕</button>`;
+    } else if (chip) chip.remove();
+}
+function apriElencoAllertSospesi() {
+    let ov = document.getElementById('allertSospesiModal');
+    if (!ov) {
+        ov = document.createElement('div'); ov.id = 'allertSospesiModal';
+        document.body.appendChild(ov);
+        ov.addEventListener('click', e => {
+            if (e.target === ov || e.target.closest('[data-chiudi]')) { ov.style.display = 'none'; return; }
+            const a = e.target.closest('[data-apri]'); if (!a) return;
+            const log = allertSospesi.find(l => String(l.id) === a.dataset.apri); if (!log) return;
+            if (!contactLogs.some(l => l.id === log.id)) contactLogs.push(log);
+            ov.style.display = 'none';
+            openAcquistoAlertModal(log.id);
+        });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') ov.style.display = 'none'; });
+    }
+    const esc = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const dataIt = iso => iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)} ${iso.slice(11, 16)}` : '';
+    const righe = (titolo, lista) => lista.length ? `<tr class="as-g"><td colspan="6">${titolo} (${lista.length})</td></tr>` + lista.map(l => {
+        const g = allertGiorni(l);
+        const dest = l.alertNotifyAll === false ? '<em>destinatari specifici</em>' : '';
+        return `<tr>
+          <td><span class="as-badge ${g >= 2 ? 'alto' : ''}">${g === 0 ? 'oggi' : g === 1 ? 'da 1 giorno' : `da ${g} giorni`}</span></td>
+          <td><b>${esc(clienteNomeCompleto(l))}</b><em>${esc(l.clienteNumero || '')}</em></td>
+          <td>${esc(l.category || '')}<em>${esc(l.otherNote || '')}</em></td>
+          <td>${esc(l.user?.fullName || '')}${dest}</td>
+          <td>${dataIt(allertQuando(l))}</td>
+          <td><button type="button" class="btn-small" data-apri="${l.id}">Apri</button></td></tr>`; }).join('') : '';
+    const da = allertSospesi.filter(l => !l.acquistoAlertStatus || l.acquistoAlertStatus === 'DA_GESTIRE');
+    const inG = allertSospesi.filter(l => l.acquistoAlertStatus === 'IN_GESTIONE');
+    ov.innerHTML = `<div class="as-box" role="dialog" aria-modal="true">
+        <header><div><h3>🔔 Allert in sospeso (${allertSospesi.length})</h3>
+          <p>Ancora da gestire o in gestione · i più vecchi per primi · "Apri" apre la gestione dell'allert</p></div>
+          <button type="button" data-chiudi aria-label="Chiudi">✕</button></header>
+        <div class="as-list">${allertSospesi.length ? `<table><thead><tr><th>Da</th><th>Cliente</th><th>Categoria</th><th>Segnalato da</th><th>Quando</th><th></th></tr></thead><tbody>
+          ${righe('⚪ Da gestire', da)}${righe('🟡 In gestione', inG)}</tbody></table>` : '<p class="as-vuoto">Nessun allert in sospeso 👍</p>'}</div></div>`;
+    ov.style.display = 'flex';
+}
+function stiliAvvisoAllert() {
+    if (document.getElementById('allertSospesiStyle')) return;
+    const st = document.createElement('style'); st.id = 'allertSospesiStyle';
+    st.textContent = `
+#allertSospesiChip { display:flex; align-items:center; gap:10px; padding:12px 12px 12px 14px; border-radius:14px; cursor:pointer;
+  background:var(--bg-card,#141822); color:var(--text-primary,#eef2f7); border:1.5px solid #5b8cff; box-shadow:0 14px 34px -12px rgba(0,0,0,.6); }
+#allertSospesiChip:hover { border-color:#8fb0ff; }
+#allertSospesiChip b { display:block; font-size:13px; }
+#allertSospesiChip em { display:block; font-style:normal; font-size:11.5px; color:var(--text-secondary,#98a2b3); margin-top:2px; }
+#allertSospesiChip button { border:0; background:transparent; color:var(--text-secondary,#98a2b3); cursor:pointer; font-size:14px; padding:4px 6px; border-radius:8px; align-self:flex-start; }
+#allertSospesiChip .as-ico { font-size:20px; }
+body > #allertSospesiChip { position:fixed; left:18px; bottom:18px; z-index:9000; max-width:370px; }
+#allertSospesiModal { position:fixed; inset:0; z-index:10000; background:rgba(0,0,0,.6); display:none; align-items:center; justify-content:center; padding:20px; }
+.as-box { width:min(1080px,100%); max-height:88vh; display:flex; flex-direction:column; background:var(--bg-card,#141822); color:var(--text-primary,#eef2f7); border:1px solid var(--border,#2a3242); border-radius:16px; box-shadow:0 24px 60px rgba(0,0,0,.55); }
+.as-box header { display:flex; justify-content:space-between; gap:12px; padding:18px 22px; border-bottom:1px solid var(--border,#2a3242); }
+.as-box h3 { margin:0; font-size:17px; }
+.as-box header p { margin:4px 0 0; font-size:12.5px; color:var(--text-secondary,#98a2b3); }
+.as-box header button { border:0; background:rgba(140,150,170,.12); color:inherit; border-radius:10px; width:34px; height:34px; cursor:pointer; }
+.as-list { overflow:auto; padding:6px 22px 18px; }
+.as-list table { width:100%; border-collapse:collapse; font-size:13px; }
+.as-list th { position:sticky; top:0; background:var(--bg-card,#141822); text-align:left; font-size:10.5px; letter-spacing:.6px; text-transform:uppercase; color:var(--text-secondary,#98a2b3); padding:10px 8px; border-bottom:1.5px solid var(--border,#2a3242); }
+.as-list td { padding:9px 8px; border-bottom:1px solid var(--border,#2a3242); vertical-align:top; }
+.as-list td em { display:block; font-style:normal; font-size:11.5px; color:var(--text-secondary,#98a2b3); margin-top:2px; }
+.as-list td:last-child { white-space:nowrap; text-align:right; }
+.as-list tr.as-g td { text-align:left; font-weight:800; font-size:12px; letter-spacing:.5px; padding-top:14px; color:var(--text-secondary,#98a2b3); }
+.as-badge { display:inline-block; white-space:nowrap; padding:3px 9px; border-radius:999px; font-size:11.5px; font-weight:800; background:rgba(240,160,48,.18); color:#f0a030; }
+.as-badge.alto { background:rgba(229,72,77,.18); color:#ff5a5f; }
+.as-vuoto { padding:30px; text-align:center; color:var(--text-secondary,#98a2b3); }
+@media (max-width:700px) { .as-list th:nth-child(3), .as-list td:nth-child(3) { display:none; } }`;
+    document.head.appendChild(st);
+}
+// partenza appena l'utente e' collegato; poi ogni 2 minuti
+(function avviaAvvisoAllert() {
+    const attesa = setInterval(() => {
+        if (typeof currentUser === 'undefined' || !currentUser) return;
+        clearInterval(attesa);
+        aggiornaAvvisoAllert();
+        setInterval(aggiornaAvvisoAllert, 2 * 60 * 1000);
+    }, 1500);
+})();

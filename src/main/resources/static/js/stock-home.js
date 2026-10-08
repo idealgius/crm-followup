@@ -363,7 +363,8 @@
             && (!f.carb || (f.carb === '__none' ? !r.carburante : r.carburante === f.carb))
             && (!f.sede || (f.sede === '__none' ? !r.sede : r.sede === f.sede))
             && (!f.ubic || r.ubic === f.ubic) && (!f.ubicDet || r.ubicDet === f.ubicDet)
-            && (!f.giac || giacKey(r) === f.giac);
+            && (!f.giac || giacKey(r) === f.giac)
+            && (!f.ids || f.ids.includes(r._i));
     }
 
     function render(msg) {
@@ -469,11 +470,15 @@
             <span class="cg-num">${fmt(n)}</span><span class="cg-sub">${sub}</span></button>`;
     const giacCard = noLine => `<div class="cg-card st-wide ${vede('G_ST_GIAC') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Giacenza</h2><p class="cg-hint" data-hint="stChGiac"></p></div><div class="cg-an-hbtns">${vociBtn('stChGiac')}${typeBtns('stChGiac', noLine)}</div></div>
         <div class="st-giac-grid"><div class="st-chart-box"><canvas id="stChGiac"></canvas></div><div class="st-giac-rep" data-rep="stChGiac"></div></div></div>`;
+    const giacMarcaCard = () => `<div class="cg-card st-wide ${vede('G_ST_GIAC') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Giacenza per marchio</h2>
+        <p class="cg-hint">Giacenza media di ogni marchio · ⚠ modelli critici (più vetture dello stesso modello ferme molto più del normale) e vetture ferme singolarmente · clicca un marchio per il dettaglio</p></div></div>
+        <div class="st-gm" id="stGiacMarca"></div></div>`;
     const chartCard = (id, title, perm, wide, extra, noLine) => `<div class="cg-card ${wide ? 'st-wide' : ''} ${vede(perm) ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>${title}</h2><p class="cg-hint" data-hint="${id}"></p></div><div class="cg-an-hbtns">${extra || ''}${vociBtn(id)}${typeBtns(id, noLine)}</div></div><div class="st-chart-box"><canvas id="${id}"></canvas></div></div>`;
     function bindView(main, baseF) {
         currentBaseF = baseF || {};
         main.querySelectorAll('.cg-kpi[data-f]').forEach(b => b.addEventListener('click', () => openList(b.dataset.t, { ...baseF, ...JSON.parse(b.dataset.f) })));
         drawCharts();
+        drawGiacMarca();
         bindVoci(main);
         const sm = main.querySelector('#stSedeMode');
         if (sm) sm.addEventListener('click', e => {
@@ -517,6 +522,7 @@
           ${chartCard('stChMotore', 'Per motorizzazione', 'G_ST_MOTORE')}
           ${chartCard('stChMarchi', 'Per marchio', 'G_ST_MARCHI')}
           ${giacCard(false)}
+          ${giacMarcaCard()}
           ${chartCard('stChSede', 'Per sede', 'G_ST_SEDE', true, `<div class="cg-an-mode" id="stSedeMode"><button type="button" data-sm="g" class="${sedeMode === 'g' ? 'on' : ''}">Riepilogo</button><button type="button" data-sm="d" class="${sedeMode === 'd' ? 'on' : ''}">Dettaglio</button></div>`)}
         </div>`;
         main.querySelector('[data-goview]').addEventListener('click', () => showView('marchi'));
@@ -548,6 +554,7 @@
           ${chartCard('stChMarchi', 'Per marchio', 'G_ST_MARCHI', false, '', true)}
           ${det.length > 1 ? chartCard('stChSede', g === 'Carrozzeria' ? 'Per carrozzeria' : 'Per sede', 'G_ST_SEDE', false, '', true) : chartCard('stChStato', 'Disponibili, prenotate e vendute', 'G_ST_STATO', false, '', true)}
           ${giacCard(true)}
+          ${giacMarcaCard()}
         </div>
         <div class="st-list-slot"></div>`;
         main.querySelectorAll('[data-goview]').forEach(b => b.addEventListener('click', () => showView(b.dataset.goview)));
@@ -703,6 +710,122 @@
             hint: scopeAll ? 'I 12 marchi con più vetture · clicca per vedere le vetture' : 'I marchi di questa sezione · clicca per vedere le vetture' };
     }
     // report della giacenza: fascia, vetture, %, giorni medi, disponibili
+    // ===== GIACENZA PER MARCHIO e VETTURE CHE NON SI RIESCONO A VENDERE =====
+    // Per ogni marchio (sulle vetture della vista):
+    //  - giacenza media (stessa base del riquadro "Giacenza");
+    //  - MODELLI CRITICI (max 3 per marchio): sulle vetture DISPONIBILI, un modello e'
+    //    critico se ha almeno 2 vetture ferme a lungo e la sua giacenza mediana e'
+    //    almeno 90 giorni e almeno 1,5 volte quella delle ALTRE vetture del marchio.
+    //    Cioe' non e' una vettura sfortunata: e' il modello che non si vende.
+    //  - VETTURE FERME SINGOLARMENTE: una vettura ferma almeno 120 giorni e almeno il
+    //    doppio delle altre dello stesso modello (che invece si vendono), con le possibili
+    //    cause rispetto a quelle (prezzo, km, tipo, motorizzazione). Le vetture dei modelli
+    //    critici non compaiono qui: il problema li' e' il modello.
+    const mediana = a => { if (!a.length) return null; const v = [...a].sort((x, y) => x - y), m = v.length >> 1; return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
+    const conGiorni = r => r.giorni != null && r.giorni !== '';
+    const keyMod = r => (r.modello || '').trim().toLowerCase();
+    function analisiGiacenzaMarchi(base) {
+        const disp = base.filter(r => r.stato === 'Disponibile' && conGiorni(r));
+        const medStock = mediana(disp.map(r => +r.giorni)) || 0;
+        const marchi = [...new Set(base.map(r => r.marca).filter(Boolean))];
+        return marchi.map(marca => {
+            const tutte = base.filter(r => r.marca === marca && conGiorni(r));
+            const media = tutte.length ? Math.round(tutte.reduce((a, r) => a + +r.giorni, 0) / tutte.length) : null;
+            const D = disp.filter(r => r.marca === marca);
+            const medMarca = mediana(D.map(r => +r.giorni)) || 0;
+            const mods = new Map(); D.forEach(r => { const k = keyMod(r); if (!mods.has(k)) mods.set(k, []); mods.get(k).push(r); });
+            let critici = [];
+            mods.forEach(ml => {
+                if (ml.length < 2) return;
+                const altre = D.filter(r => !ml.includes(r)).map(r => +r.giorni);
+                const rif = altre.length >= 3 ? mediana(altre) : medStock;
+                const med = mediana(ml.map(r => +r.giorni));
+                const ferme = ml.filter(r => +r.giorni >= Math.max(90, 1.5 * rif));
+                if (ferme.length >= 2 && med >= 90 && med >= 1.5 * rif)
+                    critici.push({ modello: ml[0].modello, tutte: ml, ferme, med: Math.round(med), rif: Math.round(rif), peso: ferme.length * med });
+            });
+            critici = critici.sort((a, b) => b.peso - a.peso).slice(0, 3);
+            const critKey = new Set(critici.map(c => keyMod(c.tutte[0])));
+            const singole = [];
+            mods.forEach((ml, k) => {
+                if (critKey.has(k)) return;
+                ml.forEach(r => {
+                    const peers = ml.filter(x => x !== r);
+                    const rif = peers.length >= 2 ? mediana(peers.map(x => +x.giorni)) : Math.max(medMarca, medStock);
+                    if (+r.giorni >= Math.max(120, 2 * rif)) singole.push({ r, peers, rif: Math.round(rif), cause: causeVettura(r, peers, medMarca) });
+                });
+            });
+            singole.sort((a, b) => b.r.giorni - a.r.giorni);
+            return { marca, tutte, media, disp: D, oltre90: D.filter(r => +r.giorni > 90).length, critici, singole };
+        }).filter(m => m.tutte.length);
+    }
+    function causeVettura(r, peers, medMarca) {
+        const c = [];
+        if (!peers.length) { c.push(`unica ${r.modello || ''} in stock: nessun confronto possibile con altre uguali`); return c; }
+        if (peers.length < 2) c.push(`solo ${peers.length + 1} ${r.modello || ''} in stock: confronto limitato`);
+        const stesso = peers.filter(x => x.tipo === r.tipo), conf = stesso.length >= 2 ? stesso : peers;
+        const pm = mediana(conf.map(x => +x.listino).filter(v => v > 0)), km = mediana(conf.map(x => +x.km).filter(v => v >= 0));
+        if (+r.listino > 0 && pm && r.listino > pm * 1.08) c.push(`prezzo ${fmt(r.listino)} € · +${Math.round((r.listino / pm - 1) * 100)}% rispetto alle altre (${fmt(Math.round(pm))} €)`);
+        if (+r.km > 0 && km != null && r.km > Math.max(km * 1.3, km + 5000)) c.push(`${fmt(r.km)} km · contro ${fmt(Math.round(km))} km delle altre`);
+        const tipoMag = [...count(peers, x => x.tipo)].sort((a, b) => b[1] - a[1])[0];
+        if (tipoMag && r.tipo && tipoMag[0] !== r.tipo && tipoMag[1] >= peers.length * 0.7) c.push(`è ${r.tipo}, le altre sono quasi tutte ${tipoMag[0]}`);
+        const carbMag = [...count(peers, x => x.carburante || '')].sort((a, b) => b[1] - a[1])[0];
+        if (carbMag && carbMag[0] && r.carburante && carbMag[0] !== r.carburante && carbMag[1] >= peers.length * 0.7) c.push(`motorizzazione ${r.carburante}, le altre ${carbMag[0]}`);
+        if (!c.length || (c.length === 1 && c[0].startsWith('solo'))) c.push('prezzo, km e tipo in linea con le altre: verificare annuncio, foto, allestimento e condizioni');
+        return c;
+    }
+    let gmAperto = new Set(), gmOrdine = 'crit';
+    function drawGiacMarca() {
+        const box = rootEl.querySelector('#stGiacMarca'); if (!box) return;
+        const ORD = {
+            crit: (a, b) => b.critici.length - a.critici.length || b.singole.length - a.singole.length || b.tutte.length - a.tutte.length,
+            media: (a, b) => (b.media || 0) - (a.media || 0),
+            vetture: (a, b) => b.tutte.length - a.tutte.length };
+        const A = analisiGiacenzaMarchi(scope).sort(ORD[gmOrdine] || ORD.crit);
+        const maxMedia = Math.max(1, ...A.map(m => m.media || 0));
+        const colore = g => (GIAC.find(x => g >= x[2] && g <= x[3]) || GIAC[GIAC.length - 1])[4];
+        const totC = A.reduce((a, m) => a + m.critici.length, 0), totS = A.reduce((a, m) => a + m.singole.length, 0);
+        const mod = (m, i) => { const c = m.critici[i];
+            return `<button type="button" class="st-gm-it crit" data-gm="c|${esc(m.marca)}|${i}"><b>⚠ ${esc(c.modello || '—')}</b>
+              <span>${fmt(c.ferme.length)} su ${fmt(c.tutte.length)} disponibili ferme a lungo · mediana <b>${fmt(c.med)} gg</b> contro ${fmt(c.rif)} gg delle altre vetture ${esc(m.marca)}</span></button>`; };
+        const sing = (m, i) => { const s = m.singole[i], r = s.r;
+            return `<button type="button" class="st-gm-it" data-gm="s|${esc(m.marca)}|${i}"><b>${esc(r.modello || '')} <small>${esc(r.versione || '')}</small></b>
+              <span>${esc(r.targa || r.telaio || '')} · ${esc(r.tipo || '')} · ferma da <b>${fmt(r.giorni)} gg</b>${s.peers.length >= 2 ? ` · le altre ${fmt(s.peers.length)} ${esc(r.modello || '')} ${fmt(s.rif)} gg` : ''}</span>
+              <ul>${s.cause.map(x => `<li>${esc(x)}</li>`).join('')}</ul></button>`; };
+        box.innerHTML = `<div class="st-gm-top"><div class="cg-an-mode">${[['crit', 'Criticità'], ['media', 'Giacenza media'], ['vetture', 'N° vetture']].map(([k, l]) => `<button type="button" data-gmord="${k}" class="${gmOrdine === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+          <p class="st-gm-sum">${totC ? `<b class="st-gm-warn">⚠ ${fmt(totC)} ${totC === 1 ? 'modello critico' : 'modelli critici'}</b>` : '<b>Nessun modello critico</b>'} · <b>${fmt(totS)}</b> ${totS === 1 ? 'vettura ferma' : 'vetture ferme'} singolarmente</p>
+          <div class="st-gm-rows">${A.map(m => `
+            <div class="st-gm-row ${gmAperto.has(m.marca) ? 'open' : ''}" data-marca="${esc(m.marca)}">
+              <button type="button" class="st-gm-head" data-gmtog="${esc(m.marca)}">
+                <span class="st-gm-name">${esc(m.marca)}<em>${fmt(m.tutte.length)} ${m.tutte.length === 1 ? 'vettura' : 'vetture'} · ${fmt(m.oltre90)} ${m.oltre90 === 1 ? 'disponibile' : 'disponibili'} oltre 90 gg</em></span>
+                <span class="st-gm-bar"><i style="width:${Math.max(3, (m.media || 0) / maxMedia * 100)}%;background:${colore(m.media || 0)}"></i></span>
+                <b class="st-gm-val">${m.media != null ? fmt(m.media) + ' gg' : '—'}</b>
+                <span class="st-gm-tags">${m.critici.length ? `<span class="st-gm-tag crit">⚠ ${m.critici.length} ${m.critici.length === 1 ? 'modello' : 'modelli'}</span>` : ''}${m.singole.length ? `<span class="st-gm-tag">${m.singole.length} ${m.singole.length === 1 ? 'vettura ferma' : 'vetture ferme'}</span>` : ''}</span>
+                <span class="st-gm-arr">▸</span></button>
+              <div class="st-gm-det">
+                ${m.critici.length ? `<h4>Modelli che non si riescono a vendere</h4>${m.critici.map((c, i) => mod(m, i)).join('')}` : '<p class="cg-hint">Nessun modello critico per questo marchio.</p>'}
+                ${m.singole.length ? `<h4>Vetture ferme singolarmente <small>(il modello si vende, quella vettura no)</small></h4>${m.singole.map((x, i) => sing(m, i)).join('')}` : ''}
+                <button type="button" class="st-gm-all" data-gmlist="${esc(m.marca)}">Vedi tutte le vetture ${esc(m.marca)} →</button>
+              </div></div>`).join('')}</div>`;
+        box.onclick = e => {
+            const o = e.target.closest('[data-gmord]');
+            if (o) { gmOrdine = o.dataset.gmord; drawGiacMarca(); return; }
+            const t = e.target.closest('[data-gmtog]');
+            if (t) { const k = t.dataset.gmtog; gmAperto.has(k) ? gmAperto.delete(k) : gmAperto.add(k); t.parentElement.classList.toggle('open'); return; }
+            const it = e.target.closest('[data-gm]');
+            if (it) {
+                const [tipo, marca, i] = it.dataset.gm.split('|'), m = A.find(x => x.marca === marca); if (!m) return;
+                if (tipo === 'c') { const c = m.critici[+i]; openList(`⚠ ${marca} ${c.modello} · disponibili`, { ids: c.tutte.map(r => r._i) }); }
+                else showOne(m.singole[+i].r);
+                return;
+            }
+            const l = e.target.closest('[data-gmlist]');
+            if (l) openList(l.dataset.gmlist, { ...(currentBaseF || {}), marca: l.dataset.gmlist });
+        };
+    }
+    // apre l'elenco con la sola vettura e subito la sua scheda
+    function showOne(r) { openList(`${r.marca} ${r.modello || ''}`, { ids: [r._i] }); showDetail(r._i); }
+
     function drawGiacReport() {
         const box = rootEl.querySelector('[data-rep="stChGiac"]'); if (!box) return;
         const conG = scope.filter(r => r.giorni != null && r.giorni !== '');
