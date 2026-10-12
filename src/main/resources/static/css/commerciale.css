@@ -212,6 +212,9 @@ table.cm-t { width:100%; border-collapse:separate; border-spacing:0; font-size:1
 .cm-cc-b { display:grid; grid-template-columns:minmax(0,1fr); gap:12px; }
 .cm-cc-b.cm-cc-bw { grid-template-columns:minmax(0,1fr) 220px; align-items:center; }
 .cm-cc-c { position:relative; }
+.cm-cc-in { position:relative; height:100%; }
+.cm-cc-c.scroll { overflow-y:auto; overscroll-behavior:contain; padding-right:4px; scrollbar-width:thin; }
+.cm-cc-c.scroll::after { content:''; position:sticky; display:block; bottom:0; height:22px; margin-top:-22px; background:linear-gradient(transparent, var(--cm-card)); pointer-events:none; }
 .cm-cc-leg { display:flex; flex-wrap:wrap; gap:4px 6px; max-height:170px; overflow:auto; }
 .cm-cc-bw .cm-cc-leg { flex-direction:column; flex-wrap:nowrap; max-height:none; }
 #commercialeRoot .cm-cc-li { display:inline-flex; align-items:center; gap:6px; border:1px solid var(--cm-line); background:var(--cm-card); border-radius:999px; padding:3px 9px 3px 7px; font-size:11.5px; color:var(--cm-ink); cursor:pointer; }

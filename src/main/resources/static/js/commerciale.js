@@ -408,11 +408,8 @@
         let arr = [...m].map(([k, l]) => ({ k, l, n: l.length }));
         const pos = k => { const i = (spec.order || []).indexOf(k); return i < 0 ? 999 : i; };
         arr.sort((x, y) => pos(x.k) - pos(y.k) || y.n - x.n);
-        if (spec.top && arr.length > spec.top + 1) {
-            const rest = arr.slice(spec.top);
-            arr = arr.slice(0, spec.top).concat([{ k: 'Altre', l: rest.flatMap(x => x.l), n: rest.reduce((s, x) => s + x.n, 0) }]);
-        }
-        arr.forEach((g, i) => { g.c = (spec.colors && spec.colors[g.k]) || (g.k === 'Altre' ? '#b7aeb1' : PALETTE[i % PALETTE.length]); });
+        // nessun raggruppamento in "Altre": si mostrano sempre tutte le voci (il grafico a barre scorre)
+        arr.forEach((g, i) => { g.c = (spec.colors && spec.colors[g.k]) || PALETTE[i % PALETTE.length]; });
         return arr;
     }
     function ccCard(spec) {
@@ -425,7 +422,7 @@
           <div class="cm-cc-h"><div><h2>${esc(spec.title)}</h2><p class="cm-hint">${spec.hint || ''}</p></div>
             <div class="cm-cc-btns"><button type="button" class="cm-cc-voci" data-voci="${spec.id}">Voci ▾</button>
               <span class="cm-cc-seg">${types.map(x => `<button type="button" data-ct="${spec.id}|${x}" class="${x === t ? 'on' : ''}" title="${TIPI[x][1]}" aria-label="${TIPI[x][1]}">${TIPI[x][0]}</button>`).join('')}</span></div></div>
-          <div class="cm-cc-b ${spec.wide ? 'cm-cc-bw' : ''}"><div class="cm-cc-c" style="height:${spec.h || 260}px"><canvas id="cc_${spec.id}"></canvas></div>
+          <div class="cm-cc-b ${spec.wide ? 'cm-cc-bw' : ''}"><div class="cm-cc-c" style="height:${spec.h || 260}px"><div class="cm-cc-in"><canvas id="cc_${spec.id}"></canvas></div></div>
             <div class="cm-cc-leg">${G.map(g => `<button type="button" class="cm-cc-li ${H.has(g.k) ? 'off' : ''}" data-ccl="${spec.id}" data-k="${esc(g.k)}" title="Clicca per l'elenco"><i style="background:${g.c}"></i><span>${esc(g.k)}</span><b>${nf(g.n)}</b>${spec.series ? '' : `<em>${pct(g.n, tot)}</em>`}</button>`).join('') || '<p class="cm-hint">Nessun dato nel periodo</p>'}</div></div>
         </div>`;
     }
@@ -488,6 +485,12 @@
             ? { x: { beginAtZero: true, grid: { color: line }, ticks: { color: ink2, precision: 0 }, border: { display: false } }, y: { grid: { display: false }, ticks: { color: ink2, font: { size: 11 } } } }
             : { x: { grid: { display: false }, ticks: { color: ink2 } }, y: { beginAtZero: true, grid: { color: line }, ticks: { color: ink2, precision: 0 }, border: { display: false } } };
         if (hor) opts.indexAxis = 'y';
+        // barre orizzontali con tante voci: il grafico si allunga e scorre dentro la card
+        const inner = cv.parentNode, box = inner.parentNode, hBox = spec.h || 260;
+        const hNeed = hor ? Math.max(hBox, labels.length * 24 + 44) : hBox;
+        inner.style.height = hNeed + 'px';
+        box.classList.toggle('scroll', hNeed > hBox);
+        if (hNeed > hBox) opts.scales.x.position = 'top';
         charts[id] = new Chart(cv, { type, data: { labels, datasets }, options: opts, plugins: [valPlugin] });
     }
     function redrawCard(id) {
@@ -633,11 +636,11 @@
     }
     function origMatrix(V) {
         const tot = [...by(V, c => c.origine)].map(([k, l]) => ({ k, n: l.length })).sort((x, y) => y.n - x.n);
-        const cols = tot.slice(0, 6).map(o => o.k), altre = tot.length > 6;
-        const key = c => cols.includes(c.origine) ? c.origine : 'Altre';
+        const cols = tot.map(o => o.k);   // tutte le origini, niente "Altre" (la tabella scorre)
+        const key = c => c.origine;
         const rows = [...by(V, c => c.vend)].map(([v, l]) => { const m = {}; l.forEach(c => { m[key(c)] = (m[key(c)] || 0) + 1; }); return { v, n: l.length, m }; }).sort((x, y) => y.n - x.n);
         const t = {}; V.forEach(c => { t[key(c)] = (t[key(c)] || 0) + 1; });
-        return { cols: altre ? cols.concat('Altre') : cols, rows, tot: t };
+        return { cols, rows, tot: t };
     }
     function origCard(V, isB) {
         const M = origMatrix(V);
@@ -708,12 +711,12 @@
           ${ccCard({ id: id('tip'), title: 'Tipologia dei contratti', hint: tip[0] ? 'Preventivi e conversione nella tabella accanto' : '', recs: C, key: r => r.tipo, order: ['Usato', 'Km0', 'Nuovo', 'Non indicata'], def: 'doughnut' })}
           <div class="cm-card"><h2>Tipologia veicolo</h2><p class="cm-hint">${tip[0] ? `${[...tip].sort((x, y) => y.p - x.p)[0].k} vale il ${pct([...tip].sort((x, y) => y.p - x.p)[0].p, P)} dei preventivi` : ''}</p>${convTable({ head: 'Tipologia', list: tip }, P, C.length)}</div>
           ${ccCard({ id: id('pag'), title: 'Pagamento', hint: 'Contratti per modalità (colonna PAGAMENTO del foglio)', recs: C, key: r => r.pag, order: ['Finanziamento', 'PC (contanti)', 'Non indicato'], colors: { 'Finanziamento': '#7a1f33', 'PC (contanti)': '#dcaab5', 'Non indicato': '#b7aeb1' }, def: 'doughnut' })}
-          ${ccCard({ id: id('mar'), title: 'Marche dei contratti', hint: '<button type="button" class="cm-link" data-vw=\'{"k":"marche"}\'>Performance marchi completa →</button>', recs: C, key: r => r.marca, top: 12, def: 'bar', horiz: true })}
+          ${ccCard({ id: id('mar'), title: 'Marche dei contratti', hint: '<button type="button" class="cm-link" data-vw=\'{"k":"marche"}\'>Performance marchi completa →</button>', recs: C, key: r => r.marca, def: 'bar', horiz: true })}
         </div>
         <div class="cm-sec">Trattative fallite</div>
         <div class="cm-grid">
           ${ccCard({ id: id('mot'), title: 'Motivi di fallimento', hint: F.length + ' trattative fallite · clicca per l\'elenco', recs: F, key: r => r.motivo, def: 'bar', horiz: true })}
-          ${ccCard({ id: id('fma'), title: 'Fallite per marca', hint: 'Le marche dove si perdono più trattative', recs: F, key: r => r.marca, top: 10, def: 'bar', horiz: true })}
+          ${ccCard({ id: id('fma'), title: 'Fallite per marca', hint: 'Tutte le marche · scorri il grafico', recs: F, key: r => r.marca, def: 'bar', horiz: true })}
         </div>
         ${isB ? '' : `<div class="cm-sec">Preventivi telefonici</div>
         <div class="cm-grid">
@@ -756,8 +759,8 @@
         </div>
         <div class="cm-sec">Grafici</div>
         <div class="cm-grid">
-          ${ccCard({ id: 'mkC' + marcheS, title: 'Contratti per marca', hint: 'Prime 12 marche · clicca per l\'elenco', recs: C, key: r => r.marca, top: 12, def: 'bar', horiz: true, h: 320 })}
-          ${ccCard({ id: 'mkP' + marcheS, title: 'Preventivi per marca', hint: 'Prime 12 marche · clicca per l\'elenco', recs: R, key: r => r.marca, top: 12, def: 'bar', horiz: true, h: 320 })}
+          ${ccCard({ id: 'mkC' + marcheS, title: 'Contratti per marca', hint: 'Tutte le marche · scorri il grafico · clicca per l\'elenco', recs: C, key: r => r.marca, def: 'bar', horiz: true, h: 320 })}
+          ${ccCard({ id: 'mkP' + marcheS, title: 'Preventivi per marca', hint: 'Tutte le marche · scorri il grafico · clicca per l\'elenco', recs: R, key: r => r.marca, def: 'bar', horiz: true, h: 320 })}
         </div>
         <div class="cm-sec">Tabella completa</div>
         <div class="cm-card"><h2>Performance per marca</h2><p class="cm-hint">Clicca un'intestazione per ordinare · clicca una marca per i suoi contratti</p>
@@ -791,7 +794,7 @@
           ${ccCard({ id: 'annF', title: 'Fonte dell\'annullamento', hint: 'Foglio AVANZAMENTO, etichetta del CSV o entrambi · clicca per l\'elenco', recs: AN, key: fonteAnn, def: 'doughnut' })}
           ${ccCard({ id: 'annO', title: 'Annullati per origine', hint: 'Origine trattativa', recs: AN, key: c => c.origine, def: 'bar', horiz: true })}
           ${ccCard({ id: 'annS', title: 'Annullati per sede', hint: 'Sede del consulente', recs: AN, key: c => SEDI[c.sede], def: 'doughnut' })}
-          ${ccCard({ id: 'annMa', title: 'Annullati per marca', hint: 'Prime 10 marche', recs: AN, key: c => c.marca, top: 10, def: 'bar', horiz: true })}
+          ${ccCard({ id: 'annMa', title: 'Annullati per marca', hint: 'Tutte le marche · scorri il grafico', recs: AN, key: c => c.marca, def: 'bar', horiz: true })}
         </div>
         <div class="cm-sec">Elenco</div>
         <div class="cm-card"><div class="cm-rbox" id="cmAnnList"></div></div>`;
@@ -819,7 +822,7 @@
           ${ccCard({ id: 'ptC', title: 'Per consulente', hint: 'Preventivi assegnati', recs: X, key: p => p.vend, def: 'bar', horiz: true, kind: 'pt', h: 320 })}
           ${ccCard({ id: 'ptO', title: 'Per operatore In bound', hint: 'Chi ha creato il preventivo', recs: X, key: p => p.op, def: 'bar', horiz: true, kind: 'pt', h: 320 })}
           ${ccCard({ id: 'ptS', title: 'Per sede', hint: 'Sede del consulente', recs: X, key: p => SEDI[p.sede], def: 'doughnut', kind: 'pt' })}
-          ${ccCard({ id: 'ptMa', title: 'Marche richieste', hint: 'Prime 10 marche', recs: X, key: p => p.marca, top: 10, def: 'bar', horiz: true, kind: 'pt' })}
+          ${ccCard({ id: 'ptMa', title: 'Marche richieste', hint: 'Tutte le marche · scorri il grafico', recs: X, key: p => p.marca, def: 'bar', horiz: true, kind: 'pt' })}
         </div>`}`;
     }
 
@@ -1136,7 +1139,7 @@
             <div class="card"><h3>Preventivi e contratti per fonte</h3><p class="h">${oriP[0] ? `${esc(oriP[0].k)} genera il ${pct(oriP[0].p, d.P)} dei preventivi` : ''}${convBest.length ? `; ${convBest.map(x => esc(x.k)).join(' e ')} convertono meglio` : ''}</p>
               ${ct('Fonte', oriP, !d.isB)}</div></div>
           <h2>Marche e trattative fallite</h2>
-          <div class="g2"><div class="card"><h3>Performance marchi</h3><p class="h">Prime 10 marche per contratti</p>${ct('Marca', d.marche.slice(0, 10))}</div>
+          <div class="g2"><div class="card"><h3>Performance marchi</h3><p class="h">Tutte le marche, per contratti</p>${ct('Marca', d.marche)}</div>
             <div class="card"><h3>Motivi di fallimento</h3><p class="h">${d.F.length} trattative fallite (${pct(d.F.length, d.P)} dei preventivi)</p>${pHb(d.motivi)}</div></div>`;
         if (!d.isB) h += `<h2>Preventivi telefonici</h2>
           <div class="g2"><div class="card"><h3>Preventivi telefonici per mese</h3><p class="h">Sezione In bound · ${d.X.length} preventivi, ${d.ptCh} diventati contratto (${pct(d.ptCh, d.X.length)})</p>
