@@ -737,6 +737,8 @@ async function printFollowUpsByConsultant() {
 /* =====================================================================
    IMPORT DEI FOLLOW-UP DAL CSV DELLE TRATTATIVE (Leadspark)
    ---------------------------------------------------------------------
+   Si importano solo le trattative con Stato "In corso" e almeno una nota in
+   "Note Cliente" (le altre finiscono tra le righe saltate, con il motivo).
    Colonne usate: Data trattativa (= giorno del follow-up), Venditore
    (= consulente: se non e' in CONSULTANTI_LIST la riga si salta), Nome
    cliente + Cognome Cliente, Tel.1 Cliente, Email1 Cliente, Marca, Modello,
@@ -975,6 +977,10 @@ async function readFollowUpCsv(file) {
         const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(col(r, 'Data trattativa'));
         if (!cons) { scartate.push({ fullName, motivo: vend ? `consulente "${vend}" non in lista` : 'senza consulente' }); return; }
         if (!m) { scartate.push({ fullName, motivo: 'data trattativa non valida' }); return; }
+        // si importano solo le trattative IN CORSO con almeno una nota (follow-up gia' iniziato)
+        const statoTr = col(r, 'Stato trattativa');
+        if (statoTr && !/in\s*corso/i.test(statoTr)) { scartate.push({ fullName, motivo: `trattativa ${statoTr.toLowerCase()}` }); return; }
+        if (!col(r, 'Note Cliente').trim()) { scartate.push({ fullName, motivo: 'nessuna nota nel follow-up' }); return; }
         const workDate = `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
         const note = col(r, 'Note Cliente');
         const p = parseFollowUpNote(note, workDate);
@@ -982,7 +988,7 @@ async function readFollowUpCsv(file) {
             email: fuEmail(col(r, 'Email1 Cliente', 'Email2 Cliente')), marca: col(r, 'Marca'), modello: col(r, 'Modello'),
             note, actions: p.actions, status: p.status, hasAppointment: p.hasAppointment, action: 'create' });
     });
-    if (!rows.length) { alert('Nessuna riga da importare' + (scartate.length ? ` (${scartate.length} scartate: consulente non in lista o data mancante)` : '.')); return; }
+    if (!rows.length) { alert('Nessuna riga da importare' + (scartate.length ? ` (${scartate.length} scartate: trattativa non in corso, senza note, consulente non in lista o data mancante)` : '.')); return; }
     let dups = {};
     try {
         const res = await fetch('/api/followups/import/check', { method: 'POST', headers: { 'Content-Type': 'application/json' },
