@@ -9,8 +9,16 @@
    1) CSV di TUTTE le trattative (Leadspark), importato da qui o da Consegne:
       - Stato "Chiusa"            -> CONTRATTO (confrontato con il foglio)
       - "In corso" e "Fallita"    -> PREVENTIVI fatti (le fallite con il motivo)
-      - Preventivi = tutte le trattative del periodo (data trattativa),
+      - Preventivi = tutte le trattative del periodo (DATA TRATTATIVA),
         conversione = contratti / preventivi (come il report venditore).
+      - Contratti = trattative chiuse nel periodo (DATA CHIUSURA): un contratto conta
+        nel mese in cui e' stato fatto. Se la trattativa era stata aperta in un mese
+        precedente ha il bollino "Trattativa del gg/mm/aaaa" (r.prima).
+   1b) CSV delle Consegne (solo chiuse): le chiuse che mancano nel CSV del Commerciale
+      (trattative aperte prima del periodo esportato) si aggiungono come contratti
+      con il bollino "Recuperata da Consegne" (r.rec). Confronto per ID trattativa.
+      L'interruttore "Recuperate nel conteggio" decide se contarle; non entrano mai
+      tra i preventivi.
    2) Foglio Google "AVANZAMENTO 2026" (scheda DATABASE), letto dall'area
       Consegne che fa l'abbinamento contratto <-> riga del foglio: dal foglio
       arrivano annullate (STATO), B2B (B2C = TRUE), pagamento (PC = contanti)
@@ -19,6 +27,10 @@
       CSV) + trattative del CSV con etichetta "CONTRATTO ANNULLATO". Una stessa pratica
       presente in tutti e due si conta una volta. Quelle che risultano SOLO dal CSV
       (non annullate nel foglio) hanno il bollino "solo CSV". Le altre fallite restano fallite.
+      Il foglio ha la precedenza: una riga ANNULLATA senza trattativa abbinata conta
+      come annullata ("Solo nel foglio").
+      Abbinamento trattativa <-> riga del foglio: regole delle Consegne (vedi REGOLE_ABB
+      qui sotto e consegne.js); la regola usata si vede nel bollino di ogni riga.
    3) Preventivi telefonici della sezione In bound: abbinati al contratto
       (stesso cliente o targa/telaio) -> bollino "Da preventivo telefonico",
       l'origine resta quella del CSV.
@@ -64,16 +76,28 @@
     const STL = { GENERATO: 'Generato (in sospeso)', NON_INTERESSATO: 'Non interessato', TRATTATIVA_GENERATA: 'Trattativa generata', CHIUSA: 'Trattativa chiusa', FALLITA: 'Trattativa fallita' };
     const STC = { GENERATO: '#8e9aab', NON_INTERESSATO: '#c4a27c', TRATTATIVA_GENERATA: '#e0a23a', CHIUSA: '#2f9e6e', FALLITA: '#c0392b' };
     const PALETTE = ['#8e2a40', '#3d7fc1', '#d98a3a', '#2f9e6e', '#9b6fd1', '#c94f7c', '#3fb0b0', '#b8a03a', '#6b7a8c', '#e06666', '#5c8a3a', '#a05a2c', '#7a8fd6'];
-    const LS_B2B = 'commerciale_b2b_v1', LS_T = 'commerciale_grafici_v1';
+    const LS_B2B = 'commerciale_b2b_v1', LS_T = 'commerciale_grafici_v1', LS_REC = 'commerciale_recuperate_v1';
+    // Come si abbina una trattativa del CSV a una riga del foglio AVANZAMENTO (motore in consegne.js)
+    const REGOLE_ABB = [
+        ['abbinata a mano', 'scelta dall\'operatore con "Verifica e abbina a…" nelle Consegne'],
+        ['targa + nome', 'stessa targa/telaio e stesso cliente, qualsiasi data'],
+        ['nome', 'stesso cliente, date entro 45 giorni (oppure, come ultima prova, qualsiasi data)'],
+        ['targa/telaio', 'stessa targa/telaio con nome diverso, entro 60 giorni, stesso consulente, riga non annullata'],
+        ['telaio parziale', 'ultime cifre del telaio, entro 30 giorni, stesso consulente, riga non annullata'],
+        ['data + consulente + modello', 'data entro 7 giorni, stesso consulente e una parola del modello in comune']
+    ];
 
     let rootEl = null, loaded = false, loading = false, info = null, msgErr = '', msgOk = '';
-    let TR = [], CONTR = [], AF = [], PT = [], vend = [], anni = [];
-    let view = { k: 'all' }, anno = new Date().getFullYear(), da = 1, a = 12, b2bOn = false;
-    let listF = { f: 'contratti' }, marcheS = 'all';
+    let TR = [], AF = [], PT = [], vend = [], anni = [];
+    let view = { k: 'all' }, anno = new Date().getFullYear(), da = 1, a = 12, b2bOn = false, recOn = true;
+    let listF = { f: 'contratti' }, marcheS = 'all', annS = 'all';
     const charts = {};
     let chartTypes = {};
     const hidden = {};
-    try { b2bOn = localStorage.getItem(LS_B2B) === '1'; chartTypes = JSON.parse(localStorage.getItem(LS_T) || '{}'); } catch (e) { /* */ }
+    try {
+        b2bOn = localStorage.getItem(LS_B2B) === '1'; recOn = localStorage.getItem(LS_REC) !== '0';
+        chartTypes = JSON.parse(localStorage.getItem(LS_T) || '{}');
+    } catch (e) { /* */ }
 
     /* ================= utilita' ================= */
     const A = () => window.Consegne && Consegne.api;
@@ -115,8 +139,11 @@
     // (stato ANNULLATA) oppure etichetta "CONTRATTO ANNULLATO" nel CSV. Le altre
     // trattative FALLITE restano fallite: sono un'altra cosa.
     const esito = r => r.ann || r.dupAnn ? 'Annullato' : r.stato === 'Chiusa' ? 'Contratto' : r.stato;
-    const isC = r => r.stato === 'Chiusa' && !r.ann;
+    // le recuperate dalle Consegne contano solo con l'interruttore acceso
+    const recOk = r => !r.rec || recOn;
+    const isC = r => r.stato === 'Chiusa' && !r.ann && recOk(r);
     const isF = r => r.stato === 'Fallita' && !r.ann && !r.dupAnn;
+    const contr = () => TR.filter(isC);
 
     /* ================= costruzione dei dati ================= */
     function build(d) {
@@ -128,15 +155,16 @@
         d.trattAll.forEach(t => {
             const v = nice(t.vend || '').trim();
             if (!v || escluso(v)) return;
-            const dt = pd(t.dataTratt) || pd(t.chiusura);
-            if (!dt) return;
+            // due date: TRATTATIVA (preventivi) e CHIUSURA (contratti, nel mese in cui sono fatti)
+            const dtT = pd(t.dataTratt) || pd(t.chiusura), dtC = pd(t.chiusura);
+            if (!dtT) return;
             const s0 = String(t.stato || '');
             // senza la colonna Stato (import fatto con la pagina vecchia) vale la Data chiusura
             const stato = s0 ? (/chius/i.test(s0) ? 'Chiusa' : /fall/i.test(s0) ? 'Fallita' : 'In corso') : (String(t.chiusura || '').trim() ? 'Chiusa' : 'In corso');
             const raw = foglioDi.get(t) || null;
             const cli = `${t.nome || ''} ${t.cognome || ''}`.replace(/\s+/g, ' ').trim() || String(t.rag || '').trim();
             const r = {
-                i: TR.length, data: dt, y: dt.getFullYear(), m: dt.getMonth() + 1, vend: v, sede: sedeOf(v),
+                i: TR.length, dataT: dtT, yT: dtT.getFullYear(), mT: dtT.getMonth() + 1, rec: !!t.rec, vend: v, sede: sedeOf(v),
                 noleggio: /noleggio/i.test(t.sede || ''), tipo: tipoOf(t.tipo), origine: orig(t.origine), origineRaw: t.origine || '',
                 stato, motivo: stato === 'Fallita' ? (String(t.motivo || '').trim() || 'Non indicato') : '', etichetta: t.etichetta || '',
                 marca: marcaOf(t.marca), veicolo: `${t.marca || ''} ${t.modello || ''}`.replace(/\s+/g, ' ').trim(),
@@ -149,6 +177,11 @@
             r.annFoglio = !!raw && up(raw['STATO']).includes('ANNULLATA');
             r.annCsv = /contratto\s+annullat/i.test(r.etichetta);
             r.ann = r.annFoglio || r.annCsv;
+            // data che decide il mese: contratti e annullati = chiusura, il resto = data trattativa
+            const dt = (stato === 'Chiusa' || r.ann) && dtC ? dtC : dtT;
+            r.data = dt; r.y = dt.getFullYear(); r.m = dt.getMonth() + 1;
+            // contratto nato da una trattativa aperta in un mese precedente
+            r.prima = stato === 'Chiusa' && !!dtC && (dtT.getFullYear() * 12 + dtT.getMonth()) < (dtC.getFullYear() * 12 + dtC.getMonth());
             if (raw) {
                 const pag = up(raw['PAGAMENTO']), g = up(raw['GARANZIA']);
                 r.pag = !pag ? 'Non indicato' : pag === 'PC' ? 'PC (contanti)' : 'Finanziamento';
@@ -160,7 +193,6 @@
             } else { r.pag = stato === 'Chiusa' || r.ann ? 'Non indicato' : ''; r.serv = null; }
             TR.push(r);
         });
-        CONTR = TR.filter(isC);
         // righe del foglio ANNULLATE senza trattativa chiusa nel CSV: contano come annullati
         const vmap = d.vendMap || new Map();
         AF = [];
@@ -172,7 +204,7 @@
             const vRaw = up(raw['VENDITORE']), v = vmap.get(vRaw) || (vRaw ? nice(vRaw) : 'Non indicato');
             if (escluso(v)) return;
             const mod = String(raw['MODELLO'] || '').replace(/\s+/g, ' ').trim(), pag = up(raw['PAGAMENTO']);
-            AF.push({ i: 'f' + n, data: dt || new Date(y, m - 1, 1), y, m, vend: v, sede: sedeOf(v), noleggio: false, tipo: tipoOf(raw['CANALE']),
+            AF.push({ i: 'f' + n, data: dt || new Date(y, m - 1, 1), y, m, yT: y, mT: m, vend: v, sede: sedeOf(v), noleggio: false, tipo: tipoOf(raw['CANALE']),
                 origine: 'Solo nel foglio', stato: 'Chiusa', motivo: '', etichetta: '', marca: marcaOf(mod.split(' ')[0]), veicolo: mod,
                 cliente: nice(raw['CLIENTE']), targa: String(raw['TARGA/TELAIO'] || '').trim(), foglio: true, soloFoglio: true, tel: null, ann: true, annFoglio: true,
                 b2b: up(raw['B2C']) === 'TRUE', pag: !pag ? 'Non indicato' : pag === 'PC' ? 'PC (contanti)' : 'Finanziamento', serv: null });
@@ -202,9 +234,10 @@
         // Abbinamento preventivo telefonico -> contratto: stesso cliente (nome e cognome)
         // o stessa targa/telaio, contratto firmato da 3 giorni prima a 180 giorni dopo
         // il preventivo. Vince prima la targa, poi lo stesso consulente, poi la data piu' vicina.
-        CONTR.forEach(c => { c.tel = null; });
+        const CH = TR.filter(c => c.stato === 'Chiusa' && !c.ann);   // tutte le chiuse, anche le recuperate
+        CH.forEach(c => { c.tel = null; });
         const pairs = [];
-        PT.forEach(p => CONTR.forEach(c => {
+        PT.forEach(p => CH.forEach(c => {
             if (c.ann) return;
             const gg = (c.data - p.data) / 86400000;
             if (gg < -3 || gg > 180) return;
@@ -238,8 +271,10 @@
                 if (r.ok) list = await r.json(); else info.ptErr = r.status === 403 ? 'non hai il permesso di vedere i preventivi telefonici' : 'errore ' + r.status;
             } catch (e) { info.ptErr = e.message; }
             buildPT(list);
-            info.senzaStato = info.trattAll.length > 0 && !info.trattAll.some(t => t.stato);
-            info.soloChiuse = info.trattAll.length > 0 && !info.senzaStato && !info.trattAll.some(t => t.stato && !/chius/i.test(t.stato));
+            // controlli sul solo CSV del Commerciale (le recuperate dalle Consegne non contano)
+            const propri = info.trattAll.filter(t => !t.rec);
+            info.senzaStato = propri.length > 0 && !propri.some(t => t.stato);
+            info.soloChiuse = propri.length > 0 && !info.senzaStato && !propri.some(t => t.stato && !/chius/i.test(t.stato));
             if (!anni.includes(anno) && anni.length) anno = anni[0];
             const now = new Date();
             a = anno === now.getFullYear() ? now.getMonth() + 1 : 12;
@@ -270,10 +305,17 @@
         if (vw.k === 'v') return v === vw.v;
         return true;
     }
-    const trIn = vw => TR.filter(r => inPer(r) && okC(r, vw));
+    // periodo per DATA TRATTATIVA (preventivi, in corso, fallite)
+    const inPerT = f => { const y = f.yT ?? f.y, m = f.mT ?? f.m; return y === anno && m >= da && m <= a; };
+    const mOfT = r => r.mT ?? r.m;
+    // PREVENTIVI di una vista: trattative create nel periodo (le recuperate non sono preventivi del periodo)
+    const trIn = vw => TR.filter(r => !r.rec && inPerT(r) && okC(r, vw));
+    // CONTRATTI di una vista: trattative chiuse nel periodo (data chiusura)
+    const cIn = vw => TR.filter(r => isC(r) && inPer(r) && okC(r, vw));
     // annullati di una vista: trattative chiuse abbinate a righe ANNULLATA + righe annullate solo nel foglio
-    const annIn = vw => TR.filter(r => r.ann && inPer(r) && okC(r, vw)).concat(AF.filter(r => inPer(r) && okC(r, vw)));
-    const annBase = c => inPer(c) && (b2bOn || !c.b2b) && c.sede !== 'Noleggio';
+    const annIn = vw => TR.filter(r => r.ann && recOk(r) && inPer(r) && okC(r, vw)).concat(AF.filter(r => inPer(r) && okC(r, vw)));
+    const annBase = c => inPer(c) && recOk(c) && (b2bOn || !c.b2b) && c.sede !== 'Noleggio';
+    const annSedeOk = c => annS === 'all' || c.sede === annS;
     const same = (x, y) => x.k === y.k && x.s === y.s && x.v === y.v;
     const months = () => { const r = []; for (let m = da; m <= a; m++) r.push(m); return r; };
     const per = () => MESIL[da] + (a !== da ? ' – ' + MESIL[a] : '') + ' ' + anno;
@@ -292,6 +334,7 @@
             </div>
             <div class="cm-ctl">
               <label class="cm-tg" title="Conta anche i contratti B2B in Panoramica, sedi e consulenti"><input type="checkbox" id="cmB2b" ${b2bOn ? 'checked' : ''}><i></i>B2B nel conteggio</label>
+              <label class="cm-tg" id="cmRecLbl" style="display:none" title="Contratti chiusi presenti nel CSV delle Consegne ma non in quello del Commerciale (trattative aperte prima del periodo esportato)"><input type="checkbox" id="cmRec" ${recOn ? 'checked' : ''}><i></i>Recuperate nel conteggio</label>
               <label for="cmAnno">Anno</label><select id="cmAnno"></select>
               <label for="cmDa">Da</label><select id="cmDa"></select>
               <label for="cmA">A</label><select id="cmA"></select>
@@ -306,6 +349,7 @@
         rootEl.addEventListener('click', onClick);
         rootEl.querySelector('#cmFile').addEventListener('change', e => importa(e.target));
         rootEl.querySelector('#cmB2b').addEventListener('change', e => { b2bOn = e.target.checked; try { localStorage.setItem(LS_B2B, b2bOn ? '1' : '0'); } catch (x) { /* */ } render(); });
+        rootEl.querySelector('#cmRec').addEventListener('change', e => { recOn = e.target.checked; try { localStorage.setItem(LS_REC, recOn ? '1' : '0'); } catch (x) { /* */ } shellSrc(); render(); });
         rootEl.querySelector('#cmAnno').addEventListener('change', e => { anno = +e.target.value; const n = new Date(); a = anno === n.getFullYear() ? n.getMonth() + 1 : 12; da = 1; render(); });
         rootEl.querySelector('#cmDa').addEventListener('change', e => { da = +e.target.value; if (a < da) a = da; render(); });
         rootEl.querySelector('#cmA').addEventListener('change', e => { a = +e.target.value; if (a < da) da = a; render(); });
@@ -314,14 +358,17 @@
         const s = rootEl.querySelector('#cmSrc'); if (!s) return;
         const m = info && info.meta, t = info && info.comm, d = m && m.database;
         const when = iso => iso ? new Date(iso).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-        const vecchio = info && info.trattAll.length && !info.trattAll.some(r => 'origine' in r);
+        const vecchio = info && info.trattAll.length && !info.trattAll.some(r => !r.rec && 'origine' in r);
         const soloChiuse = info && info.soloChiuse;
         const imp = rootEl.querySelector('#cmImpLbl'); if (imp) imp.style.display = info && info.puoImportare ? '' : 'none';
+        const nRec = TR.filter(r => r.rec).length;
+        const recL = rootEl.querySelector('#cmRecLbl'); if (recL) recL.style.display = nRec ? '' : 'none';
         const st = (info && info.storico) || [];
         s.innerHTML = `Ultimo import trattative: <b>${t ? nf(t.righe || 0) + ' righe · ' + when(t.aggiornatoAt) + (t.aggiornatoDa ? ' da ' + esc(t.aggiornatoDa) : '') : 'nessuno'}</b>` +
             ` <button type="button" class="cm-link" data-act="storico">Storico import (${st.length})</button>` +
             ` &nbsp;|&nbsp; Foglio AVANZAMENTO: <b>${d ? nf(d.righe || 0) + ' righe · ' + when(d.aggiornatoAt) : 'non ancora letto'}</b> &nbsp;|&nbsp; Preventivi telefonici: <b>${info && info.ptErr ? 'non disponibili (' + esc(info.ptErr) + ')' : nf(PT.length)}</b>` +
             (msgOk ? `<div class="cm-msg">${esc(msgOk)}</div>` : '') +
+            (nRec ? `<div class="cm-msg">${nf(nRec)} contratti chiusi sono nel CSV delle Consegne ma non in quello del Commerciale (trattative aperte prima del periodo esportato): ${recOn ? 'sono <b>contati</b>' : 'per ora <b>non sono contati</b>'}, con il bollino "Recuperata da Consegne". <button type="button" class="cm-link" data-list='${esc(JSON.stringify({ t: 'Contratti recuperati dalle Consegne', vw: { k: 'any' }, w: 'recAll' }))}'>Vedi elenco</button></div>` : '') +
             (vecchio ? `<div class="cm-msg">L'ultimo CSV trattative è stato importato prima della BI Commerciale: l'origine e il Noleggio arrivano dal prossimo import (pulsante "Importa trattative").</div>` : '') +
             (!vecchio && info && info.senzaStato ? `<div class="cm-msg err"><b>Reimporta il CSV delle trattative.</b> L'ultimo import è stato fatto con la versione precedente della pagina e non contiene lo stato delle trattative: per ora le chiuse si riconoscono dalla data di chiusura, ma fallite e motivi non si vedono. Prima di reimportare aggiorna la pagina con Ctrl+F5.</div>` : '') +
             (!vecchio && soloChiuse ? `<div class="cm-msg">Il CSV importato contiene solo le trattative chiuse: per preventivi, trattative in corso e fallite importa il CSV con <b>tutte</b> le trattative.</div>` : '') +
@@ -359,6 +406,8 @@
         if (chip) { listF.f = chip.dataset.chip; renderList(); return; }
         const ms = e.target.closest('[data-ms]');
         if (ms) { marcheS = ms.dataset.ms; render(); return; }
+        const as = e.target.closest('[data-as]');
+        if (as) { annS = as.dataset.as; render(); return; }
         if (ccClick(e)) return;
         const th = e.target.closest('table.cm-sort th');
         if (th) sortTable(th);
@@ -370,7 +419,7 @@
     }
 
     /* ---- menu a sinistra ---- */
-    const cntC = vw => CONTR.filter(c => inPer(c) && okC(c, vw)).length;
+    const cntC = vw => cIn(vw).length;
     function side() {
         let open = {}; try { open = JSON.parse(sessionStorage.getItem('cmOpen') || '{}'); } catch (e) { /* */ }
         const item = (vw, ic, label, n, sub) => `<button type="button" class="cm-nav-i ${sub ? 'sub' : ''} ${same(vw, view) ? 'on' : ''}" data-vw='${esc(JSON.stringify(vw))}'><span class="cm-nav-ic">${ic}</span><span class="cm-nav-l">${esc(label)}</span><b>${nf(n)}</b></button>`;
@@ -380,13 +429,13 @@
               <div class="cm-nav-subs">${subs.map(s => item(s, '', s.v, cntC(s), true)).join('') || '<div class="cm-hint" style="padding:6px 10px">Nessun consulente</div>'}</div></div>`;
         };
         const consOf = s => vend.filter(v => sedeOf(v) === s).map(v => ({ k: 'v', v })).sort((x, y) => cntC(y) - cntC(x));
-        const b2bSubs = vend.filter(v => sedeOf(v) !== 'Noleggio' && CONTR.some(c => c.vend === v && c.b2b)).map(v => ({ k: 'b2b', v })).sort((x, y) => cntC(y) - cntC(x));
+        const b2bSubs = vend.filter(v => sedeOf(v) !== 'Noleggio' && contr().some(c => c.vend === v && c.b2b)).map(v => ({ k: 'b2b', v })).sort((x, y) => cntC(y) - cntC(x));
         rootEl.querySelector('#cmSide').innerHTML = item({ k: 'all' }, '📊', 'Panoramica', cntC({ k: 'all' })) +
             '<div class="cm-nav-t">Sedi</div>' + ['Agnano', 'Casamarciano', 'Salerno'].map(s => grp(s, { k: 'sede', s }, '🏢', SEDI[s], consOf(s))).join('') +
             '<div class="cm-nav-t">Categorie</div>' + grp('B2B', { k: 'b2b' }, '💼', 'B2B', b2bSubs) + grp('Noleggio', { k: 'sede', s: 'Noleggio' }, '🔑', 'Noleggio', consOf('Noleggio')) +
-            '<div class="cm-nav-t">Report</div>' + item({ k: 'marche' }, '🏷️', 'Performance marchi', new Set(CONTR.filter(inPer).map(c => c.marca)).size) +
+            '<div class="cm-nav-t">Report</div>' + item({ k: 'marche' }, '🏷️', 'Performance marchi', new Set(contr().filter(inPer).map(c => c.marca)).size) +
             item({ k: 'pt' }, '📞', 'Preventivi telefonici', PT.filter(inPer).length) + item({ k: 'ann' }, '↩️', 'Contratti annullati', TR.filter(c => c.ann && annBase(c)).length + AF.filter(annBase).length) +
-            item({ k: 'list' }, '📋', 'Tutte le trattative', TR.filter(inPer).length);
+            item({ k: 'list' }, '📋', 'Tutte le trattative', trIn({ k: 'any' }).length);
     }
 
 
@@ -402,16 +451,18 @@
     const TIPI = { doughnut: [ICO.doughnut, 'Ciambella'], bar: [ICO.bar, 'Colonne'], line: [ICO.line, 'Linee mese per mese'] };
     const saveTypes = () => { try { localStorage.setItem(LS_T, JSON.stringify(chartTypes)); } catch (e) { /* */ } };
     function groups(spec) {
-        if (spec.series) return spec.series.map(s => ({ k: s.k, l: s.recs, n: s.recs.length, c: s.c }));
+        // t = 1: la serie si divide per mese della TRATTATIVA (preventivi); altrimenti per mese dell'evento (contratto)
+        if (spec.series) return spec.series.map(s => ({ k: s.k, l: s.recs, n: s.recs.length, c: s.c, t: s.t }));
         const m = new Map();
         spec.recs.forEach(r => { const k = spec.key(r); (Array.isArray(k) ? k : [k]).forEach(x => { if (x == null || x === '') return; if (!m.has(x)) m.set(x, []); m.get(x).push(r); }); });
         let arr = [...m].map(([k, l]) => ({ k, l, n: l.length }));
         const pos = k => { const i = (spec.order || []).indexOf(k); return i < 0 ? 999 : i; };
         arr.sort((x, y) => pos(x.k) - pos(y.k) || y.n - x.n);
         // nessun raggruppamento in "Altre": si mostrano sempre tutte le voci (il grafico a barre scorre)
-        arr.forEach((g, i) => { g.c = (spec.colors && spec.colors[g.k]) || PALETTE[i % PALETTE.length]; });
+        arr.forEach((g, i) => { g.c = (spec.colors && spec.colors[g.k]) || PALETTE[i % PALETTE.length]; g.t = spec.t; });
         return arr;
     }
+    const meseDi = (g, r) => g.t ? mOfT(r) : r.m;
     function ccCard(spec) {
         CC[spec.id] = spec;
         const types = spec.types || ['doughnut', 'bar', 'line'];
@@ -452,13 +503,13 @@
         if (t === 'line' || (spec.series && t === 'bar')) {
             const S = spec.series ? G : G.slice(0, 8);
             labels = ML;
-            datasets = S.map(g => ({ label: g.k, data: ms.map(m => g.l.filter(r => r.m === m).length), backgroundColor: g.c, borderColor: g.c,
+            datasets = S.map(g => ({ label: g.k, data: ms.map(m => g.l.filter(r => meseDi(g, r) === m).length), backgroundColor: g.c, borderColor: g.c,
                 tension: .3, pointRadius: 3.5, pointHoverRadius: 6, borderWidth: 2.4, borderRadius: 5, maxBarThickness: 26, fill: false }));
             pick = (di, i) => ({ g: S[di], m: ms[i] });
         } else if (spec.series) {   // ciambella dell'andamento: prima serie visibile, mese per mese
             const g = G[0] || groups(spec)[0];
             labels = ML; type = 'doughnut';
-            datasets = [{ data: ms.map(m => g.l.filter(r => r.m === m).length), backgroundColor: ms.map((m, i) => PALETTE[i % PALETTE.length]), borderColor: card, borderWidth: 2 }];
+            datasets = [{ data: ms.map(m => g.l.filter(r => meseDi(g, r) === m).length), backgroundColor: ms.map((m, i) => PALETTE[i % PALETTE.length]), borderColor: card, borderWidth: 2 }];
             pick = (di, i) => ({ g, m: ms[i] });
         } else {
             labels = G.map(g => g.k);
@@ -476,7 +527,7 @@
                 if (!els.length) return;
                 const { datasetIndex, index } = els[0], p = pick(datasetIndex, index);
                 if (!p || !p.g) return;
-                const L = p.m ? p.g.l.filter(r => r.m === p.m) : p.g.l;
+                const L = p.m ? p.g.l.filter(r => meseDi(p.g, r) === p.m) : p.g.l;
                 openRecs(`${spec.title} · ${p.g.k}${p.m ? ' · ' + MESIL[p.m] : ''}`, L, spec.kind);
             }
         };
@@ -545,6 +596,20 @@
         const t = esc(`${fonteAnn(r)} · ${abb}`);
         return `<span class="cm-es" style="--c:${ESC[e]}"${r.ann ? ` title="${t}"` : ''}>${e}</span>${r.ann && !r.annFoglio ? ` <span class="cm-csv" title="${t}">solo CSV</span>` : ''}${r.stato === 'Fallita' && r.motivo && !r.ann ? `<small class="cm-mot">${esc(r.motivo)}</small>` : ''}`;
     }
+    // Da dove arriva un contratto: CSV del Commerciale (stesso mese o trattativa di un mese
+    // precedente) oppure recuperato dal CSV delle Consegne
+    function provC(r) {
+        if (r.stato !== 'Chiusa') return '';
+        if (r.rec) return 'Recuperata da Consegne';
+        return r.prima ? 'Trattativa di un mese precedente' : 'Trattativa dello stesso mese';
+    }
+    function provBadge(r) {
+        if (r.stato !== 'Chiusa') return '';
+        const apertaIl = r.dataT ? 'trattativa aperta il ' + dd(r.dataT) : '';
+        if (r.rec) return ` <span class="cm-rec" title="${esc('Non presente nel CSV del Commerciale: preso dal CSV delle Consegne' + (apertaIl ? ' · ' + apertaIl : '') + (recOn ? '' : ' · ora NON contato (interruttore spento)'))}">Recuperata da Consegne</span>`;
+        if (r.prima) return ` <span class="cm-prima" title="${esc('Contratto del ' + dd(r.data) + ', ' + apertaIl)}">Trattativa del ${dd(r.dataT)}</span>`;
+        return '';
+    }
     // Da dove viene l'annullamento: foglio AVANZAMENTO, etichetta del CSV o entrambi
     function fonteAnn(r) {
         if (!r.ann) return '';
@@ -557,8 +622,9 @@
         kind = kind || 'tr';
         const F = kind === 'pt'
             ? [['vend', 'Consulente', p => p.vend], ['op', 'Operatore', p => p.op], ['st', 'Stato', p => STL[p.st]], ['marca', 'Marca', p => p.marca]]
-            : [['vend', 'Consulente', r => r.vend], ['origine', 'Origine', r => r.origine], ['esito', 'Esito', esito], ['tipo', 'Tipo', r => r.tipo], ['marca', 'Marca', r => r.marca]];
+            : [['vend', 'Consulente', r => r.vend], ['sede', 'Sede', r => SEDI[r.sede]], ['origine', 'Origine', r => r.origine], ['esito', 'Esito', esito], ['tipo', 'Tipo', r => r.tipo], ['marca', 'Marca', r => r.marca]];
         if (kind === 'tr' && recs.some(r => r.ann)) F.push(['fonte', 'Fonte annullamento', fonteAnn]);
+        if (kind === 'tr' && recs.some(r => r.rec || r.prima)) F.push(['prov', 'Provenienza contratto', provC]);
         const st = { q: '' }; F.forEach(f => { st[f[0]] = ''; });
         box.innerHTML = `<div class="cm-tools"><input type="search" placeholder="Cerca cliente, consulente, veicolo, targa…" data-q>
           ${F.map(([k, l, fn]) => `<select data-f="${k}"><option value="">${l}: tutti</option>${[...new Set(recs.map(fn))].filter(Boolean).sort((x, y) => String(x).localeCompare(String(y), 'it')).map(v => `<option>${esc(v)}</option>`).join('')}</select>`).join('')}
@@ -574,7 +640,7 @@
                 ? `<div class="cm-scroll"><table class="cm-t cm-sort"><tr><th>Data</th><th class="l">Cliente</th><th class="l">Consulente</th><th class="l">Operatore</th><th class="l">Veicolo</th><th class="l">Stato</th><th class="l">Contratto</th></tr>
                    ${S.map(p => `<tr><td style="text-align:left">${dd(p.data)}</td><td class="l">${esc(p.cliente)}</td><td class="l">${esc(p.vend)}</td><td class="l">${esc(p.op)}</td><td class="l">${esc(p.marca + ' ' + p.modello)}</td><td class="l"><span class="cm-es" style="--c:${STC[p.st]}">${STL[p.st]}</span></td><td class="l">${p.contr ? '✓ ' + dd(p.contr.data) : ''}</td></tr>`).join('')}</table></div>`
                 : `<div class="cm-scroll"><table class="cm-t cm-sort"><tr><th>Data</th><th class="l">Cliente</th><th class="l">Consulente</th><th class="l">Veicolo</th><th class="l">Tipo</th><th class="l">Origine</th><th class="l">Esito</th></tr>
-                   ${S.map(r => `<tr><td style="text-align:left">${dd(r.data)}</td><td class="l">${esc(r.cliente)} ${r.b2b ? '<span class="cm-b2b">B2B</span>' : ''}${r.noleggio ? ' <span class="cm-csv">Noleggio</span>' : ''}</td><td class="l">${esc(r.vend)}</td><td class="l">${esc(r.veicolo)}</td><td class="l">${r.tipo}</td>
+                   ${S.map(r => `<tr><td style="text-align:left">${dd(r.data)}</td><td class="l">${esc(r.cliente)} ${r.b2b ? '<span class="cm-b2b">B2B</span>' : ''}${r.noleggio ? ' <span class="cm-csv">Noleggio</span>' : ''}${provBadge(r)}</td><td class="l">${esc(r.vend)}</td><td class="l">${esc(r.veicolo)}</td><td class="l">${r.tipo}</td>
                      <td class="l">${esc(r.origine)}${r.tel ? ` <span class="cm-tel" title="Preventivo telefonico del ${dd(r.tel.data)} · ${esc(r.tel.op)}">📞 Da preventivo telefonico</span>` : ''}</td><td class="l">${esitoBadge(r)}</td></tr>`).join('')}</table></div>`;
             if (L.length > 500) box.querySelector('.cm-rl').insertAdjacentHTML('beforeend', '<p class="cm-hint">Mostrate le prime 500 righe: usa la ricerca o i filtri per restringere</p>');
         };
@@ -628,9 +694,10 @@
     const convTable = (rows, totP, totC, extra) => `<div class="cm-scroll"><table class="cm-t cm-sort"><tr><th>${rows.head}</th><th>Preventivi</th><th>Contratti</th><th>Conv.</th>${extra ? '<th>di cui 📞</th>' : ''}</tr>
         ${rows.list.map(r => `<tr><td>${esc(r.k)}</td><td>${nf(r.p)}</td><td>${r.c || '–'}</td><td>${r.c ? pct(r.c, r.p) : '–'}</td>${extra ? `<td>${r.tel || '–'}</td>` : ''}</tr>`).join('')}
         <tr class="tot"><td>Totale</td><td>${nf(totP)}</td><td>${nf(totC)}</td><td>${pct(totC, totP)}</td>${extra ? `<td>${rows.tel}</td>` : ''}</tr></table></div>`;
-    function perVoce(R, keyFn, order) {
-        const m = by(R, keyFn);
-        const list = [...m].map(([k, l]) => ({ k, p: l.length, c: l.filter(isC).length, tel: l.filter(r => r.tel).length }));
+    // preventivi (R, per data trattativa) e contratti (C, per data chiusura) divisi per voce
+    function perVoce(R, C, keyFn, order) {
+        const mp = by(R, keyFn), mc = by(C, keyFn);
+        const list = [...new Set([...mp.keys(), ...mc.keys()])].map(k => { const c = mc.get(k) || []; return { k, p: (mp.get(k) || []).length, c: c.length, tel: c.filter(r => r.tel).length }; });
         const pos = k => { const i = (order || []).indexOf(k); return i < 0 ? 999 : i; };
         return list.sort((x, y) => pos(x.k) - pos(y.k) || y.c - x.c || y.p - x.p);
     }
@@ -654,17 +721,19 @@
 
     /* ---- report (Panoramica / sede / consulente / B2B) ---- */
     function renderReport() {
-        const isB = view.k === 'b2b', R = trIn(view), C = R.filter(isC), ANN = annIn(view), F = R.filter(isF), IN = R.filter(r => r.stato === 'In corso');
+        const isB = view.k === 'b2b', R = trIn(view), C = cIn(view), ANN = annIn(view), F = R.filter(isF), IN = R.filter(r => r.stato === 'In corso');
+        const PRIMA = C.filter(c => c.prima || c.rec).length, REC = C.filter(c => c.rec).length;
         const X = isB ? [] : PT.filter(p => inPer(p) && okV(p.vend));
         const P = R.length, nm = a - da + 1, TEL = C.filter(c => c.tel).length, CF = C.filter(c => c.pag), FIN = C.filter(c => c.pag === 'Finanziamento').length;
-        const b2bN = CONTR.filter(c => inPer(c) && c.b2b && c.sede !== 'Noleggio' && okV(c.vend)).length;
+        const b2bN = contr().filter(c => inPer(c) && c.b2b && c.sede !== 'Noleggio' && okV(c.vend)).length;
         const topMot = [...by(F, r => r.motivo)].sort((x, y) => y[1].length - x[1].length)[0];
         const group = view.k !== 'v' && !(isB && view.v);
         const ms = months(), cvm = ms.map(m => C.filter(c => c.m === m).length), iMax = cvm.indexOf(Math.max(...cvm));
         let rank = '';
         if (group) {
-            const rv = [...by(R, r => r.vend)].map(([k, l]) => {
-                const c = l.filter(isC);
+            const pv = by(R, r => r.vend), cv = by(C, r => r.vend);
+            const rv = [...new Set([...pv.keys(), ...cv.keys()])].map(k => {
+                const l = pv.get(k) || [], c = cv.get(k) || [];
                 return { k, p: l.length, c: c.length, ann: ANN.filter(x => x.vend === k).length, f: l.filter(isF).length, tel: c.filter(x => x.tel).length, pt: X.filter(p => p.vend === k).length, fin: c.filter(x => x.pag === 'Finanziamento').length, cf: c.filter(x => x.foglio).length };
             }).sort((x, y) => y.c - x.c || y.p - x.p);
             const best = Math.max(...rv.filter(r => r.c >= 5).map(r => r.c / r.p));
@@ -674,8 +743,8 @@
             ${rv.map(r => `<tr data-vw='${esc(JSON.stringify(isB ? { k: 'b2b', v: r.k } : { k: 'v', v: r.k }))}'><td>${esc(r.k)}</td>${showS ? `<td class="l">${sedeOf(r.k)}</td>` : ''}<td>${nf(r.p)}</td><td>${r.c}</td><td class="${r.c >= 5 && r.c / r.p === best ? 'best' : ''}">${pct(r.c, r.p)}</td><td>${r.ann || '–'}</td><td>${r.f || '–'}</td>${isB ? '' : `<td>${r.pt || '–'}</td><td>${r.tel || '–'}</td>`}<td>${pct(r.fin, r.cf)}</td></tr>`).join('')}
             <tr class="tot"><td>Totale</td>${showS ? '<td></td>' : ''}<td>${nf(P)}</td><td>${C.length}</td><td>${pct(C.length, P)}</td><td>${ANN.length}</td><td>${F.length}</td>${isB ? '' : `<td>${X.length}</td><td>${TEL}</td>`}<td>${pct(FIN, CF.length)}</td></tr></table></div></div>` + origCard(C, isB);
         }
-        const tip = perVoce(R, r => r.tipo, ['Usato', 'Km0', 'Nuovo', 'Non indicata']);
-        const ori = perVoce(R, r => r.origine);
+        const tip = perVoce(R, C, r => r.tipo, ['Usato', 'Km0', 'Nuovo', 'Non indicata']);
+        const ori = perVoce(R, C, r => r.origine);
         const SV = C.filter(c => c.serv);
         const svc = SERVIZI.map(k => ({ k, n: SV.filter(c => c.serv[k]).length })).sort((x, y) => y.n - x.n);
         const id = s => (view.k + (view.s || '') + (view.v || '') + s).replace(/[^a-z0-9]/gi, '');
@@ -684,7 +753,7 @@
         <div class="cm-vhead"><h2>${esc(title())}</h2><p>${esc(subTitle())}</p></div>
         <div class="cm-kpis">
           ${kpi('📝', 'var(--cm-grey-soft)', 'Preventivi', nf(P), 'media ' + (P / nm).toLocaleString('it-IT', { maximumFractionDigits: 1 }) + ' al mese · ' + nf(IN.length) + ' in corso', { t: 'Preventivi · ' + title(), vw: view, w: 'tutte' })}
-          ${kpi('✍️', 'var(--cm-acc-soft)', 'Contratti', nf(C.length), (isB ? 'solo B2B' : (b2bOn ? 'di cui B2B ' + b2bN : 'B2B esclusi (' + b2bN + ')')) + ' · trattative chiuse', { t: 'Contratti · ' + title(), vw: view, w: 'chiuse' })}
+          ${kpi('✍️', 'var(--cm-acc-soft)', 'Contratti', nf(C.length), (isB ? 'solo B2B' : (b2bOn ? 'di cui B2B ' + b2bN : 'B2B esclusi (' + b2bN + ')')) + ' · nel mese di chiusura' + (PRIMA ? ' · ' + PRIMA + ' da trattative di mesi precedenti' + (REC ? ' (' + REC + ' recuperate)' : '') : ''), { t: 'Contratti · ' + title(), vw: view, w: 'chiuse' })}
           ${kpi('🎯', 'var(--cm-grey-soft)', 'Conversione', pct(C.length, P), 'contratti / preventivi')}
           ${kpi('↩️', 'var(--cm-acc-soft)', 'Contratti annullati', nf(ANN.length), pct(ANN.length, C.length + ANN.length) + ' dei contratti firmati' + (ANN.some(x => !x.annFoglio) ? ' · ' + ANN.filter(x => !x.annFoglio).length + ' solo dal CSV' : ''), { t: 'Contratti annullati · ' + title(), vw: view, w: 'ann' })}
         </div>
@@ -697,10 +766,10 @@
         ${rank}
         <div class="cm-sec">Andamento</div>
         <div class="cm-grid">${ccCard({ id: id('and'), title: 'Andamento mensile', hint: C.length ? `Picco di contratti a ${MESIL[ms[iMax]]} (${cvm[iMax]}) · clicca una barra per l'elenco` : 'Nessun contratto nel periodo', wide: 1, h: 300, def: 'bar', types: ['bar', 'line', 'doughnut'],
-            series: [{ k: 'Preventivi', recs: R, c: '#dcaab5' }, { k: 'Contratti', recs: C, c: '#7a1f33' }, { k: 'Annullati', recs: ANN, c: '#c0392b' }, { k: 'Fallite', recs: F, c: '#8e9aab' }] })}</div>
+            series: [{ k: 'Preventivi', recs: R, c: '#dcaab5', t: 1 }, { k: 'Contratti', recs: C, c: '#7a1f33' }, { k: 'Annullati', recs: ANN, c: '#c0392b' }, { k: 'Fallite', recs: F, c: '#8e9aab', t: 1 }] })}</div>
         <div class="cm-sec">Esito e origini</div>
         <div class="cm-grid">
-          ${ccCard({ id: id('esi'), title: 'Esito delle trattative', hint: 'Contratto, annullato, in corso o fallita', recs: R, key: esito, order: ESITI, colors: ESC, def: 'doughnut' })}
+          ${ccCard({ id: id('esi'), title: 'Esito delle trattative', hint: 'Trattative create nel periodo: contratto, annullato, in corso o fallita', recs: R, key: esito, order: ESITI, colors: ESC, def: 'doughnut', t: 1 })}
           ${ccCard({ id: id('ori'), title: 'Origine dei contratti', hint: 'Origine trattativa (voci unite come sotto)', recs: C, key: r => r.origine, def: 'bar', horiz: true })}
           <div class="cm-card cm-wide"><h2>Preventivi e contratti per origine</h2><p class="cm-hint">${ori[0] ? `${esc([...ori].sort((x, y) => y.p - x.p)[0].k)} genera il ${pct([...ori].sort((x, y) => y.p - x.p)[0].p, P)} dei preventivi` : ''} · clicca un'intestazione per ordinare</p>
             ${convTable({ head: 'Origine', list: ori, tel: TEL }, P, C.length, !isB)}
@@ -715,8 +784,8 @@
         </div>
         <div class="cm-sec">Trattative fallite</div>
         <div class="cm-grid">
-          ${ccCard({ id: id('mot'), title: 'Motivi di fallimento', hint: F.length + ' trattative fallite · clicca per l\'elenco', recs: F, key: r => r.motivo, def: 'bar', horiz: true })}
-          ${ccCard({ id: id('fma'), title: 'Fallite per marca', hint: 'Tutte le marche · scorri il grafico', recs: F, key: r => r.marca, def: 'bar', horiz: true })}
+          ${ccCard({ id: id('mot'), title: 'Motivi di fallimento', hint: F.length + ' trattative fallite · clicca per l\'elenco', recs: F, key: r => r.motivo, def: 'bar', horiz: true, t: 1 })}
+          ${ccCard({ id: id('fma'), title: 'Fallite per marca', hint: 'Tutte le marche · scorri il grafico', recs: F, key: r => r.marca, def: 'bar', horiz: true, t: 1 })}
         </div>
         ${isB ? '' : `<div class="cm-sec">Preventivi telefonici</div>
         <div class="cm-grid">
@@ -738,9 +807,10 @@
     const logo = m => m === 'Non indicata' ? '' : `<img src="/img/marchi/${String(m).toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}.png" alt="" onerror="this.remove()">`;
     function renderMarche() {
         const scope = marcheS === 'all' ? { k: 'all' } : marcheS === 'b2b' ? { k: 'b2b' } : { k: 'sede', s: marcheS };
-        const R = trIn(scope), C = R.filter(isC), P = R.length, ANNs = annIn(scope);
-        const rows = [...by(R, r => r.marca)].map(([k, l]) => {
-            const c = l.filter(isC);
+        const R = trIn(scope), C = cIn(scope), P = R.length, ANNs = annIn(scope);
+        const mp = by(R, r => r.marca), mc = by(C, r => r.marca);
+        const rows = [...new Set([...mp.keys(), ...mc.keys()])].map(k => {
+            const l = mp.get(k) || [], c = mc.get(k) || [];
             return { k, p: l.length, c: c.length, ann: ANNs.filter(x => x.marca === k).length, f: l.filter(isF).length, i: l.filter(x => x.stato === 'In corso').length,
                 u: c.filter(x => x.tipo === 'Usato').length, z: c.filter(x => x.tipo === 'Km0').length, n: c.filter(x => x.tipo === 'Nuovo').length, tel: c.filter(x => x.tel).length };
         }).sort((x, y) => y.c - x.c || y.p - x.p);
@@ -760,7 +830,7 @@
         <div class="cm-sec">Grafici</div>
         <div class="cm-grid">
           ${ccCard({ id: 'mkC' + marcheS, title: 'Contratti per marca', hint: 'Tutte le marche · scorri il grafico · clicca per l\'elenco', recs: C, key: r => r.marca, def: 'bar', horiz: true, h: 320 })}
-          ${ccCard({ id: 'mkP' + marcheS, title: 'Preventivi per marca', hint: 'Tutte le marche · scorri il grafico · clicca per l\'elenco', recs: R, key: r => r.marca, def: 'bar', horiz: true, h: 320 })}
+          ${ccCard({ id: 'mkP' + marcheS, title: 'Preventivi per marca', hint: 'Tutte le marche · scorri il grafico · clicca per l\'elenco', recs: R, key: r => r.marca, def: 'bar', horiz: true, h: 320, t: 1 })}
         </div>
         <div class="cm-sec">Tabella completa</div>
         <div class="cm-card"><h2>Performance per marca</h2><p class="cm-hint">Clicca un'intestazione per ordinare · clicca una marca per i suoi contratti</p>
@@ -771,20 +841,22 @@
 
     /* ---- report contratti annullati ---- */
     function renderAnn() {
-        const ALL = TR.filter(c => (isC(c) || c.ann) && annBase(c)).concat(AF.filter(annBase));
+        const ALL = TR.filter(c => (isC(c) || c.ann) && annBase(c) && annSedeOk(c)).concat(AF.filter(c => annBase(c) && annSedeOk(c)));
+        const chips = [['all', 'Tutte le sedi'], ['Agnano', 'Agnano'], ['Casamarciano', 'Casamarciano'], ['Salerno', 'Salerno']];
         const AN = ALL.filter(c => c.ann), F = ALL.length, N = AN.length;
         const perV = [...by(ALL, c => c.vend)].map(([v, l]) => ({ v, f: l.length, n: l.filter(c => c.ann).length, sede: sedeOf(v) })).filter(r => r.n).sort((x, y) => y.n - x.n || x.f - y.f);
         const worst = perV.filter(r => r.f >= 5).sort((x, y) => y.n / y.f - x.n / x.f)[0];
         rootEl.querySelector('#cmMain').innerHTML = `
-        <div class="cm-vhead"><h2>Contratti annullati</h2><p>Stato ANNULLATA nel foglio AVANZAMENTO o etichetta "CONTRATTO ANNULLATO" nel CSV · Agnano, Casamarciano e Salerno · ${per()}${b2bOn ? ' · B2B incluso' : ' · B2B escluso'}</p></div>
+        <div class="cm-vhead"><h2>Contratti annullati</h2><p>Stato ANNULLATA nel foglio AVANZAMENTO o etichetta "CONTRATTO ANNULLATO" nel CSV · ${annS === 'all' ? 'Agnano, Casamarciano e Salerno' : SEDI[annS]} · ${per()}${b2bOn ? ' · B2B incluso' : ' · B2B escluso'}</p></div>
+        <div class="cm-tools">${chips.map(([k, l]) => `<button type="button" class="cm-chip ${annS === k ? 'on' : ''}" data-as="${k}">${l}</button>`).join('')}</div>
         <div class="cm-kpis">
-          ${kpi('↩️', 'var(--cm-acc-soft)', 'Contratti annullati', nf(N), (AN.some(x => !x.annFoglio) ? AN.filter(x => !x.annFoglio).length + ' solo dal CSV (non annullati nel foglio) · ' : '') + 'clicca per l\'elenco', { t: 'Contratti annullati', vw: { k: 'any' }, w: 'annAll' })}
+          ${kpi('↩️', 'var(--cm-acc-soft)', 'Contratti annullati', nf(N), (AN.some(x => !x.annFoglio) ? AN.filter(x => !x.annFoglio).length + ' solo dal CSV (non annullati nel foglio) · ' : '') + 'clicca per l\'elenco', { t: 'Contratti annullati' + (annS === 'all' ? '' : ' · ' + SEDI[annS]), vw: { k: 'any' }, w: 'annAll', s: annS })}
           ${kpi('📉', 'var(--cm-grey-soft)', 'Tasso di annullamento', pct(N, F), N + ' su ' + nf(F) + ' contratti')}
           ${kpi('👤', 'var(--cm-acc-soft)', 'Consulente con più annullati', perV[0] ? esc(perV[0].v.split(' ')[0]) + ' · ' + perV[0].n : '–', perV[0] ? pct(perV[0].n, perV[0].f) + ' dei suoi contratti' : '')}
           ${kpi('⚠️', 'var(--cm-grey-soft)', 'Tasso più alto', worst ? pct(worst.n, worst.f) : '–', worst ? esc(worst.v) + ' (almeno 5 contratti)' : '')}
         </div>
         <div class="cm-sec">Andamento</div>
-        <div class="cm-grid">${ccCard({ id: 'annM', title: 'Annullati per mese', hint: 'Mese della trattativa · confronto con i contratti', wide: 1, h: 280, def: 'bar', types: ['bar', 'line', 'doughnut'],
+        <div class="cm-grid">${ccCard({ id: 'annM', title: 'Annullati per mese', hint: 'Mese del contratto (data chiusura) · confronto con i contratti', wide: 1, h: 280, def: 'bar', types: ['bar', 'line', 'doughnut'],
             series: [{ k: 'Contratti', recs: ALL, c: '#dcaab5' }, { k: 'Annullati', recs: AN, c: '#c0392b' }] })}</div>
         <div class="cm-sec">Chi e da dove</div>
         <div class="cm-grid">
@@ -797,7 +869,13 @@
           ${ccCard({ id: 'annMa', title: 'Annullati per marca', hint: 'Tutte le marche · scorri il grafico', recs: AN, key: c => c.marca, def: 'bar', horiz: true })}
         </div>
         <div class="cm-sec">Elenco</div>
-        <div class="cm-card"><div class="cm-rbox" id="cmAnnList"></div></div>`;
+        <div class="cm-card"><div class="cm-rbox" id="cmAnnList"></div></div>
+        <div class="cm-card" style="margin-top:16px"><h2>Come si decide se un contratto è annullato</h2>
+          <div class="cm-note"><b>Annullato</b> = riga del foglio AVANZAMENTO con stato ANNULLATA, oppure trattativa del CSV con etichetta "CONTRATTO ANNULLATO". Il foglio ha la precedenza.<br>
+          <b>Foglio + CSV</b> = annullato in tutti e due · <b>Foglio (CSV senza etichetta)</b> = la trattativa c'è nel CSV ma senza etichetta · <b>Solo foglio</b> = riga ANNULLATA a cui non è stata abbinata nessuna trattativa chiusa o con etichetta del CSV (conta comunque come annullato) · <b>Solo CSV</b> = etichetta nel CSV ma riga del foglio non annullata o assente.<br><br>
+          <b>Abbinamento trattativa ↔ riga del foglio</b> (stesse regole delle Consegne, in quest'ordine; ogni riga del foglio si usa una volta sola; il telefono non si confronta):<br>
+          ${REGOLE_ABB.map(([k, v], i) => `${i + 1}. <b>${esc(k)}</b>: ${esc(v)}`).join('<br>')}<br>
+          La regola usata per ogni pratica si vede passando il mouse sul bollino dell'esito.</div></div>`;
         mountRecList(rootEl.querySelector('#cmAnnList'), AN, 'tr');
     }
 
@@ -828,11 +906,14 @@
 
     /* ---- tutte le trattative ---- */
     function renderList() {
-        const all = TR.filter(inPer);
-        const chips = [['contratti', 'Contratti', all.filter(isC)], ['tutte', 'Tutte', all], ['corso', 'In corso', all.filter(r => r.stato === 'In corso')], ['fallite', 'Fallite', all.filter(isF)],
-            ['ann', 'Annullati', all.filter(r => r.ann).concat(AF.filter(inPer))], ['tel', '📞 Da prev. telefonico', all.filter(r => r.tel)], ['b2b', '💼 B2B', all.filter(r => r.b2b)]];
+        const any = { k: 'any' };
+        const all = trIn(any), CC2 = cIn(any);   // trattative create nel periodo / contratti chiusi nel periodo
+        const chips = [['contratti', 'Contratti', CC2], ['prima', 'Da mesi precedenti', CC2.filter(r => r.prima || r.rec)], ['tutte', 'Tutte', all], ['corso', 'In corso', all.filter(r => r.stato === 'In corso')], ['fallite', 'Fallite', all.filter(isF)],
+            ['ann', 'Annullati', annIn(any)], ['tel', '📞 Da prev. telefonico', CC2.filter(r => r.tel)], ['b2b', '💼 B2B', all.filter(r => r.b2b)]];
+        const nRec = TR.filter(r => r.rec && r.stato === 'Chiusa' && inPer(r)).length;
+        if (nRec) chips.push(['rec', 'Recuperate da Consegne' + (recOn ? '' : ' (non contate)'), TR.filter(r => r.rec && r.stato === 'Chiusa' && inPer(r))]);
         const cur = chips.find(c => c[0] === listF.f) || chips[0];
-        rootEl.querySelector('#cmMain').innerHTML = `<div class="cm-vhead"><h2>Tutte le trattative</h2><p>${per()} · tutte le sedi e noleggio · esclusi ${ESCLUSI.join(', ')}</p></div>
+        rootEl.querySelector('#cmMain').innerHTML = `<div class="cm-vhead"><h2>Tutte le trattative</h2><p>${per()} · tutte le sedi e noleggio · esclusi ${ESCLUSI.join(', ')} · contratti nel mese di chiusura, trattative nel mese di apertura</p></div>
         <div class="cm-tools">${chips.map(([k, l, L]) => `<button type="button" class="cm-chip ${cur[0] === k ? 'on' : ''}" data-chip="${k}">${l} · ${nf(L.length)}</button>`).join('')}</div>
         <div class="cm-card"><div class="cm-rbox" id="cmAllList"></div></div>`;
         mountRecList(rootEl.querySelector('#cmAllList'), cur[2], 'tr');
@@ -840,12 +921,13 @@
     // elenco aperto da una card dei numeri
     function openList(o) {
         if (o.pt) { openRecs(o.t, PT.filter(p => inPer(p) && (o.vw.k === 'any' || okV(p.vend, o.vw))), 'pt'); return; }
-        let L = TR.filter(r => inPer(r) && okC(r, o.vw));
-        if (o.w === 'chiuse') L = L.filter(isC);
+        let L = trIn(o.vw);                                   // preventivi (trattative create nel periodo)
+        if (o.w === 'chiuse') L = cIn(o.vw);                  // contratti (chiusi nel periodo)
         if (o.w === 'ann') L = annIn(o.vw);
         if (o.w === 'fallite') L = L.filter(isF);
-        if (o.w === 'tel') L = L.filter(r => r.tel);
-        if (o.w === 'annAll') L = TR.filter(c => c.ann && annBase(c)).concat(AF.filter(annBase));
+        if (o.w === 'tel') L = cIn(o.vw).filter(r => r.tel);
+        if (o.w === 'annAll') L = TR.filter(c => c.ann && annBase(c) && (!o.s || o.s === 'all' || c.sede === o.s)).concat(AF.filter(c => annBase(c) && (!o.s || o.s === 'all' || c.sede === o.s)));
+        if (o.w === 'recAll') L = TR.filter(r => r.rec && r.stato === 'Chiusa');   // tutte le recuperate, qualsiasi periodo
         if (o.marca) L = L.filter(r => r.marca === o.marca);
         openRecs(o.t, L, 'tr');
     }
@@ -884,7 +966,7 @@
                 if (!rows.some(x => x.stato)) throw new Error('Nel file manca la colonna "Stato trattativa": serve il CSV con tutte le trattative');
                 // confronto con l'import precedente (stesso cliente, data e consulente)
                 const chiave = x => [`${x.nome || ''} ${x.cognome || ''} ${x.rag || ''}`.toUpperCase().replace(/\s+/g, ' ').trim(), String(x.dataTratt || x.chiusura || '').trim(), String(x.vend || '').toUpperCase().trim()].join('|');
-                const prima = new Set(((info && info.trattAll) || []).map(chiave)), dopo = new Set(rows.map(chiave));
+                const prima = new Set(((info && info.trattAll) || []).filter(x => !x.rec).map(chiave)), dopo = new Set(rows.map(chiave));
                 const pd = A().pd, date = rows.map(x => pd(x.dataTratt) || pd(x.chiusura)).filter(Boolean).sort((x, y) => x - y);
                 const body = { rows, file: file.name, chiuse: rows.filter(chiusa).length, vendita: rows.filter(x => !isNol(x)).length, noleggio: rows.filter(isNol).length,
                     dal: date.length ? dd(date[0]) : '', al: date.length ? dd(date[date.length - 1]) : '',
@@ -904,22 +986,24 @@
     function lab(vw) { return vw.k === 'v' ? vw.v : vw.k === 'all' ? 'Panoramica' : vw.k === 'b2b' ? (vw.v ? 'B2B · ' + vw.v : 'B2B') : SEDI[vw.s]; }
     function calc(vw) {
         const isB = vw.k === 'b2b', ms = months();
-        const R = trIn(vw), C = R.filter(isC), ANN = annIn(vw), F = R.filter(isF), IN = R.filter(r => r.stato === 'In corso');
+        const R = trIn(vw), C = cIn(vw), ANN = annIn(vw), F = R.filter(isF), IN = R.filter(r => r.stato === 'In corso');
         const X = isB ? [] : PT.filter(p => inPer(p) && okV(p.vend, vw));
         const CF = C.filter(c => c.foglio), SV = C.filter(c => c.serv);
         const FIN = C.filter(c => c.pag === 'Finanziamento').length, PC = C.filter(c => c.pag === 'PC (contanti)').length;
-        const cons = [...by(R, r => r.vend)].map(([k, l]) => {
-            const c = l.filter(isC);
+        const pvM = by(R, r => r.vend), cvM = by(C, r => r.vend);
+        const cons = [...new Set([...pvM.keys(), ...cvM.keys()])].map(k => {
+            const l = pvM.get(k) || [], c = cvM.get(k) || [];
             return { k, sede: sedeOf(k), p: l.length, n: c.length, ann: ANN.filter(x => x.vend === k).length, f: l.filter(isF).length, tel: c.filter(x => x.tel).length, pt: X.filter(p => p.vend === k).length, fin: c.filter(x => x.pag === 'Finanziamento').length, cf: c.filter(x => x.foglio).length };
         }).sort((x, y) => y.n - x.n || y.p - x.p);
         return {
             vw, isB, R, C, ANN, F, IN, X, P: R.length, Cn: C.length, A: ANN.length, TEL: C.filter(c => c.tel).length, FIN, PC, NI: C.length - FIN - PC, CFn: CF.length, ms,
             B2B: C.filter(c => c.b2b).length,
-            pv: ms.map(m => R.filter(r => r.m === m).length), cv: ms.map(m => C.filter(c => c.m === m).length), av: ms.map(m => ANN.filter(c => c.m === m).length),
-            fv: ms.map(m => F.filter(r => r.m === m).length), ptv: ms.map(m => X.filter(p => p.m === m).length), ptc: ms.map(m => X.filter(p => p.m === m && p.contr).length),
-            tip: perVoce(R, r => r.tipo, ['Usato', 'Km0', 'Nuovo', 'Non indicata']),
-            ori: perVoce(R, r => r.origine),
-            marche: perVoce(R, r => r.marca),
+            pv: ms.map(m => R.filter(r => mOfT(r) === m).length), cv: ms.map(m => C.filter(c => c.m === m).length), av: ms.map(m => ANN.filter(c => c.m === m).length),
+            fv: ms.map(m => F.filter(r => mOfT(r) === m).length), ptv: ms.map(m => X.filter(p => p.m === m).length), ptc: ms.map(m => X.filter(p => p.m === m && p.contr).length),
+            tip: perVoce(R, C, r => r.tipo, ['Usato', 'Km0', 'Nuovo', 'Non indicata']),
+            ori: perVoce(R, C, r => r.origine),
+            marche: perVoce(R, C, r => r.marca),
+            PRIMA: C.filter(c => c.prima || c.rec).length, REC: C.filter(c => c.rec).length,
             motivi: [...by(F, r => r.motivo)].map(([k, l]) => ({ k, n: l.length })).sort((x, y) => y.n - x.n),
             SV: SV.length, serv: SERVIZI.map(k => ({ k, n: SV.filter(c => c.serv[k]).length })),
             esiti: ST.map(s => ({ s, n: X.filter(p => p.st === s).length })), ptCh: X.filter(p => p.contr).length,
@@ -1014,11 +1098,11 @@
         const T = (t, w) => ({ t, tipo: 'text', w: w || 24 }), I = (t, w) => ({ t, tipo: 'int', w: w || 12 }), Q = (t, w) => ({ t, tipo: 'pct', w: w || 11 });
         const r = (x, y) => y ? x / y : 0;
         const fogli = [];
-        fogli.push({ nome: 'Riepilogo', tabelle: [{ titolo: 'Riepilogo per voce', nota: 'Preventivi = tutte le trattative del periodo (data trattativa). Contratti = trattative chiuse. Conversione = contratti / preventivi. Pagamento e servizi: dalla riga del foglio AVANZAMENTO.',
-            colonne: [T('Voce', 30), I('Preventivi'), I('Contratti'), Q('Conversione', 12), I('Annullati'), Q('% annullati', 11), I('In corso'), I('Fallite'), I('di cui B2B'), I('Usato'), I('Km0'), I('Nuovo'), Q('% finanziati', 12), I('Prev. telefonici', 13), I('Da prev. tel.', 12), Q('Conv. prev. tel.', 13)],
+        fogli.push({ nome: 'Riepilogo', tabelle: [{ titolo: 'Riepilogo per voce', nota: 'Preventivi = trattative create nel periodo (data trattativa). Contratti = trattative chiuse nel periodo (data chiusura), comprese quelle aperte in mesi precedenti' + (recOn ? ' e quelle recuperate dal CSV delle Consegne' : '') + '. Conversione = contratti / preventivi. Pagamento e servizi: dalla riga del foglio AVANZAMENTO.',
+            colonne: [T('Voce', 30), I('Preventivi'), I('Contratti'), Q('Conversione', 12), I('Annullati'), Q('% annullati', 11), I('In corso'), I('Fallite'), I('di cui B2B'), I('Usato'), I('Km0'), I('Nuovo'), Q('% finanziati', 12), I('Prev. telefonici', 13), I('Da prev. tel.', 12), Q('Conv. prev. tel.', 13), I('Contr. da mesi prec.', 14), I('di cui recuperati', 13)],
             righe: D.map(d => [lab(d.vw), d.P, d.Cn, r(d.Cn, d.P), d.A, r(d.A, d.Cn), d.IN.length, d.F.length, d.B2B,
                 (d.tip.find(x => x.k === 'Usato') || { c: 0 }).c, (d.tip.find(x => x.k === 'Km0') || { c: 0 }).c, (d.tip.find(x => x.k === 'Nuovo') || { c: 0 }).c,
-                r(d.FIN, d.CFn), d.isB ? '' : d.X.length, d.isB ? '' : d.TEL, d.isB ? '' : r(d.ptCh, d.X.length)]) }] });
+                r(d.FIN, d.CFn), d.isB ? '' : d.X.length, d.isB ? '' : d.TEL, d.isB ? '' : r(d.ptCh, d.X.length), d.PRIMA, d.REC]) }] });
         const mh = D[0].ms.map(m => I(MESI[m].charAt(0).toUpperCase() + MESI[m].slice(1), 8));
         const mens = (titolo, key, tot) => ({ titolo, colonne: [T('Voce', 30)].concat(mh, I('Totale', 10)), righe: D.map(d => [lab(d.vw)].concat(d[key], tot(d))) });
         fogli.push({ nome: 'Andamento mensile', tabelle: [mens('Preventivi per mese', 'pv', d => d.P), mens('Contratti per mese', 'cv', d => d.Cn), mens('Annullati per mese', 'av', d => d.A), mens('Trattative fallite per mese', 'fv', d => d.F.length)]
@@ -1035,10 +1119,12 @@
         // origini per consulente (contratti)
         const consSel = new Set();
         D.forEach(d => { if (d.vw.k === 'v' || (d.vw.k === 'b2b' && d.vw.v)) consSel.add(d.vw.v); else d.cons.forEach(c => consSel.add(c.k)); });
-        const uniTR = new Map(); D.forEach(d => d.R.forEach(x => uniTR.set(x.i, x)));
-        const RC = [...uniTR.values()].filter(x => consSel.has(x.vend)), VC = RC.filter(isC);
+        const uniTR = new Map(); D.forEach(d => d.R.forEach(x => uniTR.set(x.i, x)));   // preventivi
+        const uniC = new Map(); D.forEach(d => d.C.forEach(x => uniC.set(x.i, x)));      // contratti
+        const RC = [...uniTR.values()].filter(x => consSel.has(x.vend)), VC = [...uniC.values()].filter(x => consSel.has(x.vend));
         const oriC = [...new Set(VC.map(c => c.origine))].sort((x, y) => VC.filter(c => c.origine === y).length - VC.filter(c => c.origine === x).length);
-        const rowsC = [...by(RC, c => c.vend)].map(([v, l]) => { const c = l.filter(isC); return [v, SEDI[sedeOf(v)], l.length, c.length, r(c.length, l.length)].concat(oriC.map(k => c.filter(x => x.origine === k).length), c.filter(x => x.tel).length); }).sort((x, y) => y[3] - x[3]);
+        const pRC = by(RC, c => c.vend), cRC = by(VC, c => c.vend);
+        const rowsC = [...new Set([...pRC.keys(), ...cRC.keys()])].map(v => { const l = pRC.get(v) || [], c = cRC.get(v) || []; return [v, SEDI[sedeOf(v)], l.length, c.length, r(c.length, l.length)].concat(oriC.map(k => c.filter(x => x.origine === k).length), c.filter(x => x.tel).length); }).sort((x, y) => y[3] - x[3]);
         fogli.push({ nome: 'Consulenti', tabelle: [{ titolo: 'Consulenti: preventivi, contratti e origini dei contratti', colonne: [T('Consulente', 24), T('Sede', 28), I('Preventivi'), I('Contratti'), Q('Conversione', 12)].concat(oriC.map(k => I(k, 14)), I('di cui da prev. tel.', 14)),
             righe: rowsC, totale: rowsC.length ? ['Totale', '', RC.length, VC.length, r(VC.length, RC.length)].concat(oriC.map(k => VC.filter(c => c.origine === k).length), VC.filter(c => c.tel).length) : null }] });
         // tipologia e pagamento
@@ -1051,8 +1137,8 @@
         const RM = [...uniTR.values()];
         const uniA = new Map(); D.forEach(d => d.ANN.forEach(x => uniA.set(x.i, x)));
         const ANNx = [...uniA.values()];
-        const mk = [...by(RM, x => x.marca)].map(([k, l]) => { const c = l.filter(isC); return [k, l.length, c.length, r(c.length, l.length), ANNx.filter(x => x.marca === k).length, l.filter(x => x.stato === 'In corso').length, l.filter(isF).length, c.filter(x => x.tipo === 'Usato').length, c.filter(x => x.tipo === 'Km0').length, c.filter(x => x.tipo === 'Nuovo').length]; }).sort((x, y) => y[2] - x[2] || y[1] - x[1]);
-        const RMc = RM.filter(isC);
+        const RMc = [...uniC.values()], pRM = by(RM, x => x.marca), cRM = by(RMc, x => x.marca);
+        const mk = [...new Set([...pRM.keys(), ...cRM.keys()])].map(k => { const l = pRM.get(k) || [], c = cRM.get(k) || []; return [k, l.length, c.length, r(c.length, l.length), ANNx.filter(x => x.marca === k).length, l.filter(x => x.stato === 'In corso').length, l.filter(isF).length, c.filter(x => x.tipo === 'Usato').length, c.filter(x => x.tipo === 'Km0').length, c.filter(x => x.tipo === 'Nuovo').length]; }).sort((x, y) => y[2] - x[2] || y[1] - x[1]);
         fogli.push({ nome: 'Performance marchi', tabelle: [{ titolo: 'Performance per marca (tutte le voci scelte)', colonne: [T('Marca', 20), I('Preventivi'), I('Contratti'), Q('Conversione', 12), I('Annullati'), I('In corso'), I('Fallite'), I('Usato'), I('Km0'), I('Nuovo')],
             righe: mk, totale: ['Totale', RM.length, RMc.length, r(RMc.length, RM.length), ANNx.length, RM.filter(x => x.stato === 'In corso').length, RM.filter(isF).length, RMc.filter(x => x.tipo === 'Usato').length, RMc.filter(x => x.tipo === 'Km0').length, RMc.filter(x => x.tipo === 'Nuovo').length] }] });
         // motivi di fallimento
@@ -1068,11 +1154,11 @@
         // elenchi
         const riga = c => [dd(c.data), c.cliente, c.vend, SEDI[c.sede], c.veicolo, c.tipo, c.origine, esito(c), c.motivo || '', c.b2b ? 'Sì' : '', c.pag || '',
             c.serv ? (c.serv['Blockshaft'] ? 'Sì' : '') : '', c.serv ? (c.serv['Lojack'] ? 'Sì' : '') : '', c.serv ? (c.serv['FIR'] ? 'Sì' : '') : '', c.serv ? (c.serv['Garanzia Mawdy'] ? 'Sì' : '') : '', c.serv ? (c.serv['Pack manutenzione'] ? 'Sì' : '') : '',
-            c.tel ? dd(c.tel.data) : '', isC(c) ? (c.foglio ? 'Sì' : 'No') : ''];
-        const colL = [T('Data', 11), T('Cliente', 28), T('Consulente', 22), T('Sede', 28), T('Veicolo', 34), T('Tipo', 10), T('Origine', 22), T('Esito', 12), T('Motivo fallimento', 24), T('B2B', 6), T('Pagamento', 14), T('Blockshaft', 10), T('Lojack', 8), T('FIR', 6), T('Garanzia Mawdy', 10), T('Pack manut.', 10), T('Prev. telefonico del', 13), T('Nel foglio', 9)];
+            c.tel ? dd(c.tel.data) : '', isC(c) ? (c.foglio ? 'Sì' : 'No') : '', c.dataT ? dd(c.dataT) : '', provC(c)];
+        const colL = [T('Data', 11), T('Cliente', 28), T('Consulente', 22), T('Sede', 28), T('Veicolo', 34), T('Tipo', 10), T('Origine', 22), T('Esito', 12), T('Motivo fallimento', 24), T('B2B', 6), T('Pagamento', 14), T('Blockshaft', 10), T('Lojack', 8), T('FIR', 6), T('Garanzia Mawdy', 10), T('Pack manut.', 10), T('Prev. telefonico del', 13), T('Nel foglio', 9), T('Data trattativa', 13), T('Provenienza contratto', 26)];
         const tutti = [...uniTR.values()].sort(sortD);
         if (M.s.ann) fogli.push({ nome: 'Annullati', tabelle: [{ titolo: 'Contratti annullati', colonne: colL, righe: ANNx.slice().sort(sortD).map(riga) }] });
-        if (M.s.lista) fogli.push({ nome: 'Contratti', tabelle: [{ titolo: 'Elenco dei contratti (trattative chiuse)', colonne: colL, righe: tutti.filter(isC).map(riga) }] });
+        if (M.s.lista) fogli.push({ nome: 'Contratti', tabelle: [{ titolo: 'Elenco dei contratti (chiusi nel periodo)', colonne: colL, righe: [...uniC.values()].sort(sortD).map(riga) }] });
         if (M.s.prev) fogli.push({ nome: 'Preventivi', tabelle: [{ titolo: 'Elenco di tutte le trattative (preventivi)', colonne: colL, righe: tutti.map(riga) }] });
         const amb = D.length === 1 ? lab(D[0].vw) : D.length + ' voci';
         const body = { titolo: 'Report commerciale' + (D.length === 1 ? ' · ' + lab(D[0].vw) : ''), sottotitolo: `Periodo ${M.per} · ${amb} · B2B ${M.b2b ? 'incluso' : 'escluso'} · Gruppo Autoscala`,
@@ -1122,7 +1208,7 @@
         let h = `<section class="amb"><header><h1>${esc(tit)}</h1><p>${esc(sub)}</p></header>
           <div class="kpis">
             ${kp('Preventivi', nf(d.P), 'media ' + (d.P / nm).toLocaleString('it-IT', { maximumFractionDigits: 1 }) + ' al mese')}
-            ${kp('Contratti', nf(d.Cn), 'media ' + (d.Cn / nm).toLocaleString('it-IT', { maximumFractionDigits: 1 }) + ' al mese')}
+            ${kp('Contratti', nf(d.Cn), 'media ' + (d.Cn / nm).toLocaleString('it-IT', { maximumFractionDigits: 1 }) + ' al mese' + (d.PRIMA ? ' · ' + d.PRIMA + ' da trattative di mesi precedenti' : ''))}
             ${kp('Conversione', pct(d.Cn, d.P), 'contratti / preventivi')}
             ${kp('Contratti annullati', nf(d.A), 'stato annullata')}
             ${d.isB ? kp('Trattative fallite', nf(d.F.length), pct(d.F.length, d.P) + ' dei preventivi') : kp('Preventivi telefonici', nf(d.X.length), d.ptCh + ' diventati contratto')}
@@ -1188,9 +1274,25 @@
 
 
     /* ================= avvio ================= */
+    // Barra in alto del CRM color bordeaux mentre e' aperto il Commerciale:
+    // <html data-bi="commerciale"> finche' la pagina e' visibile (stili in commerciale.css)
+    let barObs = null;
+    function seguiBarra() {
+        const page = document.getElementById('commercialePage');
+        if (!page || barObs) return;
+        const agg = () => {
+            const vis = page.style.display !== 'none' && getComputedStyle(page).display !== 'none';
+            if (vis) document.documentElement.setAttribute('data-bi', 'commerciale');
+            else if (document.documentElement.getAttribute('data-bi') === 'commerciale') document.documentElement.removeAttribute('data-bi');
+        };
+        barObs = new MutationObserver(agg);
+        barObs.observe(page, { attributes: true, attributeFilter: ['style', 'class'] });
+        agg();
+    }
     function init() {
         rootEl = document.getElementById('commercialeRoot');
         if (!rootEl) return;
+        seguiBarra();
         if (!rootEl.dataset.ready) { shell(); rootEl.dataset.ready = '1'; }
         selects(); shellSrc();
         load(true);

@@ -160,7 +160,8 @@
     /* ================= categorie ================= */
     // base: 'tutti' = anche annullate; 'validi' = solo non annullate; 'dc' = solo da consegnare
     const CATS = [
-        { id: 'esito', t: 'Vendite: consegnate, da consegnare, annullate', base: 'tutti', get: r => r.esito, order: ['Consegnate', 'Da consegnare', 'Annullate'] },
+        // mensile: anche la vista a colonne divide per mese (colonne affiancate per ogni voce), come le linee
+        { id: 'esito', t: 'Vendite: consegnate, da consegnare, annullate', base: 'tutti', get: r => r.esito, order: ['Consegnate', 'Da consegnare', 'Annullate'], mensile: true },
         { id: 'dc', t: 'Vetture da consegnare: stato', base: 'dc', get: r => r.stato },
         { id: 'consulenti', t: 'Consulenti: vendite, consegnate, in lavorazione, annullate', base: 'tutti', get: r => r.vend, special: 'consulenti' },
         { id: 'stato', t: 'Stato (annullate comprese)', base: 'tutti', get: r => r.stato },
@@ -486,7 +487,7 @@
     function chartClick(c, agg, R, type, el0) {
         const baseInfo = { n: agg.base, label: c.money ? 'finanziati' : c.base === 'tutti' ? '(annullate comprese)' : c.base === 'dc' ? 'da consegnare' : 'validi' };
         const titolo = c.t.split(':')[0];
-        if (type === 'line' && c.special !== 'importoMese') {
+        if ((type === 'line' || (type === 'bar' && c.mensile)) && c.special !== 'importoMese') {
             const v = lineVoci(c, agg)[el0.datasetIndex]; if (!v) return;
             const k = monthKeys(c.money ? agg.B : R)[el0.index];
             const list = v.list.filter(r => mkOf(r) === k && (c.special !== 'consulenti' || r.esito !== 'Annullate'));
@@ -581,6 +582,14 @@
             return { type: 'bar', data: { labels, datasets: ser.map(([l, e, col]) => ({ label: l, data: agg.voci.map(v => v.list.filter(r => r.esito === e).length), backgroundColor: col, borderRadius: 4, stack: 's', maxBarThickness: 22 })) },
                 options: { ...common, indexAxis: 'y', scales: { x: { ...valAxis, stacked: true }, y: { ...catAxis, stacked: true } },
                     plugins: { ...common.plugins, legend: { ...common.plugins.legend, position: 'top' } } } };
+        }
+        // colonne MESE PER MESE (stessi numeri del grafico a linee): una colonna per voce, affiancate in ogni mese
+        if (type === 'bar' && c.mensile) {
+            const mm = monthly(agg.voci, R), ks = monthKeys(R);
+            const inCorso = ks.length && ks[ks.length - 1] === NOW_KEY;
+            const labs = mm.labels.map((l, i) => (inCorso && i === mm.labels.length - 1) ? l + ' (in corso)' : l);
+            return { type: 'bar', data: { labels: labs, datasets: mm.series.map((s, i) => ({ label: lbl(s.nome), data: s.valori, backgroundColor: colorOfV(s.nome, i), borderRadius: 4, maxBarThickness: 18 })) },
+                options: { ...common, scales: { ...axes, x: { ...axes.x, ticks: { ...axes.x.ticks, maxRotation: 0, autoSkip: true } } } } };
         }
         const data = agg.voci.map(val);
         if (type === 'bar') {

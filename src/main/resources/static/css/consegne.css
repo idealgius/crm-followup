@@ -286,3 +286,9 @@ table.cg-list { width:100%; border-collapse:collapse; min-width:900px; }
 .cg-an-mode { display:flex; gap:3px; background:var(--cg-grey-soft); border-radius:10px; padding:3px; }
 .cg-an-mode button { height:28px; padding:0 10px; border:0; border-radius:8px; background:transparent; color:var(--cg-ink-2) !important; font-weight:700; font-size:12px !important; cursor:pointer; }
 .cg-an-mode button.on { background:var(--cg-card); color:var(--cg-ink) !important; box-shadow:0 1px 3px rgba(0,0,0,.15); }
+/* vista salvata della scheda Tempistiche (solo abbinati / solo foglio / solo CSV) */
+.cg-vista { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:12px; padding:10px 14px; border-radius:14px; background:rgba(255,255,255,.14); color:#fff; font-size:13px; }
+.cg-vista b { color:#fff; }
+.cg-vista button { border:0; border-radius:10px; padding:6px 12px; font-weight:700; font-size:12.5px !important; cursor:pointer; background:#fff; color:var(--cg-band) !important; }
+.cg-chip.cg-chip-save { border-color:var(--cg-teal); color:var(--cg-teal) !important; font-weight:700; }
+.cg-chip.cg-chip-save:hover { background:var(--cg-teal); color:#0f3a2e !important; }

@@ -173,7 +173,13 @@ public class FollowUpImportController {
                         if (st == null) continue;
                         st.setOutcome(String.valueOf(am.get("outcome")));
                         String note = str(am.get("notes"));
-                        if (note != null) st.setNotes(st.getNotes() == null || st.getNotes().isBlank() ? note : st.getNotes() + "\n" + note);
+                        // la nota si aggiunge solo se non c'e' gia' (reimportando lo stesso CSV con
+                        // "Aggiorna esistente" non si duplica)
+                        if (note != null) {
+                            String prima = st.getNotes();
+                            if (prima == null || prima.isBlank()) st.setNotes(note);
+                            else if (!prima.contains(note)) st.setNotes(prima + "\n" + note);
+                        }
                         LocalDate d = am.get("date") != null ? LocalDate.parse(String.valueOf(am.get("date"))) : LocalDate.now(ITALY);
                         st.setExecutedAt(LocalDateTime.of(d, ora));
                         st.setExecutedBy(user);

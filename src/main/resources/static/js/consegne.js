@@ -7,18 +7,29 @@
       Gestore / Moderatore). Il file viene letto e ridotto qui nel browser
       alle sole colonne necessarie (niente telefoni, email, CF), poi
       inviato a POST /api/consegne/trattative, che sostituisce l'import
-      precedente. Scartate le righe con Sede "Gruppo Autoscala Noleggio".
+      precedente. Si salvano TUTTE le righe (anche il Noleggio, con l'ID
+      trattativa): le Consegne poi mostrano solo le chiuse senza Noleggio,
+      la BI Commerciale le usa per recuperare i contratti che mancano nel
+      suo CSV (trattative aperte in un anno e chiuse in quello dopo).
    2) Scheda DATABASE del foglio Google "AVANZAMENTO 2026": la legge il
       server (script Apps Script + GSHEET_URL / GSHEET_TOKEN) ogni 5
       minuti, oppure subito con "Aggiorna dal foglio Google".
       Tenute solo le righe con B2C = FALSE.
 
-   Abbinamento trattativa -> riga DATABASE, in ordine di priorita':
-     1. targa/telaio + nome cliente
-     2. nome cliente (data vicina, entro 45 giorni)
-     3. targa o telaio completi (entro 60 giorni)
-     4. ultime cifre del telaio (entro 30 giorni)
-     5. nome cliente (qualsiasi data)
+   Abbinamento trattativa -> riga DATABASE, in ordine di priorita'
+   (ogni riga del foglio si usa una volta sola; in ogni livello passano
+   prima le coppie con la data piu' vicina; il telefono non si confronta):
+     0. abbinamento fatto a mano ("Verifica e abbina a...")
+     1. targa/telaio + nome cliente (qualsiasi data)
+     2. nome cliente, date entro 45 giorni
+     3. targa o telaio completi con nome diverso, entro 60 giorni,
+        stesso consulente, riga del foglio non ANNULLATA
+     4. ultime cifre del telaio, entro 30 giorni, stesso consulente,
+        riga del foglio non ANNULLATA
+     5. nome cliente, qualsiasi data
+     6. data entro 7 giorni + stesso consulente + una parola del modello in comune
+   Nome uguale = almeno 2 parole in comune (1 se uno dei nomi ha una parola sola).
+   Data della trattativa = data chiusura (se manca, data trattativa).
    Non trovate -> lista "Da verificare" (non conteggiate).
 
    Classificazione (stato dal foglio + data dal CSV):
@@ -45,6 +56,21 @@
     let rootEl = null;
     let meta = null;    // info ultimo import / ultima lettura foglio dal server
     let autoTimer = null;
+    // VISTA SALVATA della scheda Tempistiche: quali contratti contare
+    // ('abb' = abbinati CSV + foglio, 'solo' = solo nel foglio, 'csv' = solo nel CSV,
+    // compresi quelli caricati a mano come contratto differente). Vuota = tutti.
+    // Si sceglie dalla lista ("Usa questa scelta nella pagina") e resta salvata in questo browser.
+    const LS_VISTA = 'consegne_vista_v1';
+    const VISTA_ID = ['abb', 'solo', 'csv'];
+    let vista = new Set();
+    try { vista = new Set((JSON.parse(localStorage.getItem(LS_VISTA) || '[]') || []).filter(x => VISTA_ID.includes(x))); } catch (e) { /* */ }
+    const vistaOk = r => !vista.size || [...vista].some(id => originIs(id, r));
+    function salvaVista(ids) {
+        vista = new Set((ids || []).filter(x => VISTA_ID.includes(x)));
+        if (vista.size === VISTA_ID.length) vista = new Set();   // tutte e tre = tutti
+        try { localStorage.setItem(LS_VISTA, JSON.stringify([...vista])); } catch (e) { /* */ }
+        if (result) render(rootEl.querySelector('#cgBody'));
+    }
 
     /* ================= CSV ================= */
     function parseCSV(text) {
@@ -82,6 +108,7 @@
         // tipo cliente, data trattativa): servono alla BI Commerciale. Le Consegne
         // continuano a lavorare SENZA il Noleggio (vedi applyServerData).
         return rows.map(r => ({
+            id: String(r['ID Trattativa'] || '').trim(),   // numero unico della trattativa (confronto tra i due CSV)
             sede: r['Sede'], chiusura: r['Data chiusura'], consegna: r['Data Consegna'], prevista: r['Data prevista consegna'],
             vend: r['Venditore'], nome: r['Nome cliente'], cognome: r['Cognome Cliente'], rag: r['Rag. Sociale Cliente'],
             tipo: r['Tipo Trattativa'], marca: r['Marca'], modello: r['Modello'], targa: r['Targa'], telaio: r['Telaio'],
@@ -630,7 +657,8 @@
     }
 
     function render(body) {
-        const R = result.recs;
+        const R = result.recs.filter(vistaOk);   // vista salvata (vuota = tutti)
+        const vistaLbl = [...vista].map(id => ORIGIN_LABEL[id]).join(' + ');
         const months = [...new Set(R.map(r => r.m))].sort((a, b) => a - b);
         // Le annullate NON fanno parte dei contratti (come nel conteggio sul
         // foglio): percentuali calcolate solo sui contratti validi.
@@ -679,6 +707,7 @@
         const maxR = rs.length ? rs[0][1] : 1;
 
         body.innerHTML = `
+          ${vista.size ? `<div class="cg-vista"><span>📌 Stai vedendo solo: <b>${esc(vistaLbl)}</b> · ${fmt(R.filter(r => r.k !== 'ann').length)} contratti su ${fmt(result.recs.filter(r => r.k !== 'ann').length)}</span><button type="button" data-vista-reset>Mostra tutti</button></div>` : ''}
           <section class="cg-kpis">${kpi}</section>
           <section class="cg-grid">
             <div class="cg-card ${vede('G_CG_TEMPI') ? '' : 'chart-perm-hidden'}">
@@ -713,6 +742,8 @@
             </div>
           </section>`;
 
+        const vr = body.querySelector('[data-vista-reset]');
+        if (vr) vr.addEventListener('click', () => salvaVista([]));
         body.querySelector('.cg-kpis').addEventListener('click', e => {
             const b = e.target.closest('[data-kpi]'); if (!b) return;
             const base = { n: RV.length, label: 'nel periodo importato' }, k = b.dataset.kpi;
@@ -876,6 +907,8 @@
             setVerifica(key, on, b);
         });
         ov.querySelector('#cgMOrigin').addEventListener('click', e => {
+            const sv = e.target.closest('[data-salvavista]');
+            if (sv) { salvaVista(sv.dataset.salvavista ? sv.dataset.salvavista.split(',') : []); renderOrigin(); return; }
             const c = e.target.closest('[data-origin]'); if (!c) return;
             const id = c.dataset.origin;
             if (!id) curOrigins.clear(); else if (curOrigins.has(id)) curOrigins.delete(id); else curOrigins.add(id);
@@ -934,7 +967,7 @@
     function renderOrigin() {
         const box = ov.querySelector('#cgMOrigin');
         if (curVerify) { box.innerHTML = ''; return; }
-        const nSolo = cur.filter(r => r.solo).length, nCsv = cur.filter(r => r.soloCsv).length, nAbb = cur.length - nSolo - nCsv;
+        const nSolo = cur.filter(r => originIs('solo', r)).length, nCsv = cur.filter(r => originIs('csv', r)).length, nAbb = cur.length - nSolo - nCsv;
         const nCheck = cur.filter(needsCheck).length, nVer = cur.filter(r => r.check && verOf(r)).length;
         const chip = (id, label, n) => `<button class="cg-chip ${(id ? curOrigins.has(id) : curOrigins.size === 0) ? 'on' : ''}" type="button" data-origin="${id}">${label} (${fmt(n)})</button>`;
         const origini = [nAbb, nSolo, nCsv].filter(Boolean).length;
@@ -943,8 +976,17 @@
             (origini > 1 ? (nAbb ? chip('abb', 'Abbinati', nAbb) : '') + (nSolo ? chip('solo', 'Solo nel foglio', nSolo) : '') + (nCsv ? chip('csv', 'Solo nel CSV', nCsv) : '') : '') +
             (nCheck ? chip('check', '<span class="cg-info cg-info-static">i</span>Da verificare a mano', nCheck) : '') +
             (nVer ? chip('ver', '✓ Verificati a mano', nVer) : '') : '';
+        // salva la scelta (Abbinati / Solo nel foglio / Solo nel CSV) come vista della scheda Tempistiche
+        const scelti = [...curOrigins].filter(x => VISTA_ID.includes(x));
+        if (box.innerHTML && (scelti.length || vista.size)) {
+            const uguale = scelti.length === vista.size && scelti.every(x => vista.has(x));
+            box.insertAdjacentHTML('beforeend', scelti.length && !uguale
+                ? `<button type="button" class="cg-chip cg-chip-save" data-salvavista="${scelti.join(',')}" title="La tabella, le card e i motivi della scheda Tempistiche conteranno solo questi contratti (resta salvato)">📌 Usa questa scelta nella pagina</button>`
+                : vista.size ? `<button type="button" class="cg-chip cg-chip-save" data-salvavista="" title="Torna a contare tutti i contratti nella scheda Tempistiche">📌 Pagina: mostra tutti</button>` : '');
+        }
     }
-    const originIs = (id, r) => id === 'solo' ? !!r.solo : id === 'csv' ? !!r.soloCsv : id === 'abb' ? (!r.solo && !r.soloCsv)
+    // 'csv' comprende anche le trattative caricate a mano come contratto differente (non sono nel foglio)
+    const originIs = (id, r) => id === 'solo' ? !!r.solo : id === 'csv' ? !!(r.soloCsv || r.manuale) : id === 'abb' ? (!r.solo && !r.soloCsv && !r.manuale)
         : id === 'check' ? needsCheck(r) : id === 'ver' ? !!(r.check && verOf(r)) : true;
     const originOk = r => !curOrigins.size || [...curOrigins].some(id => originIs(id, r));
     const reasonOk = r => !curChips.size || curChips.has(r.stato);
@@ -1134,17 +1176,48 @@
     // del foglio con le stesse regole delle Consegne. I dati delle Consegne non
     // vengono toccati (si rimettono come erano subito dopo).
     // Restituisce: righe -> ogni riga del foglio (raw) con la trattativa del Commerciale abbinata (csv) o null
+    //
+    // CONTRATTI RECUPERATI DALLE CONSEGNE: il CSV del Commerciale contiene solo le
+    // trattative CREATE nel periodo esportato; una trattativa aperta prima (es. dicembre
+    // 2025) e chiusa dopo (gennaio 2026) non c'e'. Il CSV delle Consegne invece ha le
+    // trattative CHIUSE, quindi le contiene. Qui si aggiungono le chiuse delle Consegne
+    // che mancano nel CSV del Commerciale, segnate con rec = true (bollino "Recuperata
+    // da Consegne"; nel Commerciale un interruttore decide se contarle).
+    // Confronto: ID trattativa; se manca da una delle due parti (import fatti prima
+    // della colonna ID) nome cliente + consulente + data chiusura.
+    function recuperaDaConsegne(comm, cons) {
+        const chiave = t => {
+            const dc = pd(t.chiusura);
+            if (!dc) return '';
+            return [[...toks(`${t.nome || ''} ${t.cognome || ''} ${t.rag || ''}`)].sort().join(' '), [...toks(t.vend)].sort().join(' '), fmtD(dc)].join('|');
+        };
+        const ids = new Set(), keys = new Set();
+        comm.forEach(t => { if (t.id) ids.add(String(t.id)); const k = chiave(t); if (k) keys.add(k); });
+        const visti = new Set(), out = [];
+        (cons || []).forEach(t => {
+            if (!isChiusa(t) || !pd(t.chiusura)) return;
+            const k = chiave(t), id = String(t.id || '');
+            if ((id && ids.has(id)) || keys.has(k)) return;          // c'e' gia' nel CSV del Commerciale
+            const v = id || k;
+            if (visti.has(v)) return;                               // doppione nel CSV delle Consegne
+            visti.add(v);
+            out.push({ ...t, stato: t.stato || 'Chiusa', rec: true });
+        });
+        return out;
+    }
     async function carica(altre) {
         applyServerData(await api('/data'));
         const tieni = { tratt, trattAll, result, vendMap };
-        trattAll = Array.isArray(altre) ? altre : [];
+        const comm = Array.isArray(altre) ? altre : [];
+        const recuperate = comm.length ? recuperaDaConsegne(comm, tieni.trattAll) : [];
+        trattAll = comm.concat(recuperate);
         // chiuse + quelle con etichetta "CONTRATTO ANNULLATO" (nel CSV risultano Fallite):
         // passano tutte dallo stesso abbinamento col foglio delle Consegne
         tratt = trattAll.filter(r => !/noleggio/i.test(r.sede || '') && (isChiusa(r) || /contratto\s+annullat/i.test(r.etichetta || '')));
         if (tratt.length && db) compute(); else result = null;
         const righe = result && tratt.length && db ? result.righe.slice() : (db || []).map(g => ({ raw: g._raw, csv: null, how: '' }));
         const vmap = vendMap;
-        const out = { meta, vendMap: vmap, trattAll, righe };
+        const out = { meta, vendMap: vmap, trattAll, righe, recuperate: recuperate.length };
         tratt = tieni.tratt; trattAll = tieni.trattAll; result = tieni.result; vendMap = tieni.vendMap;
         return out;
     }

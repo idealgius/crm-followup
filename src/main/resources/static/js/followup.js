@@ -742,16 +742,10 @@ async function printFollowUpsByConsultant() {
    cliente + Cognome Cliente, Tel.1 Cliente, Email1 Cliente, Marca, Modello,
    Note Cliente (esiti degli step).
 
-   Note Cliente, lette in ordine:
-     05/10            -> data delle azioni che seguono (anno corrente)
-     nr, non risponde, non raggiungibile, non disponibile, occupato, nd
-                      -> prossimo step di CHIAMATA (1, 2, poi 4) = ❌
-     wh / whatsapp    -> step 3 = WhatsApp inviato
-     mail             -> step 3 = Mail inviata
-     altro testo      -> prossimo step di chiamata = ✅ risponde, con la nota
-     FISS. APP. 10/05 12:00 -> appuntamento fissato (flag Appuntamento) e risponde
-   Esito della scheda: Risponde se il cliente ha risposto; Non risponde se
-   tutti e 4 gli step sono stati fatti senza risposta.
+   Note Cliente: come si leggono e' spiegato sopra parseFollowUpNote (qui sotto).
+   In breve: step 1, 2 e 4 = chiamate, step 3 = WhatsApp o mail; una data all'inizio
+   di un blocco = nuovo giorno; nr/segreteria/numero non attivo = non risponde;
+   wh + testo "via whatsapp" = risposta su WhatsApp; altro testo = risponde.
    ===================================================================== */
 const escFu = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fuNorm = s => String(s ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').trim().split(/\s+/).filter(Boolean).sort().join(' ');
@@ -795,51 +789,162 @@ function parseCsvSemicolon(text) {
 }
 
 // Note Cliente -> azioni sugli step + esito della scheda
+//
+// COME SI LEGGONO LE NOTE (esempi reali: "12/10  nr  wh", "12/10  segreteria  wh  Il cliente comunica...")
+//  - Step 1, 2 e 4 = tentativi di CHIAMATA; step 3 = WhatsApp o mail.
+//  - Una data (14/09, 14-09, 25.09) all'inizio di un blocco = nuovo giorno: le azioni che
+//    seguono hanno quella data. Una data DENTRO una frase ("disponibilita' 14/05 alle ore 10")
+//    non e' un nuovo giorno. L'anno e' quello della data della trattativa.
+//  - nr, n.r., non risponde, non raggiungibile, irraggiungibile, segreteria, spento, nd
+//    (anche "recall NR", "chiamato ma nr") -> prossimo step di chiamata = non risponde.
+//    occupato / non disponibile seguiti da una frase sono una frase (il cliente ha risposto).
+//  - wh / wa / whatsapp -> step 3 = WhatsApp inviato; mail / e-mail -> step 3 = Mail inviata.
+//      wh + testo che parla di WhatsApp ("comunica via whatsapp", "scrive", "messaggio")
+//        -> il cliente ha risposto SU WHATSAPP: la nota va sullo step 3.
+//      wh + altro testo -> WhatsApp inviato e il testo e' la risposta alla chiamata successiva.
+//  - Altro testo -> prossimo step di chiamata = risponde, con la nota. "Inviato preventivo via
+//    mail" e simili sono note dello step, non lo step 3.
+//  - "Richiamare alle 18:30" / "dopo le 14:30" subito dopo un nr = promemoria: va nella nota di
+//    quello step. "Chiede di essere ricontattato alle 18:30. <altro testo>" -> il testo dopo,
+//    senza una nuova data, e' il contatto del pomeriggio = step di chiamata successivo.
+//  - Piu' di 3 chiamate: i tentativi in piu' finiscono nella nota dell'ultimo step di chiamata.
+//  - FISS. APP. 10/05 12:00 -> appuntamento fissato (flag Appuntamento) e il cliente ha risposto.
+// Esito: Risponde se c'e' una risposta (anche su WhatsApp) o un appuntamento; Non risponde se
+// tutti e 4 gli step sono fatti senza risposta; altrimenti In corso.
 function parseFollowUpNote(note, workDate) {
-    const year = new Date().getFullYear();
-    let date = workDate;
-    const actions = [], callSteps = [1, 2, 4];
-    // "FISS. APP. 10/05 12:00" = appuntamento fissato: si segna l'appuntamento e il cliente ha risposto.
-    // La data dopo FISS. APP. e' quella dell'APPUNTAMENTO, non delle azioni: la riscrivo come testo
-    // (10-05) cosi' non viene letta come data degli step.
+    const wd = /^\d{4}-\d{2}-\d{2}$/.test(String(workDate || '')) ? workDate : new Date().toISOString().slice(0, 10);
+    const baseY = +wd.slice(0, 4);
+    let date = wd;
+    const actions = [], callSteps = [1, 2, 4], extra = [];
     let hasAppointment = false;
     const APP = /fiss(?:ato|\.)?\s*app(?:untamento|\.)?(?:\s*(?:per|il|:|-))?\s*(?:(\d{1,2})\s*\/\s*(\d{1,2})(?:\s*\/\s*\d{2,4})?)?\s*(?:ore|h|alle)?\s*(\d{1,2}[:.]\d{2})?/ig;
-    const txt0 = String(note || '').replace(APP, (m, g, mm, ora) => {
+    const txt = String(note || '').replace(/\r?\n/g, '  ').replace(APP, (m, g, mm, ora) => {
         hasAppointment = true;
         return 'Appuntamento fissato' + (g ? ` il ${g.padStart(2, '0')}-${mm.padStart(2, '0')}` : '') + (ora ? ` alle ${ora.replace('.', ':')}` : '') + '.';
     });
-    let i = 0; const txt = txt0;
-    const KW = /^(non\s+risponde|non\s+raggiungibile|non\s+disponibile|occupato|n\.?\s?r\.?|nd|whatsapp|wh|wa|e-?mail|mail)(?![a-zàèéìòù0-9])/i;
-    const DT = /^(\d{1,2})\s*\/\s*(\d{1,2})(?:\s*\/\s*(\d{2,4}))?/;
-    const nextCall = () => callSteps.find(n => !actions.some(a => a.step === n));
+    const fmt = d => d.slice(8, 10) + '/' + d.slice(5, 7);
+    // data -> anno della trattativa (se cade molto prima della trattativa e' dell'anno dopo)
+    const toIso = (g, m, y) => {
+        let yy = y ? (String(y).length === 2 ? 2000 + +y : +y) : baseY;
+        let d = new Date(Date.UTC(yy, m - 1, g));
+        if (isNaN(d) || d.getUTCMonth() !== m - 1) return null;
+        if (!y && d.toISOString().slice(0, 10) < wd && (Date.parse(wd) - d) > 60 * 86400000) d = new Date(Date.UTC(yy + 1, m - 1, g));
+        return d.toISOString().slice(0, 10);
+    };
+    // parole di mancata risposta / invio; FILL = parole che possono precedere ("recall NR")
+    const FILL = '(?:(?:recall|richiamo|richiamat[oa]|chiamat[oa]|chiamata|tentativ[oi]|effettuat[oa]|telefonat[oa]|ancora|di\\s+nuovo|diverse\\s+volte|piu\\s+volte|più\\s+volte|varie\\s+volte|ma|inviat[oa]|mandat[oa]|un|messaggio|su|via|per)\\s+)*';
+    const NR = 'numero\\s+(?:non\\s+(?:attivo|esistente|valido|corretto|accettabile|raggiungibile)|inesistente|errato|sbagliato|disattivato|inattivo)|non\\s+(?:mi\\s+)?risponde|non\\s+risp\\.?|non\\s+raggiungibile|irraggiungibile|segreteria(?:\\s+telefonica)?|spento|n\\.?\\s?r\\.?|nd|occupato|non\\s+disponibile';
+    const SEND = 'whatsapp|wh|wa|e-?mail|mail';
+    const KW = new RegExp('^' + FILL + '(' + NR + '|' + SEND + ')(?![a-zàèéìòù0-9])', 'i');
+    const SOFT = /^(occupato|non\s+disponibile)$/i;       // seguiti da una frase = frase
+    // data che apre un nuovo giorno: inizio nota, oppure dopo doppio spazio / punto / a capo
+    const DT = /^(\d{1,2})\s*[\/\-]\s*(\d{1,2})(?:\s*[\/\-]\s*(\d{2,4}))?(?![\d:])|^(\d{1,2})\.(\d{1,2})(?=\s|[:\-]|$)/;
+    const nextDate = s => {   // posizione della prossima data "di blocco" dentro s
+        const re = /(^|\s{2,}|[.;]\s+|\|\s*)(\d{1,2}\s*[\/\-]\s*\d{1,2}(?:\s*[\/\-]\s*\d{2,4})?|\d{1,2}\.\d{1,2}(?=\s|[:\-]|$))(?![\d:])/g;
+        let m;
+        while ((m = re.exec(s))) {
+            const prima = s.slice(0, m.index + m[1].length);
+            const dopo = s.slice(m.index + m[0].length);
+            if (/\b(il|al|dal|del|entro|per|fino|giorno|data|disponibilit\w*|prossim\w*|da|dopo)\s*$/i.test(prima)) continue;
+            if (/^\s*(alle|ore|h)\b/i.test(dopo)) continue;
+            return m.index + m[1].length;
+        }
+        return -1;
+    };
+    const isWaText = s => /whats?app|\bwa\b|\bwh\b|messagg|\bscriv|\bscritto|chat|vocale|risposto\s+(?:al|sul)\s+messaggio/i.test(s);
+    // "nessun riscontro", "in attesa di risposta": non e' una risposta del cliente
+    const isNoReply = s => /^(?:ma\s+|e\s+)?(?:nessun\w*\s+(?:riscontro|risposta|feedback|feed\s*back)|non\s+(?:ha\s+)?(?:ancora\s+)?(?:rispost\w*|risponde|visualizza\w*|letto)|in\s+attesa\s+(?:di\s+)?(?:risposta|riscontro))\b/i.test(s.trim());
+    // "Scritto su wa, riferisce...", "risponde su whatsapp": risposta arrivata su WhatsApp
+    const WA_REPLY = /^(?:(?:scritto|scrive|ha\s+scritto|risponde|ha\s+risposto|sentit[oa]|contattat[oa]|comunica|riferisce)\s+)?(?:su|via|tramite|per|in)\s+(?:wa|wh|whatsapp|whats\s*app|chat)\b/i;
+    const isMailText = s => /\bmail\b|e-mail|posta/i.test(s);
+    // promemoria ("richiamare alle 18:30", "dopo le 14:30"): non e' una risposta
+    const isReminder = s => /^(?:da\s+)?(?:richiam\w*|ricontatt\w*|recall|risentir\w*|dopo\s+le|alle|ore|nel\s+pomeriggio|in\s+serata|piu'?\s+tardi|più\s+tardi)\b[^.]{0,40}$/i.test(s.trim());
+    // il cliente chiede di essere ricontattato: quello che segue (stesso giorno) e' un altro contatto
+    const CALLBACK = /\b(?:chied\w*|richied\w*|preferisc\w*|riferisc\w*|dice|comunica)\s+(?:di\s+)?(?:essere\s+|esser\s+)?(?:ricontattat\w*|richiamat\w*|chiamat\w*|contattat\w*|risentit\w*)[^.]*?(?:\d{1,2}[:.]\d{2}|pomeriggio|serata|sera|successivamente|più tardi|piu' tardi|in seguito|domani)[^.]{0,30}?(?=\.|\s{2,}|\s+(?:il\s+|la\s+)?client[ei]\b|\s+[A-Z]|$)\.?/i;
+    const calls = () => actions.filter(a => a.step !== 3);
+    const lastCall = () => calls().sort((a, b) => b.step - a.step)[0];
+    const pushCall = (outcome, notes) => {
+        const n = callSteps.find(s => !actions.some(a => a.step === s));
+        if (n) { actions.push({ step: n, outcome, date, ...(notes ? { notes } : {}) }); return actions[actions.length - 1]; }
+        extra.push(`${fmt(date)} ${outcome === 'NO_ANSWER' ? 'non risponde' : 'risponde' + (notes ? ': ' + notes : '')}`);
+        return null;
+    };
+    const addNote = (a, t) => { if (a && t) a.notes = a.notes ? a.notes + ' · ' + t : t; };
+    let last = null;   // ultima azione scritta (per i promemoria)
+    let i = 0;
     while (i < txt.length) {
         const rest = txt.slice(i);
         const sp = /^[\s,;.\-–|:]+/.exec(rest); if (sp) { i += sp[0].length; continue; }
         const d = DT.exec(rest);
         if (d) {
-            const y = d[3] ? (d[3].length === 2 ? 2000 + +d[3] : +d[3]) : year;
-            const dd = new Date(Date.UTC(y, +d[2] - 1, +d[1]));
-            if (!isNaN(dd)) date = dd.toISOString().slice(0, 10);
-            i += d[0].length; continue;
+            const iso = d[1] ? toIso(+d[1], +d[2], d[3]) : toIso(+d[4], +d[5]);
+            if (iso) { date = iso; last = null; i += d[0].length; continue; }
         }
         let k = KW.exec(rest);
-        // una parola chiave conta solo se dopo c'e' la fine, una data o un'altra parola chiave
-        // ("Non disponibile fino a lunedi', richiamare" e' una frase: il cliente ha risposto)
-        if (k) { const dopo = rest.slice(k[0].length).replace(/^[\s,;.\-–|:]+/, ''); if (dopo && !DT.test(dopo) && !KW.test(dopo) && !/^appuntamento fissato/i.test(dopo)) k = null; }
         if (k) {
             const w = k[1].toLowerCase().replace(/\s+/g, ' ');
-            if (/^(wh|wa|whatsapp)$/.test(w)) { if (!actions.some(a => a.step === 3)) actions.push({ step: 3, outcome: 'SENT_WHATSAPP', date }); }
-            else if (/mail$/.test(w)) { if (!actions.some(a => a.step === 3)) actions.push({ step: 3, outcome: 'SENT_MAIL', date }); }
-            else { const n = nextCall(); if (n) actions.push({ step: n, outcome: 'NO_ANSWER', date }); }
-            i += k[0].length; continue;
+            const dopo = rest.slice(k[0].length).replace(/^[\s,;.\-–|:]+/, '');
+            const finisce = !dopo || DT.test(dopo) || KW.test(dopo) || /^appuntamento fissato/i.test(dopo);
+            if (SOFT.test(w) && !finisce && !isReminder(dopo.split(/\s{2,}/)[0])) k = null;   // "Non disponibile fino a lunedi', richiamare" = frase
+            else if (/^(wh|wa|whatsapp|e-?mail|mail)$/.test(w)) {
+                const out = /mail$/.test(w) ? 'SENT_MAIL' : 'SENT_WHATSAPP';
+                i += k[0].length;
+                let a3 = actions.find(a => a.step === 3);
+                if (!a3) { a3 = { step: 3, outcome: out, date }; actions.push(a3); }
+                last = a3;
+                if (!finisce) {
+                    // testo subito dopo: risposta su WhatsApp/mail o risposta alla chiamata successiva
+                    const r2 = txt.slice(i).replace(/^[\s,;.\-–|:]+/, '');
+                    const off = txt.length - r2.length;
+                    const end = nextDate(r2);
+                    const free = (end < 0 ? r2 : r2.slice(0, end)).trim();
+                    const viaCanale = out === 'SENT_WHATSAPP' ? isWaText(free) : isMailText(free);
+                    // descrizione dell'invio ("inviato whatsapp per un feedback"): nota dello step 3
+                    const descr = /^(?:per|con|chiedendo|in\s+cui|di|e|al?|allegando|contenente|del(?:la)?|della|dove|cosi|così|siccome|perch[eéè]|poich[eéè]|in\s+quanto|visto\s+che|dato\s+che)\b/i.test(free) || isNoReply(free);
+                    if (descr && free) { addNote(a3, free); i = off + (end < 0 ? r2.length : end); continue; }
+                    if (viaCanale && !isReminder(free)) {
+                        addNote(a3, (out === 'SENT_MAIL' ? 'Risposta via mail: ' : 'Risposta su WhatsApp: ') + free); a3.risposta = true;
+                        i = off + (end < 0 ? r2.length : end);
+                    } else i = off;   // lo legge il giro normale (chiamata successiva o promemoria)
+                }
+                continue;
+            } else {
+                last = pushCall('NO_ANSWER');
+                i += k[0].length; continue;
+            }
         }
-        // testo libero = il cliente ha risposto: fino alla prossima data (o alla fine)
-        const m = /\d{1,2}\s*\/\s*\d{1,2}/.exec(rest);
-        const free = (m ? rest.slice(0, m.index) : rest).trim();
-        i += m ? m.index : rest.length;
-        if (free) { const n = nextCall(); if (n) actions.push({ step: n, outcome: 'ANSWERED', date, notes: free }); }
+        // testo libero fino alla prossima data di blocco (o alla fine)
+        const end = nextDate(rest);
+        let free = (end < 0 ? rest : rest.slice(0, end)).trim();
+        let used = end < 0 ? rest.length : end;
+        // dentro il testo un nr staccato da doppio spazio ("DOPO LE 14:30  nr"): si ferma prima
+        const kwIn = /\s{2,}(?=(?:recall\s+|ma\s+)?(?:nr|n\.r\.|non\s+risponde|segreteria|wh|wa|occupato)(?![a-zàèéìòù0-9]))/i.exec(free);
+        if (kwIn) { used = free.slice(0, kwIn.index).length + (rest.length - rest.trimStart().length); free = free.slice(0, kwIn.index).trim(); }
+        // "chiede di essere ricontattato alle 18:30. <altro>": l'altro e' un nuovo contatto
+        const cb = CALLBACK.exec(free);
+        if (cb && free.slice(cb.index + cb[0].length).trim().length > 15) {
+            const cut = cb.index + cb[0].length;
+            used = (rest.length - rest.trimStart().length) + rest.trimStart().indexOf(free) + cut;
+            free = free.slice(0, cut).trim();
+        }
+        i += used || 1;
+        if (!free) continue;
+        if (last && isReminder(free)) { addNote(last, free); continue; }   // promemoria del tentativo appena fatto
+        if (isNoReply(free)) { if (last) addNote(last, free); else last = pushCall('NO_ANSWER', free); continue; }
+        if (WA_REPLY.test(free)) {   // risposta arrivata su WhatsApp: nota sullo step 3
+            let a3 = actions.find(a => a.step === 3);
+            if (!a3) { a3 = { step: 3, outcome: 'SENT_WHATSAPP', date }; actions.push(a3); }
+            addNote(a3, 'Risposta su WhatsApp: ' + free); a3.risposta = true; last = a3; continue;
+        }
+        last = pushCall('ANSWERED', free);
+        if (!last && extra.length) { /* oltre il terzo contatto: finisce nelle note */ }
     }
-    const answered = actions.some(a => a.outcome === 'ANSWERED');
+    if (extra.length) {
+        const lc = lastCall();
+        if (lc) addNote(lc, 'altri tentativi: ' + extra.join(', '));
+    }
+    const answered = actions.some(a => a.outcome === 'ANSWERED' || a.risposta) || extra.some(e => /risponde:/.test(e));
+    actions.forEach(a => delete a.risposta);
     const allDone = [1, 2, 3, 4].every(n => actions.some(a => a.step === n));
     return { actions: actions.sort((a, b) => a.step - b.step), hasAppointment,
         status: (answered || hasAppointment) ? 'RESPONDED' : allDone ? 'ABANDONED' : 'IN_PROGRESS' };

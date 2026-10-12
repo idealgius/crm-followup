@@ -244,3 +244,14 @@ table.cm-t { width:100%; border-collapse:separate; border-spacing:0; font-size:1
 .cm-cc-seg button svg { display:block; margin:auto; }
 .cm-mk { display:inline-flex; align-items:center; gap:8px; }
 .cm-mk img { width:30px; height:20px; object-fit:contain; background:#fff; border-radius:5px; padding:2px; box-shadow:0 0 0 1px var(--cm-line); }
+/* contratti recuperati dal CSV delle Consegne e contratti da trattative di mesi precedenti */
+.cm-rec, .cm-prima { display:inline-block; font-size:10.5px; font-weight:800; padding:2px 7px; border-radius:999px; white-space:nowrap; cursor:help; }
+.cm-rec { background:#fff1d6; color:#8a5a12; }
+.cm-prima { background:var(--cm-grey-soft); color:var(--cm-ink-2); }
+[data-theme="dark"] .cm-rec { background:#3a2c16; color:#f3c27a; }
+
+/* barra in alto del CRM bordeaux mentre e' aperto il Commerciale (data-bi messo da commerciale.js) */
+html[data-bi="commerciale"] { --navbar-bg:#5a1726; }
+html[data-theme="dark"][data-bi="commerciale"] { --navbar-bg:#3e1420; }
+html[data-bi="commerciale"] .navbar { background:var(--navbar-bg); }
+html[data-bi="commerciale"] .cm-band { border-top:0; }
