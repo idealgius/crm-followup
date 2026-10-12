@@ -15,8 +15,10 @@
       Consegne che fa l'abbinamento contratto <-> riga del foglio: dal foglio
       arrivano annullate (STATO), B2B (B2C = TRUE), pagamento (PC = contanti)
       e servizi (BLOCKSHAFT, LOJACK, FIR, GARANZIA Mawdy, PACK MANUTENZIONE).
-      Gli ANNULLATI arrivano solo dal foglio (stato ANNULLATA): anche le righe
-      annullate senza una trattativa chiusa nel CSV. Le fallite restano fallite.
+      ANNULLATI: righe del foglio con stato ANNULLATA (anche senza trattativa chiusa nel
+      CSV) + trattative del CSV con etichetta "CONTRATTO ANNULLATO". Una stessa pratica
+      presente in tutti e due si conta una volta. Quelle che risultano SOLO dal CSV
+      (non annullate nel foglio) hanno il bollino "solo CSV". Le altre fallite restano fallite.
    3) Preventivi telefonici della sezione In bound: abbinati al contratto
       (stesso cliente o targa/telaio) -> bollino "Da preventivo telefonico",
       l'origine resta quella del CSV.
@@ -109,20 +111,19 @@
         return t === 'NUOVO' ? 'Nuovo' : t === 'KM0' ? 'Km0' : t === 'USATO' ? 'Usato' : 'Non indicata';
     }
     const css = n => getComputedStyle(rootEl).getPropertyValue(n).trim();
-    // Contratto valido = trattativa chiusa non annullata. ANNULLATI = solo dal foglio
-    // AVANZAMENTO (stato ANNULLATA): la trattativa chiusa abbinata alla riga annullata,
-    // oppure la riga annullata da sola se nel CSV non c'e' una chiusa corrispondente.
-    // Le trattative FALLITE restano fallite: sono un'altra cosa.
-    const esito = r => r.ann ? 'Annullato' : r.stato === 'Chiusa' ? 'Contratto' : r.stato;
+    // Contratto valido = trattativa chiusa non annullata. ANNULLATI = foglio AVANZAMENTO
+    // (stato ANNULLATA) oppure etichetta "CONTRATTO ANNULLATO" nel CSV. Le altre
+    // trattative FALLITE restano fallite: sono un'altra cosa.
+    const esito = r => r.ann || r.dupAnn ? 'Annullato' : r.stato === 'Chiusa' ? 'Contratto' : r.stato;
     const isC = r => r.stato === 'Chiusa' && !r.ann;
-    const isF = r => r.stato === 'Fallita' && !r.ann;
+    const isF = r => r.stato === 'Fallita' && !r.ann && !r.dupAnn;
 
     /* ================= costruzione dei dati ================= */
     function build(d) {
         const pd = A().pd;
         // contratto del CSV -> riga del foglio abbinata dalle Consegne
-        const foglioDi = new Map();
-        d.righe.forEach(({ raw, csv }) => { if (csv && raw) foglioDi.set(csv, raw); });
+        const foglioDi = new Map(), comeDi = new Map();
+        d.righe.forEach(({ raw, csv, how }) => { if (csv && raw) { foglioDi.set(csv, raw); comeDi.set(csv, how || ''); } });
         TR = [];
         d.trattAll.forEach(t => {
             const v = nice(t.vend || '').trim();
@@ -140,11 +141,14 @@
                 stato, motivo: stato === 'Fallita' ? (String(t.motivo || '').trim() || 'Non indicato') : '', etichetta: t.etichetta || '',
                 marca: marcaOf(t.marca), veicolo: `${t.marca || ''} ${t.modello || ''}`.replace(/\s+/g, ' ').trim(),
                 cliente: nice(cli), targa: String(t.targa || t.telaio || '').trim(), targa2: String(t.telaio || '').trim(),
-                foglio: !!raw, tel: null
+                foglio: !!raw, tel: null, how: comeDi.get(t) || '',
+                fCli: raw ? nice(raw['CLIENTE'] || '') : '', fStato: raw ? String(raw['STATO'] || '').trim() : ''
             };
             r.tk = toks(r.cliente);
             r.b2b = raw ? up(raw['B2C']) === 'TRUE' : /societ/i.test(t.tipoCli || '');
-            r.ann = !!raw && up(raw['STATO']).includes('ANNULLATA');
+            r.annFoglio = !!raw && up(raw['STATO']).includes('ANNULLATA');
+            r.annCsv = /contratto\s+annullat/i.test(r.etichetta);
+            r.ann = r.annFoglio || r.annCsv;
             if (raw) {
                 const pag = up(raw['PAGAMENTO']), g = up(raw['GARANZIA']);
                 r.pag = !pag ? 'Non indicato' : pag === 'PC' ? 'PC (contanti)' : 'Finanziamento';
@@ -170,7 +174,7 @@
             const mod = String(raw['MODELLO'] || '').replace(/\s+/g, ' ').trim(), pag = up(raw['PAGAMENTO']);
             AF.push({ i: 'f' + n, data: dt || new Date(y, m - 1, 1), y, m, vend: v, sede: sedeOf(v), noleggio: false, tipo: tipoOf(raw['CANALE']),
                 origine: 'Solo nel foglio', stato: 'Chiusa', motivo: '', etichetta: '', marca: marcaOf(mod.split(' ')[0]), veicolo: mod,
-                cliente: nice(raw['CLIENTE']), targa: String(raw['TARGA/TELAIO'] || '').trim(), foglio: true, soloFoglio: true, tel: null, ann: true,
+                cliente: nice(raw['CLIENTE']), targa: String(raw['TARGA/TELAIO'] || '').trim(), foglio: true, soloFoglio: true, tel: null, ann: true, annFoglio: true,
                 b2b: up(raw['B2C']) === 'TRUE', pag: !pag ? 'Non indicato' : pag === 'PC' ? 'PC (contanti)' : 'Finanziamento', serv: null });
         });
         vend = [...new Set(TR.map(r => r.vend))].sort((x, y) => x.localeCompare(y, 'it'));
@@ -533,13 +537,25 @@
     /* ================= elenco con ricerca e filtri ================= */
     function esitoBadge(r) {
         const e = esito(r);
-        return `<span class="cm-es" style="--c:${ESC[e]}">${e}</span>${r.stato === 'Fallita' && r.motivo ? `<small class="cm-mot">${esc(r.motivo)}</small>` : ''}`;
+        const abb = r.soloFoglio ? 'Solo nel foglio AVANZAMENTO, nessuna trattativa del CSV abbinata'
+            : r.foglio ? `Abbinata al foglio (${r.how || 'regole Consegne'}): ${r.fCli || ''}${r.fStato ? ' · stato ' + r.fStato : ''}` : 'Nessuna riga del foglio abbinata';
+        const t = esc(`${fonteAnn(r)} · ${abb}`);
+        return `<span class="cm-es" style="--c:${ESC[e]}"${r.ann ? ` title="${t}"` : ''}>${e}</span>${r.ann && !r.annFoglio ? ` <span class="cm-csv" title="${t}">solo CSV</span>` : ''}${r.stato === 'Fallita' && r.motivo && !r.ann ? `<small class="cm-mot">${esc(r.motivo)}</small>` : ''}`;
+    }
+    // Da dove viene l'annullamento: foglio AVANZAMENTO, etichetta del CSV o entrambi
+    function fonteAnn(r) {
+        if (!r.ann) return '';
+        if (r.annFoglio && r.annCsv) return 'Foglio + CSV';
+        if (r.soloFoglio) return 'Solo foglio (pratica non nel CSV)';
+        if (r.annFoglio) return 'Foglio (CSV senza etichetta)';
+        return 'Solo CSV (non annullata nel foglio)';
     }
     function mountRecList(box, recs, kind) {
         kind = kind || 'tr';
         const F = kind === 'pt'
             ? [['vend', 'Consulente', p => p.vend], ['op', 'Operatore', p => p.op], ['st', 'Stato', p => STL[p.st]], ['marca', 'Marca', p => p.marca]]
             : [['vend', 'Consulente', r => r.vend], ['origine', 'Origine', r => r.origine], ['esito', 'Esito', esito], ['tipo', 'Tipo', r => r.tipo], ['marca', 'Marca', r => r.marca]];
+        if (kind === 'tr' && recs.some(r => r.ann)) F.push(['fonte', 'Fonte annullamento', fonteAnn]);
         const st = { q: '' }; F.forEach(f => { st[f[0]] = ''; });
         box.innerHTML = `<div class="cm-tools"><input type="search" placeholder="Cerca cliente, consulente, veicolo, targa…" data-q>
           ${F.map(([k, l, fn]) => `<select data-f="${k}"><option value="">${l}: tutti</option>${[...new Set(recs.map(fn))].filter(Boolean).sort((x, y) => String(x).localeCompare(String(y), 'it')).map(v => `<option>${esc(v)}</option>`).join('')}</select>`).join('')}
@@ -667,7 +683,7 @@
           ${kpi('📝', 'var(--cm-grey-soft)', 'Preventivi', nf(P), 'media ' + (P / nm).toLocaleString('it-IT', { maximumFractionDigits: 1 }) + ' al mese · ' + nf(IN.length) + ' in corso', { t: 'Preventivi · ' + title(), vw: view, w: 'tutte' })}
           ${kpi('✍️', 'var(--cm-acc-soft)', 'Contratti', nf(C.length), (isB ? 'solo B2B' : (b2bOn ? 'di cui B2B ' + b2bN : 'B2B esclusi (' + b2bN + ')')) + ' · trattative chiuse', { t: 'Contratti · ' + title(), vw: view, w: 'chiuse' })}
           ${kpi('🎯', 'var(--cm-grey-soft)', 'Conversione', pct(C.length, P), 'contratti / preventivi')}
-          ${kpi('↩️', 'var(--cm-acc-soft)', 'Contratti annullati', nf(ANN.length), pct(ANN.length, C.length + ANN.length) + ' dei contratti firmati', { t: 'Contratti annullati · ' + title(), vw: view, w: 'ann' })}
+          ${kpi('↩️', 'var(--cm-acc-soft)', 'Contratti annullati', nf(ANN.length), pct(ANN.length, C.length + ANN.length) + ' dei contratti firmati' + (ANN.some(x => !x.annFoglio) ? ' · ' + ANN.filter(x => !x.annFoglio).length + ' solo dal CSV' : ''), { t: 'Contratti annullati · ' + title(), vw: view, w: 'ann' })}
         </div>
         <div class="cm-kpis">
           ${kpi('✖️', 'var(--cm-grey-soft)', 'Trattative fallite', nf(F.length), topMot ? 'motivo principale: ' + esc(topMot[0]) : 'nessuna', { t: 'Trattative fallite · ' + title(), vw: view, w: 'fallite' })}
@@ -757,9 +773,9 @@
         const perV = [...by(ALL, c => c.vend)].map(([v, l]) => ({ v, f: l.length, n: l.filter(c => c.ann).length, sede: sedeOf(v) })).filter(r => r.n).sort((x, y) => y.n - x.n || x.f - y.f);
         const worst = perV.filter(r => r.f >= 5).sort((x, y) => y.n / y.f - x.n / x.f)[0];
         rootEl.querySelector('#cmMain').innerHTML = `
-        <div class="cm-vhead"><h2>Contratti annullati</h2><p>Stato ANNULLATA nel foglio AVANZAMENTO (con o senza trattativa chiusa nel CSV) · Agnano, Casamarciano e Salerno · ${per()}${b2bOn ? ' · B2B incluso' : ' · B2B escluso'}</p></div>
+        <div class="cm-vhead"><h2>Contratti annullati</h2><p>Stato ANNULLATA nel foglio AVANZAMENTO o etichetta "CONTRATTO ANNULLATO" nel CSV · Agnano, Casamarciano e Salerno · ${per()}${b2bOn ? ' · B2B incluso' : ' · B2B escluso'}</p></div>
         <div class="cm-kpis">
-          ${kpi('↩️', 'var(--cm-acc-soft)', 'Contratti annullati', nf(N), 'clicca per l\'elenco dei clienti', { t: 'Contratti annullati', vw: { k: 'any' }, w: 'annAll' })}
+          ${kpi('↩️', 'var(--cm-acc-soft)', 'Contratti annullati', nf(N), (AN.some(x => !x.annFoglio) ? AN.filter(x => !x.annFoglio).length + ' solo dal CSV (non annullati nel foglio) · ' : '') + 'clicca per l\'elenco', { t: 'Contratti annullati', vw: { k: 'any' }, w: 'annAll' })}
           ${kpi('📉', 'var(--cm-grey-soft)', 'Tasso di annullamento', pct(N, F), N + ' su ' + nf(F) + ' contratti')}
           ${kpi('👤', 'var(--cm-acc-soft)', 'Consulente con più annullati', perV[0] ? esc(perV[0].v.split(' ')[0]) + ' · ' + perV[0].n : '–', perV[0] ? pct(perV[0].n, perV[0].f) + ' dei suoi contratti' : '')}
           ${kpi('⚠️', 'var(--cm-grey-soft)', 'Tasso più alto', worst ? pct(worst.n, worst.f) : '–', worst ? esc(worst.v) + ' (almeno 5 contratti)' : '')}
@@ -772,6 +788,7 @@
           <div class="cm-card"><h2>Per consulente</h2><p class="cm-hint">Clicca un'intestazione per ordinare · un nome per il suo report</p>
             <div class="cm-scroll"><table class="cm-t cm-sort"><tr><th>Consulente</th><th class="l">Sede</th><th>Contratti</th><th>Annullati</th><th>Tasso</th></tr>
             ${perV.map(r => `<tr data-vw='${esc(JSON.stringify({ k: 'v', v: r.v }))}'><td>${esc(r.v)}</td><td class="l">${r.sede}</td><td>${r.f}</td><td>${r.n}</td><td>${pct(r.n, r.f)}</td></tr>`).join('') || '<tr><td colspan="5">Nessun annullato</td></tr>'}</table></div></div>
+          ${ccCard({ id: 'annF', title: 'Fonte dell\'annullamento', hint: 'Foglio AVANZAMENTO, etichetta del CSV o entrambi · clicca per l\'elenco', recs: AN, key: fonteAnn, def: 'doughnut' })}
           ${ccCard({ id: 'annO', title: 'Annullati per origine', hint: 'Origine trattativa', recs: AN, key: c => c.origine, def: 'bar', horiz: true })}
           ${ccCard({ id: 'annS', title: 'Annullati per sede', hint: 'Sede del consulente', recs: AN, key: c => SEDI[c.sede], def: 'doughnut' })}
           ${ccCard({ id: 'annMa', title: 'Annullati per marca', hint: 'Prime 10 marche', recs: AN, key: c => c.marca, top: 10, def: 'bar', horiz: true })}

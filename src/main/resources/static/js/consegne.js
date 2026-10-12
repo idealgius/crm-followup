@@ -161,7 +161,8 @@
         // due trattative non possono piu' finire sulla stessa riga (prima
         // succedeva con i doppioni nel CSV e gonfiava i conteggi).
         const T = tratt.map(t => {
-            const dc = pd(t.chiusura);
+            // data di chiusura; se manca (es. contratto annullato, ora "Fallita") la data della trattativa
+            const dc = pd(t.chiusura) || pd(t.dataTratt);
             const tk = new Set([...toks(nameOf(t)), ...toks(t.rag)]);
             const info = [];
             const tv = toks(t.vend);
@@ -1137,7 +1138,9 @@
         applyServerData(await api('/data'));
         const tieni = { tratt, trattAll, result, vendMap };
         trattAll = Array.isArray(altre) ? altre : [];
-        tratt = trattAll.filter(r => !/noleggio/i.test(r.sede || '') && isChiusa(r));
+        // chiuse + quelle con etichetta "CONTRATTO ANNULLATO" (nel CSV risultano Fallite):
+        // passano tutte dallo stesso abbinamento col foglio delle Consegne
+        tratt = trattAll.filter(r => !/noleggio/i.test(r.sede || '') && (isChiusa(r) || /contratto\s+annullat/i.test(r.etichetta || '')));
         if (tratt.length && db) compute(); else result = null;
         const righe = result && tratt.length && db ? result.righe.slice() : (db || []).map(g => ({ raw: g._raw, csv: null, how: '' }));
         const vmap = vendMap;
