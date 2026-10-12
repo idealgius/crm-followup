@@ -1,5 +1,5 @@
 /* =====================================================================
-   PAGINA "BI" (macro-sezione): capitoli Consegne / Stock / Commerciale
+   PAGINA "BI" (macro-sezione): capitoli Consegne / Stock / Commerciale / Service
    Classi con prefisso bh- per non toccare gli stili del CRM.
    ===================================================================== */
 #biPage{position:relative;min-height:calc(100vh - 70px);background:#101216;color:#eceff3;font-family:Inter,system-ui,-apple-system,'Segoe UI',sans-serif}
@@ -17,27 +17,26 @@
 .bh-av{position:absolute;right:40px;top:38px;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-weight:800;background:var(--acc);color:#111;transition:background .8s}
 
 /* capitoli a sinistra */
-.bh-rail{position:absolute;left:40px;top:128px;width:268px}
-.bh-ch{position:relative;display:block;width:100%;text-align:left;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;padding:11px 16px 15px 18px;border-radius:18px;transition:background .35s}
+.bh-rail{position:absolute;left:40px;top:116px;width:250px}
+.bh-ch{position:relative;display:block;width:100%;text-align:left;border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;padding:8px 16px 13px 18px;border-radius:18px;transition:background .35s}
 .bh-ch:hover{background:rgba(255,255,255,.04)}
 .bh-ch.bh-on{background:rgba(255,255,255,.06)}
 .bh-ch .bh-n{font-size:12px;font-weight:800;letter-spacing:1px;color:#6f7886}
-.bh-ch .bh-t{display:block;font-size:20px;font-weight:800;letter-spacing:-.4px;margin-top:2px;color:#8e97a5;transition:color .35s}
+.bh-ch .bh-t{display:block;font-size:19px;font-weight:800;letter-spacing:-.4px;margin-top:2px;color:#8e97a5;transition:color .35s}
 .bh-ch.bh-on .bh-t{color:#fff}
-.bh-ch .bh-d{display:block;font-size:12.5px;color:#7d8694;margin-top:2px}
-.bh-ch .bh-bar{position:absolute;left:18px;right:16px;bottom:8px;height:3px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden}
+.bh-ch .bh-d{display:block;font-size:12px;color:#7d8694;margin-top:1px}
+.bh-ch .bh-bar{position:absolute;left:18px;right:16px;bottom:6px;height:3px;border-radius:2px;background:rgba(255,255,255,.08);overflow:hidden}
 .bh-ch .bh-bar i{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--c);border-radius:2px}
 .bh-ch.bh-on .bh-bar i{animation:bh-fill var(--dur,8s) linear forwards}
 .bh-paused .bh-ch.bh-on .bh-bar i{animation-play-state:paused}
 @keyframes bh-fill{to{width:100%}}
-.bh-sub{margin:12px 0 0;padding:0;list-style:none}
-.bh-sub li{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:12px;font-size:13px;color:#c9d0da;cursor:pointer;opacity:0;transform:translateY(6px);transition:opacity .4s,transform .4s,background .25s}
+.bh-sub{margin:10px 0 0;padding:0;list-style:none}
+.bh-sub li{display:flex;align-items:center;gap:10px;padding:5px 12px;border-radius:12px;font-size:13.5px;color:#c9d0da;cursor:pointer;opacity:0;transform:translateY(6px);transition:opacity .4s,transform .4s,background .25s}
 .bh-sub li.bh-in{opacity:1;transform:none}
 .bh-sub li:hover{background:rgba(255,255,255,.05)}
-.bh-sub li i{flex:0 0 8px;width:8px;height:8px;border-radius:50%;background:var(--acc)}
-.bh-sub li span{min-width:0;flex:1 1 auto}
-.bh-sub li em{margin-left:auto;font-style:normal;font-size:10.5px;font-weight:700;color:#8e97a5;background:rgba(255,255,255,.07);padding:2px 8px;border-radius:999px;white-space:nowrap;flex:0 0 auto}
-.bh-enter{position:absolute;left:40px;bottom:36px;display:flex;align-items:center;gap:10px;height:54px;padding:0 22px;border-radius:16px;border:0;background:var(--acc);color:#111;font:inherit;font-weight:800;font-size:15px;cursor:pointer;transition:background .8s,transform .25s;box-shadow:0 16px 30px -14px var(--acc)}
+.bh-sub li i{width:8px;height:8px;border-radius:50%;background:var(--acc)}
+.bh-sub li em{margin-left:auto;white-space:nowrap;font-style:normal;font-size:10.5px;font-weight:700;color:#8e97a5;background:rgba(255,255,255,.07);padding:2px 8px;border-radius:999px}
+.bh-enter{position:absolute;left:40px;bottom:30px;display:flex;align-items:center;gap:10px;height:54px;padding:0 22px;border-radius:16px;border:0;background:var(--acc);color:#111;font:inherit;font-weight:800;font-size:15px;cursor:pointer;transition:background .8s,transform .25s;box-shadow:0 16px 30px -14px var(--acc)}
 .bh-enter:hover{transform:translateX(3px)}
 .bh-back{position:absolute;left:196px;top:56px;height:36px;padding:0 14px;border-radius:12px;font-size:13px;border:0;background:rgba(255,255,255,.06);color:#eceff3;font:inherit;font-weight:700;cursor:pointer}
 
@@ -82,6 +81,7 @@
 /* STOCK: pedana girevole con i marchi */
 .bh-turn{position:absolute;left:50%;top:44%;width:0;height:0;perspective:1100px}
 .bh-ring{position:absolute;left:0;top:0;transform-style:preserve-3d;transform:rotateX(-12deg) rotateY(0deg);animation:bh-spin 40s linear infinite}
+.bh-paused .bh-ring{animation-play-state:paused}
 @keyframes bh-spin{to{transform:rotateX(-12deg) rotateY(-360deg)}}
 .bh-plq{position:absolute;left:-46px;top:-46px;width:92px;height:92px;border-radius:22px;display:grid;place-items:center;
   background:linear-gradient(160deg,#ffffff,#e6e9ee);box-shadow:0 18px 26px -14px rgba(0,0,0,.7),inset 0 0 0 1px rgba(255,255,255,.7);backface-visibility:hidden}
@@ -146,12 +146,80 @@
 .bh-cm-chip{border-color:rgba(155,123,255,.5)}
 .bh-cm-chip i{background:#9b7bff;box-shadow:0 0 10px #9b7bff}
 .bh-enter.bh-off{opacity:.45;cursor:default;box-shadow:none}
+/* SERVICE: officina "diagnosi" (vettura sul ponte, scansione, ordine di lavoro) */
+.sv{position:absolute;inset:0;overflow:hidden;font-family:Inter,system-ui,sans-serif;color:#e8f3ff;--b:#5ab4ff}
+.sv-bg{position:absolute;inset:0;width:100%;height:100%}
+.sv-led{filter:drop-shadow(0 0 6px #8fd0ff);animation:sv-led 4s ease-in-out infinite}
+@keyframes sv-led{50%{opacity:.55}}
+.sv-cone{animation:sv-cone 5s ease-in-out infinite}
+@keyframes sv-cone{50%{opacity:.7}}
+.sv-brand{position:absolute;left:28px;top:56px;font-weight:900;font-size:30px;letter-spacing:10px;color:rgba(255,255,255,.07)}
+.sv-brand span{display:block;font-size:10px;letter-spacing:5px;font-weight:800;color:rgba(255,255,255,.12);margin-top:2px}
+/* colonne del ponte */
+.sv-post{position:absolute;top:150px;width:26px;height:290px;border-radius:6px;background:linear-gradient(90deg,#1e2836,#3a4a60 45%,#1a2230);box-shadow:0 20px 30px -10px rgba(0,0,0,.8),inset 0 0 0 1px rgba(255,255,255,.05);z-index:1}
+.sv-post::after{content:"";position:absolute;left:-10px;right:-10px;bottom:-6px;height:10px;border-radius:3px;background:#2a3546}
+.sv-post i{position:absolute;left:11px;top:16px;bottom:22px;width:4px;border-radius:2px;background:linear-gradient(180deg,var(--b),rgba(90,180,255,.08));box-shadow:0 0 12px var(--b)}
+.sv-post.sv-l{left:112px}.sv-post.sv-r{left:500px}
+/* vettura che sale: tutto quello che sta in .sv-lift si muove insieme */
+.sv-lift{position:absolute;inset:0;z-index:2}
+.sv-run .sv-lift{animation:sv-up 10s cubic-bezier(.45,0,.25,1) both}
+@keyframes sv-up{0%{transform:translateY(0)}12%,86%{transform:translateY(-46px)}100%{transform:translateY(0)}}
+.sv-car{position:absolute;left:var(--cx);top:var(--cy);width:var(--cw);height:var(--ch)}
+.sv-car img{position:absolute;left:0;top:0;width:100%;height:100%;user-select:none;pointer-events:none}
+.sv-img{filter:drop-shadow(0 18px 18px rgba(0,0,0,.55))}
+.sv-xray{filter:grayscale(1) brightness(.9) contrast(1.8) sepia(1) hue-rotate(160deg) saturate(3.2);mix-blend-mode:screen;opacity:.9;clip-path:inset(0 100% 0 0)}
+.sv-run .sv-xray{animation:sv-xray 10s linear both}
+@keyframes sv-xray{0%,12%{clip-path:inset(0 100% 0 0);opacity:.9}52%{clip-path:inset(0 0 0 0);opacity:.9}62%,100%{clip-path:inset(0 0 0 0);opacity:0}}
+.sv-beam{position:absolute;top:-8%;bottom:-6%;width:3px;left:0;opacity:0;background:#bff0ff;box-shadow:0 0 14px 4px rgba(90,200,255,.9),0 0 60px 18px rgba(90,180,255,.35)}
+.sv-run .sv-beam{animation:sv-beam 10s linear both}
+@keyframes sv-beam{0%,12%{left:0;opacity:0}14%{opacity:1}50%{left:100%;opacity:1}53%,100%{left:100%;opacity:0}}
+.sv-arm{position:absolute;height:9px;border-radius:5px;background:linear-gradient(180deg,#5d6d86,#2c3646);box-shadow:0 4px 8px rgba(0,0,0,.5)}
+.sv-arm.sv-a1{left:124px;top:412px;width:140px;transform:rotate(-4deg)}
+.sv-arm.sv-a2{left:390px;top:384px;width:122px;transform:rotate(3deg)}
+.sv-shadow{position:absolute;left:180px;top:440px;width:280px;height:30px;border-radius:50%;background:radial-gradient(closest-side,rgba(0,0,0,.6),transparent);z-index:1}
+.sv-run .sv-shadow{animation:sv-sh 10s cubic-bezier(.45,0,.25,1) both}
+@keyframes sv-sh{0%{transform:scale(1);opacity:1}12%,86%{transform:scale(.8);opacity:.45}100%{transform:scale(1);opacity:1}}
+.sv-refl{position:absolute;transform:scaleY(-1);opacity:.12;filter:blur(1.5px);-webkit-mask-image:linear-gradient(to top,rgba(0,0,0,.9),transparent 40%);mask-image:linear-gradient(to top,rgba(0,0,0,.9),transparent 40%);z-index:1}
+/* etichette di diagnosi */
+.sv-co-svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+.sv-co{opacity:0}
+.sv-run .sv-co{animation:sv-co-in .45s ease var(--dl) both,sv-co-out .5s ease 8.5s forwards}
+@keyframes sv-co-in{from{opacity:0}to{opacity:1}}
+@keyframes sv-co-out{to{opacity:0}}
+.sv-co-d{fill:#bff0ff;filter:drop-shadow(0 0 4px #5ab4ff)}
+.sv-co-r{fill:none;stroke:#5ab4ff;stroke-width:1.5;transform-box:fill-box;transform-origin:center;animation:sv-ping 1.6s ease-out infinite}
+@keyframes sv-ping{from{transform:scale(.4);opacity:1}to{transform:scale(1.8);opacity:0}}
+.sv-co-l{stroke:rgba(150,210,255,.8);stroke-width:1.2;fill:none;stroke-dasharray:3 3}
+.sv-co-b{fill:rgba(10,20,34,.88);stroke:rgba(90,180,255,.55)}
+.sv-co-t{font-size:8.5px;font-weight:800;letter-spacing:.8px;fill:#8fb7da}
+.sv-co-v{font-size:11px;font-weight:800;fill:#7dffb8}
+.sv-co-v.warn{fill:#ffc24d}
+/* HUD */
+.sv-hud{position:absolute;left:22px;bottom:22px;display:flex;align-items:center;gap:10px;padding:10px 14px 10px 10px;border-radius:14px;background:rgba(10,18,30,.75);border:1px solid rgba(90,180,255,.35);backdrop-filter:blur(4px);z-index:4}
+.sv-hud small{display:block;font-size:9px;font-weight:800;letter-spacing:1.2px;color:#8fb7da}
+.sv-hud b{display:block;font-size:22px;line-height:1.1}
+.sv-hud em{display:block;font-style:normal;font-size:10px;color:#7f97ad}
+.sv-ring{width:44px;height:44px;transform:rotate(-90deg)}
+.sv-ring circle{fill:none;stroke-width:4}
+.sv-ring .bg{stroke:rgba(255,255,255,.08)}
+.sv-ring .fg{stroke:#5ab4ff;stroke-linecap:round;stroke-dasharray:113;stroke-dashoffset:113}
+.sv-run .sv-ring .fg{animation:sv-ring 10s linear both}
+@keyframes sv-ring{0%,12%{stroke-dashoffset:113}50%,86%{stroke-dashoffset:0;stroke:#7dffb8}100%{stroke-dashoffset:0;stroke:#7dffb8}}
+/* ordine di lavoro */
+.sv-odl{position:absolute;right:22px;top:64px;width:190px;padding:12px 12px 10px;border-radius:16px;background:rgba(240,246,252,.96);color:#14202e;box-shadow:0 24px 40px -18px rgba(0,0,0,.9);z-index:4}
+.sv-odl-h small{display:block;font-size:8.5px;font-weight:800;letter-spacing:1.2px;color:#2f6fb5}
+.sv-odl-h b{display:block;font-size:13px;margin:2px 0 8px}
+.sv-step{display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:600;padding:5px 0;border-top:1px solid #dde4ec;color:#6b7a8c}
+.sv-step i{width:16px;height:16px;border-radius:50%;border:2px solid #b8c4d2;position:relative;flex:none}
+.sv-step i::after{content:"";position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg) scale(0)}
+.sv-run .sv-step{animation:sv-st-c 10s both;animation-delay:calc(var(--i) * 1.5s + .6s)}
+.sv-run .sv-step i{animation:sv-st-i 10s both;animation-delay:calc(var(--i) * 1.5s + .6s)}
+.sv-run .sv-step i::after{animation:sv-st-k 10s both;animation-delay:calc(var(--i) * 1.5s + .6s)}
+@keyframes sv-st-c{0%{color:#6b7a8c}4%,100%{color:#14202e}}
+@keyframes sv-st-i{0%{background:transparent;border-color:#b8c4d2}4%,100%{background:#22a06b;border-color:#22a06b}}
+@keyframes sv-st-k{0%{transform:rotate(45deg) scale(0)}5%,100%{transform:rotate(45deg) scale(1)}}
+.sv-odl-f{display:flex;justify-content:space-between;margin-top:6px;padding-top:7px;border-top:2px solid #14202e;font-size:11px;font-weight:700}
+.sv-odl-f b{color:#22a06b}
+.sv-chip{position:absolute;right:22px;bottom:22px;display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;background:rgba(10,18,30,.8);border:1px solid rgba(90,180,255,.4);font-size:12px;font-weight:700;z-index:4}
+.sv-chip i{width:8px;height:8px;border-radius:50%;background:#5ab4ff;box-shadow:0 0 10px #5ab4ff;animation:sv-led 1.6s infinite}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-/* SMARTPHONE (<=768px): pedana 3D di Stock. Safari iOS e alcuni Android non disegnano
-   bene il 3D dentro antenati con overflow:hidden + border-radius + scale. Il PC non cambia. */
-@media (max-width:768px){
-  .bh-stage{-webkit-transform:translateZ(0);transform:translateZ(0);isolation:isolate}
-  .bh-turn{width:2px;height:2px;margin:-1px 0 0 -1px;-webkit-perspective:1100px;perspective:1100px}
-  .bh-ring{-webkit-transform-style:preserve-3d;will-change:transform}
-  .bh-plq{-webkit-backface-visibility:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.7)}
-}

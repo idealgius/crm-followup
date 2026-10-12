@@ -6,10 +6,11 @@
     <title>CRM Gestione Clienti | Gruppo Autoscala</title>
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/macro-home.css">
-    <link rel="stylesheet" href="/css/bi-home.css">
+    <link rel="stylesheet" href="/css/bi-home.css?v=20261012b">
     <link rel="stylesheet" href="/css/dashboard-fu.css">
-    <link rel="stylesheet" href="/css/consegne.css">
-    <link rel="stylesheet" href="/css/stock-home.css">
+    <link rel="stylesheet" href="/css/consegne.css?v=20261012b">
+    <link rel="stylesheet" href="/css/stock-home.css?v=20261012b">
+    <link rel="stylesheet" href="/css/commerciale.css?v=20261012b">
     <!-- NUOVO: grafici nascosti dai permessi (vedi applyChartPermissions in app.js) -->
     <style>.chart-perm-hidden { display: none !important; }</style>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -174,6 +175,12 @@
          (vedi /js/macro-home.js); il contenuto lo costruisce /js/stock-home.js. -->
     <div id="stockPage" class="page" style="display:none">
         <div id="stockRoot"></div>
+    </div>
+
+    <!-- NUOVO: AREA COMMERCIALE — capitolo 03 della BI. Si apre da MacroHome.openCommerciale()
+         (vedi /js/macro-home.js); il contenuto lo costruisce /js/commerciale.js. -->
+    <div id="commercialePage" class="page" style="display:none">
+        <div id="commercialeRoot"></div>
     </div>
 
     <!-- DASHBOARD -->
@@ -2617,11 +2624,12 @@
 <script src="/js/preventivi.js"></script>
 <script src="/js/preventivi-sospesi.js"></script>
 <script src="/js/app.js"></script>
-<script src="/js/macro-home.js"></script>
-<script src="/js/bi-home.js"></script>
-<script src="/js/consegne.js"></script>
-<script src="/js/consegne-analisi.js"></script>
-<script src="/js/stock-home.js"></script>
+<script src="/js/macro-home.js?v=20261012b"></script>
+<script src="/js/bi-home.js?v=20261012b"></script>
+<script src="/js/consegne.js?v=20261012b"></script>
+<script src="/js/consegne-analisi.js?v=20261012b"></script>
+<script src="/js/stock-home.js?v=20261012b"></script>
+<script src="/js/commerciale.js?v=20261012b"></script>
 <script src="/js/graphmenu.js"></script>
 <script src="/js/multiselect.js"></script>
 </body>

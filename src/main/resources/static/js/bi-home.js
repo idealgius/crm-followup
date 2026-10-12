@@ -1,16 +1,97 @@
 /* =====================================================================
    BI — pagina della macro-sezione (Gruppo Autoscala CRM)
    ---------------------------------------------------------------------
-   Si apre dalla card "BI" della home (MacroHome.openBI). Tre capitoli:
+   Si apre dalla card "BI" della home (MacroHome.openBI). Quattro capitoli:
      01 Consegne    -> "Entra" apre l'area Consegne (Tempistiche / Analisi)
-     02 Stock       -> prossimamente (pedana con i loghi dei marchi)
-     03 Commerciale -> prossimamente (abitacolo digitale: lead, vendite, noleggio)
+     02 Stock       -> "Entra" apre l'area Stock (pedana con i loghi dei marchi)
+     03 Commerciale -> "Entra" apre l'area Commerciale (abitacolo digitale: lead, vendite, noleggio)
+     04 Service     -> in arrivo (officina connessa: la Sportequipe sul ponte
+                       sollevatore, scansione di diagnosi con i punti controllati,
+                       ordine di lavoro che si completa da solo).
+                       Foto: /img/macro/sportequipe-service.png
    I capitoli scorrono da soli (pausa con il mouse sopra), il cambio e' una
    lama di luce che attraversa il palco. Le animazioni girano solo mentre
    la pagina e' visibile (start/stop). Stili in /css/bi-home.css (prefisso bh-).
    ===================================================================== */
 (function () {
     let root = null, scene = null;
+
+    // SERVICE: officina "connessa" — la Sportequipe sale sul ponte, una scansione
+    // la attraversa e compaiono i punti di diagnosi; l'ordine di lavoro si spunta da solo.
+    // Foto della vettura: /img/macro/sportequipe-service.png (sfondo gia' tolto).
+    function serviceScene() {
+        // Coordinate del palco: 750 x 580. Vettura: foto ritagliata 413 x 244.
+        const CW = 356, CK = CW / 413, CH = Math.round(244 * CK), CX = 146, CY = 236;
+        const at = (x, y) => [CX + x * CK, CY + y * CK];
+        // punti di diagnosi sulla vettura (coordinate della foto) e dove va l'etichetta
+        const PTS = [
+            { p: [242, 185], l: [-40, 96], t: 'Freni anteriori', v: '92%', ok: 1 },
+            { p: [120, 108], l: [-150, -40], t: 'Olio motore', v: 'Da sostituire', ok: 0 },
+            { p: [40, 150], l: [-150, 66], t: 'Batteria 12V', v: '12,6 V', ok: 1 },
+            { p: [300, 60], l: [-150, -96], t: 'Climatizzazione', v: 'OK', ok: 1 },
+            { p: [392, 140], l: [-10, 120], t: 'Pneumatici', v: '6,8 mm', ok: 1 }
+        ];
+        const SCAN = 7;   // secondi della scansione (la vettura sale, scansione, scende)
+        let callouts = '';
+        PTS.forEach((d, i) => {
+            const [x, y] = at(d.p[0], d.p[1]), lx = x + d.l[0], ly = y + d.l[1];
+            const delay = (1.2 + (d.p[0] / 413) * 3.6).toFixed(2);
+            const left = d.l[0] < -60, w = 136;
+            callouts += `<g class="sv-co" style="--dl:${delay}s">
+              <circle class="sv-co-r" cx="${x}" cy="${y}" r="10"/><circle class="sv-co-d" cx="${x}" cy="${y}" r="4"/>
+              <path class="sv-co-l" d="M${x} ${y} L${lx + (left ? w : 0)} ${ly}"/>
+              <g transform="translate(${left ? lx : lx} ${ly - 17})"><rect width="${w}" height="34" rx="9" class="sv-co-b"/>
+                <text x="12" y="14" class="sv-co-t">${d.t.toUpperCase()}</text>
+                <text x="12" y="27" class="sv-co-v ${d.ok ? '' : 'warn'}">${d.ok ? '● ' : '▲ '}${d.v}</text></g></g>`;
+        });
+        const floorLines = [];
+        for (let i = -10; i <= 10; i++) floorLines.push(`<line x1="${375 + i * 26}" y1="420" x2="${375 + i * 110}" y2="600"/>`);
+        for (let j = 0; j < 7; j++) { const y = 420 + Math.pow(j / 6, 1.7) * 160; floorLines.push(`<line x1="0" y1="${y}" x2="750" y2="${y}"/>`); }
+        return `
+        <div class="sv">
+          <svg class="sv-bg" viewBox="0 0 750 580" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="svWall" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0d1420"/><stop offset="1" stop-color="#121b2a"/></linearGradient>
+              <linearGradient id="svFloor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#17202d"/><stop offset="1" stop-color="#0b0f16"/></linearGradient>
+              <radialGradient id="svSpot" cx="50%" cy="0%" r="70%"><stop offset="0" stop-color="#7cc4ff" stop-opacity=".35"/><stop offset="1" stop-color="#7cc4ff" stop-opacity="0"/></radialGradient>
+            </defs>
+            <rect width="750" height="420" fill="url(#svWall)"/>
+            ${[60, 170, 280, 470, 580, 690].map(x => `<rect x="${x}" y="40" width="2" height="380" fill="rgba(255,255,255,.035)"/>`).join('')}
+            <rect x="0" y="372" width="750" height="48" fill="rgba(255,255,255,.025)"/>
+            <rect y="420" width="750" height="160" fill="url(#svFloor)"/>
+            <g stroke="rgba(124,196,255,.10)" stroke-width="1">${floorLines.join('')}</g>
+            <polygon points="250,0 500,0 640,580 110,580" fill="url(#svSpot)" class="sv-cone"/>
+            ${[0, 1, 2].map(i => `<rect x="${200 + i * 120}" y="${14 + i * 0}" width="110" height="4" rx="2" fill="#bfe3ff" class="sv-led" style="animation-delay:${i * .4}s"/>`).join('')}
+          </svg>
+
+          <!-- ponte sollevatore -->
+          <div class="sv-post sv-l"><i></i></div><div class="sv-post sv-r"><i></i></div>
+          <div class="sv-lift" style="--cx:${CX}px;--cy:${CY}px;--cw:${CW}px;--ch:${CH}px">
+            <div class="sv-arm sv-a1"></div><div class="sv-arm sv-a2"></div>
+            <div class="sv-car">
+              <img class="sv-img" src="/img/macro/sportequipe-service.png" alt="">
+              <img class="sv-xray" src="/img/macro/sportequipe-service.png" alt="">
+              <div class="sv-beam"></div>
+            </div>
+            <svg class="sv-co-svg" viewBox="0 0 750 580">${callouts}</svg>
+          </div>
+          <div class="sv-shadow"></div>
+          <img class="sv-refl" src="/img/macro/sportequipe-service.png" alt="" style="left:${CX}px;top:${CY + CH - 6}px;width:${CW}px">
+
+          <!-- HUD diagnosi -->
+          <div class="sv-hud">
+            <svg viewBox="0 0 44 44" class="sv-ring"><circle cx="22" cy="22" r="18" class="bg"/><circle cx="22" cy="22" r="18" class="fg"/></svg>
+            <div><small>DIAGNOSI IN CORSO</small><b><span class="sv-pct">0</span>%</b><em>Sportequipe · OdL 2026-0418</em></div>
+          </div>
+          <!-- ordine di lavoro -->
+          <div class="sv-odl">
+            <div class="sv-odl-h"><small>ORDINE DI LAVORO</small><b>Tagliando 30.000 km</b></div>
+            ${['Accettazione', 'Diagnosi elettronica', 'Cambio olio e filtri', 'Controllo freni', 'Lavaggio e consegna'].map((x, i) => `<div class="sv-step" style="--i:${i}"><i></i><span>${x}</span></div>`).join('')}
+            <div class="sv-odl-f"><span>Ricambi riservati</span><b>3 / 3</b></div>
+          </div>
+          <div class="sv-chip"><i></i>Officina connessa · in arrivo</div>
+        </div>`;
+    }
 
     function template() {
         return `
@@ -23,7 +104,8 @@
     <nav class="bh-rail">
       <button class="bh-ch" data-c="0" type="button" style="--c:#f4a83a"><span class="bh-n">01</span><span class="bh-t">Consegne</span><span class="bh-d">Tempistiche, analisi e verifiche</span><span class="bh-bar"><i></i></span></button>
       <button class="bh-ch" data-c="1" type="button" style="--c:#3fcfae"><span class="bh-n">02</span><span class="bh-t">Stock</span><span class="bh-d">Giacenza, marchi e motorizzazioni</span><span class="bh-bar"><i></i></span></button>
-      <button class="bh-ch" data-c="2" type="button" style="--c:#ff7a1a"><span class="bh-n">03</span><span class="bh-t">Commerciale</span><span class="bh-d">Prossimamente</span><span class="bh-bar"><i></i></span></button>
+      <button class="bh-ch" data-c="2" type="button" style="--c:#ff7a1a"><span class="bh-n">03</span><span class="bh-t">Commerciale</span><span class="bh-d">Contratti, origini e preventivi</span><span class="bh-bar"><i></i></span></button>
+      <button class="bh-ch" data-c="3" type="button" style="--c:#4aa8ff"><span class="bh-n">04</span><span class="bh-t">Service</span><span class="bh-d">Prossimamente</span><span class="bh-bar"><i></i></span></button>
       <ul class="bh-sub" id="bh-sub"></ul>
     </nav>
     <button class="bh-enter" type="button" id="bh-enter">Entra <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="#111" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
@@ -95,7 +177,7 @@
       </div>
       <!-- COMMERCIALE (grafica provvisoria, da definire) -->
       <div class="bh-scene" data-s="2">
-        <div class="bh-cap"><i></i>Lead, vendite e noleggio · prossimamente</div>
+        <div class="bh-cap"><i></i>Lead, vendite e noleggio</div>
         <div class="bh-ck" id="bh-ck">
           <!-- parabrezza notturno -->
           <div class="bh-ck-sky"><svg viewBox="0 0 750 140" preserveAspectRatio="none"><path d="M0,110 L60,92 L120,100 L190,78 L260,96 L330,84 L410,102 L480,86 L560,98 L640,80 L750,96 L750,140 L0,140 Z" fill="#1b1e2a"/></svg></div>
@@ -136,6 +218,11 @@
           <span class="bh-ck-seat bh-l"></span><span class="bh-ck-seat bh-r"></span>
         </div>
               </div>
+      <!-- SERVICE: officina connessa (in arrivo), disegnata da serviceScene() -->
+      <div class="bh-scene" data-s="3">
+        <div class="bh-cap"><i></i>Officina · ricambi · ordini di lavoro · prossimamente</div>
+        ${serviceScene()}
+      </div>
       <div class="bh-beam" id="bh-beam"></div>
     </div>
   </div>
@@ -156,7 +243,8 @@
   const CH = [
     { acc: '#f4a83a', tint: 'rgba(244,168,58,.28)', sub: [['Tempistiche consegne'], ['Analisi avanzamento'], ['Verifiche e quadratura']] },
     { acc: '#3fcfae', tint: 'rgba(63,207,174,.26)', sub: [['Panoramica e grafici'], ['Per marchio e modello'], ['Disponibili, prenotate, vendute']], off: !(window.MacroHome && MacroHome.canStock && MacroHome.canStock()) },
-    { acc: '#ff7a1a', tint: 'rgba(255,106,26,.18)', sub: [['Lead e Origine', 'In arrivo'], ['Vendite', 'In arrivo'], ['Noleggio', 'In arrivo']], off: true }
+    { acc: '#ff7a1a', tint: 'rgba(255,106,26,.18)', sub: [['Panoramica e sedi'], ['Consulenti, B2B e noleggio'], ['Preventivi telefonici']], off: !(window.MacroHome && MacroHome.canCommerciale && MacroHome.canCommerciale()) },
+    { acc: '#4aa8ff', tint: 'rgba(74,168,255,.22)', sub: [['Magazzino ricambi', 'In arrivo'], ['Ordini di lavoro', 'In arrivo'], ['Accettazione', 'In arrivo']], off: true }
   ];
   const DUR = 9000;
   let cur = -1, timer = null, paused = false;
@@ -273,11 +361,17 @@
     const iv = setInterval(() => { v = Math.min(n, v + st); el.textContent = v; if (v >= n) clearInterval(iv); }, 30); });
   const cmRun = () => { cm.classList.remove('bh-run'); void cm.offsetWidth; cm.classList.add('bh-run'); count(); };
   setInterval(() => { if (active && cur === 2 && !reduce) cmRun(); }, 9000);
-  const go0 = go; go = function (i, f) { go0(i, f); if (i === 2) cmRun(); else if (i === 1) stockSpin(); };
+  // SERVICE: ogni 10,5 secondi la sequenza riparte (sale, scansione, diagnosi, scende)
+  const sv = document.querySelector('#biPage .sv'), svPct = sv && sv.querySelector('.sv-pct');
+  let svT0 = 0;
+  const svRun = () => { if (!sv || reduce) return; sv.classList.remove('sv-run'); void sv.offsetWidth; sv.classList.add('sv-run'); svT0 = performance.now(); };
+  setInterval(() => { if (active && cur === 3) svRun(); }, 10500);
+  setInterval(() => { if (!active || cur !== 3 || !svPct) return; const s = (performance.now() - svT0) / 1000; svPct.textContent = Math.max(0, Math.min(100, Math.round((s - 1.2) / 3.8 * 100))); }, 80);
+  const go0 = go; go = function (i, f) { go0(i, f); if (i === 2) cmRun(); else if (i === 1) stockSpin(); else if (i === 3) svRun(); };
   // Avvio/arresto: tutto gira solo mentre la pagina BI e' visibile
   function start() {
     scale(); active = true; paused = false; settle();
-    if (cur < 0) go(0, true); else if (cur === 2) cmRun(); else if (cur === 1) stockSpin();
+    if (cur < 0) go(0, true); else if (cur === 2) cmRun(); else if (cur === 1) stockSpin(); else if (cur === 3) svRun();
     restart();
     if (!reduce) requestAnimationFrame(frame);
   }
@@ -300,7 +394,9 @@
             if (e.target.closest('#bh-enter')) {
                 if (!e.target.closest('#bh-enter').classList.contains('bh-off')) {
                     const act = root.querySelector('.bh-ch.bh-on');
-                    if (act && act.dataset.c === '1') MacroHome.openStock(); else openTab('tempi');
+                    if (act && act.dataset.c === '1') MacroHome.openStock();
+                    else if (act && act.dataset.c === '2') MacroHome.openCommerciale();
+                    else if (act && act.dataset.c === '0') openTab('tempi');
                 }
                 return;
             }
@@ -310,6 +406,7 @@
                 const [c, k] = li.dataset.sub.split('|').map(Number);
                 if (c === 0) openTab(k === 1 ? 'analisi' : 'tempi');
                 else if (c === 1 && window.MacroHome && MacroHome.canStock && MacroHome.canStock()) MacroHome.openStock();
+                else if (c === 2 && window.MacroHome && MacroHome.canCommerciale && MacroHome.canCommerciale()) MacroHome.openCommerciale();
             }
         });
         scene = initScene();

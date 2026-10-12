@@ -37,7 +37,8 @@
     const BUCKETS = [0, 1, 2, 3, 4, 5, 6];
     const BLABEL = k => k === 0 ? 'Stesso mese' : k === 6 ? '6+ mesi' : '+' + k + (k === 1 ? ' mese' : ' mesi');
 
-    let tratt = null;   // [{...colonne minime}]
+    let tratt = null;   // [{...colonne minime}] (senza il Noleggio: e' quello che usano le Consegne)
+    let trattAll = null; // tutte le trattative importate, Noleggio compreso (le usa la BI Commerciale)
     let db = null;      // [{...colonne minime}]
     let result = null;  // {recs, verify, excl}
     let vendMap = new Map(); // nome consulente nel foglio -> nome completo (dal CSV)
@@ -77,10 +78,16 @@
     function slimTrattative(rows) {
         need(rows, ['Sede', 'Data chiusura', 'Data Consegna', 'Data prevista consegna', 'Venditore', 'Nome cliente',
             'Cognome Cliente', 'Rag. Sociale Cliente', 'Tipo Trattativa', 'Marca', 'Modello', 'Targa', 'Telaio'], 'delle trattative');
-        return rows.filter(r => !/noleggio/i.test(r['Sede'])).map(r => ({
+        // Si tengono anche le trattative del Noleggio e alcune colonne in piu' (origine,
+        // tipo cliente, data trattativa): servono alla BI Commerciale. Le Consegne
+        // continuano a lavorare SENZA il Noleggio (vedi applyServerData).
+        return rows.map(r => ({
             sede: r['Sede'], chiusura: r['Data chiusura'], consegna: r['Data Consegna'], prevista: r['Data prevista consegna'],
             vend: r['Venditore'], nome: r['Nome cliente'], cognome: r['Cognome Cliente'], rag: r['Rag. Sociale Cliente'],
-            tipo: r['Tipo Trattativa'], marca: r['Marca'], modello: r['Modello'], targa: r['Targa'], telaio: r['Telaio']
+            tipo: r['Tipo Trattativa'], marca: r['Marca'], modello: r['Modello'], targa: r['Targa'], telaio: r['Telaio'],
+            dataTratt: r['Data trattativa'] || '', origine: r['Origine Trattativa'] || '', tipoCli: r['Tipo cliente'] || '', team: r['Team'] || '',
+            // CSV "tutte le trattative": Chiusa = contratto, In corso / Fallita = preventivi (le usa la BI Commerciale)
+            stato: r['Stato trattativa'] || '', motivo: r['Motivo fallimento'] || '', etichetta: (r['Etichetta'] || '').trim()
         }));
     }
     function slimDatabase(rows) {
@@ -88,7 +95,8 @@
         return rows.filter(r => r['CLIENTE'] || r['TARGA/TELAIO']).map(r => ({
             cliente: r['CLIENTE'], b2c: String(r['B2C']).toUpperCase(), tt: r['TARGA/TELAIO'],
             stato: r['STATO'], prov: r['PROVENIENZA'], data: r['DATA'],
-            vend: r['VENDITORE'] || '', modello: r['MODELLO'] || '', canale: r['CANALE'] || '', mese: r['MESE'] || ''
+            vend: r['VENDITORE'] || '', modello: r['MODELLO'] || '', canale: r['CANALE'] || '', mese: r['MESE'] || '',
+            _raw: r   // riga completa del foglio (pagamento, servizi...): la usa la BI Commerciale
         }));
     }
 
@@ -326,7 +334,7 @@
                     const m = dc ? dc.getMonth() + 1 : 0;
                     const k = dReal && dc ? Math.min(6, Math.max(0, (dReal.getFullYear() - dc.getFullYear()) * 12 + dReal.getMonth() - dc.getMonth())) : 'dc';
                     manuali.push({
-                        ...base, dec, m, k, manuale: true,
+                        ...base, dec, _t: t, m, k, manuale: true,
                         stato: dReal ? 'CONSEGNATA (DATA DA CSV)' : 'NON PRESENTE NEL FOGLIO',
                         consegna: dReal ? fmtD(dReal) : '', prevista: false, prov: 'Non specificato', abb: 'contratto differente'
                     });
@@ -343,7 +351,7 @@
                     const m = dc ? dc.getMonth() + 1 : 0;
                     const k = dReal && dc ? Math.min(6, Math.max(0, (dReal.getFullYear() - dc.getFullYear()) * 12 + dReal.getMonth() - dc.getMonth())) : 'dc';
                     soloCsv.push({
-                        ...base, m, k, soloCsv: true, check: true, key: dkey,
+                        ...base, _t: t, m, k, soloCsv: true, check: true, key: dkey,
                         note: [{ c: 'info', t: `Solo nel CSV: nel foglio avanzamento non c'è ancora nessuna riga con ${targaCsv(t) ? 'targa/telaio ' + targaCsv(t) + ' o ' : ''}nome "${nice(nameOf(t))}"` }],
                         stato: dReal ? 'CONSEGNATA (DATA DA CSV)' : 'NON ANCORA NEL FOGLIO AVANZAMENTO',
                         consegna: dReal ? fmtD(dReal) : '', prevista: false, prov: 'Non specificato', abb: 'solo CSV'
@@ -407,8 +415,12 @@
                 chiusura: g._d ? fmtD(g._d) : (g.data || ''), targa: (g.tt || '—').trim(), tipo: cap(String(g.canale || '').trim()),
                 m, k, stato: st || 'STATO NON INDICATO', consegna: '', prevista: false,
                 prov: g.prov ? cap(g.prov) : 'Non specificato', abb: 'solo foglio', solo: true,
-                check: k !== 'ann', key: keyOf(g), note
+                check: k !== 'ann', key: keyOf(g), dkey: keyOf(g), note
             };
+            // "Elimina" anche per le righe solo nel foglio (es. riga doppia o errata):
+            // non si contano piu', restano nella lista "eliminate" con Annulla.
+            const decF = decisione(rec.dkey);
+            if (decF && decF.azione === 'elimina') { rec.dec = decF; rec.check = false; eliminateFoglio.push(rec); return; }
             soloFoglio.push(rec);
         });
         const contate = soloFoglio.filter(r => r.k !== 'ann' && r.m);
@@ -428,10 +440,12 @@
             metodi: abbinate.reduce((acc, r) => { acc[r.abb] = (acc[r.abb] || 0) + 1; return acc; }, {})
         };
         quad.okCsv = quad.abbinate + quad.esclusiB2C + quad.soloCsv + quad.verify + quad.manuali + quad.eliminate === quad.csvTot;
-        quad.okFoglio = quad.abbinate + quad.soloTot === quad.foglioTot;
+        quad.okFoglio = quad.abbinate + quad.soloTot + quad.eliminateFoglio === quad.foglioTot;
         quad.ok = quad.okCsv && quad.okFoglio && quad.righeRiusate === 0;
 
-        result = { recs: recs.filter(r => r.m).concat(manuali.filter(r => r.m), soloCsv.filter(r => r.m), contate), verify, excl, soloFoglio, soloCsv, esclusiB2C, abbinate, manuali, eliminate, eliminateFoglio, quad };
+        // Per la BI Commerciale: ogni riga del foglio con la trattativa del CSV abbinata (o null)
+        const righe = G.map(g => { const o = presaDa.get(g._i); return { raw: g._raw, csv: o ? o.t : null, how: o ? o.how : '' }; });
+        result = { recs: recs.filter(r => r.m).concat(manuali.filter(r => r.m), soloCsv.filter(r => r.m), contate), verify, excl, soloFoglio, soloCsv, esclusiB2C, abbinate, manuali, eliminate, eliminateFoglio, quad, righe };
     }
 
     /* ================= util ================= */
@@ -467,10 +481,17 @@
         return data;
     }
 
+    // Trattativa chiusa (= contratto). Se l'import non ha la colonna "Stato trattativa"
+    // (fatto con una versione vecchia della pagina) vale la Data chiusura: solo le
+    // trattative chiuse ce l'hanno.
+    const isChiusa = r => r.stato ? /chius/i.test(r.stato) : !!String(r.chiusura || '').trim();
+
     // Applica la risposta del server (GET /data e POST) allo stato locale
     function applyServerData(d) {
         meta = d;
-        tratt = d.trattative && Array.isArray(d.trattative.rows) ? d.trattative.rows : null;
+        trattAll = d.trattative && Array.isArray(d.trattative.rows) ? d.trattative.rows : null;
+        // Le Consegne lavorano solo sui CONTRATTI: trattative chiuse (i CSV vecchi non hanno lo stato: erano gia' solo chiuse)
+        tratt = trattAll ? trattAll.filter(r => !/noleggio/i.test(r.sede || '') && isChiusa(r)) : null;
         try { db = d.database && d.database.csv ? slimDatabase(parseCSV(d.database.csv)) : null; }
         catch (e) { db = null; meta.foglioErrore = e.message; }
     }
@@ -482,10 +503,10 @@
           <div class="cg-band-top">
             <div>
               <div class="cg-back-row">
-                <button type="button" class="cg-back" onclick="MacroHome.openBI()">&larr; BI</button>
+                <button type="button" class="cg-back" onclick="MacroHome.show()">&larr; Home</button>
               </div>
-              <h1>Consegne</h1>
-              <p>Tempistiche di consegna e analisi dell'avanzamento</p>
+              <h1>Power BI</h1>
+              <p>Consegne, tempistiche e analisi dell'avanzamento</p>
             </div>
             <div class="cg-actions">
               <label class="cg-btn" id="cgImportLbl" style="display:none">Importa trattative (CSV)<input type="file" accept=".csv,text/csv" id="cgFileTratt" hidden></label>
@@ -556,15 +577,9 @@
         const r = new FileReader();
         r.onload = async () => {
             try {
-                const rows = slimTrattative(parseCSV(String(r.result)));
-                if (!rows.length) throw new Error('Il file non contiene trattative (dopo aver escluso il Noleggio).');
                 lbl.classList.add('cg-busy');
-                const d = await api('/trattative', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ rows })
-                });
-                applyServerData(d);
-                refresh(`Import completato: ${fmt(rows.length)} trattative. Ora le vedono tutti.`);
+                const n = await importaCsv(String(r.result));
+                refresh(`Import completato: ${fmt(n)} trattative. Ora le vedono tutti.`);
             } catch (e) { setSrc(e.message, true); }
             finally { lbl.classList.remove('cg-busy'); input.value = ''; }
         };
@@ -771,8 +786,9 @@
               <ul>
                 <li><span>abbinate al CSV</span>${lnk('abb', q.abbinate)}</li>
                 <li><span>solo nel foglio (${fmt(q.soloAnn)} annullate, non contate)</span>${lnk('solo', q.soloTot)}</li>
+                <li><span>eliminate a mano</span>${lnk('delf', q.eliminateFoglio)}</li>
               </ul>
-              <p class="cg-q-sum">${fmt(q.abbinate)} + ${fmt(q.soloTot)} = ${fmt(q.abbinate + q.soloTot)}</p>
+              <p class="cg-q-sum">${fmt(q.abbinate)} + ${fmt(q.soloTot)} + ${fmt(q.eliminateFoglio)} = ${fmt(q.abbinate + q.soloTot + q.eliminateFoglio)}</p>
             </div>
             <div class="cg-q-box">
               <h4>Come sono state abbinate</h4>
@@ -795,6 +811,7 @@
         if (id === 'b2c') return openModal('Scartate: B2C = TRUE nel foglio', q.esclusiB2C, null, { verify: true });
         if (id === 'csv') return openModal('Solo nel CSV: non ancora nel foglio avanzamento', q.soloCsv, null, { reasons: true });
         if (id === 'man') return openModal('Caricate a mano come contratto differente', q.manuali, null, {});
+        if (id === 'delf') return openModal('Righe del foglio eliminate a mano', q.eliminateFoglio, null, {});
         if (id === 'del') return openModal('Trattative eliminate a mano', q.eliminate, null, { verify: true });
         if (id === 'ver') return openModal('Da verificare: non trovate nel foglio DATABASE', q.verify, null, { verify: true });
         if (id === 'solo') return openModal('Solo nel foglio Google: senza trattativa nel CSV', q.soloFoglio, null, { reasons: true });
@@ -966,7 +983,7 @@
                     ? `<span class="cg-verok cg-del">✕ Eliminata da ${esc(dec.da)} il ${esc(whenDay(dec.at))} alle ${esc(whenTime(dec.at))}</span>`
                     : `<span class="cg-verok">✓ Caricata come contratto differente da ${esc(dec.da)} il ${esc(whenDay(dec.at))} alle ${esc(whenTime(dec.at))}</span>`;
                 d += `<button type="button" class="cg-vlink" data-dkey="${k}" data-az="">Annulla</button>`;
-            } else if (r.soloCsv) {
+            } else if (r.soloCsv || r.solo) {
                 d = `<span class="cg-dec"><button type="button" class="cg-vbtn cg-vbtn-del" data-dkey="${k}" data-az="elimina">Elimina</button></span>`;
             } else {
                 d = (r.cands && r.cands.length ? `<span class="cg-dec-t">Verifica e abbina a:</span><span class="cg-dec">` +
@@ -1003,7 +1020,7 @@
                 if (r.dkey !== key) return;
                 if (azione) r.dec = meta.verifiche[key]; else delete r.dec;
                 // una riga eliminata non va piu' verificata; annullando torna com'era
-                if (r.soloCsv) r.check = azione !== 'elimina';
+                if (r.solo || r.soloCsv) r.check = azione === 'elimina' ? false : (r.soloCsv ? true : r.k !== 'ann');
             });
             renderOrigin(); renderList();
             compute(); render(rootEl.querySelector('#cgBody'));
@@ -1097,6 +1114,37 @@
     function closeModal() {
         closeColPop(); ov.classList.remove('open'); if (lastFocus && lastFocus.focus) lastFocus.focus(); }
 
+    /* ================= import CSV delle Consegne ================= */
+    // Legge il CSV, lo riduce e lo salva sul server (sostituisce il precedente).
+    // E' SOLO delle Consegne: la BI Commerciale ha un suo import separato.
+    async function importaCsv(text) {
+        const rows = slimTrattative(parseCSV(String(text)));
+        if (!rows.filter(x => !/noleggio/i.test(x.sede || '') && isChiusa(x)).length) throw new Error('Il file non contiene trattative chiuse (dopo aver escluso il Noleggio).');
+        const d = await api('/trattative', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows }) });
+        applyServerData(d);
+        return rows.length;
+    }
+    // Per la BI Commerciale: legge e riduce il CSV senza salvarlo qui
+    const preparaCsv = text => slimTrattative(parseCSV(String(text)));
+
+    /* ================= dati per la BI Commerciale ================= */
+    // La BI Commerciale ha il SUO CSV (tutte le trattative): qui si legge solo il
+    // foglio DATABASE e si abbinano le trattative CHIUSE del Commerciale alle righe
+    // del foglio con le stesse regole delle Consegne. I dati delle Consegne non
+    // vengono toccati (si rimettono come erano subito dopo).
+    // Restituisce: righe -> ogni riga del foglio (raw) con la trattativa del Commerciale abbinata (csv) o null
+    async function carica(altre) {
+        applyServerData(await api('/data'));
+        const tieni = { tratt, trattAll, result, vendMap };
+        trattAll = Array.isArray(altre) ? altre : [];
+        tratt = trattAll.filter(r => !/noleggio/i.test(r.sede || '') && isChiusa(r));
+        if (tratt.length && db) compute(); else result = null;
+        const righe = result && tratt.length && db ? result.righe : (db || []).map(g => ({ raw: g._raw, csv: null, how: '' }));
+        const out = { meta, vendMap, trattAll, righe };
+        tratt = tieni.tratt; trattAll = tieni.trattAll; result = tieni.result; vendMap = tieni.vendMap;
+        return out;
+    }
+
     /* ================= avvio ================= */
     function init() {
         rootEl = document.getElementById('consegneRoot');
@@ -1122,6 +1170,9 @@
             meta: () => meta,
             vendMap: () => vendMap,
             soloCsv: () => (result && result.soloCsv) || [],
+            // BI Commerciale: carica i dati anche se l'area Consegne non e' mai stata aperta
+            carica: carica,
+            preparaCsv: preparaCsv,
             parseCSV, pd, fmtD, nice, cap, esc, fmt, pct, toks,
             openModal: (title, rows, base, opts) => openModal(title, rows, base, opts || {}),
             post: (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })

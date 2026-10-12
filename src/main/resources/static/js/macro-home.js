@@ -28,6 +28,7 @@
     let scene = null;
     let inConsegne = false;
     let inStock = false;
+    let inComm = false;   // area Commerciale (capitolo 03 della BI)
 
     // La selezione area (e l'area Consegne) la vede SOLO chi ha il permesso
     // CONSEGNE (pagina Permessi per Ruolo / per Operatore; default:
@@ -57,6 +58,8 @@
         if (consegne) consegne.style.display = 'none';
         const stockP = document.getElementById('stockPage');
         if (stockP) stockP.style.display = 'none';
+        const commP = document.getElementById('commercialePage');
+        if (commP) commP.style.display = 'none';
         document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
     }
 
@@ -106,7 +109,7 @@
         hideAllPages();
         hideBI();
         const cgp = document.getElementById('consegnePage'); if (cgp) cgp.style.display = 'none';
-        inConsegne = false; inStock = false;
+        inConsegne = false; inStock = false; inComm = false;
         setNavLinksVisible(false);
         document.body.removeAttribute('data-role-theme');
         setBadge('HOME');
@@ -133,7 +136,9 @@
         if (consegne) consegne.style.display = 'none';
         const stockP = document.getElementById('stockPage');
         if (stockP) stockP.style.display = 'none';
-        inConsegne = false; inStock = false;
+        const commP = document.getElementById('commercialePage');
+        if (commP) commP.style.display = 'none';
+        inConsegne = false; inStock = false; inComm = false;
         setNavLinksVisible(true);
     }
 
@@ -150,7 +155,7 @@
         hideAllPages();
         const consegne = document.getElementById('consegnePage');
         if (consegne) consegne.style.display = 'none';
-        inConsegne = false; inStock = false;
+        inConsegne = false; inStock = false; inComm = false;
         setNavLinksVisible(false);
         document.body.removeAttribute('data-role-theme');
         setBadge('BI');
@@ -167,7 +172,7 @@
         hideBI();
         stopInboundLiveUpdates();
         hideAllPages();
-        inConsegne = true; inStock = false;
+        inConsegne = true; inStock = false; inComm = false;
         setNavLinksVisible(false);
         document.body.removeAttribute('data-role-theme');
         setBadge('CONSEGNE');
@@ -192,7 +197,7 @@
         hideBI();
         stopInboundLiveUpdates();
         hideAllPages();
-        inConsegne = false; inStock = true;
+        inConsegne = false; inStock = true; inComm = false;
         setNavLinksVisible(false);
         document.body.removeAttribute('data-role-theme');
         setBadge('STOCK');
@@ -204,6 +209,27 @@
         window.scrollTo(0, 0);
     }
 
+    // Area Commerciale (capitolo 03 della BI): pagina #commercialePage, contenuto
+    // costruito da /js/commerciale.js. La vede chi puo' entrare nella BI.
+    function canCommerciale() { return canShow(); }
+    function openCommerciale() {
+        if (!canCommerciale()) return;
+        hide();
+        hideBI();
+        stopInboundLiveUpdates();
+        hideAllPages();
+        inConsegne = false; inStock = false; inComm = true;
+        setNavLinksVisible(false);
+        document.body.removeAttribute('data-role-theme');
+        setBadge('COMMERCIALE');
+        const page = document.getElementById('commercialePage');
+        if (page) page.style.display = 'block';
+        if (window.CommercialeBI) CommercialeBI.init();
+        history.replaceState(null, '', window.location.pathname + '#commerciale');
+        sessionStorage.setItem('currentPage', 'commerciale');
+        window.scrollTo(0, 0);
+    }
+
     // Al logout: chiude tutto e ripristina la navbar per il prossimo login
     function reset() {
         hide();
@@ -212,7 +238,9 @@
         if (consegne) consegne.style.display = 'none';
         const stockP = document.getElementById('stockPage');
         if (stockP) stockP.style.display = 'none';
-        inConsegne = false; inStock = false;
+        const commP = document.getElementById('commercialePage');
+        if (commP) commP.style.display = 'none';
+        inConsegne = false; inStock = false; inComm = false;
         setNavLinksVisible(true);
     }
 
@@ -412,8 +440,10 @@
         openBI: openBI,
         openStock: openStock,
         canStock: canStock,
+        openCommerciale: openCommerciale,
+        canCommerciale: canCommerciale,
         reset: reset,
-        isInConsegne: function () { return inConsegne || inStock; },
+        isInConsegne: function () { return inConsegne || inStock || inComm; },
         isInStock: function () { return inStock; }
     };
 })();
