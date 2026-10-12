@@ -1139,8 +1139,9 @@
         trattAll = Array.isArray(altre) ? altre : [];
         tratt = trattAll.filter(r => !/noleggio/i.test(r.sede || '') && isChiusa(r));
         if (tratt.length && db) compute(); else result = null;
-        const righe = result && tratt.length && db ? result.righe : (db || []).map(g => ({ raw: g._raw, csv: null, how: '' }));
-        const out = { meta, vendMap, trattAll, righe };
+        const righe = result && tratt.length && db ? result.righe.slice() : (db || []).map(g => ({ raw: g._raw, csv: null, how: '' }));
+        const vmap = vendMap;
+        const out = { meta, vendMap: vmap, trattAll, righe };
         tratt = tieni.tratt; trattAll = tieni.trattAll; result = tieni.result; vendMap = tieni.vendMap;
         return out;
     }

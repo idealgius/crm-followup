@@ -15,7 +15,8 @@
       Consegne che fa l'abbinamento contratto <-> riga del foglio: dal foglio
       arrivano annullate (STATO), B2B (B2C = TRUE), pagamento (PC = contanti)
       e servizi (BLOCKSHAFT, LOJACK, FIR, GARANZIA Mawdy, PACK MANUTENZIONE).
-      Annullato anche se nel CSV l'etichetta e' "CONTRATTO ANNULLATO".
+      Gli ANNULLATI arrivano solo dal foglio (stato ANNULLATA): anche le righe
+      annullate senza una trattativa chiusa nel CSV. Le fallite restano fallite.
    3) Preventivi telefonici della sezione In bound: abbinati al contratto
       (stesso cliente o targa/telaio) -> bollino "Da preventivo telefonico",
       l'origine resta quella del CSV.
@@ -64,7 +65,7 @@
     const LS_B2B = 'commerciale_b2b_v1', LS_T = 'commerciale_grafici_v1';
 
     let rootEl = null, loaded = false, loading = false, info = null, msgErr = '', msgOk = '';
-    let TR = [], CONTR = [], PT = [], vend = [], anni = [];
+    let TR = [], CONTR = [], AF = [], PT = [], vend = [], anni = [];
     let view = { k: 'all' }, anno = new Date().getFullYear(), da = 1, a = 12, b2bOn = false;
     let listF = { f: 'contratti' }, marcheS = 'all';
     const charts = {};
@@ -108,8 +109,13 @@
         return t === 'NUOVO' ? 'Nuovo' : t === 'KM0' ? 'Km0' : t === 'USATO' ? 'Usato' : 'Non indicata';
     }
     const css = n => getComputedStyle(rootEl).getPropertyValue(n).trim();
-    const esito = r => r.stato === 'Chiusa' ? (r.ann ? 'Annullato' : 'Contratto') : r.stato;
-    const isC = r => r.stato === 'Chiusa';
+    // Contratto valido = trattativa chiusa non annullata. ANNULLATI = solo dal foglio
+    // AVANZAMENTO (stato ANNULLATA): la trattativa chiusa abbinata alla riga annullata,
+    // oppure la riga annullata da sola se nel CSV non c'e' una chiusa corrispondente.
+    // Le trattative FALLITE restano fallite: sono un'altra cosa.
+    const esito = r => r.ann ? 'Annullato' : r.stato === 'Chiusa' ? 'Contratto' : r.stato;
+    const isC = r => r.stato === 'Chiusa' && !r.ann;
+    const isF = r => r.stato === 'Fallita' && !r.ann;
 
     /* ================= costruzione dei dati ================= */
     function build(d) {
@@ -126,7 +132,7 @@
             const s0 = String(t.stato || '');
             // senza la colonna Stato (import fatto con la pagina vecchia) vale la Data chiusura
             const stato = s0 ? (/chius/i.test(s0) ? 'Chiusa' : /fall/i.test(s0) ? 'Fallita' : 'In corso') : (String(t.chiusura || '').trim() ? 'Chiusa' : 'In corso');
-            const raw = stato === 'Chiusa' ? (foglioDi.get(t) || null) : null;
+            const raw = foglioDi.get(t) || null;
             const cli = `${t.nome || ''} ${t.cognome || ''}`.replace(/\s+/g, ' ').trim() || String(t.rag || '').trim();
             const r = {
                 i: TR.length, data: dt, y: dt.getFullYear(), m: dt.getMonth() + 1, vend: v, sede: sedeOf(v),
@@ -138,7 +144,7 @@
             };
             r.tk = toks(r.cliente);
             r.b2b = raw ? up(raw['B2C']) === 'TRUE' : /societ/i.test(t.tipoCli || '');
-            r.ann = stato === 'Chiusa' && ((raw && up(raw['STATO']).includes('ANNULLATA')) || /annullat/i.test(r.etichetta));
+            r.ann = !!raw && up(raw['STATO']).includes('ANNULLATA');
             if (raw) {
                 const pag = up(raw['PAGAMENTO']), g = up(raw['GARANZIA']);
                 r.pag = !pag ? 'Non indicato' : pag === 'PC' ? 'PC (contanti)' : 'Finanziamento';
@@ -147,10 +153,26 @@
                     'FIR': /\d/.test(raw['FIR'] || '') ? 1 : 0, 'Garanzia Mawdy': g.includes('MAWDY') ? 1 : 0,
                     'Pack manutenzione': /\d/.test(raw['PACK MANUTENZIONE'] || '') ? 1 : 0
                 };
-            } else { r.pag = stato === 'Chiusa' ? 'Non indicato' : ''; r.serv = null; }
+            } else { r.pag = stato === 'Chiusa' || r.ann ? 'Non indicato' : ''; r.serv = null; }
             TR.push(r);
         });
         CONTR = TR.filter(isC);
+        // righe del foglio ANNULLATE senza trattativa chiusa nel CSV: contano come annullati
+        const vmap = d.vendMap || new Map();
+        AF = [];
+        d.righe.forEach(({ raw, csv }, n) => {
+            if (csv || !raw || !String(raw['CLIENTE'] || '').trim() || !up(raw['STATO']).includes('ANNULLATA')) return;
+            const dt = pd(raw['DATA']), mm = MESIL.map(x => x.toUpperCase()).indexOf(up(raw['MESE']));
+            const m = dt ? dt.getMonth() + 1 : (mm > 0 ? mm : 0); if (!m) return;
+            const y = dt ? dt.getFullYear() : new Date().getFullYear();
+            const vRaw = up(raw['VENDITORE']), v = vmap.get(vRaw) || (vRaw ? nice(vRaw) : 'Non indicato');
+            if (escluso(v)) return;
+            const mod = String(raw['MODELLO'] || '').replace(/\s+/g, ' ').trim(), pag = up(raw['PAGAMENTO']);
+            AF.push({ i: 'f' + n, data: dt || new Date(y, m - 1, 1), y, m, vend: v, sede: sedeOf(v), noleggio: false, tipo: tipoOf(raw['CANALE']),
+                origine: 'Solo nel foglio', stato: 'Chiusa', motivo: '', etichetta: '', marca: marcaOf(mod.split(' ')[0]), veicolo: mod,
+                cliente: nice(raw['CLIENTE']), targa: String(raw['TARGA/TELAIO'] || '').trim(), foglio: true, soloFoglio: true, tel: null, ann: true,
+                b2b: up(raw['B2C']) === 'TRUE', pag: !pag ? 'Non indicato' : pag === 'PC' ? 'PC (contanti)' : 'Finanziamento', serv: null });
+        });
         vend = [...new Set(TR.map(r => r.vend))].sort((x, y) => x.localeCompare(y, 'it'));
         anni = [...new Set(TR.map(r => r.y))].sort((x, y) => y - x);
     }
@@ -245,6 +267,9 @@
         return true;
     }
     const trIn = vw => TR.filter(r => inPer(r) && okC(r, vw));
+    // annullati di una vista: trattative chiuse abbinate a righe ANNULLATA + righe annullate solo nel foglio
+    const annIn = vw => TR.filter(r => r.ann && inPer(r) && okC(r, vw)).concat(AF.filter(r => inPer(r) && okC(r, vw)));
+    const annBase = c => inPer(c) && (b2bOn || !c.b2b) && c.sede !== 'Noleggio';
     const same = (x, y) => x.k === y.k && x.s === y.s && x.v === y.v;
     const months = () => { const r = []; for (let m = da; m <= a; m++) r.push(m); return r; };
     const per = () => MESIL[da] + (a !== da ? ' – ' + MESIL[a] : '') + ' ' + anno;
@@ -356,7 +381,7 @@
             '<div class="cm-nav-t">Sedi</div>' + ['Agnano', 'Casamarciano', 'Salerno'].map(s => grp(s, { k: 'sede', s }, '🏢', SEDI[s], consOf(s))).join('') +
             '<div class="cm-nav-t">Categorie</div>' + grp('B2B', { k: 'b2b' }, '💼', 'B2B', b2bSubs) + grp('Noleggio', { k: 'sede', s: 'Noleggio' }, '🔑', 'Noleggio', consOf('Noleggio')) +
             '<div class="cm-nav-t">Report</div>' + item({ k: 'marche' }, '🏷️', 'Performance marchi', new Set(CONTR.filter(inPer).map(c => c.marca)).size) +
-            item({ k: 'pt' }, '📞', 'Preventivi telefonici', PT.filter(inPer).length) + item({ k: 'ann' }, '↩️', 'Contratti annullati', CONTR.filter(c => inPer(c) && c.ann).length) +
+            item({ k: 'pt' }, '📞', 'Preventivi telefonici', PT.filter(inPer).length) + item({ k: 'ann' }, '↩️', 'Contratti annullati', TR.filter(c => c.ann && annBase(c)).length + AF.filter(annBase).length) +
             item({ k: 'list' }, '📋', 'Tutte le trattative', TR.filter(inPer).length);
     }
 
@@ -610,7 +635,7 @@
 
     /* ---- report (Panoramica / sede / consulente / B2B) ---- */
     function renderReport() {
-        const isB = view.k === 'b2b', R = trIn(view), C = R.filter(isC), ANN = C.filter(c => c.ann), F = R.filter(r => r.stato === 'Fallita'), IN = R.filter(r => r.stato === 'In corso');
+        const isB = view.k === 'b2b', R = trIn(view), C = R.filter(isC), ANN = annIn(view), F = R.filter(isF), IN = R.filter(r => r.stato === 'In corso');
         const X = isB ? [] : PT.filter(p => inPer(p) && okV(p.vend));
         const P = R.length, nm = a - da + 1, TEL = C.filter(c => c.tel).length, CF = C.filter(c => c.pag), FIN = C.filter(c => c.pag === 'Finanziamento').length;
         const b2bN = CONTR.filter(c => inPer(c) && c.b2b && c.sede !== 'Noleggio' && okV(c.vend)).length;
@@ -621,7 +646,7 @@
         if (group) {
             const rv = [...by(R, r => r.vend)].map(([k, l]) => {
                 const c = l.filter(isC);
-                return { k, p: l.length, c: c.length, ann: c.filter(x => x.ann).length, f: l.filter(x => x.stato === 'Fallita').length, tel: c.filter(x => x.tel).length, pt: X.filter(p => p.vend === k).length, fin: c.filter(x => x.pag === 'Finanziamento').length, cf: c.filter(x => x.foglio).length };
+                return { k, p: l.length, c: c.length, ann: ANN.filter(x => x.vend === k).length, f: l.filter(isF).length, tel: c.filter(x => x.tel).length, pt: X.filter(p => p.vend === k).length, fin: c.filter(x => x.pag === 'Finanziamento').length, cf: c.filter(x => x.foglio).length };
             }).sort((x, y) => y.c - x.c || y.p - x.p);
             const best = Math.max(...rv.filter(r => r.c >= 5).map(r => r.c / r.p));
             const showS = view.k === 'all' || isB;
@@ -642,7 +667,7 @@
           ${kpi('📝', 'var(--cm-grey-soft)', 'Preventivi', nf(P), 'media ' + (P / nm).toLocaleString('it-IT', { maximumFractionDigits: 1 }) + ' al mese · ' + nf(IN.length) + ' in corso', { t: 'Preventivi · ' + title(), vw: view, w: 'tutte' })}
           ${kpi('✍️', 'var(--cm-acc-soft)', 'Contratti', nf(C.length), (isB ? 'solo B2B' : (b2bOn ? 'di cui B2B ' + b2bN : 'B2B esclusi (' + b2bN + ')')) + ' · trattative chiuse', { t: 'Contratti · ' + title(), vw: view, w: 'chiuse' })}
           ${kpi('🎯', 'var(--cm-grey-soft)', 'Conversione', pct(C.length, P), 'contratti / preventivi')}
-          ${kpi('↩️', 'var(--cm-acc-soft)', 'Contratti annullati', nf(ANN.length), pct(ANN.length, C.length) + ' dei contratti', { t: 'Contratti annullati · ' + title(), vw: view, w: 'ann' })}
+          ${kpi('↩️', 'var(--cm-acc-soft)', 'Contratti annullati', nf(ANN.length), pct(ANN.length, C.length + ANN.length) + ' dei contratti firmati', { t: 'Contratti annullati · ' + title(), vw: view, w: 'ann' })}
         </div>
         <div class="cm-kpis">
           ${kpi('✖️', 'var(--cm-grey-soft)', 'Trattative fallite', nf(F.length), topMot ? 'motivo principale: ' + esc(topMot[0]) : 'nessuna', { t: 'Trattative fallite · ' + title(), vw: view, w: 'fallite' })}
@@ -694,10 +719,10 @@
     const logo = m => m === 'Non indicata' ? '' : `<img src="/img/marchi/${String(m).toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}.png" alt="" onerror="this.remove()">`;
     function renderMarche() {
         const scope = marcheS === 'all' ? { k: 'all' } : marcheS === 'b2b' ? { k: 'b2b' } : { k: 'sede', s: marcheS };
-        const R = trIn(scope), C = R.filter(isC), P = R.length;
+        const R = trIn(scope), C = R.filter(isC), P = R.length, ANNs = annIn(scope);
         const rows = [...by(R, r => r.marca)].map(([k, l]) => {
             const c = l.filter(isC);
-            return { k, p: l.length, c: c.length, ann: c.filter(x => x.ann).length, f: l.filter(x => x.stato === 'Fallita').length, i: l.filter(x => x.stato === 'In corso').length,
+            return { k, p: l.length, c: c.length, ann: ANNs.filter(x => x.marca === k).length, f: l.filter(isF).length, i: l.filter(x => x.stato === 'In corso').length,
                 u: c.filter(x => x.tipo === 'Usato').length, z: c.filter(x => x.tipo === 'Km0').length, n: c.filter(x => x.tipo === 'Nuovo').length, tel: c.filter(x => x.tel).length };
         }).sort((x, y) => y.c - x.c || y.p - x.p);
         const conv = rows.filter(r => r.p >= 15).sort((x, y) => y.c / y.p - x.c / x.p);
@@ -727,12 +752,12 @@
 
     /* ---- report contratti annullati ---- */
     function renderAnn() {
-        const ALL = CONTR.filter(c => inPer(c) && (b2bOn || !c.b2b) && c.sede !== 'Noleggio');
+        const ALL = TR.filter(c => (isC(c) || c.ann) && annBase(c)).concat(AF.filter(annBase));
         const AN = ALL.filter(c => c.ann), F = ALL.length, N = AN.length;
         const perV = [...by(ALL, c => c.vend)].map(([v, l]) => ({ v, f: l.length, n: l.filter(c => c.ann).length, sede: sedeOf(v) })).filter(r => r.n).sort((x, y) => y.n - x.n || x.f - y.f);
         const worst = perV.filter(r => r.f >= 5).sort((x, y) => y.n / y.f - x.n / x.f)[0];
         rootEl.querySelector('#cmMain').innerHTML = `
-        <div class="cm-vhead"><h2>Contratti annullati</h2><p>Stato ANNULLATA nel foglio o etichetta "CONTRATTO ANNULLATO" nel CSV · Agnano, Casamarciano e Salerno · ${per()}${b2bOn ? ' · B2B incluso' : ' · B2B escluso'}</p></div>
+        <div class="cm-vhead"><h2>Contratti annullati</h2><p>Stato ANNULLATA nel foglio AVANZAMENTO (con o senza trattativa chiusa nel CSV) · Agnano, Casamarciano e Salerno · ${per()}${b2bOn ? ' · B2B incluso' : ' · B2B escluso'}</p></div>
         <div class="cm-kpis">
           ${kpi('↩️', 'var(--cm-acc-soft)', 'Contratti annullati', nf(N), 'clicca per l\'elenco dei clienti', { t: 'Contratti annullati', vw: { k: 'any' }, w: 'annAll' })}
           ${kpi('📉', 'var(--cm-grey-soft)', 'Tasso di annullamento', pct(N, F), N + ' su ' + nf(F) + ' contratti')}
@@ -784,8 +809,8 @@
     /* ---- tutte le trattative ---- */
     function renderList() {
         const all = TR.filter(inPer);
-        const chips = [['contratti', 'Contratti', all.filter(isC)], ['tutte', 'Tutte', all], ['corso', 'In corso', all.filter(r => r.stato === 'In corso')], ['fallite', 'Fallite', all.filter(r => r.stato === 'Fallita')],
-            ['ann', 'Annullati', all.filter(r => r.ann)], ['tel', '📞 Da prev. telefonico', all.filter(r => r.tel)], ['b2b', '💼 B2B', all.filter(r => r.b2b)]];
+        const chips = [['contratti', 'Contratti', all.filter(isC)], ['tutte', 'Tutte', all], ['corso', 'In corso', all.filter(r => r.stato === 'In corso')], ['fallite', 'Fallite', all.filter(isF)],
+            ['ann', 'Annullati', all.filter(r => r.ann).concat(AF.filter(inPer))], ['tel', '📞 Da prev. telefonico', all.filter(r => r.tel)], ['b2b', '💼 B2B', all.filter(r => r.b2b)]];
         const cur = chips.find(c => c[0] === listF.f) || chips[0];
         rootEl.querySelector('#cmMain').innerHTML = `<div class="cm-vhead"><h2>Tutte le trattative</h2><p>${per()} · tutte le sedi e noleggio · esclusi ${ESCLUSI.join(', ')}</p></div>
         <div class="cm-tools">${chips.map(([k, l, L]) => `<button type="button" class="cm-chip ${cur[0] === k ? 'on' : ''}" data-chip="${k}">${l} · ${nf(L.length)}</button>`).join('')}</div>
@@ -797,10 +822,10 @@
         if (o.pt) { openRecs(o.t, PT.filter(p => inPer(p) && (o.vw.k === 'any' || okV(p.vend, o.vw))), 'pt'); return; }
         let L = TR.filter(r => inPer(r) && okC(r, o.vw));
         if (o.w === 'chiuse') L = L.filter(isC);
-        if (o.w === 'ann') L = L.filter(r => r.ann);
-        if (o.w === 'fallite') L = L.filter(r => r.stato === 'Fallita');
+        if (o.w === 'ann') L = annIn(o.vw);
+        if (o.w === 'fallite') L = L.filter(isF);
         if (o.w === 'tel') L = L.filter(r => r.tel);
-        if (o.w === 'annAll') L = CONTR.filter(c => inPer(c) && c.ann && (b2bOn || !c.b2b) && c.sede !== 'Noleggio');
+        if (o.w === 'annAll') L = TR.filter(c => c.ann && annBase(c)).concat(AF.filter(annBase));
         if (o.marca) L = L.filter(r => r.marca === o.marca);
         openRecs(o.t, L, 'tr');
     }
@@ -859,13 +884,13 @@
     function lab(vw) { return vw.k === 'v' ? vw.v : vw.k === 'all' ? 'Panoramica' : vw.k === 'b2b' ? (vw.v ? 'B2B · ' + vw.v : 'B2B') : SEDI[vw.s]; }
     function calc(vw) {
         const isB = vw.k === 'b2b', ms = months();
-        const R = trIn(vw), C = R.filter(isC), ANN = C.filter(c => c.ann), F = R.filter(r => r.stato === 'Fallita'), IN = R.filter(r => r.stato === 'In corso');
+        const R = trIn(vw), C = R.filter(isC), ANN = annIn(vw), F = R.filter(isF), IN = R.filter(r => r.stato === 'In corso');
         const X = isB ? [] : PT.filter(p => inPer(p) && okV(p.vend, vw));
         const CF = C.filter(c => c.foglio), SV = C.filter(c => c.serv);
         const FIN = C.filter(c => c.pag === 'Finanziamento').length, PC = C.filter(c => c.pag === 'PC (contanti)').length;
         const cons = [...by(R, r => r.vend)].map(([k, l]) => {
             const c = l.filter(isC);
-            return { k, sede: sedeOf(k), p: l.length, n: c.length, ann: c.filter(x => x.ann).length, f: l.filter(x => x.stato === 'Fallita').length, tel: c.filter(x => x.tel).length, pt: X.filter(p => p.vend === k).length, fin: c.filter(x => x.pag === 'Finanziamento').length, cf: c.filter(x => x.foglio).length };
+            return { k, sede: sedeOf(k), p: l.length, n: c.length, ann: ANN.filter(x => x.vend === k).length, f: l.filter(isF).length, tel: c.filter(x => x.tel).length, pt: X.filter(p => p.vend === k).length, fin: c.filter(x => x.pag === 'Finanziamento').length, cf: c.filter(x => x.foglio).length };
         }).sort((x, y) => y.n - x.n || y.p - x.p);
         return {
             vw, isB, R, C, ANN, F, IN, X, P: R.length, Cn: C.length, A: ANN.length, TEL: C.filter(c => c.tel).length, FIN, PC, NI: C.length - FIN - PC, CFn: CF.length, ms,
@@ -1004,10 +1029,12 @@
             { titolo: 'Pagamento dei contratti (foglio AVANZAMENTO)', colonne: [T('Voce', 30), I('Finanziamento', 14), I('PC (contanti)', 14), I('Non indicato', 13), Q('% finanziati', 12)], righe: D.map(d => [lab(d.vw), d.FIN, d.PC, d.NI, r(d.FIN, d.CFn)]) }] });
         // performance marchi (tutte le voci scelte insieme)
         const RM = [...uniTR.values()];
-        const mk = [...by(RM, x => x.marca)].map(([k, l]) => { const c = l.filter(isC); return [k, l.length, c.length, r(c.length, l.length), c.filter(x => x.ann).length, l.filter(x => x.stato === 'In corso').length, l.filter(x => x.stato === 'Fallita').length, c.filter(x => x.tipo === 'Usato').length, c.filter(x => x.tipo === 'Km0').length, c.filter(x => x.tipo === 'Nuovo').length]; }).sort((x, y) => y[2] - x[2] || y[1] - x[1]);
+        const uniA = new Map(); D.forEach(d => d.ANN.forEach(x => uniA.set(x.i, x)));
+        const ANNx = [...uniA.values()];
+        const mk = [...by(RM, x => x.marca)].map(([k, l]) => { const c = l.filter(isC); return [k, l.length, c.length, r(c.length, l.length), ANNx.filter(x => x.marca === k).length, l.filter(x => x.stato === 'In corso').length, l.filter(isF).length, c.filter(x => x.tipo === 'Usato').length, c.filter(x => x.tipo === 'Km0').length, c.filter(x => x.tipo === 'Nuovo').length]; }).sort((x, y) => y[2] - x[2] || y[1] - x[1]);
         const RMc = RM.filter(isC);
         fogli.push({ nome: 'Performance marchi', tabelle: [{ titolo: 'Performance per marca (tutte le voci scelte)', colonne: [T('Marca', 20), I('Preventivi'), I('Contratti'), Q('Conversione', 12), I('Annullati'), I('In corso'), I('Fallite'), I('Usato'), I('Km0'), I('Nuovo')],
-            righe: mk, totale: ['Totale', RM.length, RMc.length, r(RMc.length, RM.length), RMc.filter(x => x.ann).length, RM.filter(x => x.stato === 'In corso').length, RM.filter(x => x.stato === 'Fallita').length, RMc.filter(x => x.tipo === 'Usato').length, RMc.filter(x => x.tipo === 'Km0').length, RMc.filter(x => x.tipo === 'Nuovo').length] }] });
+            righe: mk, totale: ['Totale', RM.length, RMc.length, r(RMc.length, RM.length), ANNx.length, RM.filter(x => x.stato === 'In corso').length, RM.filter(isF).length, RMc.filter(x => x.tipo === 'Usato').length, RMc.filter(x => x.tipo === 'Km0').length, RMc.filter(x => x.tipo === 'Nuovo').length] }] });
         // motivi di fallimento
         const motK = [...new Set(D.flatMap(d => d.motivi.map(m => m.k)))];
         fogli.push({ nome: 'Trattative fallite', tabelle: [{ titolo: 'Motivi di fallimento', colonne: [T('Voce', 30)].concat(motK.map(k => I(k, 16)), I('Totale', 10)), righe: D.map(d => [lab(d.vw)].concat(motK.map(k => (d.motivi.find(m => m.k === k) || { n: 0 }).n), d.F.length)) }] });
@@ -1024,7 +1051,7 @@
             c.tel ? dd(c.tel.data) : '', isC(c) ? (c.foglio ? 'Sì' : 'No') : ''];
         const colL = [T('Data', 11), T('Cliente', 28), T('Consulente', 22), T('Sede', 28), T('Veicolo', 34), T('Tipo', 10), T('Origine', 22), T('Esito', 12), T('Motivo fallimento', 24), T('B2B', 6), T('Pagamento', 14), T('Blockshaft', 10), T('Lojack', 8), T('FIR', 6), T('Garanzia Mawdy', 10), T('Pack manut.', 10), T('Prev. telefonico del', 13), T('Nel foglio', 9)];
         const tutti = [...uniTR.values()].sort(sortD);
-        if (M.s.ann) fogli.push({ nome: 'Annullati', tabelle: [{ titolo: 'Contratti annullati', colonne: colL, righe: tutti.filter(c => c.ann).map(riga) }] });
+        if (M.s.ann) fogli.push({ nome: 'Annullati', tabelle: [{ titolo: 'Contratti annullati', colonne: colL, righe: ANNx.slice().sort(sortD).map(riga) }] });
         if (M.s.lista) fogli.push({ nome: 'Contratti', tabelle: [{ titolo: 'Elenco dei contratti (trattative chiuse)', colonne: colL, righe: tutti.filter(isC).map(riga) }] });
         if (M.s.prev) fogli.push({ nome: 'Preventivi', tabelle: [{ titolo: 'Elenco di tutte le trattative (preventivi)', colonne: colL, righe: tutti.map(riga) }] });
         const amb = D.length === 1 ? lab(D[0].vw) : D.length + ' voci';
