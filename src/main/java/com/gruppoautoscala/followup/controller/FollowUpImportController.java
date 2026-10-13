@@ -1,9 +1,13 @@
 package com.gruppoautoscala.followup.controller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.gruppoautoscala.followup.model.ConsegneDataset;
 import com.gruppoautoscala.followup.model.Customer;
 import com.gruppoautoscala.followup.model.FollowUp;
 import com.gruppoautoscala.followup.model.FollowUpStep;
 import com.gruppoautoscala.followup.model.User;
+import com.gruppoautoscala.followup.repository.ConsegneDatasetRepository;
 import com.gruppoautoscala.followup.repository.CustomerRepository;
 import com.gruppoautoscala.followup.repository.FollowUpRepository;
 import com.gruppoautoscala.followup.repository.FollowUpStepRepository;
@@ -39,12 +43,19 @@ import java.util.*;
  * Il follow-up importato ha come creatore chi fa l'import e il flag
  * "imported" (in pagina: "Creato da Import da ..."); gli step scritti
  * dall'import hanno data = quella della nota (05/10) e ora = ora dell'import.
+ *
+ *  GET  /api/followups/import/storico -> ultimi import (data, chi, file, quanti nuovi /
+ *       aggiornati). Ogni import salva l'elenco dei follow-up CREATI e AGGIORNATI
+ *       (i saltati no) nella tabella consegne_dataset, chiave "FOLLOWUP_IMPORTS":
+ *       serve all'export Excel "Ultimo import" (FollowUpController, modo=import).
  */
 @RestController
 @RequestMapping("/api/followups/import")
 public class FollowUpImportController {
 
     private static final ZoneId ITALY = ZoneId.of("Europe/Rome");
+    public static final String CHIAVE_IMPORTS = "FOLLOWUP_IMPORTS";
+    private static final int MAX_IMPORTS = 30;
 
     @Autowired private FollowUpService followUpService;
     @Autowired private FollowUpRepository followUpRepository;
@@ -53,6 +64,8 @@ public class FollowUpImportController {
     @Autowired private UserRepository userRepository;
     @Autowired private RecallFollowUpService recallFollowUpService;
     @Autowired private RolePermissionService rolePermissionService;
+    @Autowired private ConsegneDatasetRepository datasetRepository;
+    @Autowired private ObjectMapper objectMapper;
 
     private ResponseEntity<?> check(HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");
@@ -129,6 +142,7 @@ public class FollowUpImportController {
         LocalTime ora = LocalTime.now(ITALY).withNano(0);
         int creati = 0, aggiornati = 0, saltati = 0;
         List<String> errori = new ArrayList<>();
+        List<Long> idNuovi = new ArrayList<>(), idAggiornati = new ArrayList<>();
 
         for (Object o : rows) {
             if (!(o instanceof Map<?, ?> r)) continue;
@@ -193,6 +207,7 @@ public class FollowUpImportController {
                 String stato = str(r.get("status"));
                 if (stato != null && !"IN_PROGRESS".equals(stato)) fu.setStatus(stato);
                 FollowUp saved = followUpService.save(fu);
+                ("update".equals(azione) && r.get("updateId") != null ? idAggiornati : idNuovi).add(saved.getId());
                 // come dalla pagina: un follow-up che diventa "Non risponde" avvia il Recall
                 if ("ABANDONED".equals(saved.getStatus()) && !"ABANDONED".equals(prev)) {
                     recallFollowUpService.maybeCreateRecallFollowUp(saved);
@@ -201,7 +216,66 @@ public class FollowUpImportController {
                 errori.add(r.get("fullName") + ": " + e.getMessage());
             }
         }
-        return ResponseEntity.ok(Map.of("creati", creati, "aggiornati", aggiornati, "saltati", saltati, "errori", errori));
+        String importId = null;
+        if (!idNuovi.isEmpty() || !idAggiornati.isEmpty()) {
+            try { importId = salvaImport(user.getFullName(), str(body.get("file")), idNuovi, idAggiornati, saltati); }
+            catch (Exception e) { errori.add("Storico import non salvato: " + e.getMessage()); }
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("creati", creati); out.put("aggiornati", aggiornati); out.put("saltati", saltati); out.put("errori", errori);
+        out.put("importId", importId);
+        return ResponseEntity.ok(out);
+    }
+
+    /* ---------------- storico degli import (per l'export "Ultimo import") ---------------- */
+    public List<Map<String, Object>> leggiImports() {
+        return datasetRepository.findById(CHIAVE_IMPORTS).map(d -> {
+            try { return objectMapper.readValue(d.getContenuto(), new TypeReference<List<Map<String, Object>>>() {}); }
+            catch (Exception e) { return new ArrayList<Map<String, Object>>(); }
+        }).orElseGet(ArrayList::new);
+    }
+
+    private synchronized String salvaImport(String chi, String file, List<Long> nuovi, List<Long> aggiornati, int saltati) throws Exception {
+        List<Map<String, Object>> lista = leggiImports();
+        LocalDateTime ora = LocalDateTime.now(ITALY).withNano(0);
+        String id = ora.toString() + "-" + (int) (Math.random() * 1000);
+        Map<String, Object> riga = new LinkedHashMap<>();
+        riga.put("id", id);
+        riga.put("quando", ora.toString());
+        riga.put("chi", chi);
+        riga.put("file", file != null ? file : "");
+        riga.put("nuovi", nuovi);
+        riga.put("aggiornati", aggiornati);
+        riga.put("saltati", saltati);
+        lista.add(0, riga);
+        while (lista.size() > MAX_IMPORTS) lista.remove(lista.size() - 1);
+        ConsegneDataset d = datasetRepository.findById(CHIAVE_IMPORTS).orElseGet(() -> { ConsegneDataset n = new ConsegneDataset(); n.setTipo(CHIAVE_IMPORTS); return n; });
+        d.setContenuto(objectMapper.writeValueAsString(lista));
+        d.setRighe(lista.size());
+        d.setAggiornatoAt(LocalDateTime.now());
+        d.setAggiornatoDa(chi);
+        datasetRepository.save(d);
+        return id;
+    }
+
+    // elenco degli ultimi import, senza gli id (per la finestra di export)
+    @GetMapping("/storico")
+    public ResponseEntity<?> storico(HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        String role = (String) session.getAttribute("userRole");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        if (!rolePermissionService.hasAtLeast(rolePermissionService.getEffectiveAccess(userId, role, "FOLLOWUPS"), "READ_ONLY"))
+            return ResponseEntity.status(403).body(Map.of("error", "Non hai il permesso per i Follow-up"));
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map<String, Object> m : leggiImports()) {
+            Map<String, Object> x = new LinkedHashMap<>();
+            x.put("id", m.get("id")); x.put("quando", m.get("quando")); x.put("chi", m.get("chi")); x.put("file", m.get("file"));
+            x.put("nuovi", m.get("nuovi") instanceof List<?> l ? l.size() : 0);
+            x.put("aggiornati", m.get("aggiornati") instanceof List<?> l ? l.size() : 0);
+            x.put("saltati", m.get("saltati"));
+            out.add(x);
+        }
+        return ResponseEntity.ok(Map.of("imports", out));
     }
 
     private static String str(Object o) {

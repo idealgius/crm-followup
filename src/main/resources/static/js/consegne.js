@@ -649,6 +649,8 @@
         render(body);
     }
 
+    // cella della tabella: percentuale in grande, numero di vetture sotto
+    const cella = (x, n) => `<b class="cg-c-p">${pct(x, n)}</b><span class="cg-c-n">${fmt(x)} auto</span>`;
     function heatStyle(p) {
         if (p <= 0) return '';
         const steps = ['--cg-h1', '--cg-h2', '--cg-h3', '--cg-h4', '--cg-h5'];
@@ -688,10 +690,10 @@
             s += n ? `<td><button class="cg-cell cg-tot" type="button" data-f="${key}|all">${fmt(n)}</button></td>` : empty;
             BUCKETS.forEach(k => {
                 const x = c(r => r.k === k);
-                s += x ? `<td><button class="cg-cell" type="button" style="${heatStyle(x / n)}" data-f="${key}|${k}" title="${x} vetture">${pct(x, n)}</button></td>` : empty;
+                s += x ? `<td><button class="cg-cell cg-cell2" type="button" style="${heatStyle(x / n)}" data-f="${key}|${k}" title="${x} su ${n} contratti · clicca per i clienti">${cella(x, n)}</button></td>` : empty;
             });
-            if (ndTot) s += ndC ? `<td><button class="cg-cell cg-nd" type="button" data-f="${key}|nd" title="${ndC} vetture">${pct(ndC, n)}</button></td>` : empty;
-            s += dcC ? `<td><button class="cg-cell cg-dc" type="button" data-f="${key}|dc" title="${dcC} vetture">${pct(dcC, n)}</button></td>` : empty;
+            if (ndTot) s += ndC ? `<td><button class="cg-cell cg-cell2 cg-nd" type="button" data-f="${key}|nd" title="${ndC} su ${n} contratti · clicca per i clienti">${cella(ndC, n)}</button></td>` : empty;
+            s += dcC ? `<td><button class="cg-cell cg-cell2 cg-dc" type="button" data-f="${key}|dc" title="${dcC} su ${n} contratti · clicca per i clienti">${cella(dcC, n)}</button></td>` : empty;
             s += annC ? `<td><button class="cg-cell cg-ann" type="button" data-f="${key}|ann" title="Annullate: non incluse nei contratti">${fmt(annC)}</button></td>` : empty;
             return s + '</tr>';
         }

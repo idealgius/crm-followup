@@ -38,19 +38,24 @@ public class FollowUpController {
     @Autowired private RecallFollowUpService recallFollowUpService;
     @Autowired private FollowUpExcelService followUpExcelService;
     @Autowired private RolePermissionService rolePermissionService;
+    @Autowired private FollowUpImportController followUpImportController;
 
     // NUOVO: export Excel dei follow-up di un giorno o di un periodo
     // (Riepilogo + un foglio per consulente + "Tutti").
     // GET /api/followups/export?from=2026-10-01&to=2026-10-05&consultants=Scala Rosario,Fiore Guido
+    // modo=import&importId=... (vuoto = l'ultimo): solo i follow-up creati o aggiornati da quell'import
     @GetMapping("/export")
-    public ResponseEntity<?> exportExcel(@RequestParam String from, @RequestParam(required = false) String to,
+    public ResponseEntity<?> exportExcel(@RequestParam(required = false) String from, @RequestParam(required = false) String to,
                                          @RequestParam(required = false) String consultants,
-                                         @RequestParam(required = false, defaultValue = "giorno") String modo, HttpSession session) {
+                                         @RequestParam(required = false, defaultValue = "giorno") String modo,
+                                         @RequestParam(required = false) String importId, HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");
         String role = (String) session.getAttribute("userRole");
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
         if (!rolePermissionService.hasAtLeast(rolePermissionService.getEffectiveAccess(userId, role, "FOLLOWUPS"), "READ_ONLY"))
             return ResponseEntity.status(403).body(Map.of("error", "Non hai il permesso per i Follow-up"));
+        if ("import".equals(modo)) return exportImport(importId, consultants, userId);
+        if (from == null || from.isBlank()) return ResponseEntity.badRequest().body(Map.of("error", "Scegli le date"));
         try {
             LocalDate dal = LocalDate.parse(from), al = (to == null || to.isBlank()) ? dal : LocalDate.parse(to);
             if (al.isBefore(dal)) { LocalDate t = dal; dal = al; al = t; }
@@ -61,6 +66,36 @@ public class FollowUpController {
             boolean caricati = "caricati".equals(modo);   // solo quelli inseriti/importati nelle date scelte
             byte[] xlsx = followUpExcelService.export(dal, al, cons, chi, caricati);
             String nome = "followup_" + (caricati ? "caricati_" : "") + dal + (al.equals(dal) ? "" : "_" + al) + ".xlsx";
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + nome + "\"")
+                    .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                    .body(xlsx);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Export non riuscito: " + e.getMessage()));
+        }
+    }
+
+    private ResponseEntity<?> exportImport(String importId, String consultants, Long userId) {
+        try {
+            List<Map<String, Object>> imports = followUpImportController.leggiImports();
+            Map<String, Object> imp = imports.stream()
+                    .filter(m -> importId == null || importId.isBlank() || importId.equals(String.valueOf(m.get("id"))))
+                    .findFirst().orElse(null);
+            if (imp == null) return ResponseEntity.badRequest().body(Map.of("error", "Nessun import trovato"));
+            Map<Long, String> tipo = new LinkedHashMap<>();
+            if (imp.get("nuovi") instanceof List<?> l) for (Object o : l) tipo.put(Long.valueOf(String.valueOf(o)), "Nuovo");
+            if (imp.get("aggiornati") instanceof List<?> l) for (Object o : l) tipo.putIfAbsent(Long.valueOf(String.valueOf(o)), "Aggiornato");
+            Set<String> cons = new LinkedHashSet<>();
+            if (consultants != null) for (String c : consultants.split(",")) if (!c.isBlank()) cons.add(c.trim());
+            String chi = userRepository.findById(userId).map(User::getFullName).orElse(null);
+            String quando = String.valueOf(imp.get("quando"));
+            LocalDateTime q = null;
+            try { q = LocalDateTime.parse(quando); } catch (Exception e) { /* data non leggibile */ }
+            String desc = "import del " + (q != null ? q.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")) : quando)
+                    + (imp.get("chi") != null ? " da " + imp.get("chi") : "")
+                    + (imp.get("file") != null && !String.valueOf(imp.get("file")).isBlank() ? " (" + imp.get("file") + ")" : "");
+            byte[] xlsx = followUpExcelService.exportImport(tipo, cons, chi, desc);
+            String nome = "followup_import_" + (q != null ? q.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmm")) : "ultimo") + ".xlsx";
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + nome + "\"")
                     .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))

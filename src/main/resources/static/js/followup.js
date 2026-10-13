@@ -997,10 +997,10 @@ async function readFollowUpCsv(file) {
         dups = (await res.json()).duplicates || {};
     } catch (e) { alert('Errore di connessione'); return; }
     rows.forEach(r => { if (dups[r.key]) { r.dups = dups[r.key]; r.action = 'skip'; } });
-    showFollowUpImportPreview(rows, scartate);
+    showFollowUpImportPreview(rows, scartate, file.name);
 }
 
-function showFollowUpImportPreview(rows, scartate) {
+function showFollowUpImportPreview(rows, scartate, fileName) {
     const ICON = { NO_ANSWER: '<span title="Non risponde" style="color:#ff5252">❌</span>', ANSWERED: '<span title="Risponde">✅</span>',
         SENT_WHATSAPP: '<span title="WhatsApp inviato">💬</span>', SENT_MAIL: '<span title="Mail inviata">✉️</span>' };
     const STATO = { RESPONDED: '<b style="color:#00c853">Risponde</b>', ABANDONED: '<b style="color:#ff5252">Non risponde</b>', IN_PROGRESS: '<span style="color:var(--text-secondary)">In corso</span>' };
@@ -1053,11 +1053,11 @@ function showFollowUpImportPreview(rows, scartate) {
         go.disabled = true; go.textContent = 'Importazione…';
         try {
             const res = await fetch('/api/followups/import', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ rows: rows.map(r => ({ ...r, dups: undefined })) }) });
+                body: JSON.stringify({ file: fileName || '', rows: rows.map(r => ({ ...r, dups: undefined })) }) });
             const d = await res.json().catch(() => ({}));
             if (!res.ok) { alert('Import non riuscito: ' + (d.error || res.status)); go.disabled = false; go.textContent = 'Importa'; return; }
             ov.remove();
-            alert(`Import completato: ${d.creati} creati, ${d.aggiornati} aggiornati, ${d.saltati} saltati${(d.errori || []).length ? '\n\nErrori:\n' + d.errori.join('\n') : ''}`);
+            alert(`Import completato: ${d.creati} creati, ${d.aggiornati} aggiornati, ${d.saltati} saltati${(d.errori || []).length ? '\n\nErrori:\n' + d.errori.join('\n') : ''}${d.importId ? '\n\nPer esportarli: 📊 EXCEL → "Solo quelli dell\'ultimo import".' : ''}`);
             if (typeof loadFollowUps === 'function') loadFollowUps();
         } catch (err) { alert('Errore di connessione'); go.disabled = false; go.textContent = 'Importa'; }
     });
@@ -1094,8 +1094,12 @@ function openFollowUpExport() {
       <div class="fuex-sec"><h4>Cosa esportare</h4>
         ${opt('fuexModo', 'giorno', true, 'Follow-up del giorno / periodo', 'Tutti i follow-up con data nel periodo scelto')}
         ${opt('fuexModo', 'caricati', false, 'Solo quelli caricati nel giorno / periodo', 'Solo i follow-up inseriti o importati in quelle date (es. "caricati oggi"), qualunque sia il giorno del follow-up')}
+        ${opt('fuexModo', 'import', false, 'Solo quelli dell\'ultimo import', 'I follow-up creati o aggiornati da un import CSV (i saltati no), con la colonna Nuovo / Aggiornato')}
       </div>
-      <div class="fuex-sec"><h4 id="fuExDateTitle">Giorno del follow-up</h4>
+      <div class="fuex-sec" id="fuExImpSec" style="display:none"><h4>Import</h4>
+        <select id="fuExImp" class="input-dark" style="width:100%"><option value="">Caricamento…</option></select>
+      </div>
+      <div class="fuex-sec" id="fuExDateSec"><h4 id="fuExDateTitle">Giorno del follow-up</h4>
         <div style="display:flex;gap:10px">
           <label style="flex:1;font-size:12px;font-weight:700">Dal<input type="date" id="fuExFrom" class="input-dark" value="${day}" style="width:100%;margin-top:4px"></label>
           <label style="flex:1;font-size:12px;font-weight:700">Al<input type="date" id="fuExTo" class="input-dark" value="${day}" style="width:100%;margin-top:4px"></label></div>
@@ -1122,12 +1126,32 @@ function openFollowUpExport() {
     const set = (a, b) => { $('#fuExFrom').value = iso(a); $('#fuExTo').value = iso(b); };
     ov.addEventListener('change', e => {
         if (e.target.name === 'fuexModo') {
+            const imp = e.target.value === 'import';
+            $('#fuExImpSec').style.display = imp ? '' : 'none';
+            $('#fuExDateSec').style.display = imp ? 'none' : '';
+            if (imp) caricaImports();
             const car = e.target.value === 'caricati';
             $('#fuExDateTitle').textContent = car ? 'Giorno di caricamento (inserimento / import)' : 'Giorno del follow-up';
             if (car) { $('#fuExFrom').value = oggi; $('#fuExTo').value = oggi; }
         }
         if (e.target.name === 'fuexCons') $('#fuExConsBox').classList.toggle('on', e.target.value === 'scelti');
     });
+    // elenco degli ultimi import (il primo = l'ultimo)
+    let importsCaricati = false;
+    async function caricaImports() {
+        if (importsCaricati) return;
+        const sel = $('#fuExImp');
+        try {
+            const res = await fetch('/api/followups/import/storico');
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) { sel.innerHTML = `<option value="">${escFu(d.error || 'Elenco non disponibile')}</option>`; return; }
+            const L = d.imports || [];
+            const quando = q => { const x = new Date(q); return isNaN(x) ? q : x.toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); };
+            sel.innerHTML = L.length ? L.map((m, i) => `<option value="${escFu(m.id)}">${i === 0 ? 'Ultimo · ' : ''}${quando(m.quando)}${m.chi ? ' · ' + escFu(m.chi) : ''} · ${m.nuovi} nuovi, ${m.aggiornati} aggiornati${m.file ? ' · ' + escFu(m.file) : ''}</option>`).join('')
+                : '<option value="">Nessun import registrato (compaiono da quello dopo questo aggiornamento)</option>';
+            importsCaricati = true;
+        } catch (err) { sel.innerHTML = '<option value="">Errore di connessione</option>'; }
+    }
     $('#fuExConsQ').addEventListener('input', e => { const q = e.target.value.toLowerCase(); ov.querySelectorAll('.fuex-cons-list label').forEach(l => { l.style.display = !q || l.dataset.n.includes(q) ? '' : 'none'; }); });
     ov.addEventListener('click', async e => {
         if (e.target === ov || e.target.closest('[data-x]')) { ov.remove(); return; }
@@ -1148,9 +1172,11 @@ function openFollowUpExport() {
         const modo = ov.querySelector('input[name="fuexModo"]:checked').value;
         const scelti = ov.querySelector('input[name="fuexCons"]:checked').value === 'scelti';
         const cons = [...ov.querySelectorAll('.fuex-cons-list input:checked')].map(i => i.value);
-        if (!from || !to) { $('#fuExMsg').textContent = 'Scegli le date.'; return; }
+        if (modo !== 'import' && (!from || !to)) { $('#fuExMsg').textContent = 'Scegli le date.'; return; }
+        const impId = $('#fuExImp').value;
+        if (modo === 'import' && !impId) { $('#fuExMsg').textContent = 'Nessun import da esportare.'; return; }
         if (scelti && !cons.length) { $('#fuExMsg').textContent = 'Scegli almeno un consulente (o "Tutti i consulenti").'; return; }
-        const params = new URLSearchParams({ from, to, modo });
+        const params = new URLSearchParams(modo === 'import' ? { modo, importId: impId } : { from, to, modo });
         if (scelti) params.set('consultants', cons.join(','));
         go.disabled = true; go.textContent = 'Preparazione…'; $('#fuExMsg').textContent = '';
         try {
@@ -1159,7 +1185,8 @@ function openFollowUpExport() {
             const blob = await res.blob();
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = `followup_${modo === 'caricati' ? 'caricati_' : ''}${from}${to !== from ? '_' + to : ''}.xlsx`;
+            const cd = res.headers.get('Content-Disposition') || '', fn = /filename="?([^";]+)"?/i.exec(cd);
+            a.download = modo === 'import' ? (fn ? fn[1] : 'followup_import.xlsx') : `followup_${modo === 'caricati' ? 'caricati_' : ''}${from}${to !== from ? '_' + to : ''}.xlsx`;
             document.body.appendChild(a); a.click(); a.remove();
             setTimeout(() => URL.revokeObjectURL(a.href), 2000);
             ov.remove();

@@ -6,8 +6,8 @@
 
    - Filtri: periodo dal/al, anno, mesi, finanziaria (una o piu'), sede,
      consulente, B2C/B2B (all'apertura entrambi).
-   - Riquadri: contratti validi, annullati, da consegnare, Lojack, Polizza FIR,
-     Mawdy, Pack manutenzione.
+   - Riquadri: contratti validi, annullati, da consegnare, Lojack, Blockshaft,
+     Polizza FIR, Mawdy, Pack manutenzione.
    - Una card per categoria con 3 tipi di grafico (ciambella / colonne /
      linee mese per mese) e il report (voce, numero, %), cliccabile.
    - Filtro "Grafici": si scelgono le categorie da mostrare (ricordato).
@@ -303,7 +303,7 @@
         const tot = R.length, ann = R.filter(r => r.esito === 'Annullate').length, val = tot - ann;
         const V = R.filter(r => r.esito !== 'Annullate');
         const lj = V.filter(r => r.lojack === 'Installato').length, fr = V.filter(r => r.fir !== 'Non venduta').length, mw = V.filter(r => r.mawdy !== 'Non venduta').length;
-        const pk = V.filter(r => r.pack !== 'Non venduta').length;
+        const pk = V.filter(r => r.pack !== 'Non venduta').length, bs = V.filter(r => r.block === 'Installato').length;
         const dc = V.filter(r => r.esito === 'Da consegnare').length;
         const k = (id, l, n, sub, dot) => `<button type="button" class="cg-kpi" data-kpi2="${id}"><div class="cg-k-top">${l}<span class="cg-dot" style="background:${dot}"></span></div><div class="cg-num">${api.fmt(n)}</div><div class="cg-sub">${sub}</div></button>`;
         el.querySelector('#anKpis').innerHTML =
@@ -311,6 +311,7 @@
             k('ann', 'Annullati', ann, `${pctS(ann, tot)} di ${api.fmt(tot)} contratti`, 'var(--cg-grey-soft)') +
             k('dc', 'Da consegnare', dc, `${pctS(dc, val)} dei validi`, 'var(--cg-amber-soft)') +
             k('lj', 'Lojack', lj, `${pctS(lj, val)} dei validi`, 'var(--cg-violet-soft)') +
+            k('bs', 'Blockshaft', bs, `${pctS(bs, val)} dei validi`, 'var(--cg-violet-soft)') +
             k('fir', 'Polizza FIR', fr, `${pctS(fr, val)} dei validi`, 'var(--cg-violet-soft)') +
             k('mw', 'Mawdy', mw, `${pctS(mw, val)} dei validi`, 'var(--cg-violet-soft)') +
             k('pk', 'Pack manutenzione', pk, `${pctS(pk, val)} dei validi`, 'var(--cg-violet-soft)');
@@ -642,7 +643,7 @@
         if (k) {
             const R = filtered(), V = R.filter(r => r.esito !== 'Annullate');
             const map = { val: ['Contratti validi', V], ann: ['Contratti annullati', R.filter(r => r.esito === 'Annullate')], dc: ['Vetture da consegnare', V.filter(r => r.esito === 'Da consegnare')],
-                lj: ['Lojack installati', V.filter(r => r.lojack === 'Installato')], fir: ['Polizza FIR venduta', V.filter(r => r.fir !== 'Non venduta')], mw: ['Mawdy venduta', V.filter(r => r.mawdy !== 'Non venduta')],
+                lj: ['Lojack installati', V.filter(r => r.lojack === 'Installato')], bs: ['Blockshaft installati', V.filter(r => r.block === 'Installato')], fir: ['Polizza FIR venduta', V.filter(r => r.fir !== 'Non venduta')], mw: ['Mawdy venduta', V.filter(r => r.mawdy !== 'Non venduta')],
                 pk: ['Pack manutenzione venduto', V.filter(r => r.pack !== 'Non venduta')] };
             const [tt, list] = map[k.dataset.kpi2];
             openList(tt, list, { n: k.dataset.kpi2 === 'ann' || k.dataset.kpi2 === 'val' ? R.length : V.length, label: k.dataset.kpi2 === 'ann' || k.dataset.kpi2 === 'val' ? '(annullate comprese)' : 'validi' });
@@ -762,6 +763,7 @@
             kpi: [['Contratti validi', V.length, tot ? V.length / tot : 0], ['Annullati', ann, tot ? ann / tot : 0],
                 ['Da consegnare', V.filter(r => r.esito === 'Da consegnare').length, V.length ? V.filter(r => r.esito === 'Da consegnare').length / V.length : 0],
                 ['Lojack', V.filter(r => r.lojack === 'Installato').length, V.length ? V.filter(r => r.lojack === 'Installato').length / V.length : 0],
+                ['Blockshaft', V.filter(r => r.block === 'Installato').length, V.length ? V.filter(r => r.block === 'Installato').length / V.length : 0],
                 ['Polizza FIR', V.filter(r => r.fir !== 'Non venduta').length, V.length ? V.filter(r => r.fir !== 'Non venduta').length / V.length : 0],
                 ['Mawdy', V.filter(r => r.mawdy !== 'Non venduta').length, V.length ? V.filter(r => r.mawdy !== 'Non venduta').length / V.length : 0],
                 ['Pack manutenzione', V.filter(r => r.pack !== 'Non venduta').length, V.length ? V.filter(r => r.pack !== 'Non venduta').length / V.length : 0]]

@@ -31,6 +31,10 @@ import java.util.stream.Collectors;
  *    telefono, mail, vettura, esito della scheda, appuntamento, i 4 step
  *    (esito + data/ora + chi), le note, chi l'ha creato.
  *  - "Tutti": la stessa tabella con la colonna Consulente e i filtri.
+ *
+ * exportImport(): solo i follow-up CREATI o AGGIORNATI da un import (vedi
+ * FollowUpImportController, storico "FOLLOWUP_IMPORTS"), con la colonna
+ * "Import" = Nuovo / Aggiornato. I saltati non ci sono.
  */
 @Service
 public class FollowUpExcelService {
@@ -51,11 +55,22 @@ public class FollowUpExcelService {
     // createdAt e' salvato con l'ora del server: i limiti del giorno italiano
     // vengono convertiti nel fuso del server.
     public byte[] export(LocalDate from, LocalDate to, Set<String> consulenti, String generatoDa, boolean perCaricamento) throws Exception {
-        List<FollowUp> base = perCaricamento
+        List<FollowUp> base0 = perCaricamento
                 ? followUpRepository.findByCreatedAtRange(
                         from.atStartOfDay(ITALY).withZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime(),
                         to.plusDays(1).atStartOfDay(ITALY).withZoneSameInstant(ZoneId.systemDefault()).toLocalDateTime())
                 : followUpRepository.findByWorkDateBetween(from, to);
+        String periodo = (perCaricamento ? "caricati " : "") + (from.equals(to) ? (perCaricamento ? "il " : "") + from.format(D) : (perCaricamento ? "dal " : "") + from.format(D) + (perCaricamento ? " al " : " - ") + to.format(D));
+        return crea(base0, consulenti, generatoDa, periodo, null);
+    }
+
+    // Follow-up di un import: tipo = id -> "Nuovo" / "Aggiornato"
+    public byte[] exportImport(Map<Long, String> tipo, Set<String> consulenti, String generatoDa, String descrizione) throws Exception {
+        List<FollowUp> base0 = tipo.isEmpty() ? List.of() : followUpRepository.findAllById(tipo.keySet());
+        return crea(base0, consulenti, generatoDa, descrizione, tipo);
+    }
+
+    private byte[] crea(List<FollowUp> base, Set<String> consulenti, String generatoDa, String periodo, Map<Long, String> tipo) throws Exception {
         List<FollowUp> fus = base.stream()
                 .filter(f -> consulenti == null || consulenti.isEmpty() || consulenti.contains(nz(f.getConsultantName())))
                 .sorted(Comparator.comparing(FollowUp::getWorkDate).thenComparing(f -> nz(f.getCustomer().getFullName()).toLowerCase()))
@@ -68,7 +83,6 @@ public class FollowUpExcelService {
 
         try (XSSFWorkbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Styles st = new Styles(wb);
-            String periodo = (perCaricamento ? "caricati " : "") + (from.equals(to) ? (perCaricamento ? "il " : "") + from.format(D) : (perCaricamento ? "dal " : "") + from.format(D) + (perCaricamento ? " al " : " - ") + to.format(D));
 
             // ---------- Riepilogo ----------
             Sheet rs = wb.createSheet("Riepilogo");
@@ -77,7 +91,10 @@ public class FollowUpExcelService {
             cell(rs.createRow(r++), 0, "Generato il " + LocalDateTime.now(ITALY).format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"))
                     + (generatoDa != null ? " da " + generatoDa : "")
                     + (consulenti != null && !consulenti.isEmpty() ? " · Consulenti: " + String.join(", ", consulenti) : " · Tutti i consulenti"), st.note);
-            r++;
+            if (tipo != null) {
+                long nNuovi = fus.stream().filter(f -> "Nuovo".equals(tipo.get(f.getId()))).count();
+                cell(rs.createRow(r++), 0, nNuovi + " nuovi · " + (fus.size() - nNuovi) + " aggiornati (i follow-up saltati nell'import non ci sono)", st.note);
+            } else r++;
             String[] hr = {"Consulente", "Follow-up", "Risponde", "Non risponde", "In corso", "Appuntamenti", "% risposta"};
             Row h = rs.createRow(r++);
             for (int i = 0; i < hr.length; i++) cell(h, i, hr[i], st.head);
@@ -103,28 +120,30 @@ public class FollowUpExcelService {
             tp.setCellFormula(perConsulente.isEmpty() ? "0" : "IF(B" + r + "=0,0,C" + r + "/B" + r + ")"); tp.setCellStyle(st.totPerc);
             rs.setColumnWidth(0, 30 * 256);
             for (int c = 1; c < hr.length; c++) rs.setColumnWidth(c, 15 * 256);
-            rs.createFreezePane(0, 4);
+            rs.createFreezePane(0, 4);   // titolo, generato il, riga vuota/nuovi-aggiornati, intestazione
 
             // ---------- un foglio per consulente ----------
             Set<String> nomi = new HashSet<>();
             for (Map.Entry<String, List<FollowUp>> e : perConsulente.entrySet()) {
                 String nome = sheetName(e.getKey(), nomi);
-                tabella(wb.createSheet(nome), e.getKey() + " · " + periodo, e.getValue(), steps, st, false);
+                tabella(wb.createSheet(nome), e.getKey() + " · " + periodo, e.getValue(), steps, st, false, tipo);
             }
             // ---------- tutti ----------
-            tabella(wb.createSheet("Tutti"), "Tutti i follow-up · " + periodo, fus, steps, st, true);
+            tabella(wb.createSheet("Tutti"), "Tutti i follow-up · " + periodo, fus, steps, st, true, tipo);
 
             wb.write(out);
             return out.toByteArray();
         }
     }
 
-    private void tabella(Sheet sh, String titolo, List<FollowUp> fus, Map<Long, List<FollowUpStep>> steps, Styles st, boolean conConsulente) {
+    private void tabella(Sheet sh, String titolo, List<FollowUp> fus, Map<Long, List<FollowUpStep>> steps, Styles st, boolean conConsulente, Map<Long, String> tipo) {
+        final boolean conImport = tipo != null;
         int r = 0;
         cell(sh.createRow(r++), 0, titolo, st.title);
         cell(sh.createRow(r++), 0, fus.size() + " follow-up", st.note);
         r++;
         List<String> head = new ArrayList<>();
+        if (conImport) head.add("Import");
         if (conConsulente) head.add("Consulente");
         head.addAll(List.of("Data", "Caricato il", "Cliente", "Telefono", "Email", "Vettura", "Esito", "Appuntamento",
                 "Step 1 · Chiamata mattina", "Step 2 · Chiamata pomeriggio", "Step 3 · WhatsApp / Mail", "Step 4 · Chiamata GG3",
@@ -138,6 +157,7 @@ public class FollowUpExcelService {
             Row row = sh.createRow(r++);
             int c = 0;
             CellStyle t = zebra ? st.textZ : st.text, w = zebra ? st.wrapZ : st.wrap;
+            if (conImport) { String ti = tipo.getOrDefault(f.getId(), ""); cell(row, c++, ti, "Nuovo".equals(ti) ? st.green : st.blue); }
             if (conConsulente) cell(row, c++, nz(f.getConsultantName()), t);
             cell(row, c++, f.getWorkDate().format(D), t);
             cell(row, c++, f.getCreatedAt() != null ? f.getCreatedAt().atZone(ZoneId.systemDefault()).withZoneSameInstant(ITALY).format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")) : "", t);
@@ -174,8 +194,10 @@ public class FollowUpExcelService {
         }
         int[] widths = conConsulente ? new int[]{22, 12, 17, 24, 16, 28, 34, 14, 13, 24, 24, 24, 24, 60, 26}
                                      : new int[]{12, 17, 24, 16, 28, 34, 14, 13, 24, 24, 24, 24, 60, 26};
-        for (int i = 0; i < widths.length; i++) sh.setColumnWidth(i, widths[i] * 256);
-        sh.createFreezePane(conConsulente ? 4 : 3, firstData);
+        int off = conImport ? 1 : 0;
+        if (conImport) sh.setColumnWidth(0, 12 * 256);
+        for (int i = 0; i < widths.length; i++) sh.setColumnWidth(i + off, widths[i] * 256);
+        sh.createFreezePane((conConsulente ? 4 : 3) + off, firstData);
         if (r > firstData) sh.setAutoFilter(new CellRangeAddress(firstData - 1, r - 1, 0, head.size() - 1));
         sh.getPrintSetup().setLandscape(true);
         sh.setFitToPage(true);
