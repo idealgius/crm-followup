@@ -17,6 +17,24 @@
      Marchi    varianti unite (DR AUTOMOBILES -> DR, Citro?n -> Citroën, ...)
      Targa     righe doppie: si tiene quella con più dati
      Vuoto     dove il file è vuoto non si scrive nulla
+
+   Due modelli di file letti allo stesso modo (le colonne si riconoscono dal nome):
+     A) export "Stock" del gestionale: Stato FREE/RESERVED/CONTRATTUALIZZATA,
+        Sede / Ubicazione, Prezzo Listino, Prezzo Bottom, Giorni in Stock, Fornitore,
+        cliente, prezzo di vendita, interventi...
+     B) export "report-vehicles" del portale: Stato Libera/Prenotata/Venduta,
+        Concessionario (= sede), Prezzo al pubblico (B2C) (= listino), Prezzo minimo
+        di vendita (= bottom), Data Stock (= inizio stock; i giorni si calcolano),
+        Allestimento, Alimentazione, Vin. Fornitore, cliente, prezzo di vendita,
+        documenti e interventi in questo file non ci sono.
+     Caratteri rovinati da Excel ("CitroÃ«n", "SÃ¬") vengono corretti.
+     Se il file ha piu' fogli (es. una tabella pivot aggiunta) si usa quello con piu' righe.
+
+   AGGIORNAMENTO (lo fa il server, StockController): un nuovo file non sostituisce lo
+   stock ma lo AGGIORNA. Stessa vettura (targa o telaio + marchio) -> cambiano solo km,
+   prezzo, stato e sede (cronologia nella scheda). Vetture nuove -> "Nuova entrata".
+   Vetture non piu' nel file -> "Rimosse", con motivo automatico modificabile.
+   Menu: Elenchi -> Nuove entrate, Rimosse, Storico caricamenti.
    ===================================================================== */
 (function () {
     const API = '/api/stock';
@@ -24,6 +42,8 @@
     let rootEl = null;
     let meta = null;      // risposta del server (ultimo import, permessi)
     let rows = [];        // vetture normalizzate
+    let rimosse = [];     // vetture uscite dallo stock (dal server)
+    let lastAt = '';      // data/ora dell'ultimo caricamento (per "Nuova entrata" e "Rimosse nell'ultimo")
     let charts = [];
     let ov = null;        // modale elenco / scheda
     let view = { base: [], title: '', f: {}, stato: '', tipo: '', q: '', hasMarca: false };
@@ -47,8 +67,15 @@
     }
 
     /* ================= lettura e normalizzazione del file ================= */
+    // "CitroÃ«n" -> "Citroën": testo UTF-8 letto come Latin-1 (file CSV aperto e risalvato da Excel)
+    function fixMoji(s) {
+        if (!/[ÃÂ][\u0080-\u00BF]/.test(s)) return s;
+        const cs = [...s].map(c => c.charCodeAt(0));
+        if (cs.some(c => c > 255)) return s;
+        try { return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(cs)); } catch (e) { return s; }
+    }
     function decode(s) {
-        return String(s ?? '').replace(/&amp;/gi, '&').replace(/&quot;/gi, '"').replace(/&#0?39;|&apos;/gi, "'")
+        return fixMoji(String(s ?? '')).replace(/&amp;/gi, '&').replace(/&quot;/gi, '"').replace(/&#0?39;|&apos;/gi, "'")
             .replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/\u00a0/g, ' ').trim();
     }
     function txt(v) {
@@ -148,7 +175,7 @@
     }
     function statoOf(raw) {
         const s = norm(raw);
-        if (s === 'free' || s === 'disponibile') return 'Disponibile';
+        if (s === 'free' || s === 'disponibile' || s === 'libera' || s === 'libero') return 'Disponibile';
         if (s === 'reserved' || s === 'prenotata' || s === 'prenotato') return 'Prenotata';
         if (s === 'contrattualizzata' || s === 'contrattualizzato' || s === 'venduta' || s === 'venduto') return 'Venduta';
         return decode(raw) ? 'Altro' : '';
@@ -174,14 +201,14 @@
         { k: 'cambio', ex: ['cambio'] },
         { k: 'carrozzeria', ex: ['carrozzeria'] },
         { k: 'carburante', ex: ['carburante', 'alimentazione'] },
-        { k: 'listino', ex: ['prezzolistino', 'listino'] },
-        { k: 'bottom', ex: ['prezzobottom', 'bottom'] },
+        { k: 'listino', ex: ['prezzolistino', 'listino', 'prezzoalpubblicob2c', 'prezzoalpubblico'], has: ['prezzoalpubblico', 'prezzolistino'] },
+        { k: 'bottom', ex: ['prezzobottom', 'bottom', 'prezzominimodivendita', 'prezzominimo'], has: ['prezzominimo', 'prezzobottom'] },
         { k: 'fornitore', ex: ['fornitore'] },
-        { k: 'inizio', ex: ['dataingressostock', 'ingressostock', 'datainiziostock', 'iniziostock'], has: ['ingressostock', 'iniziostock'] },
+        { k: 'inizio', ex: ['dataingressostock', 'ingressostock', 'datainiziostock', 'iniziostock', 'datastock'], has: ['ingressostock', 'iniziostock'] },
         { k: 'giorni', ex: ['giorniinstock', 'giornistock'], has: ['giorniinstock'] },
         { k: 'iva', ex: ['ivaesposta', 'iva'] },
-        { k: 'sede', ex: ['sede', 'sedeubicazione', 'ubicazione', 'sedediubicazione'], has: ['ubicazione'] },
-        { k: 'optionals', ex: ['optionals', 'optional', 'accessori'] },
+        { k: 'sede', ex: ['sede', 'sedeubicazione', 'ubicazione', 'sedediubicazione', 'concessionario'], has: ['ubicazione'] },
+        { k: 'optionals', ex: ['optionals', 'optional', 'accessori', 'opzionale', 'opzionali'] },
         { k: 'note', ex: ['note', 'nota'] },
         // interventi: nel file sono separati tra officina e carrozzeria (dettaglio + costo)
         { k: 'intOffDet', ex: ['dettagliointerventiofficina'] },
@@ -253,6 +280,10 @@
             const tipo = tipoOf(get(r, 'tipo'), kmRaw);
             const km = (kmRaw && kmRaw > 0) ? Math.round(kmRaw) : null;     // 0 -> niente km (Nuova, Km 0 e Usata)
             const stato = statoOf(get(r, 'stato'));
+            const inizio = isoDate(get(r, 'inizio'));
+            // giorni in stock: dal file, altrimenti calcolati dalla data di ingresso (modello "report-vehicles")
+            let giorni = num(get(r, 'giorni'));
+            if (giorni == null && inizio) { const g = Math.floor((Date.now() - Date.parse(inizio + 'T12:00:00')) / 86400000); if (g >= 0) giorni = g; }
             if (stato === 'Altro') altri.add(decode(get(r, 'stato')));
             const fornitore = (() => { const f = decode(get(r, 'fornitore')); return /^n\.?\s*\/?\s*d\.?$/i.test(f) ? 'Non specificato' : f; })();
             const o = {
@@ -261,7 +292,7 @@
                 km, colore: decode(get(r, 'colore')), cambio: decode(get(r, 'cambio')), carrozzeria: decode(get(r, 'carrozzeria')),
                 carburante: carburante(get(r, 'carburante')),
                 listino: num(get(r, 'listino')), bottom: num(get(r, 'bottom')), fornitore,
-                inizio: isoDate(get(r, 'inizio')), giorni: num(get(r, 'giorni')),
+                inizio, giorni,
                 iva: siNo(get(r, 'iva')), sede: sentenceIfUpper(get(r, 'sede')),
                 optionals: decode(get(r, 'optionals')), note: decode(get(r, 'note')),
                 ...interventiOf(r, get),
@@ -287,7 +318,7 @@
             if (filled(o) > filled(prev)) { prev._drop = true; seen.set(key, o); } else o._drop = true;
         });
         const finale = out.filter(o => !o._drop);
-        return { rows: finale, scartate, duplicati, altri: [...altri], mancanti: CAMPI.filter(c => !map[c.k] && !c.alt).map(c => c.k) };
+        return { rows: finale, scartate, duplicati, altri: [...altri], mancanti: CAMPI.filter(c => !map[c.k] && !c.alt && !(c.k === 'giorni' && map.inizio)).map(c => c.k) };   // giorni: calcolati dalla data di ingresso
     }
 
     /* ================= UI ================= */
@@ -308,6 +339,8 @@
         </div>
         <div class="cg-wrap" id="stBody"></div>`;
         rootEl.querySelector('#stFile').addEventListener('change', e => importFile(e.target));
+        // link "Vedi nuove" / "Vedi rimosse" nel messaggio dopo l'import
+        rootEl.querySelector('#stSrc').addEventListener('click', e => { const b = e.target.closest('[data-goview]'); if (b && rows.length) showView(b.dataset.goview); });
     }
 
     function setSrc(msg, isErr) {
@@ -322,7 +355,12 @@
     function applyServerData(d) {
         meta = d;
         rows = (d.stock && Array.isArray(d.stock.rows) ? d.stock.rows : []).map((r, i) => { const u = ubicazione(r.sede); return { ...r, _i: i, ubic: u.g, ubicDet: u.d }; });
+        rimosse = (Array.isArray(d.rimosse) ? d.rimosse : []).map(r => { const u = ubicazione(r.ultimaSede || r.sede); return { ...r, ubic: u.g, ubicDet: u.d }; });
+        const st = Array.isArray(d.storico) ? d.storico : [];
+        lastAt = st.length ? String(st[st.length - 1].at || '') : '';
     }
+    const isNuova = r => !!r.entrataAt && r.entrataAt === lastAt;
+    const nuovaTag = r => isNuova(r) ? ` <span class="st-new" title="Entrata con l'ultimo caricamento">${r.rientrata ? 'Rientrata' : 'Nuova'}</span>` : '';
 
     async function reload(msg) {
         try { applyServerData(await api('/data')); render(msg); }
@@ -339,10 +377,18 @@
                 if (!p.rows.length) throw new Error('Il file non contiene vetture valide.');
                 lbl.classList.add('cg-busy');
                 const d = await api('/import', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows: p.rows })
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows: p.rows, file: file.name })
                 });
                 applyServerData(d);
-                let m = `Import completato: ${fmt(p.rows.length)} vetture. Ora le vedono tutti.`;
+                const x = d.esitoImport;
+                let m = `Import completato: ${fmt(p.rows.length)} vetture nel file. Ora le vedono tutti.`;
+                if (x && !x.primo) {
+                    const c = x.cambi || {};
+                    m = `<b>Stock aggiornato</b> (${fmt(x.prima)} → ${fmt(x.totale)} vetture): ${fmt(x.confermate)} già presenti`
+                        + (x.aggiornate ? `, di cui ${fmt(x.aggiornate)} cambiate (stato ${fmt(c.stato || 0)}, sede ${fmt(c.sede || 0)}, prezzo ${fmt(c.listino || 0)}, km ${fmt(c.km || 0)})` : ', nessuna cambiata')
+                        + ` · <b>${fmt(x.entrate)} nuove entrate</b>${x.rientrate ? ` (${fmt(x.rientrate)} rientrate)` : ''} · <b>${fmt(x.rimosse)} rimosse</b>.`
+                        + ` <button type="button" class="st-msg-link" data-goview="nuove">Vedi nuove</button> <button type="button" class="st-msg-link" data-goview="rimosse">Vedi rimosse</button>`;
+                }
                 if (p.duplicati) m += ` Righe doppie (stessa targa o telaio) unite: ${p.duplicati}.`;
                 if (p.scartate) m += ` Righe senza marca o modello scartate: ${p.scartate}.`;
                 if (p.altri.length) m += ` Stati non riconosciuti (contati come "Altro"): ${esc(p.altri.join(', '))}.`;
@@ -431,6 +477,10 @@
                     .map(([d, n]) => item('d:' + g + '|' + d, '', d, n, true)).join('')}</div></div>`;
         });
         h += '<div class="st-nav-t">Elenchi</div>' + item('marchi', '🏷️', 'Marchi', new Set(rows.map(r => r.marca)).size) + item('tutte', '📋', 'Tutte le vetture', rows.length);
+        const nNuove = rows.filter(isNuova).length;
+        h += '<div class="st-nav-t">Movimenti</div>' + (nNuove ? item('nuove', '🆕', 'Nuove entrate', nNuove) : '')
+            + (rimosse.length ? item('rimosse', '📤', 'Rimosse', rimosse.length) : '')
+            + item('storico', '🕘', 'Storico caricamenti', ((meta && meta.storico) || []).length);
         const nav = rootEl.querySelector('#stNav'); nav.innerHTML = h;
         nav.onclick = e => {
             const t = e.target.closest('[data-tog]');
@@ -446,7 +496,8 @@
     }
     function showView(key) {
         // vista non piu' valida (es. sezione sparita dopo un nuovo import): panoramica
-        const valid = key === 'panoramica' || key === 'marchi' || key === 'tutte'
+        const valid = key === 'panoramica' || key === 'marchi' || key === 'tutte' || key === 'storico'
+            || (key === 'nuove' && rows.some(isNuova)) || (key === 'rimosse' && rimosse.length)
             || (key.startsWith('g:') && rows.some(r => r.ubic === key.slice(2)))
             || (key.startsWith('d:') && rows.some(r => r.ubic + '|' + r.ubicDet === key.slice(2)));
         if (!valid) key = 'panoramica';
@@ -462,6 +513,9 @@
         if (key === 'panoramica') return viewPanoramica(main);
         if (key === 'marchi') { scope = rows; scopeAll = true; main.innerHTML = `<div class="cg-card"><h2>Marchi</h2><p class="cg-hint">In ordine alfabetico · clicca un marchio per vedere modelli e vetture</p><div class="st-brands" id="stBrands"></div></div>`; drawBrands(); return; }
         if (key === 'tutte') { scope = rows; scopeAll = true; main.innerHTML = ''; mountList(main, 'Tutte le vetture', {}); return; }
+        if (key === 'nuove') { scope = rows; scopeAll = true; main.innerHTML = `<div class="st-vhead"><h2>🆕 Nuove entrate</h2><p>Vetture entrate nello stock con l'ultimo caricamento (${esc(when(lastAt))}) · "Rientrata" = era tra le rimosse ed è tornata</p></div>`; mountList(main, 'Nuove entrate', { ids: rows.filter(isNuova).map(r => r._i) }); return; }
+        if (key === 'rimosse') return viewRimosse(main);
+        if (key === 'storico') return viewStorico(main);
         const [g, d] = key.slice(2).split('|');
         viewSezione(main, g, key.startsWith('d:') ? d : null);
     }
@@ -1134,7 +1188,7 @@
             ${showM ? th('Marchio', 'marca') : ''}${th('Modello / Versione', 'modello')}<th>Tipo</th><th>Motorizzazione</th><th>Targa / Telaio</th>${th('Sede', 'ubicDet')}${th('Km', 'km')}${th('Giorni', 'giorni')}${th('Prezzo', 'listino')}<th>Stato</th></tr></thead><tbody>
             ${shown.map(r => `<tr class="st-row" data-i="${r._i}">
                 ${showM ? `<td class="cg-cl">${esc(r.marca)}</td>` : ''}
-                <td class="${showM ? '' : 'cg-cl'}">${esc(r.modello)}${r.versione ? `<span class="st-sub">${esc(r.versione)}</span>` : ''}</td>
+                <td class="${showM ? '' : 'cg-cl'}">${esc(r.modello)}${nuovaTag(r)}${r.versione ? `<span class="st-sub">${esc(r.versione)}</span>` : ''}</td>
                 <td>${esc(r.tipo || '')}${r.categoria ? `<span class="st-sub">${esc(r.categoria)}</span>` : ''}</td>
                 <td>${esc(r.carburante || '')}</td>
                 <td class="st-mono">${esc(r.targa || '')}${r.targa && r.telaio ? '<br>' : ''}${esc(r.telaio || '')}</td>
@@ -1158,7 +1212,7 @@
             <div><button type="button" class="cg-chip" id="stBack">&larr; Torna all'elenco</button>
               <h4 style="margin-top:12px">${esc(r.marca)} ${esc(r.modello)}</h4>
               ${r.versione ? `<span class="st-sub">${esc(r.versione)}</span>` : ''}</div>
-            <div>${tag(r.stato)}</div>
+            <div>${tag(r.stato)}${nuovaTag(r)}</div>
           </div>
           <div class="st-grid">
             ${field('Tipo', r.tipo)}${field('Categoria', r.categoria)}${field('Motorizzazione', r.carburante)}
@@ -1171,6 +1225,7 @@
           ${box('Cliente e vendita', (r.cliente || r.prezzoVenduto) ? `<p>${r.cliente ? '<b>' + esc(r.cliente) + '</b>' : ''}${r.cliente && r.prezzoVenduto ? ' · ' : ''}${r.prezzoVenduto ? 'prezzo ' + esc(eur(r.prezzoVenduto)) : ''}</p>` : '', 'sale')}
           ${box('Optionals', r.optionals ? `<p>${esc(r.optionals)}</p>` : '')}
           ${box('Note', r.note ? `<p>${esc(r.note)}</p>` : '')}
+          ${box('Cronologia', cronologia(r))}
           ${box('Interventi', (r.interventi || r.intervPrezzo) ? `<p>${esc(r.interventi || '')}${r.interventi && r.intervPrezzo ? '<br>' : ''}${r.intervPrezzo ? 'Prezzo: ' + esc(eur(r.intervPrezzo)) : ''}</p>` : '')}
         </div>`;
         ov.querySelector('#stMList').style.display = 'none';
@@ -1178,6 +1233,122 @@
         const listRoot = ov;
         det.querySelector('#stBack').addEventListener('click', () => {
             det.style.display = 'none'; listRoot.querySelector('#stMList').style.display = '';
+        });
+    }
+
+
+    /* ================= movimenti: cronologia, rimosse, storico ================= */
+    const CAMPO = { km: 'Km', listino: 'Prezzo', stato: 'Stato', sede: 'Sede' };
+    const valCampo = (c, v) => v == null || v === '' ? '—' : c === 'listino' ? eur(v) : c === 'km' ? fmt(v) + ' km' : String(v);
+    function cronologia(r) {
+        const s = Array.isArray(r.storia) ? r.storia : [];
+        if (!s.length) return '';
+        return '<ul class="st-cron">' + s.slice().reverse().map(x => {
+            const d = fmtDay(x.at);
+            if (x.c === 'entrata') return `<li><b>${d}</b> Entrata nello stock</li>`;
+            if (x.c === 'rientro') return `<li><b>${d}</b> Rientrata nello stock (era stata rimossa il ${esc(fmtDay(String(x.da || '')))})</li>`;
+            if (x.c === 'uscita') return `<li><b>${d}</b> Uscita dallo stock (ultimo stato: ${esc(x.da || '—')})</li>`;
+            return `<li><b>${d}</b> ${esc(CAMPO[x.c] || x.c)}: <s>${esc(valCampo(x.c, x.da))}</s> → <b>${esc(valCampo(x.c, x.a))}</b></li>`;
+        }).join('') + '</ul>';
+    }
+
+    // ===== RIMOSSE: vetture che non ci sono piu' nell'ultimo file =====
+    const MOTIVI = ['Venduta e consegnata', 'Venduta a commerciante', 'Resa / trasferita al fornitore', 'Trasferita ad altra società del gruppo',
+        'Rottamata / demolita', 'Errore nel file precedente', 'Da verificare'];
+    const daVerif = r => /verificar/i.test(r.motivo || '');
+    let rimF = { q: '', f: '', day: '', limit: 200 };
+    function viewRimosse(main, day) {
+        if (day !== undefined) rimF = { q: '', f: day ? 'day' : '', day: day || '', limit: 200 };
+        const ultimo = rimosse.filter(r => r.rimossaAt === lastAt).length, dv = rimosse.filter(daVerif).length;
+        const vend = rimosse.filter(r => r.ultimoStato === 'Venduta').length;
+        const can = meta && meta.puoModificare;
+        main.innerHTML = `
+        <div class="st-vhead"><h2>📤 Rimosse dallo stock</h2><p>Vetture presenti in un caricamento e non più in quello dopo · il motivo è proposto in automatico dall'ultimo stato${can ? ' e si può cambiare' : ''}</p></div>
+        <div class="cg-kpis">
+          <button type="button" class="cg-kpi" data-rf=""><span class="cg-k-top">Rimosse in totale<span class="cg-dot" style="background:var(--cg-grey-soft)">📤</span></span><span class="cg-num">${fmt(rimosse.length)}</span><span class="cg-sub">da quando c'è lo storico</span></button>
+          <button type="button" class="cg-kpi" data-rf="ultimo"><span class="cg-k-top">Nell'ultimo caricamento<span class="cg-dot" style="background:var(--cg-amber-soft)">🕘</span></span><span class="cg-num">${fmt(ultimo)}</span><span class="cg-sub">${esc(when(lastAt))}</span></button>
+          <button type="button" class="cg-kpi" data-rf="verif"><span class="cg-k-top">Da verificare<span class="cg-dot" style="background:var(--cg-amber-soft)">❓</span></span><span class="cg-num">${fmt(dv)}</span><span class="cg-sub">${pctS(dv, rimosse.length)} delle rimosse</span></button>
+          <button type="button" class="cg-kpi" data-rf="vend"><span class="cg-k-top">Uscite da vendute<span class="cg-dot" style="background:var(--cg-violet-soft)">🤝</span></span><span class="cg-num">${fmt(vend)}</span><span class="cg-sub">erano "Venduta" nell'ultimo file in cui c'erano</span></button>
+        </div>
+        <div class="cg-card st-embed" style="margin-top:16px"><div class="cg-m-tools">
+            <input type="search" id="stRimQ" placeholder="Cerca marchio, modello, targa, telaio, sede, motivo…" value="${esc(rimF.q)}">
+            <div class="cg-chips" id="stRimChips"></div></div>
+          <div class="cg-m-body" id="stRimBody"></div></div>
+        <datalist id="stMotivi">${MOTIVI.map(m => `<option value="${esc(m)}">`).join('')}</datalist>`;
+        main.querySelectorAll('[data-rf]').forEach(b => b.addEventListener('click', () => { rimF.f = b.dataset.rf; rimF.limit = 200; drawRimosse(); }));
+        main.querySelector('#stRimQ').addEventListener('input', e => { rimF.q = e.target.value; rimF.limit = 200; drawRimosse(); });
+        main.querySelector('#stRimChips').addEventListener('click', e => { const b = e.target.closest('[data-rf]'); if (b) { rimF.f = b.dataset.rf; rimF.limit = 200; drawRimosse(); } });
+        const body = main.querySelector('#stRimBody');
+        body.addEventListener('click', e => { if (e.target.id === 'stRimMore') { rimF.limit += 200; drawRimosse(); } });
+        body.addEventListener('change', async e => {
+            const inp = e.target.closest('[data-rid]'); if (!inp) return;
+            inp.disabled = true;
+            try {
+                const res = await api('/rimosse/motivo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: inp.dataset.rid, motivo: inp.value }) });
+                const r = rimosse.find(x => x.rid === inp.dataset.rid); if (r && res.rimossa) Object.assign(r, res.rimossa);
+                drawRimosse();
+            } catch (err) { alert('Motivo non salvato: ' + err.message); inp.disabled = false; }
+        });
+        drawRimosse();
+    }
+    function drawRimosse() {
+        const main = rootEl.querySelector('#stMain'); if (!main || !main.querySelector('#stRimBody')) return;
+        const can = meta && meta.puoModificare;
+        const flt = r => rimF.f === 'ultimo' ? r.rimossaAt === lastAt : rimF.f === 'verif' ? daVerif(r) : rimF.f === 'vend' ? r.ultimoStato === 'Venduta'
+            : rimF.f === 'motivo' ? !daVerif(r) : rimF.f === 'day' ? String(r.rimossaAt || '').startsWith(rimF.day) : true;
+        const chips = [['', 'Tutte', rimosse.length], ['ultimo', 'Ultimo caricamento', rimosse.filter(r => r.rimossaAt === lastAt).length],
+            ['verif', 'Da verificare', rimosse.filter(daVerif).length], ['motivo', 'Con motivo', rimosse.filter(r => !daVerif(r)).length]];
+        if (rimF.day) chips.push(['day', 'Del ' + fmtDay(rimF.day), rimosse.filter(r => String(r.rimossaAt || '').startsWith(rimF.day)).length]);
+        main.querySelector('#stRimChips').innerHTML = chips.map(([k, l, n]) => `<button type="button" class="cg-chip ${rimF.f === k ? 'on' : ''}" data-rf="${k}">${esc(l)} (${fmt(n)})</button>`).join('');
+        const q = norm(rimF.q);
+        let L = rimosse.filter(flt);
+        if (q) L = L.filter(r => norm([r.marca, r.modello, r.versione, r.targa, r.telaio, r.ultimaSede, r.motivo, r.cliente].join(' ')).includes(q));
+        L = L.slice().sort((a, b) => String(b.rimossaAt || '').localeCompare(String(a.rimossaAt || '')) || cmp(a.marca, b.marca) || cmp(a.modello, b.modello));
+        const body = main.querySelector('#stRimBody');
+        if (!L.length) { body.innerHTML = '<div class="cg-empty-msg">Nessuna vettura rimossa con questi filtri.</div>'; return; }
+        const S = L.slice(0, rimF.limit);
+        body.innerHTML = `<p class="st-rim-n">${fmt(L.length)} vetture</p><div class="cg-scroll"><table class="cg-list st-rim"><thead><tr>
+            <th>Vettura</th><th>Targa / Telaio</th><th>Ultimo stato</th><th>Ultima sede</th><th>Uscita il</th><th>Giorni in stock</th><th>Prezzo</th><th>Motivo</th></tr></thead><tbody>
+            ${S.map(r => `<tr>
+              <td class="cg-cl">${esc(r.marca)} ${esc(r.modello)}${r.versione ? `<span class="st-sub">${esc(r.versione)}</span>` : ''}</td>
+              <td class="st-mono">${esc(r.targa || '')}${r.targa && r.telaio ? '<br>' : ''}${esc(r.telaio || '')}</td>
+              <td>${tag(r.ultimoStato)}${r.cliente ? `<span class="st-sub">${esc(r.cliente)}</span>` : ''}</td>
+              <td>${esc(r.ubicDet || r.ultimaSede || '')}<span class="st-sub">${esc(r.ubic || '')}</span></td>
+              <td>${esc(fmtDay(r.rimossaAt))}</td>
+              <td>${r.giorni != null ? fmt(r.giorni) : ''}</td>
+              <td>${eur(r.listino)}${r.prezzoVenduto ? `<span class="st-sub">venduta ${eur(r.prezzoVenduto)}</span>` : ''}</td>
+              <td class="st-mot">${can ? `<input type="text" list="stMotivi" data-rid="${esc(r.rid)}" value="${esc(r.motivo || '')}" placeholder="Scrivi o scegli il motivo" class="${daVerif(r) ? 'dv' : ''}">` : `<span class="${daVerif(r) ? 'st-dv' : ''}">${esc(r.motivo || '')}</span>`}
+                <span class="st-sub">${r.motivoAuto ? 'proposto in automatico' : esc('scritto da ' + (r.motivoDa || '—') + (r.motivoAt ? ' il ' + fmtDay(r.motivoAt) : ''))}</span></td>
+            </tr>`).join('')}</tbody></table></div>`
+            + (L.length > S.length ? `<button type="button" class="cg-chip st-more" id="stRimMore">Mostra altre ${fmt(Math.min(200, L.length - S.length))} (ne restano ${fmt(L.length - S.length)})</button>` : '');
+    }
+
+    // ===== STORICO CARICAMENTI: un riga per giorno con cosa e' cambiato =====
+    function viewStorico(main) {
+        const st = ((meta && meta.storico) || []).slice().reverse();
+        const n = v => v ? fmt(v) : '–';
+        main.innerHTML = `
+        <div class="st-vhead"><h2>🕘 Storico caricamenti</h2><p>Un caricamento per giorno (se nello stesso giorno se ne fanno più, i movimenti si sommano) · clicca entrate o rimosse per vedere le vetture</p></div>
+        <div class="cg-card st-embed"><div class="cg-m-body"><div class="cg-scroll"><table class="cg-list st-sto"><thead><tr>
+          <th>Giorno</th><th>Caricato da</th><th>Vetture</th><th>Nuove entrate</th><th>Rimosse</th><th>Cambio stato</th><th>Cambio sede</th><th>Cambio prezzo</th><th>Cambio km</th></tr></thead><tbody>
+          ${st.map((f, i) => { const m = f.mov, c = (m && m.cambi) || {}, day = String(f.at || '').slice(0, 10), prev = st[i + 1];
+            const diff = prev ? (f.totale || 0) - (prev.totale || 0) : null;
+            return `<tr>
+              <td class="cg-cl">${esc(fmtDay(day))}${i === 0 ? ' <span class="st-new">Ultimo</span>' : ''}${f.file ? `<span class="st-sub">${esc(f.file)}</span>` : ''}</td>
+              <td>${esc(f.da || '')}<span class="st-sub">${esc(when(f.at))}${m && m.caricamenti > 1 ? ' · ' + m.caricamenti + ' caricamenti' : ''}</span></td>
+              <td><b>${fmt(f.totale)}</b>${diff != null && diff !== 0 ? `<span class="st-sub ${diff > 0 ? 'st-up' : 'st-down'}">${diff > 0 ? '+' : ''}${fmt(diff)}</span>` : ''}</td>
+              <td>${m ? (m.entrate ? `<button type="button" class="st-lnk" data-sin="${day}">${fmt(m.entrate)}</button>${m.rientrate ? `<span class="st-sub">${fmt(m.rientrate)} rientrate</span>` : ''}` : '–') : '<span class="st-sub">non registrato</span>'}</td>
+              <td>${m ? (m.rimosse ? `<button type="button" class="st-lnk" data-sout="${day}">${fmt(m.rimosse)}</button>` : '–') : ''}</td>
+              <td>${m ? n(c.stato) : ''}</td><td>${m ? n(c.sede) : ''}</td><td>${m ? n(c.listino) : ''}</td><td>${m ? n(c.km) : ''}</td></tr>`; }).join('')
+            || '<tr><td colspan="9">Nessun caricamento registrato</td></tr>'}
+          </tbody></table></div>
+          <p class="cg-hint" style="margin:12px 2px 0">I movimenti (nuove entrate, rimosse, cambi) si registrano dai caricamenti fatti dopo questo aggiornamento; per quelli precedenti c'è solo il numero di vetture.</p></div></div>`;
+        main.querySelector('.st-sto').addEventListener('click', e => {
+            const a = e.target.closest('[data-sin]'), b = e.target.closest('[data-sout]');
+            if (a) { const ids = rows.filter(r => String(r.entrataAt || '').startsWith(a.dataset.sin)).map(r => r._i);
+                if (!ids.length) { alert('Le vetture entrate quel giorno non sono più nello stock (sono tra le rimosse).'); return; }
+                openList('Entrate del ' + fmtDay(a.dataset.sin) + ' (ancora in stock)', { ids }); }
+            if (b) { curView = 'rimosse'; rootEl.querySelectorAll('.st-nav-i').forEach(x => x.classList.toggle('on', x.dataset.view === 'rimosse')); viewRimosse(rootEl.querySelector('#stMain'), b.dataset.sout); }
         });
     }
 

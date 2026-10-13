@@ -279,3 +279,26 @@
 @media (max-width:760px) { .st-gm-head { grid-template-columns:1fr 70px 18px; } .st-gm-bar, .st-gm-tags { display:none; } }
 .st-gm-top { display:flex; justify-content:flex-end; margin:4px 0 -26px; }
 @media (max-width:760px) { .st-gm-top { margin:6px 0; justify-content:flex-start; } }
+/* ===== movimenti: nuove entrate, rimosse, storico, cronologia ===== */
+.st-new { display:inline-block; margin-left:6px; padding:1px 7px; border-radius:999px; font-size:10.5px; font-weight:800; vertical-align:1px;
+  background:var(--cg-teal-soft); color:#1f8a6b; white-space:nowrap; }
+[data-theme="dark"] .st-new { color:#5cd6a7; }
+.st-msg-link { border:0; background:rgba(255,255,255,.18); color:#fff !important; border-radius:8px; padding:2px 9px; margin-left:4px; font-weight:700; font-size:12px !important; cursor:pointer; }
+.st-msg-link:hover { background:rgba(255,255,255,.3); }
+.st-cron { list-style:none; margin:0; padding:0; font-size:13px; }
+.st-cron li { padding:5px 0; border-bottom:1px solid var(--cg-line); }
+.st-cron li:last-child { border-bottom:0; }
+.st-cron li > b:first-child { display:inline-block; min-width:86px; color:var(--cg-ink-2); font-weight:700; }
+.st-cron s { color:var(--cg-ink-2); }
+.st-rim-n { margin:12px 2px 8px; font-size:12.5px; color:var(--cg-ink-2); font-weight:700; }
+.st-embed .cg-m-tools { padding:14px 20px 4px; }
+.st-embed .cg-m-body { padding:0 20px 18px; }
+table.st-rim td.st-mot { min-width:240px; }
+table.st-rim td.st-mot input { width:100%; height:34px; border-radius:9px; border:1.5px solid var(--cg-line); background:var(--cg-bg); color:var(--cg-ink); padding:0 10px; font:inherit; font-size:12.5px; }
+table.st-rim td.st-mot input:focus { outline:none; border-color:var(--cg-teal); }
+table.st-rim td.st-mot input.dv, .st-dv { border-color:rgba(232,161,58,.6); color:var(--cg-amber-ink); }
+table.st-rim td.st-mot input:disabled { opacity:.6; }
+.st-lnk { border:0; background:var(--cg-grey-soft); color:var(--cg-ink) !important; border-radius:8px; padding:3px 10px; font-weight:800; cursor:pointer; font-size:13px !important; }
+.st-lnk:hover { box-shadow:inset 0 0 0 1.5px var(--cg-teal); }
+.st-up { color:#1f9d6f !important; font-weight:700; }
+.st-down { color:#e5484d !important; font-weight:700; }
