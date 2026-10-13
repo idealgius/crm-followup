@@ -801,6 +801,7 @@ function parseCsvSemicolon(text) {
 //    (anche "recall NR", "chiamato ma nr") -> prossimo step di chiamata = non risponde.
 //    occupato / non disponibile seguiti da una frase sono una frase (il cliente ha risposto).
 //  - wh / wa / whatsapp -> step 3 = WhatsApp inviato; mail / e-mail -> step 3 = Mail inviata.
+//    "no wh" / "niente whatsapp" / "senza mail" = il canale non c'e': nota sullo step appena fatto.
 //      wh + testo che parla di WhatsApp ("comunica via whatsapp", "scrive", "messaggio")
 //        -> il cliente ha risposto SU WHATSAPP: la nota va sullo step 3.
 //      wh + altro testo -> WhatsApp inviato e il testo e' la risposta alla chiamata successiva.
@@ -881,6 +882,13 @@ function parseFollowUpNote(note, workDate) {
         if (d) {
             const iso = d[1] ? toIso(+d[1], +d[2], d[3]) : toIso(+d[4], +d[5]);
             if (iso) { date = iso; last = null; i += d[0].length; continue; }
+        }
+        // "no wh", "niente whatsapp", "senza mail": il canale non c'e' -> nota, non e' un esito
+        const no = /^(?:no|niente|senza|non\s+ha|non\s+c'?\s*[eè]|non\s+(?:presente|attivo)\s+su)\s+(wh|wa|whats\s*app|e-?mail|mail)(?![a-zàèéìòù0-9])/i.exec(rest);
+        if (no) {
+            const t = /mail/i.test(no[1]) ? 'senza mail' : 'senza WhatsApp';
+            if (last) addNote(last, t); else extra.push(fmt(date) + ' ' + t);
+            i += no[0].length; continue;
         }
         let k = KW.exec(rest);
         if (k) {
