@@ -285,7 +285,7 @@ public class SaloneController {
             if (prima) { r.put("presoAt", now.toString()); r.put("presoIt", oraIt(now)); r.put("presoDa", c.nome()); }
             try {
                 scrivi("SALONE_" + g, l, l.size(), c.nome());
-                if (prima) {
+                if (prima && online(String.valueOf(r.get("consulente")), now)) {   // non connesso: resta "non in salone"
                     Map<String, Map<String, Object>> m = statiOggi();
                     String cliente = (str(r.get("nome")) + " " + str(r.get("cognome"))).trim();
                     cambiaStato(m, String.valueOf(r.get("consulente")), "OCCUPATO", c.nome(), "Walk-in preso in carico", id, cliente, now);
@@ -338,13 +338,18 @@ public class SaloneController {
             if (g.isBefore(oggi) || (now.isAfter(chiusura) && dal.isBefore(chiusura))) {
                 spegni(r, dal.isAfter(chiusura) ? dal : chiusura, "sistema", "Fine giornata: chiuso in automatico alle " + CHIUSURA);
                 cambiato = true;
-            } else if (Boolean.TRUE.equals(r.get("presenza")) && !online(str(r.get("nome")), now)) {
+            } else if (!online(str(r.get("nome")), now)) {
+                // REGOLA: senza un accesso al CRM in corso il consulente risulta "non in salone" (bollino vuoto),
+                // anche se lo stato era stato messo a mano da un Front Office / Admin
                 // orario di uscita: l'ultimo segnale ricevuto (o la ripartenza del server dopo un deploy)
                 Long ult = ULTIMO.get(str(r.get("nome")));
                 Instant fine = Instant.ofEpochMilli(ult != null ? ult : AVVIO_MS);
                 if (fine.isBefore(dal)) fine = dal;
                 if (fine.isAfter(now)) fine = now;
-                spegni(r, fine, "sistema", ult == null ? "Uscito dal CRM (riavvio del CRM / nuovo deploy)" : "Uscito dal CRM (finestra chiusa o disconnesso)");
+                String motivo = ult != null ? "Uscito dal CRM (finestra chiusa o disconnesso)"
+                    : dal.toEpochMilli() < AVVIO_MS ? "Uscito dal CRM (riavvio del CRM / nuovo deploy)"
+                    : "Non connesso al CRM";
+                spegni(r, fine, "sistema", motivo);
                 cambiato = true;
             }
         }
@@ -372,12 +377,23 @@ public class SaloneController {
     /** ultimo segnale vero di ogni consulente (per segnare l'uscita all'ora giusta) */
     private static final Map<String, Long> ULTIMO = new java.util.concurrent.ConcurrentHashMap<>();
     private static boolean online(String nome, Instant now) {
+        if (now.toEpochMilli() - AVVIO_MS < PRESENZA_TIMEOUT_MS) return true;     // server appena ripartito: aspetto che i CRM aperti si rifacciano vivi
+        return presente(nome, now);
+    }
+    /** ha davvero una finestra del CRM aperta (senza l'attesa dopo il riavvio) */
+    private static boolean presente(String nome, Instant now) {
         long t = now.toEpochMilli();
-        if (t - AVVIO_MS < PRESENZA_TIMEOUT_MS) return true;     // server appena ripartito: aspetto che i CRM aperti si rifacciano vivi
         Map<String, Long> f = FINESTRE.get(nome);
         if (f == null) return false;
         f.values().removeIf(v -> t - v > PRESENZA_TIMEOUT_MS);
         return !f.isEmpty();
+    }
+    /** consulenti con il CRM aperto in questo momento */
+    private static List<String> connessi() {
+        Instant now = Instant.now();
+        List<String> out = new ArrayList<>();
+        for (String n : CONSULENTI_AGNANO) if (presente(n, now)) out.add(n);
+        return out;
     }
     private static String tab(Map<String, Object> b) {
         String t = str(b.get("tab"));
@@ -404,7 +420,6 @@ public class SaloneController {
                     cambiaStato(m, nome, "DISPONIBILE", c.nome(), "Accesso al CRM: disponibile in automatico", null, null, Instant.now());
                     salva = true;
                 }
-                if (r.get("stato") != null && !Boolean.TRUE.equals(r.get("presenza"))) { r.put("presenza", true); salva = true; }
                 if (salva) salvaStati(m, c.nome());
                 out.put("stato", r.get("stato"));
             } catch (Exception e) { return ResponseEntity.status(500).body(Map.of("error", e.getMessage())); }
@@ -427,7 +442,7 @@ public class SaloneController {
                 Map<String, Map<String, Object>> m = statiOggi();
                 f.clear();                                   // dopo statiOggi(): cosi' il motivo resta "Ha fatto Esci"
                 Map<String, Object> r = m.get(nome);
-                if (r.get("stato") != null && Boolean.TRUE.equals(r.get("presenza"))) {
+                if (r.get("stato") != null) {
                     spegni(r, Instant.now(), c.nome(), "Ha fatto Esci dal CRM");
                     salvaStati(m, c.nome());
                 }
@@ -500,6 +515,7 @@ public class SaloneController {
             out.put("ora", Instant.now().toString());
             out.put("mio", consulenteDi(c.nome()));
             out.put("cambiaTutti", gestisce(c));
+            out.put("online", connessi());
             return ResponseEntity.ok(out);
         } catch (Exception e) { return ResponseEntity.status(500).body(Map.of("error", e.getMessage())); }
     }
@@ -513,12 +529,17 @@ public class SaloneController {
         String nome = str(b.get("nome")).isEmpty() ? mio : consulenteDi(str(b.get("nome")));
         if (nome == null) return ResponseEntity.badRequest().body(Map.of("error", "Non risulti tra i consulenti del salone"));
         if (!nome.equals(mio) && !gestisce(c)) return ResponseEntity.status(403).body(Map.of("error", "Puoi cambiare solo il tuo stato"));
+        if (nome.equals(mio)) {           // e' lui: e' connesso adesso
+            FINESTRE.computeIfAbsent(nome, k -> new java.util.concurrent.ConcurrentHashMap<>()).put("stato", System.currentTimeMillis());
+            ULTIMO.put(nome, System.currentTimeMillis());
+        } else if (!presente(nome, Instant.now()))
+            return ResponseEntity.status(409).body(Map.of("error", nome + " non ha il CRM aperto: risulta fuori dal salone finche' non accede."));
         synchronized (LOCK) {
             try {
                 Map<String, Map<String, Object>> m = statiOggi();
                 cambiaStato(m, nome, stato, c.nome(), nome.equals(mio) ? "Cambiato dal consulente" : "Cambiato da " + c.nome(), null, null, Instant.now());
                 salvaStati(m, c.nome());
-                return ResponseEntity.ok(Map.of("stati", new ArrayList<>(m.values()), "ora", Instant.now().toString()));
+                return ResponseEntity.ok(Map.of("stati", new ArrayList<>(m.values()), "ora", Instant.now().toString(), "online", connessi()));
             } catch (Exception e) { return ResponseEntity.status(500).body(Map.of("error", e.getMessage())); }
         }
     }

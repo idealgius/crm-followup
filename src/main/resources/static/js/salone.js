@@ -222,7 +222,7 @@
     async function caricaStati() {
         try {
             const d = await api('/stati');
-            st.stati = d.stati || []; st.mio = d.mio || null; st.cambiaTutti = !!d.cambiaTutti;
+            st.stati = d.stati || []; st.mio = d.mio || null; st.cambiaTutti = !!d.cambiaTutti; st.online = d.online || [];
             disegnaStati();
         } catch (e) { /* rete: si riprova */ }
     }
@@ -243,12 +243,13 @@
               ${Object.keys(STATI).map(k => `<button type="button" class="sa-mio-b ${STATI[k].c} ${mio.stato === k ? 'on' : ''}" data-stato="${k}">${bollino(k)} ${STATI[k].t}</button>`).join('')}</div>` : ''}
           </div>
           <div class="sa-stati-l">${st.stati.map(s => {
-              const io = st.mio === s.nome, puo = st.cambiaTutti || io;
+              // senza il CRM aperto il consulente resta "non in salone": il suo stato non si puo' cambiare da fuori
+              const io = st.mio === s.nome, conn = io || (st.online || []).includes(s.nome), puo = io || (st.cambiaTutti && conn);
               return `<div class="sa-cs ${s.stato ? STATI[s.stato].c : 'grigio'} ${io ? 'io' : ''}">
-                <button type="button" class="sa-cs-b" ${puo ? `data-menu="${esc(s.nome)}"` : 'disabled'} title="${puo ? 'Cambia stato' : ''}">
+                <button type="button" class="sa-cs-b" ${puo ? `data-menu="${esc(s.nome)}"` : 'disabled'} title="${puo ? 'Cambia stato' : st.cambiaTutti && !conn ? 'Non ha il CRM aperto: lo stato torna disponibile quando accede' : ''}">
                   ${bollino(s.stato, true)}
                   <span class="sa-cs-t"><b>${esc(s.nome)}${io ? ' (tu)' : ''}</b>
-                  <em>${s.stato ? STATI[s.stato].t + ' · da ' + durata(minDa(s.dal)) : s.uscitoAt && isoRoma(new Date(s.uscitoAt)) === oggi() ? 'Uscito dal CRM alle ' + ora(s.uscitoAt) : 'Non ancora in salone oggi'}</em>
+                  <em>${s.stato ? STATI[s.stato].t + ' · da ' + durata(minDa(s.dal)) : conn ? 'CRM aperto · fuori orario del salone' : s.uscitoAt && isoRoma(new Date(s.uscitoAt)) === oggi() && !/^Non connesso|riavvio/.test(s.motivo || '') ? 'Uscito dal CRM alle ' + ora(s.uscitoAt) : 'Non ancora in salone oggi'}</em>
                   ${s.stato === 'OCCUPATO' && s.cliente ? `<em class="sa-cs-cl">con ${esc(s.cliente)}</em>` : ''}</span>
                 </button></div>`;
           }).join('')}</div>`;
@@ -262,7 +263,7 @@
     async function cambiaStato(stato, nome) {
         try {
             const d = await post('/stati', nome && nome !== st.mio ? { stato, nome } : { stato });
-            st.stati = d.stati || st.stati; disegnaStati();
+            st.stati = d.stati || st.stati; if (d.online) st.online = d.online; disegnaStati();
             toast((nome && nome !== st.mio ? nome + ': ' : 'Ora sei ') + STATI[stato].t.toLowerCase());
         } catch (e) { alert(e.message); }
     }
