@@ -1,0 +1,54 @@
+/* =====================================================================
+   PERMESSI (pagina Admin → Permessi per Ruolo / per Operatore) — /js/admin.js (PermUI)
+   - riquadro che scorre con intestazione e prima colonna ferme, barra di scorrimento anche in alto
+   - gruppi richiudibili, vista compatta
+   - livello scelto molto piu' visibile (colore pieno + bordo), per ogni livello
+   ===================================================================== */
+.perm-bar { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:0 0 10px; }
+.perm-bar button { border:1px solid var(--border); background:var(--bg-card); color:var(--text-primary); font:inherit; font-size:12.5px; font-weight:700; padding:7px 12px; border-radius:9px; cursor:pointer; }
+.perm-bar button:hover { border-color:#f0c040; }
+.perm-bar label { display:flex; align-items:center; gap:6px; font-size:12.5px; font-weight:700; color:var(--text-secondary); cursor:pointer; margin-left:4px; }
+
+/* barra di scorrimento in alto, sempre a portata (resta attaccata sotto la barra del CRM) */
+.perm-topscroll { position:sticky; top:64px; z-index:6; overflow-x:auto; overflow-y:hidden; height:16px; margin-bottom:2px; background:var(--bg-primary, transparent); }
+.perm-topscroll > div { height:1px; }
+/* la tabella scorre dentro un riquadro alto quanto lo schermo: anche la barra in basso e' sempre visibile */
+.perm-scroll { overflow:auto; max-height:calc(100vh - 230px); border:1px solid var(--border); border-radius:12px; background:var(--bg-card); }
+.perm-scroll .permission-matrix-table thead th { position:sticky; top:0; z-index:3; background:var(--bg-card); box-shadow:inset 0 -2px 0 var(--border); }
+.perm-scroll .permission-matrix-table tbody td:first-child,
+.perm-scroll .permission-matrix-table thead th:first-child { position:sticky; left:0; z-index:2; background:var(--bg-card); box-shadow:inset -1px 0 0 var(--border); }
+.perm-scroll .permission-matrix-table thead th:first-child { z-index:4; }
+.perm-scroll .permission-matrix-table tbody tr:hover td:first-child { background:var(--step-bg, var(--bg-card)); }
+
+/* gruppi richiudibili */
+.permission-matrix-table tr.perm-grp { cursor:pointer; user-select:none; }
+.permission-matrix-table tr.perm-grp td { background:var(--step-bg, rgba(127,127,127,.06)) !important; }
+.permission-matrix-table tr.perm-grp:hover td { color:var(--text-primary) !important; }
+.perm-arrow { display:inline-block; width:16px; color:#f0c040; font-size:12px; }
+.perm-grp-in { position:sticky; left:14px; display:inline-block; }
+
+/* vista compatta */
+.perm-compatta .permission-matrix-table th, .perm-compatta .permission-matrix-table td { padding:4px 8px; }
+.perm-compatta .permission-cell-btn { padding:3px 6px; font-size:12px; }
+.perm-compatta .permission-matrix-table thead th { font-size:10px; }
+.perm-compatta .permission-matrix-table thead th button { display:none; }
+
+/* livello scelto: colore pieno, bordo e alone, cosi' si vede subito */
+.permission-cell-group { gap:3px !important; }
+.permission-cell-btn { border:1.5px solid transparent !important; min-width:30px; font-weight:800; opacity:.55; }
+.permission-cell-btn:hover { opacity:1; }
+.permission-cell-btn.active { opacity:1; transform:scale(1.06); }
+.permission-cell-btn.active.level-NONE { background:#e5484d !important; border-color:#ff8a8d !important; color:#fff !important; box-shadow:0 0 0 2px rgba(229,72,77,.35); }
+.permission-cell-btn.active.level-READ_ONLY { background:#e8b52c !important; border-color:#ffd970 !important; color:#2a1d00 !important; box-shadow:0 0 0 2px rgba(232,181,44,.35); }
+.permission-cell-btn.active.level-FULL { background:#1fae5b !important; border-color:#6ae29b !important; color:#fff !important; box-shadow:0 0 0 2px rgba(31,174,91,.35); }
+.permission-cell-btn.active.level-ADMIN_FULL { background:#3d7be0 !important; border-color:#8fb6ff !important; color:#fff !important; box-shadow:0 0 0 2px rgba(61,123,224,.35); }
+.permission-cell-btn.active.level-LIVELLO_4 { background:#8a5cf0 !important; border-color:#c3a8ff !important; color:#fff !important; box-shadow:0 0 0 2px rgba(138,92,240,.35); }
+/* "Eredita da ruolo" (operatori) scelto */
+.permission-cell-btn.active:not([class*="level-"]) { background:#6b7686 !important; border-color:#a7b1bf !important; color:#fff !important; box-shadow:0 0 0 2px rgba(107,118,134,.35); }
+
+/* Permessi per operatore: schede richiudibili */
+.perm-op-h { cursor:pointer; user-select:none; }
+.perm-op-h .perm-arrow { margin-right:4px; }
+.perm-op:not(.aperto) > :not(.perm-op-h) { display:none !important; }
+.perm-op:not(.aperto) > .perm-op-h { margin-bottom:0 !important; }
+.perm-op.aperto { border-color:#f0c040 !important; }

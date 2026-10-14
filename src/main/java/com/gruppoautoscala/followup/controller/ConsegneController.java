@@ -28,6 +28,9 @@ import java.util.Optional;
  *  POST /api/consegne/database/import     -> carica la scheda DATABASE da CSV (mette in pausa l'automatico)
  *  POST /api/consegne/export-excel        -> Excel dell'Analisi avanzamento (piu' fogli, grafici nativi)
  *  POST /api/consegne/verifiche           -> segna / toglie la verifica manuale di una pratica ("i")
+ *  GET  /api/consegne/versione            -> NUOVO: numero che cambia a ogni aggiornamento (foglio, import,
+ *                                            verifiche, officina): la pagina lo controlla ogni 15 s
+ *  In GET /data c'e' anche "officina": il registro della lavorazione officina (ConsegneOfficinaService)
  *
  * Permessi: sezione CONSEGNE della pagina Permessi (ruolo + operatore).
  *  - i dati (GET /data) li legge anche il Commerciale: basta "Solo lettura" su CONSEGNE
@@ -55,6 +58,21 @@ public class ConsegneController {
 
     @Autowired
     private ConsegneExcelService consegneExcelService;
+
+    @Autowired
+    private com.gruppoautoscala.followup.service.ConsegneOfficinaService officinaService;
+
+    /** NUOVO: controllo leggero per l'aggiornamento immediato della pagina */
+    @GetMapping("/versione")
+    public ResponseEntity<?> versione(HttpSession session) {
+        String acc = access(session);
+        if (!puoVedere(acc)) {
+            Long userId = (Long) session.getAttribute("userId");
+            String role = (String) session.getAttribute("userRole");
+            if (userId == null || !puoVedere(rolePermissionService.getEffectiveAccess(userId, role, "COMMERCIALE"))) return negato(acc);
+        }
+        return ResponseEntity.ok(Map.of("v", consegneService.getVersione()));
+    }
 
     private String access(HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");
@@ -207,6 +225,8 @@ public class ConsegneController {
         out.put("puoImportare", puoModificare(acc));
         out.put("puoModificare", puoModificare(acc));
         out.put("verifiche", consegneService.getVerifiche());
+        out.put("officina", officinaService.leggi());
+        out.put("versione", consegneService.getVersione());
         return out;
     }
 

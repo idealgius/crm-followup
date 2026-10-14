@@ -9,6 +9,7 @@ import com.gruppoautoscala.followup.repository.UserRepository;
 import com.gruppoautoscala.followup.service.RolePermissionService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -45,6 +46,11 @@ import java.util.regex.Pattern;
  * STATO DEI CONSULENTI (bollini)  DISPONIBILE (verde) · OCCUPATO (giallo) · NON_DISPONIBILE (rosso)
  *  GET   /api/salone/stati                      -> stato attuale di ogni consulente (da quando)
  *  POST  /api/salone/stati                      -> {stato, nome?}  nome (stato di un altro) dal livello 2
+ *  Altri due bollini: TEST_DRIVE (grigio) e IN_PIAZZALE (azzurro). Senza CRM aperto: bollino vuoto.
+ *  POST  /api/salone/stati/rinvio               -> il consulente risponde "No" al controllo: occupato altri 10 minuti
+ *  Controllo dei 15 minuti: quando un consulente prende in carico un walk-in, "controlloAt" = +15 minuti.
+ *  Se a quell'ora e' ancora Occupato senza aver cambiato stato, alla Consulenza compare "sei nuovamente
+ *  disponibile?" (salone.js): No = +10 minuti, Si' o nessuna risposta in 60 secondi = Disponibile.
  *  Ogni cambio finisce nello storico SALONE_STATI_LOG_<aaaa-mm> con la durata dello stato precedente.
  *  A fine giornata lo stato rimasto aperto viene chiuso alle 21:00 (CHIUSURA) e il giorno dopo si riparte da zero.
  *
@@ -56,6 +62,14 @@ import java.util.regex.Pattern;
  *
  * REPORT (livello 3)
  *  GET   /api/salone/report?da=2026-10-01&a=2026-10-14 -> ingressi del periodo + cambi di stato
+ *
+ * ELIMINA STORICO (solo ruolo Admin, con password)
+ *  POST  /api/salone/storico/elimina  -> {walkin, appuntamenti, storicoImport, stati, chat, tutto, da, a, password}
+ *  Si sceglie cosa cancellare: walk-in, appuntamenti importati, storico degli import,
+ *  stati dei consulenti con lo storico dei cambi di stato, messaggi della chat.
+ *  Report e grafici si calcolano da walk-in e cambi di stato: cancellando quelli si azzerano.
+ *  Periodo: dal / al, oppure "tutto" (con "tutto" + stati si azzera anche lo stato attuale).
+ *  Password: variabile SALONE_PASSWORD_ELIMINA di Railway, se non c'e' vale RITA.
  *
  * CHAT (gruppo con tutti + chat private) — solo livello 4 e ruoli Front Office / Consulenza / Back Office: /chat/utenti, /chat/aggiornamenti, /chat/messaggi, /chat/reazione, /chat/letto
  *
@@ -76,7 +90,10 @@ public class SaloneController {
     private static final int MAX_MSG = 1500;
     private static final int MAX_STORICO = 150;
     private static final Object LOCK = new Object();
-    public static final List<String> STATI = List.of("DISPONIBILE", "OCCUPATO", "NON_DISPONIBILE");
+    /** bollini: verde, giallo, rosso, grigio (test drive), azzurro (in piazzale) */
+    public static final List<String> STATI = List.of("DISPONIBILE", "OCCUPATO", "NON_DISPONIBILE", "TEST_DRIVE", "IN_PIAZZALE");
+    /** controllo dopo la presa in carico di un walk-in: 15 minuti, "No" = altri 10 */
+    private static final long CONTROLLO_MIN = 15, RINVIO_MIN = 10;
     /** consulenti del salone di Agnano (per ora: in seguito si potranno gestire dalla pagina) */
     public static final List<String> CONSULENTI_AGNANO = List.of(
         "Luca Ambrosino", "Marco Castaldo", "Roberto Castaldo", "Guido Fiore",
@@ -377,6 +394,7 @@ public class SaloneController {
         if (r.get("walkinAperto") != null) chiudiWalkin(String.valueOf(r.get("walkinAperto")), fine, chi, motivo);
         r.put("stato", null); r.put("dal", null); r.put("dalIt", null); r.put("cliente", null); r.put("walkinId", null);
         r.put("walkinAperto", null); r.put("motivo", motivo); r.put("chi", chi); r.put("presenza", null);
+        r.put("controlloAt", null); r.put("rinvii", 0);
         r.put("uscitoAt", fine.toString()); r.put("uscitoIt", oraIt(fine));
     }
 
@@ -498,11 +516,13 @@ public class SaloneController {
         } else if ("DISPONIBILE".equals(nuovo)) {
             if (aperto != null) chiudiWalkin(aperto, now, chi, null);
             r.put("walkinAperto", null); r.put("walkinId", null); r.put("cliente", null);
-        } else if (!"OCCUPATO".equals(nuovo)) {
+        } else if ("NON_DISPONIBILE".equals(nuovo)) {
             r.put("cliente", null); r.put("walkinId", null);  // il walk-in resta aperto finche' non torna disponibile
-        }
+        }   // TEST_DRIVE / IN_PIAZZALE: resta il cliente (di solito e' con lui)
+        // controllo dei 15 minuti: solo subito dopo la presa in carico; qualsiasi altro cambio lo toglie
+        r.put("controlloAt", "OCCUPATO".equals(nuovo) && walkinId != null ? now.plusSeconds(CONTROLLO_MIN * 60).toString() : null);
         r.put("stato", nuovo); r.put("dal", now.toString()); r.put("dalIt", oraIt(now));
-        r.put("chi", chi); r.put("motivo", motivo);
+        r.put("chi", chi); r.put("motivo", motivo); r.put("rinvii", 0);
         return true;
     }
     /** il consulente torna disponibile: sul walk-in resta quanto tempo e' passato dalla presa in carico */
@@ -552,9 +572,33 @@ public class SaloneController {
         synchronized (LOCK) {
             try {
                 Map<String, Map<String, Object>> m = statiOggi();
-                cambiaStato(m, nome, stato, c.nome(), nome.equals(mio) ? "Cambiato dal consulente" : "Cambiato da " + c.nome(), null, null, Instant.now());
+                String motivo = !nome.equals(mio) ? "Cambiato da " + c.nome()
+                    : "si".equals(str(b.get("controllo"))) ? "Controllo dei 15 minuti: ha confermato di essere disponibile"
+                    : "auto".equals(str(b.get("controllo"))) ? "Controllo dei 15 minuti: nessuna risposta in 60 secondi, disponibile in automatico"
+                    : "Cambiato dal consulente";
+                cambiaStato(m, nome, stato, c.nome(), motivo, null, null, Instant.now());
                 salvaStati(m, c.nome());
                 return ResponseEntity.ok(Map.of("stati", new ArrayList<>(m.values()), "ora", Instant.now().toString(), "online", connessi()));
+            } catch (Exception e) { return ResponseEntity.status(500).body(Map.of("error", e.getMessage())); }
+        }
+    }
+
+    /** "No" al controllo dei 15 minuti: resta occupato, la domanda torna tra 10 minuti */
+    @PostMapping("/stati/rinvio")
+    public ResponseEntity<?> rinvio(HttpSession s) {
+        Chi c = chi(s); if (!vede(c)) return no(c);
+        String mio = consulenteDi(c.nome());
+        if (mio == null) return ResponseEntity.badRequest().body(Map.of("error", "Non risulti tra i consulenti del salone"));
+        synchronized (LOCK) {
+            try {
+                Map<String, Map<String, Object>> m = statiOggi();
+                Map<String, Object> r = m.get(mio);
+                if (!"OCCUPATO".equals(r.get("stato"))) return ResponseEntity.ok(Map.of("stati", new ArrayList<>(m.values())));
+                Instant now = Instant.now();
+                r.put("controlloAt", now.plusSeconds(RINVIO_MIN * 60).toString());
+                r.put("rinvii", (r.get("rinvii") instanceof Number n ? n.intValue() : 0) + 1);
+                salvaStati(m, c.nome());
+                return ResponseEntity.ok(Map.of("stati", new ArrayList<>(m.values()), "ora", now.toString()));
             } catch (Exception e) { return ResponseEntity.status(500).body(Map.of("error", e.getMessage())); }
         }
     }
@@ -815,6 +859,103 @@ public class SaloneController {
         return m;
     }
 
+    /* ================= ELIMINA STORICO (solo Admin) ================= */
+    @Value("${SALONE_PASSWORD_ELIMINA:RITA}")
+    private String passwordElimina;
+    /** primo giorno in cui possono esserci walk-in salvati (la sezione e' nata nel 2026) */
+    private static final LocalDate PRIMO_GIORNO = LocalDate.of(2025, 1, 1);
+
+    @PostMapping("/storico/elimina")
+    public ResponseEntity<?> eliminaStorico(@RequestBody Map<String, Object> b, HttpSession s) {
+        Chi c = chi(s); if (c == null) return no(null);
+        if (!"ADMIN".equalsIgnoreCase(c.role())) return ResponseEntity.status(403).body(Map.of("error", "Solo un Admin puo' eliminare lo storico"));
+        if (!str(b.get("password")).equals(str(passwordElimina)))
+            return ResponseEntity.status(403).body(Map.of("error", "Password non corretta: non e' stato eliminato niente"));
+        boolean walkin = Boolean.TRUE.equals(b.get("walkin")), app = Boolean.TRUE.equals(b.get("appuntamenti")),
+                imp = Boolean.TRUE.equals(b.get("storicoImport")), tutto = Boolean.TRUE.equals(b.get("tutto")),
+                stati = Boolean.TRUE.equals(b.get("stati")), chat = Boolean.TRUE.equals(b.get("chat"));
+        if (!walkin && !app && !imp && !stati && !chat) return ResponseEntity.badRequest().body(Map.of("error", "Scegli cosa eliminare"));
+        LocalDate oggi = LocalDate.now(ITALY), da, a;
+        if (tutto) { da = PRIMO_GIORNO; a = oggi.plusYears(2); }
+        else {
+            try { da = LocalDate.parse(str(b.get("da"))); a = LocalDate.parse(str(b.get("a"))); }
+            catch (Exception e) { return ResponseEntity.badRequest().body(Map.of("error", "Scegli il periodo (dal / al)")); }
+            if (da.isAfter(a)) { LocalDate t = da; da = a; a = t; }
+        }
+        String gi = da.toString(), gf = a.toString();
+        int nWalkin = 0, nGiorni = 0, nApp = 0, nImp = 0, nCambi = 0, nMsg = 0;
+        synchronized (LOCK) {
+            try {
+                if (walkin) {
+                    LocalDate fineW = a.isAfter(oggi) ? oggi : a;
+                    for (LocalDate g = da.isBefore(PRIMO_GIORNO) ? PRIMO_GIORNO : da; !g.isAfter(fineW); g = g.plusDays(1)) {
+                        Optional<ConsegneDataset> ds = repository.findById("SALONE_" + g);
+                        if (ds.isEmpty() || ds.get().getRighe() == null || ds.get().getRighe() == 0) continue;
+                        nWalkin += ds.get().getRighe(); nGiorni++;
+                        scrivi("SALONE_" + g, new ArrayList<>(), 0, c.nome());
+                    }
+                }
+                if (app) {
+                    List<Map<String, Object>> l = leggi("SALONE_APP");
+                    int prima = l.size();
+                    if (tutto) l.clear();
+                    else l.removeIf(r -> { String g = str(r.get("appData")); return !g.isEmpty() && g.compareTo(gi) >= 0 && g.compareTo(gf) <= 0; });
+                    nApp = prima - l.size();
+                    if (nApp > 0) scrivi("SALONE_APP", l, l.size(), c.nome());
+                }
+                if (imp) {
+                    List<Map<String, Object>> l = leggi("SALONE_APP_STORICO");
+                    int prima = l.size();
+                    if (tutto) l.clear();
+                    else l.removeIf(r -> { Instant at = inst(r.get("at")); if (at == null) return false; String g = at.atZone(ITALY).toLocalDate().toString(); return g.compareTo(gi) >= 0 && g.compareTo(gf) <= 0; });
+                    nImp = prima - l.size();
+                    if (nImp > 0) scrivi("SALONE_APP_STORICO", l, l.size(), c.nome());
+                }
+                if (stati) {
+                    // storico dei cambi di stato (un elenco per mese): da qui escono tempi e grafici del Report
+                    LocalDate fineS = a.isAfter(oggi) ? oggi : a;
+                    for (YearMonth ym = YearMonth.from(da.isBefore(PRIMO_GIORNO) ? PRIMO_GIORNO : da); !ym.isAfter(YearMonth.from(fineS)); ym = ym.plusMonths(1)) {
+                        String key = "SALONE_STATI_LOG_" + ym;
+                        List<Map<String, Object>> l = leggi(key);
+                        if (l.isEmpty()) continue;
+                        int prima = l.size();
+                        if (tutto) l.clear();
+                        else l.removeIf(e -> { Instant at = inst(e.get("at")); if (at == null) return false; String g = at.atZone(ITALY).toLocalDate().toString(); return g.compareTo(gi) >= 0 && g.compareTo(gf) <= 0; });
+                        if (l.size() != prima) { nCambi += prima - l.size(); scrivi(key, l, l.size(), c.nome()); }
+                    }
+                    // "tutto": anche lo stato attuale di ogni consulente torna vuoto (bollino grigio)
+                    if (tutto) {
+                        Map<String, Map<String, Object>> m = statiMappa();
+                        for (Map<String, Object> st : m.values()) {
+                            st.put("stato", null); st.put("dal", null); st.put("dalIt", null); st.put("cliente", null);
+                            st.put("walkinId", null); st.put("walkinAperto", null); st.put("motivo", null); st.put("chi", null);
+                            st.put("uscitoAt", null); st.put("uscitoIt", null);
+                        }
+                        salvaStati(m, c.nome());
+                    }
+                }
+                if (chat) {
+                    List<String> conv = new ArrayList<>(List.of("GRUPPO")); conv.addAll(indice());
+                    for (String k : conv) {
+                        List<Map<String, Object>> l = leggi("SALONE_CHAT_" + k);
+                        if (l.isEmpty()) continue;
+                        int prima = l.size();
+                        if (tutto) l.clear();
+                        else l.removeIf(m -> { long ts = m.get("ts") instanceof Number n ? n.longValue() : 0; if (ts == 0) return false; String g = Instant.ofEpochMilli(ts).atZone(ITALY).toLocalDate().toString(); return g.compareTo(gi) >= 0 && g.compareTo(gf) <= 0; });
+                        if (l.size() != prima) { nMsg += prima - l.size(); scrivi("SALONE_CHAT_" + k, l, l.size(), c.nome()); }
+                    }
+                    // le chat aperte in questo momento (di tutti) si svuotano e si ricaricano da sole
+                    scrivi("SALONE_CHAT_AZZERATA", List.of(Map.of("at", System.currentTimeMillis())), 1, c.nome());
+                }
+            } catch (Exception e) { return ResponseEntity.status(500).body(Map.of("error", "Eliminazione non completata: " + e.getMessage())); }
+        }
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("walkin", nWalkin); out.put("giorni", nGiorni); out.put("appuntamenti", nApp); out.put("import", nImp);
+        out.put("cambi", nCambi); out.put("messaggi", nMsg);
+        out.put("periodo", tutto ? "tutto" : gi + " / " + gf);
+        return ResponseEntity.ok(out);
+    }
+
     /* ================= CHAT ================= */
     @GetMapping("/chat/utenti")
     public ResponseEntity<?> utenti(HttpSession s) {
@@ -878,7 +1019,8 @@ public class SaloneController {
             }
             conv.put(k, Map.of("messaggi", nuovi, "nonLetti", nonLetti));
         }
-        return ResponseEntity.ok(Map.of("conv", conv, "ora", max));
+        long azz = leggi("SALONE_CHAT_AZZERATA").stream().map(x -> x.get("at")).filter(x -> x instanceof Number).mapToLong(x -> ((Number) x).longValue()).max().orElse(0);
+        return ResponseEntity.ok(Map.of("conv", conv, "ora", max, "azzerata", azz));
     }
 
     @PostMapping("/chat/messaggi")

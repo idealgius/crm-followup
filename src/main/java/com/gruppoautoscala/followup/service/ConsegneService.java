@@ -32,6 +32,11 @@ import java.util.Optional;
  * script Apps Script pubblicato come App web, protetto da una parola
  * segreta. URL e parola NON sono nel codice: arrivano dalle variabili
  * d'ambiente GSHEET_URL e GSHEET_TOKEN (Railway / configurazione IntelliJ).
+ *
+ * NUOVO: il foglio si rilegge ogni MINUTO (prima ogni 5). A ogni lettura con dati
+ * cambiati il registro della lavorazione officina (ConsegneOfficinaService) confronta
+ * gli stati con la lettura precedente. getVersione() cambia a ogni salvataggio: la
+ * pagina Consegne lo controlla ogni 15 secondi e si aggiorna da sola.
  */
 @Service
 public class ConsegneService {
@@ -48,6 +53,13 @@ public class ConsegneService {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private ConsegneOfficinaService officinaService;
+
+    /** cambia a ogni salvataggio (trattative, foglio, verifiche): la pagina Consegne si riallinea */
+    private volatile long versione = System.currentTimeMillis();
+    public String getVersione() { return versione + "-" + officinaService.getVersione(); }
 
     @Value("${GSHEET_URL:}")
     private String sheetUrl;
@@ -84,7 +96,7 @@ public class ConsegneService {
     /**
      * Legge SUBITO la scheda DATABASE dallo script e la salva.
      * Se il contenuto non e' cambiato dall'ultima lettura non riscrive il
-     * database (evita scritture inutili ogni 5 minuti).
+     * database (evita scritture inutili ogni minuto).
      */
     public synchronized ConsegneDataset aggiornaDaFoglio(String chi) throws IOException, InterruptedException {
         if (!isFoglioConfigurato()) {
@@ -118,8 +130,14 @@ public class ConsegneService {
             ConsegneDataset risultato;
             if (attuale != null && Objects.equals(attuale.getContenuto(), body)) {
                 risultato = attuale; // nessuna modifica nel foglio
+                // prima partenza del registro officina con il foglio invariato
+                if (!officinaService.inizializzato()) officinaService.registra(null, body, "Prima lettura del foglio");
             } else {
+                String vecchio = attuale == null ? null : attuale.getContenuto();
                 risultato = salva(DATABASE, body, righe, chi);
+                // stati cambiati -> inizio / aggiornamento / fine lavorazione officina
+                officinaService.registra(officinaService.inizializzato() ? vecchio : null, body,
+                        "Aggiornamento automatico".equals(chi) ? "Lettura automatica del foglio" : "Aggiorna dal foglio Google · " + chi);
             }
             ultimoControllo = LocalDateTime.now();
             ultimoErrore = null;
@@ -181,7 +199,7 @@ public class ConsegneService {
     /**
      * Import della scheda DATABASE da un file CSV (alternativa alla lettura
      * da Google). Finche' l'ultimo dato e' un import CSV, la rilettura
-     * automatica ogni 5 minuti resta in pausa: riparte quando qualcuno preme
+     * automatica ogni minuto resta in pausa: riparte quando qualcuno preme
      * "Aggiorna dal foglio Google".
      */
     public synchronized ConsegneDataset importaDatabaseCsv(String csv, String chi) throws IOException {
@@ -191,7 +209,10 @@ public class ConsegneService {
             throw new IOException("Il file non sembra la scheda DATABASE (mancano le colonne CLIENTE / STATO)");
         }
         int righe = (int) Math.max(0, body.lines().filter(l -> !l.isBlank()).count() - 1);
-        return salva(DATABASE, body, righe, "Import CSV · " + chi);
+        String vecchio = repository.findById(DATABASE).map(ConsegneDataset::getContenuto).orElse(null);
+        ConsegneDataset d = salva(DATABASE, body, righe, "Import CSV · " + chi);
+        officinaService.registra(officinaService.inizializzato() ? vecchio : null, body, "Import CSV · " + chi);
+        return d;
     }
 
     private boolean databaseDaImportCsv() {
@@ -200,8 +221,8 @@ public class ConsegneService {
                 .orElse(false);
     }
 
-    /** Rilettura automatica del foglio ogni 5 minuti (prima volta 1 minuto dopo l'avvio). */
-    @Scheduled(initialDelay = 60_000, fixedDelay = 300_000)
+    /** Rilettura automatica del foglio ogni minuto (prima volta 30 secondi dopo l'avvio). */
+    @Scheduled(initialDelay = 30_000, fixedDelay = 60_000)
     public void aggiornamentoAutomatico() {
         if (!isFoglioConfigurato()) return;
         if (databaseDaImportCsv()) return;   // in pausa: l'ultimo dato e' un import CSV
@@ -222,6 +243,8 @@ public class ConsegneService {
         d.setRighe(righe);
         d.setAggiornatoAt(LocalDateTime.now());
         d.setAggiornatoDa(chi);
-        return repository.save(d);
+        ConsegneDataset salvato = repository.save(d);
+        versione = System.currentTimeMillis();
+        return salvato;
     }
 }

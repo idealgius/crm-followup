@@ -159,8 +159,10 @@
     const UBIC_ORDINE = ['Gruppo Autoscala', 'Autoscala', 'Carrozzeria', 'Altre lavorazioni', 'C/O Altri Dealer', 'In arrivo'];
     const UBIC_DET_ORDINE = ['Capodichino', 'Caserta', 'In uso / Demo'];
     // ===== GIACENZA: fasce di giorni in stock =====
+    // fasce di giacenza: ogni 30 giorni fino a 180, poi 181-365 e oltre un anno (uguali in StockController)
     const GIAC = [['0-30', '0-30 gg', 0, 30, '#34c38f'], ['31-60', '31-60 gg', 31, 60, '#8fd17a'], ['61-90', '61-90 gg', 61, 90, '#e8c13a'],
-        ['91-180', '91-180 gg', 91, 180, '#e8a13a'], ['181-365', '181-365 gg', 181, 365, '#e5734d'], ['365+', '> 365 gg', 366, Infinity, '#e5484d']];
+        ['91-120', '91-120 gg', 91, 120, '#eaa63a'], ['121-150', '121-150 gg', 121, 150, '#e8903b'], ['151-180', '151-180 gg', 151, 180, '#e67a42'],
+        ['181-365', '181-365 gg', 181, 365, '#e3624a'], ['365+', '> 365 gg', 366, Infinity, '#e5484d']];
     const giacKey = r => { if (r.giorni == null || r.giorni === '') return 'nd'; const g = Number(r.giorni); const b = GIAC.find(x => g >= x[2] && g <= x[3]); return b ? b[0] : 'nd'; };
     const nomeSede = raw => titleCase(String(raw).replace(/\s+/g, ' ').trim());
     function ubicazione(raw) {

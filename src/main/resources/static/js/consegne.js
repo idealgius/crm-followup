@@ -12,8 +12,11 @@
       la BI Commerciale le usa per recuperare i contratti che mancano nel
       suo CSV (trattative aperte in un anno e chiuse in quello dopo).
    2) Scheda DATABASE del foglio Google "AVANZAMENTO 2026": la legge il
-      server (script Apps Script + GSHEET_URL / GSHEET_TOKEN) ogni 5
-      minuti, oppure subito con "Aggiorna dal foglio Google".
+      server (script Apps Script + GSHEET_URL / GSHEET_TOKEN) ogni minuto,
+      oppure subito con "Aggiorna dal foglio Google". La pagina controlla
+      ogni 15 secondi se ci sono novita' (GET /versione) e si ricarica da sola.
+      A ogni lettura il server tiene anche il registro della LAVORAZIONE
+      OFFICINA (vedi Officina, piu' sotto).
       Tenute solo le righe con B2C = FALSE.
 
    Abbinamento trattativa -> riga DATABASE, in ordine di priorita'
@@ -41,7 +44,9 @@
    ===================================================================== */
 (function () {
     const API = '/api/consegne';
-    const AUTO_REFRESH_MS = 5 * 60 * 1000; // stesso intervallo della rilettura del foglio lato server
+    // NUOVO: il server rilegge il foglio ogni minuto; la pagina chiede ogni 15 secondi se qualcosa
+    // e' cambiato (GET /versione, leggerissimo) e si ricarica SUBITO quando cambia.
+    const AUTO_REFRESH_MS = 15 * 1000;
 
     const MESI = ['', 'Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
     const MESI_L = ['', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
@@ -117,9 +122,21 @@
             stato: r['Stato trattativa'] || '', motivo: r['Motivo fallimento'] || '', etichetta: (r['Etichetta'] || '').trim()
         }));
     }
+    // NUOVO: chiave della vettura nel registro officina (uguale a ConsegneOfficinaService.chiave lato server):
+    // T:<targa/telaio> oppure C:<cliente>|<data>; i doppioni prendono #2, #3...
+    function chiaviOfficina(rows) {
+        const viste = new Set(), soloLett = x => String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        return rows.map(r => {
+            const tt = soloLett(r['TARGA/TELAIO']);
+            const base = tt.length >= 5 ? 'T:' + tt : 'C:' + soloLett(r['CLIENTE']) + '|' + String(r['DATA'] || '').trim();
+            let k = base; for (let n = 2; viste.has(k); n++) k = base + '#' + n;
+            viste.add(k); return k;
+        });
+    }
     function slimDatabase(rows) {
         need(rows, ['CLIENTE', 'B2C', 'TARGA/TELAIO', 'STATO', 'PROVENIENZA', 'DATA'], 'DATABASE');
-        return rows.filter(r => r['CLIENTE'] || r['TARGA/TELAIO']).map(r => ({
+        const tenute = rows.filter(r => r['CLIENTE'] || r['TARGA/TELAIO']), fks = chiaviOfficina(tenute);
+        return tenute.map((r, i) => ({ fk: fks[i],
             cliente: r['CLIENTE'], b2c: String(r['B2C']).toUpperCase(), tt: r['TARGA/TELAIO'],
             stato: r['STATO'], prov: r['PROVENIENZA'], data: r['DATA'],
             vend: r['VENDITORE'] || '', modello: r['MODELLO'] || '', canale: r['CANALE'] || '', mese: r['MESE'] || '',
@@ -317,7 +334,8 @@
             const base = {
                 cliente: nice(nameOf(t)), marca: t.marca.trim(), modello: t.modello.replace(/\s+/g, ' ').trim(),
                 vend: nice(t.vend), chiusura: dc ? fmtD(dc) : t.chiusura, targa: targaCsv(t) || '—', tipo: t.tipo,
-                sede: t.sede.replace(/Gruppo Auto ?Scala srl/i, '').trim() || 'Agnano', note: []
+                sede: t.sede.replace(/Gruppo Auto ?Scala srl/i, '').trim() || 'Agnano', note: [],
+                tgc: (t.targa || '').trim(), tel: (t.telaio || '').trim()   // per la ricerca: targa e telaio del CSV
             };
             if (!best) {
                 const occupate = o.info.filter(x => presaDa.has(x.g._i));
@@ -410,7 +428,7 @@
             if (g._d && dc && fmtD(g._d) !== fmtD(dc)) base.note.push({ c: 'abb', t: `Data nel CSV ${fmtD(dc)}, nel foglio ${fmtD(g._d)}: vale quella del foglio` });
 
             recs.push({
-                ...base, chiusura: g._d ? fmtD(g._d) : base.chiusura, m, k, stato: st || 'STATO NON INDICATO',
+                ...base, fk: g.fk, tt: g.tt, chiusura: g._d ? fmtD(g._d) : base.chiusura, m, k, stato: st || 'STATO NON INDICATO',
                 consegna: (k === 'nd' || !dCon) ? '' : fmtD(dCon), prevista: !dReal && !!dPrev && k !== 'nd',
                 prov: g.prov ? cap(g.prov) : 'Non specificato', abb: how,
                 check: !!anom && k !== 'ann', key: anom ? keyOf(g) : null,
@@ -442,7 +460,7 @@
                 vend: vendMap.get(String(g.vend || '').toUpperCase().replace(/\s+/g, ' ').trim()) || nice(g.vend),
                 chiusura: g._d ? fmtD(g._d) : (g.data || ''), targa: (g.tt || '—').trim(), tipo: cap(String(g.canale || '').trim()),
                 m, k, stato: st || 'STATO NON INDICATO', consegna: '', prevista: false,
-                prov: g.prov ? cap(g.prov) : 'Non specificato', abb: 'solo foglio', solo: true,
+                prov: g.prov ? cap(g.prov) : 'Non specificato', abb: 'solo foglio', solo: true, fk: g.fk, tt: g.tt,
                 check: k !== 'ann', key: keyOf(g), dkey: keyOf(g), note
             };
             // "Elimina" anche per le righe solo nel foglio (es. riga doppia o errata):
@@ -524,6 +542,84 @@
         catch (e) { db = null; meta.foglioErrore = e.message; }
     }
 
+    /* ================= LAVORAZIONE OFFICINA =================
+       Registro tenuto dal server (ConsegneOfficinaService): a ogni lettura del foglio confronta lo
+       STATO di ogni vettura con la lettura prima e segna inizio / aggiornamenti / fine di ogni
+       "giro" in lavorazione officina, con data e ora italiane (chi ha cambiato: quando arrivera'
+       dallo script del foglio). Qui:
+         - Officina.celle(r): 3 colonne nelle liste delle vetture (e quindi nell'Excel del riquadro)
+         - riquadri "In lavorazione / Inizio / Fine lavorazione officina" in "In evidenza" quando si
+           allarga la tabella delle Tempistiche (bi-tools.js, BiTools.evidenzaExtra) */
+    let ultimiRec = [];
+    const Officina = (function () {
+        const reg = () => (meta && meta.officina && meta.officina.vetture) || {};
+        const di = r => { const v = r && r.fk ? reg()[r.fk] : null; return v && v.giri && v.giri.length ? v : null; };
+        const t = iso => new Date(iso).getTime();
+        const ultimo = v => v.giri[v.giri.length - 1];
+        const aperto = v => !ultimo(v).fine;
+        const durata = (a, b) => {
+            const d = b - a; if (!(d >= 0)) return '—';
+            const g = Math.floor(d / 864e5);
+            if (g >= 1) return g + (g === 1 ? ' giorno' : ' giorni');
+            const h = Math.floor(d / 36e5);
+            return h >= 1 ? h + (h === 1 ? ' ora' : ' ore') : 'meno di un\'ora';
+        };
+        const chi = e => e && e.chi ? ' · ' + e.chi : '';
+        const quando = e => e.atIt + (e.stimato ? ' (o prima)' : '');
+        const giro = (v, i) => v.giri.length > 1 ? (i + 1) + '° giro: ' : '';
+        function celle(r) {
+            const v = di(r), td = x => `<td class="cg-off">${esc(x).replace(/\n/g, '<br>')}</td>`;
+            if (!v) return td('—') + td('—') + td('—');
+            const now = Date.now();
+            const ini = v.giri.map((g, i) => giro(v, i) + quando(g.inizio) + ' · ' + cap(g.inizio.a || '') + chi(g.inizio)).join('\n');
+            const agg = v.giri.flatMap((g, i) => {
+                let prima = t(g.inizio.at);
+                return g.agg.map(e => { const x = `${giro(v, i)}${e.atIt} → ${cap(e.a || '')} (${durata(prima, t(e.at))} dalla modifica prima)${chi(e)}`; prima = t(e.at); return x; });
+            }).join('\n') || '—';
+            const fin = v.giri.map((g, i) => {
+                if (g.fine) return `${giro(v, i)}${g.fine.atIt} → ${cap(g.fine.a || '')} · ${durata(t(g.inizio.at), t(g.fine.at))} in officina${chi(g.fine)}`;
+                const ult = g.agg.length ? g.agg[g.agg.length - 1] : null;
+                return `${giro(v, i)}in corso da ${durata(t(g.inizio.at), now)}${ult ? ' · ultimo cambio da ' + durata(t(ult.at), now) : ''}`;
+            }).join('\n');
+            return td(ini) + td(agg) + td(fin);
+        }
+        // riquadri "Lavorazione officina" sotto "In evidenza" della tabella Tempistiche
+        function evidenza(card) {
+            if (!card || !card.matches('[data-officina]')) return null;
+            const R = ultimiRec.filter(di), now = Date.now();
+            const inCorso = R.filter(r => aperto(di(r)));
+            const gg = inCorso.map(r => (now - t(ultimo(di(r)).inizio.at)) / 864e5);
+            const giri = R.flatMap(r => di(r).giri.map(g => ({ r, g })));
+            const ultIni = giri.slice().sort((a, b) => t(b.g.inizio.at) - t(a.g.inizio.at))[0];
+            const finiti = giri.filter(x => x.g.fine);
+            const ggFine = finiti.map(x => (t(x.g.fine.at) - t(x.g.inizio.at)) / 864e5);
+            const media = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
+            const nGg = g => g < 1 ? 'meno di un giorno' : (Math.round(g * 10) / 10).toLocaleString('it-IT') + ' giorni';
+            const piuLunga = inCorso.length ? inCorso[gg.indexOf(Math.max(...gg))] : null;
+            const d = document.createElement('div');
+            d.className = 'cg-off-ev';
+            const dal = meta && meta.officina && meta.officina.iniziatoIt;
+            d.innerHTML = `<div class="bi-ev-h">Lavorazione officina${dal ? ` <em>· registrata dal ${esc(dal)}</em>` : ''}</div><div class="bi-ev-grid">
+                <button type="button" class="bi-ev cg-off-b" data-off="in"><small>In lavorazione officina</small><b>${inCorso.length} vettur${inCorso.length === 1 ? 'a' : 'e'}</b>
+                  <span>${inCorso.length ? `da ${nGg(media(gg))} in media · la più lunga ${nGg(Math.max(...gg))} (${esc(piuLunga.cliente)})` : 'nessuna in questo momento'}</span></button>
+                <button type="button" class="bi-ev cg-off-b" data-off="inizio"><small>Inizio lavorazione officina</small><b>${giri.length} ingress${giri.length === 1 ? 'o' : 'i'}</b>
+                  <span>${ultIni ? `ultimo: ${esc(ultIni.r.cliente)} · ${esc(quando(ultIni.g.inizio))}` : 'nessuno registrato'}</span></button>
+                <button type="button" class="bi-ev cg-off-b" data-off="fine"><small>Fine lavorazione officina</small><b>${finiti.length} uscit${finiti.length === 1 ? 'a' : 'e'}</b>
+                  <span>${finiti.length ? `in officina ${nGg(media(ggFine))} in media` : 'nessuna ancora'}</span></button>
+              </div>`;
+            d.addEventListener('click', e => {
+                const b = e.target.closest('[data-off]'); if (!b) return;
+                const k = b.dataset.off;
+                if (k === 'in') openModal('In lavorazione officina adesso', inCorso, null);
+                if (k === 'inizio') openModal('Inizio lavorazione officina · tutte le vetture registrate', R, null);
+                if (k === 'fine') openModal('Fine lavorazione officina', R.filter(r => di(r).giri.some(g => g.fine)), null);
+            });
+            return d;
+        }
+        if (window.BiTools) (BiTools.evidenzaExtra = BiTools.evidenzaExtra || []).push(evidenza);
+        return { di, celle, evidenza };
+    })();
+
     /* ================= UI ================= */
     function shell() {
         rootEl.innerHTML = `
@@ -542,6 +638,12 @@
             </div>
           </div>
           <div class="cg-src" id="cgSrc"></div>
+          <div class="cg-search" id="cgSearch" role="search">
+            <span class="cg-search-i" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg></span>
+            <input type="search" id="cgSearchIn" autocomplete="off" placeholder="Cerca un cliente per nome, cognome, targa o telaio" aria-label="Cerca un cliente per nome, cognome, targa o telaio">
+            <button type="button" class="cg-search-go" id="cgSearchGo">Cerca</button>
+            <div class="cg-search-pop" id="cgSearchPop" role="listbox" hidden></div>
+          </div>
           <div class="cg-tabs" role="tablist">
             <button type="button" class="cg-tab on" data-tab="tempi" role="tab">Tempistiche</button>
             <button type="button" class="cg-tab" data-tab="analisi" role="tab">Analisi avanzamento</button>
@@ -552,7 +654,75 @@
         rootEl.querySelector('#cgFileTratt').addEventListener('change', e => importTrattative(e.target));
         rootEl.querySelectorAll('.cg-tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
         rootEl.querySelector('#cgSheetBtn').addEventListener('click', refreshSheet);
+        Cerca.collega(rootEl.querySelector('#cgSearch'));
     }
+
+    /* ================= RICERCA CLIENTE (barra nella fascia in alto) =================
+       Cerca tra tutte le pratiche (contratti, solo foglio, solo CSV, da verificare):
+       - per nome / cognome: ogni parola scritta deve essere l'inizio di una parola del nome,
+         in qualsiasi ordine ("ross mar" trova "Mario Rossi")
+       - per targa o telaio (CSV e foglio): basta un pezzo di almeno 3 caratteri, spazi e trattini non contano
+       Mentre si scrive compaiono i primi risultati; Invio o "Vedi tutti" apre l'elenco completo
+       (con le colonne della lavorazione officina e l'Excel). */
+    const Cerca = (function () {
+        let box, inp, pop, trovati = [], sel = -1;
+        const pul = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const parole = s => String(s || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^A-Z0-9]+/).filter(Boolean);
+        function tutte() {
+            if (!result) return [];
+            const viste = new Set();
+            return result.recs.concat(result.verify || []).filter(r => !viste.has(r) && viste.add(r));
+        }
+        function cerca(q) {
+            const P = parole(q), Q = pul(q);
+            if (Q.length < 2) return [];
+            return tutte().filter(r => {
+                const nome = parole(r.cliente);
+                if (P.length && P.every(p => nome.some(w => w.startsWith(p)))) return true;
+                return Q.length >= 3 && [r.targa, r.tgc, r.tel, r.tt].some(c => { const x = pul(c); return x.length >= 3 && x.includes(Q); });
+            }).sort((a, b) => (pd(b.chiusura) || 0) - (pd(a.chiusura) || 0));
+        }
+        function mostra() {
+            const q = inp.value.trim();
+            trovati = cerca(q); sel = -1;
+            if (!q || pul(q).length < 2) { pop.hidden = true; return; }
+            const off = r => { const v = Officina.di(r); if (!v) return ''; const g = v.giri[v.giri.length - 1]; return `<span class="cg-sr-off">${g.fine ? 'uscita officina' : 'in officina'}</span>`; };
+            pop.innerHTML = (trovati.length ? trovati.slice(0, 8).map((r, i) => `<button type="button" class="cg-sr" role="option" data-i="${i}">
+                  <span class="cg-sr-n"><b>${esc(r.cliente)}</b>${off(r)}</span>
+                  <span class="cg-sr-d">${esc([r.marca, r.modello].filter(Boolean).join(' ') || 'Vettura non indicata')} · ${esc(r.targa && r.targa !== '—' ? r.targa : (r.tt || r.tel || 'senza targa'))} · contratto ${esc(r.chiusura || '—')} · ${esc(r.vend || '')}</span>
+                  <span class="cg-tag ${isDel(r) ? 'ok' : r.k === 'dc' ? 'wait' : ''}">${esc(cap(r.stato || ''))}</span></button>`).join('')
+                : `<div class="cg-sr-none">Nessun cliente trovato per “${esc(q)}”</div>`) +
+                (trovati.length > 8 ? `<button type="button" class="cg-sr-all" data-all>Vedi tutti i ${trovati.length} risultati</button>` : trovati.length > 1 ? `<button type="button" class="cg-sr-all" data-all>Apri l'elenco dei ${trovati.length} risultati</button>` : '');
+            pop.hidden = false;
+        }
+        function apri(lista, titolo) {
+            pop.hidden = true;
+            if (!lista.length) return;
+            openModal(titolo, lista, null);
+        }
+        const tuttiRis = () => apri(trovati, `Ricerca: “${inp.value.trim()}”`);
+        function evidenzia() { pop.querySelectorAll('.cg-sr').forEach((b, i) => b.classList.toggle('on', i === sel)); }
+        function collega(el) {
+            box = el; inp = el.querySelector('#cgSearchIn'); pop = el.querySelector('#cgSearchPop');
+            inp.addEventListener('input', mostra);
+            inp.addEventListener('focus', () => { if (inp.value.trim()) mostra(); });
+            inp.addEventListener('keydown', e => {
+                const n = Math.min(8, trovati.length);
+                if (e.key === 'ArrowDown' && n) { e.preventDefault(); sel = (sel + 1) % n; evidenzia(); }
+                else if (e.key === 'ArrowUp' && n) { e.preventDefault(); sel = (sel - 1 + n) % n; evidenzia(); }
+                else if (e.key === 'Enter') { e.preventDefault(); if (sel >= 0) apri([trovati[sel]], trovati[sel].cliente); else { mostra(); tuttiRis(); } }
+                else if (e.key === 'Escape') { pop.hidden = true; }
+            });
+            el.querySelector('#cgSearchGo').addEventListener('click', () => { mostra(); tuttiRis(); });
+            pop.addEventListener('mousedown', e => e.preventDefault());       // il campo non perde il fuoco
+            pop.addEventListener('click', e => {
+                const b = e.target.closest('[data-i]'); if (b) { const r = trovati[+b.dataset.i]; apri([r], r.cliente); return; }
+                if (e.target.closest('[data-all]')) tuttiRis();
+            });
+            document.addEventListener('click', e => { if (box && !box.contains(e.target)) pop.hidden = true; });
+        }
+        return { collega, aggiorna: () => { if (inp && inp.value.trim() && !pop.hidden) mostra(); } };
+    })();
 
     // Schede: "Tempistiche" (tabella esistente) / "Analisi avanzamento" (consegne-analisi.js)
     let tab = 'tempi';
@@ -647,6 +817,7 @@
         }
         compute();
         render(body);
+        Cerca.aggiorna();
     }
 
     // cella della tabella: percentuale in grande, numero di vetture sotto
@@ -660,6 +831,7 @@
 
     function render(body) {
         const R = result.recs.filter(vistaOk);   // vista salvata (vuota = tutti)
+        ultimiRec = R;                            // per i riquadri della lavorazione officina
         const vistaLbl = [...vista].map(id => ORIGIN_LABEL[id]).join(' + ');
         const months = [...new Set(R.map(r => r.m))].sort((a, b) => a - b);
         // Le annullate NON fanno parte dei contratti (come nel conteggio sul
@@ -712,7 +884,7 @@
           ${vista.size ? `<div class="cg-vista"><span>📌 Stai vedendo solo: <b>${esc(vistaLbl)}</b> · ${fmt(R.filter(r => r.k !== 'ann').length)} contratti su ${fmt(result.recs.filter(r => r.k !== 'ann').length)}</span><button type="button" data-vista-reset>Mostra tutti</button></div>` : ''}
           <section class="cg-kpis">${kpi}</section>
           <section class="cg-grid">
-            <div class="cg-card ${vede('G_CG_TEMPI') ? '' : 'chart-perm-hidden'}">
+            <div class="cg-card ${vede('G_CG_TEMPI') ? '' : 'chart-perm-hidden'}" data-officina>
               <h2>Tempistiche consegne per mese di contratto</h2>
               <p class="cg-hint">Percentuale dei contratti firmati nel mese, consegnati dopo N mesi. Clicca una cella per vedere i clienti.</p>
               <div class="cg-scroll"><table class="cg-heat" id="cgHeat">${table}</table></div>
@@ -1134,9 +1306,13 @@
             return `<th><span class="cg-th">${nome}` +
                 (fk ? `<button type="button" class="cg-colf ${n ? 'on' : ''}" data-colf="${fk}" title="Filtra per ${label.toLowerCase()}" aria-label="Filtra per ${label.toLowerCase()}">▾${n ? `<b>${n}</b>` : ''}</button>` : '') + `</span></th>`;
         };
+        // NUOVO: se nella lista c'e' almeno una vettura passata dalla lavorazione officina, 3 colonne in piu'
+        const conOff = !curVerify && rows.some(r => Officina.di(r));
+        ov.querySelector('.cg-modal').classList.toggle('cg-wide', conOff);   // finestra piu' larga per le colonne officina
         const head = '<thead><tr>' + th('Cliente', 'cliente') + th('Vettura', 'vettura') + th('Consulente', 'vend', 'vend') + th('Data chiusura', 'chiusura') +
             (curVerify ? th('Targa / telaio', 'targa') + th('Tipo', 'tipo', 'tipo') + th('Sede', 'sede', 'sede')
-                : th('Data consegna', 'consegna') + th('Stato', 'stato', 'stato') + th('Provenienza', 'prov', 'prov') + th('Tipo', 'tipo', 'tipo') + th('Targa / telaio', 'targa')) + '</tr></thead>';
+                : th('Data consegna', 'consegna') + th('Stato', 'stato', 'stato') + th('Provenienza', 'prov', 'prov') + th('Tipo', 'tipo', 'tipo') + th('Targa / telaio', 'targa')) +
+            (conOff ? '<th>Inizio lav. officina</th><th>Aggiornamenti officina</th><th>Fine lav. officina</th>' : '') + '</tr></thead>';
         if (!rows.length) { list.innerHTML = head + `<tbody><tr><td class="cg-empty-msg" colspan="${curVerify ? 7 : 9}">Nessuna vettura corrisponde ai filtri.</td></tr></tbody>`; return; }
         list.innerHTML = head + '<tbody>' +
             rows.map(r => '<tr>' +
@@ -1144,7 +1320,7 @@
                 (curVerify ? `<td>${esc(r.targa)}</td><td>${esc(r.tipo)}</td><td>${esc(r.sede)}</td>`
                     : `<td>${r.consegna ? esc(r.consegna) : '—'}${r.prevista ? '<span class="cg-prev">prevista</span>' : ''}</td>` +
                     `<td><span class="cg-tag ${isDel(r) ? 'ok' : r.k === 'dc' ? 'wait' : ''}">${esc(cap(r.stato))}</span></td>` +
-                    `<td>${esc(r.prov)}</td><td>${esc(r.tipo)}</td><td>${esc(r.targa)}</td>`) + '</tr>').join('') + '</tbody>';
+                    `<td>${esc(r.prov)}</td><td>${esc(r.tipo)}</td><td>${esc(r.targa)}</td>`) + (conOff ? Officina.celle(r) : '') + '</tr>').join('') + '</tbody>';
     }
     // --- menu a tendina dei filtri per colonna ---
     let colPop = null;
@@ -1257,9 +1433,13 @@
         // Finche' l'area Consegne e' aperta si riallinea da sola ogni 5 minuti
         // (il server rilegge il foglio con la stessa frequenza).
         if (!autoTimer) {
-            autoTimer = setInterval(() => {
+            autoTimer = setInterval(async () => {
                 const page = document.getElementById('consegnePage');
-                if (page && page.style.display !== 'none' && !document.hidden) reload();
+                if (!page || page.style.display === 'none' || document.hidden) return;
+                try {
+                    const v = (await api('/versione')).v;
+                    if (meta && meta.versione && v !== meta.versione) reload();
+                } catch (e) { /* rete: si riprova */ }
             }, AUTO_REFRESH_MS);
         }
     }

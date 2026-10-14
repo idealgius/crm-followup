@@ -300,3 +300,29 @@ table.cg-list { width:100%; border-collapse:collapse; min-width:900px; }
 .cg-c-n { font-size:10.5px; font-weight:600; opacity:.72; font-variant-numeric:tabular-nums; white-space:nowrap; }
 .cg-cell.cg-cell2:hover .cg-c-n { opacity:1; }
 .cg-total .cg-cell.cg-cell2 { box-shadow:inset 0 2px 0 rgba(255,255,255,.08); }
+
+/* NUOVO: colonne della lavorazione officina nelle liste delle vetture */
+.cg-list td.cg-off { font-size:12px; line-height:1.45; min-width:210px; color:var(--cg-ink-2); }
+.cg-modal.cg-wide { width:min(1560px,100%); }
+
+/* NUOVO: barra di ricerca cliente (nome, cognome, targa, telaio) nella fascia in alto */
+.cg-search { position:relative; max-width:1320px; margin:16px auto 0; display:flex; align-items:center; gap:10px; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.22); border-radius:16px; padding:6px 6px 6px 16px; }
+.cg-search:focus-within { background:rgba(255,255,255,.18); border-color:rgba(255,255,255,.45); }
+.cg-search-i { display:grid; place-items:center; color:rgba(255,255,255,.75); }
+.cg-search-i svg { width:19px; height:19px; }
+.cg-search input { flex:1; min-width:0; border:0; outline:0; background:transparent; color:#fff; font:inherit; font-size:15px; padding:9px 0; }
+.cg-search input::placeholder { color:rgba(255,255,255,.65); }
+.cg-search-go { border:0; border-radius:11px; background:#fff; color:var(--cg-band); font:inherit; font-size:13.5px; font-weight:800; padding:10px 20px; cursor:pointer; }
+.cg-search-go:hover { background:#e9f0f8; }
+.cg-search-pop { position:absolute; left:0; right:0; top:calc(100% + 8px); z-index:60; background:var(--cg-card); color:var(--cg-ink); border:1px solid var(--cg-line); border-radius:16px; box-shadow:0 24px 50px -16px rgba(0,0,0,.45); padding:6px; max-height:min(480px, 70vh); overflow:auto; }
+.cg-search-pop[hidden] { display:none; }
+.cg-sr { display:grid; grid-template-columns:minmax(0,1fr) auto; grid-template-areas:"n t" "d t"; gap:2px 12px; align-items:center; width:100%; text-align:left; border:0; background:transparent; color:inherit; font:inherit; padding:10px 12px; border-radius:11px; cursor:pointer; }
+.cg-sr:hover, .cg-sr.on { background:var(--cg-grey-soft); }
+.cg-sr-n { grid-area:n; display:flex; align-items:center; gap:8px; font-size:14.5px; }
+.cg-sr-d { grid-area:d; font-size:12.5px; color:var(--cg-ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.cg-sr .cg-tag { grid-area:t; }
+.cg-sr-off { font-size:11px; font-weight:800; padding:2px 8px; border-radius:999px; background:var(--cg-amber-soft); color:var(--cg-amber-ink); }
+.cg-sr-none { padding:16px 12px; font-size:13.5px; color:var(--cg-ink-2); }
+.cg-sr-all { display:block; width:100%; margin-top:4px; border:0; border-top:1px solid var(--cg-line); background:transparent; color:var(--cg-band); font:inherit; font-size:13px; font-weight:800; padding:11px; cursor:pointer; border-radius:0 0 11px 11px; }
+[data-theme="dark"] .cg-sr-all { color:#9cc3ee; }
+@media (max-width:520px) { .cg-search-go { padding:10px 14px; } }

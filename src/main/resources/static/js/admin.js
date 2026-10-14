@@ -344,6 +344,7 @@ function renderPermissionMatrix() {
     html += `</tbody></table>`;
     html += renderChartPermissionTable();
     container.innerHTML = html;
+    PermUI.tabelle(container);
 }
 
 // ===== NUOVO: PERMESSI DEI GRAFICI (per ruolo) =====
@@ -550,7 +551,110 @@ function renderOperatorPermissions() {
             ${renderOperatorChartOverrides(u)}
         </div>`;
     }).join('');
+    PermUI.operatori(container, filtered);
 }
+
+/* ===== NUOVO: visualizzazione piu' comoda dei permessi (stili in /css/permessi.css) =====
+   - la tabella sta in un riquadro alto quanto lo schermo: intestazione e prima colonna restano
+     ferme, la barra per scorrere di lato c'e' SOPRA (sempre a portata) e sotto
+   - i gruppi (In bound, BI, Salone, Gestione, grafici...) si chiudono e si aprono cliccandoli;
+     "Comprimi tutto" / "Espandi tutto" e "Vista compatta" (scelte ricordate nel browser)
+   - Permessi per operatore: ogni operatore si apre e si chiude (di partenza chiusi) */
+const PermUI = (function () {
+    const LS = 'permUiStato';
+    let stato = {}; try { stato = JSON.parse(localStorage.getItem(LS) || '{}') || {}; } catch (e) { stato = {}; }
+    stato.chiusi = stato.chiusi || {}; stato.aperti = stato.aperti || {};
+    const salva = () => { try { localStorage.setItem(LS, JSON.stringify(stato)); } catch (e) { /* */ } };
+
+    function barra(container) {
+        let b = container.querySelector(':scope > .perm-bar');
+        if (b) return b;
+        b = document.createElement('div');
+        b.className = 'perm-bar';
+        b.innerHTML = `<button type="button" data-pa="chiudi">▸ Comprimi tutti i gruppi</button><button type="button" data-pa="apri">▾ Espandi tutti</button>
+            <label><input type="checkbox" data-pa="compatta"> Vista compatta</label>`;
+        container.insertBefore(b, container.firstChild);
+        return b;
+    }
+    function compatta(container, on) { container.classList.toggle('perm-compatta', !!on); }
+
+    function tabelle(container) {
+        const b = barra(container);
+        const chk = b.querySelector('[data-pa="compatta"]');
+        chk.checked = !!stato.compatta; compatta(container, stato.compatta);
+        chk.onchange = () => { stato.compatta = chk.checked; salva(); compatta(container, chk.checked); allinea(container); };
+        container.querySelectorAll('table.permission-matrix-table').forEach((t, ti) => {
+            if (t.parentElement.classList.contains('perm-scroll')) return;
+            // barra di scorrimento in alto + riquadro che scorre
+            const top = document.createElement('div'); top.className = 'perm-topscroll'; top.innerHTML = '<div></div>';
+            const box = document.createElement('div'); box.className = 'perm-scroll';
+            t.parentElement.insertBefore(top, t); t.parentElement.insertBefore(box, t); box.appendChild(t);
+            top.addEventListener('scroll', () => { if (box.scrollLeft !== top.scrollLeft) box.scrollLeft = top.scrollLeft; });
+            box.addEventListener('scroll', () => { if (top.scrollLeft !== box.scrollLeft) top.scrollLeft = box.scrollLeft; });
+            // gruppi richiudibili: righe con una sola cella che occupa tutta la riga
+            let gruppo = null;
+            [...t.tBodies[0].rows].forEach(tr => {
+                if (tr.cells.length === 1 && tr.cells[0].colSpan > 1) {
+                    const nome = ti + '|' + tr.cells[0].textContent.split('·')[0].trim();
+                    gruppo = { tr, nome, righe: [] };
+                    tr.classList.add('perm-grp'); tr.dataset.grp = nome;
+                    tr.cells[0].innerHTML = '<span class="perm-grp-in"><span class="perm-arrow">▾</span>' + tr.cells[0].innerHTML + '</span>';   // resta ferma a sinistra quando si scorre
+                    tr._grp = gruppo;
+                    tr.addEventListener('click', () => { stato.chiusi[nome] = !stato.chiusi[nome]; salva(); applica(tr); allinea(container); });
+                } else if (gruppo) { gruppo.righe.push(tr); }
+            });
+            t.querySelectorAll('tr.perm-grp').forEach(applica);
+        });
+        b.onclick = e => {
+            const a = e.target.closest('button[data-pa]'); if (!a) return;
+            container.querySelectorAll('tr.perm-grp').forEach(tr => { stato.chiusi[tr.dataset.grp] = a.dataset.pa === 'chiudi'; applica(tr); });
+            salva(); allinea(container);
+        };
+        allinea(container);
+        if (!window._permResize) { window._permResize = true; window.addEventListener('resize', () => document.querySelectorAll('#permissionMatrixContainer').forEach(allinea)); }
+    }
+    function applica(tr) {
+        const g = tr._grp; if (!g) return;
+        const chiuso = !!stato.chiusi[g.nome];
+        tr.classList.toggle('chiuso', chiuso);
+        tr.querySelector('.perm-arrow').textContent = chiuso ? '▸' : '▾';
+        g.righe.forEach(x => { x.style.display = chiuso ? 'none' : ''; });
+    }
+    function allinea(container) {
+        container.querySelectorAll('.perm-scroll').forEach(box => {
+            const top = box.previousElementSibling; if (!top || !top.classList.contains('perm-topscroll')) return;
+            const t = box.querySelector('table');
+            top.firstElementChild.style.width = t.scrollWidth + 'px';
+            top.style.display = t.scrollWidth > box.clientWidth + 2 ? '' : 'none';
+        });
+    }
+
+    // Permessi per operatore: ogni scheda si apre/chiude cliccando l'intestazione
+    function operatori(container, utenti) {
+        const b = barra(container);
+        b.querySelector('label').style.display = 'none';
+        b.querySelector('[data-pa="chiudi"]').textContent = '▸ Chiudi tutti gli operatori';
+        b.querySelector('[data-pa="apri"]').textContent = '▾ Apri tutti';
+        const carte = [...container.querySelectorAll(':scope > .waiting-card')];
+        carte.forEach((c, i) => {
+            const u = utenti[i]; if (!u) return;
+            const testa = c.firstElementChild;
+            c.classList.add('perm-op');
+            testa.classList.add('perm-op-h');
+            (testa.querySelector('.waiting-name') || testa.firstElementChild || testa).insertAdjacentHTML('afterbegin', '<span class="perm-arrow">▸</span>');
+            const metti = () => { const ap = !!stato.aperti[u.id]; c.classList.toggle('aperto', ap); testa.querySelector('.perm-arrow').textContent = ap ? '▾' : '▸'; };
+            testa.addEventListener('click', e => { if (e.target.closest('button')) return; stato.aperti[u.id] = !stato.aperti[u.id]; salva(); metti(); });
+            metti();
+        });
+        b.onclick = e => {
+            const a = e.target.closest('button[data-pa]'); if (!a) return;
+            utenti.forEach(u => { stato.aperti[u.id] = a.dataset.pa === 'apri'; });
+            salva();
+            carte.forEach(c => { const ap = a.dataset.pa === 'apri'; c.classList.toggle('aperto', ap); c.querySelector('.perm-arrow').textContent = ap ? '▾' : '▸'; });
+        };
+    }
+    return { tabelle, operatori };
+})();
 
 // NUOVO: eccezioni personali sui grafici, in un blocco richiudibile per non
 // allungare troppo la scheda di ogni operatore.

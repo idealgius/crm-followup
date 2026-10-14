@@ -369,7 +369,17 @@
     const nfmt = (v, tipo) => v == null ? '–' : tipo === 'pct' ? (v * 100).toLocaleString('it-IT', { maximumFractionDigits: 1 }) + '%'
         : tipo === 'eur' ? Math.round(v).toLocaleString('it-IT') + ' €' : (Math.round(v * 10) / 10).toLocaleString('it-IT');
     const MESE = /^(gen|feb|mar|apr|mag|giu|lug|ago|set|ott|nov|dic)/i;
+    // NUOVO: le sezioni possono aggiungere i loro riquadri sotto "In evidenza":
+    // BiTools.evidenzaExtra = [funzione(card) -> elemento HTML oppure null] (es. Lavorazione officina delle Consegne)
     function evidenza(card) {
+        const base = evidenzaBase(card);
+        const extra = (window.BiTools && BiTools.evidenzaExtra || []).map(f => { try { return f(card); } catch (e) { return null; } }).filter(Boolean);
+        if (!extra.length) return base;
+        const d = base || Object.assign(document.createElement('div'), { className: 'bi-evid' });
+        extra.forEach(x => d.appendChild(x));
+        return d;
+    }
+    function evidenzaBase(card) {
         if (card.querySelector('.cm-rbox, .st-embed') || card.classList.contains('st-embed')) return null;   // elenchi: hanno gia' i loro filtri
         const tab = tabelleDi2(card)[0]; if (!tab || !tab.righe.length) return null;
         const C = tab.colonne, rows = tab.righe.filter(r => r[0] != null && r[0] !== '');

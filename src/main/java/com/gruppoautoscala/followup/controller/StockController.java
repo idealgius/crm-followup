@@ -457,7 +457,7 @@ public class StockController {
             String k = "nd";
             if (g instanceof Number n) {
                 double dd = n.doubleValue();
-                k = dd <= 30 ? "0-30" : dd <= 60 ? "31-60" : dd <= 90 ? "61-90" : dd <= 180 ? "91-180" : dd <= 365 ? "181-365" : "365+";
+                k = dd <= 30 ? "0-30" : dd <= 60 ? "31-60" : dd <= 90 ? "61-90" : dd <= 120 ? "91-120" : dd <= 150 ? "121-150" : dd <= 180 ? "151-180" : dd <= 365 ? "181-365" : "365+";
             }
             giac.merge(k, 1, Integer::sum);
         }

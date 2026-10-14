@@ -35,9 +35,13 @@
     const STATI = {
         DISPONIBILE: { t: 'Disponibile', c: 'verde' },
         OCCUPATO: { t: 'Occupato', c: 'giallo' },
-        NON_DISPONIBILE: { t: 'Non disponibile', c: 'rosso' }
+        NON_DISPONIBILE: { t: 'Non disponibile', c: 'rosso' },
+        TEST_DRIVE: { t: 'Test drive', c: 'grigio' },
+        IN_PIAZZALE: { t: 'In piazzale', c: 'azzurro' }
     };
-    const COL = { DISPONIBILE: '#22c55e', OCCUPATO: '#f5b301', NON_DISPONIBILE: '#ef4444' };
+    const COL = { DISPONIBILE: '#22c55e', OCCUPATO: '#f5b301', NON_DISPONIBILE: '#ef4444', TEST_DRIVE: '#8b95a5', IN_PIAZZALE: '#38bdf8' };
+    const EMO = { DISPONIBILE: '🟢', OCCUPATO: '🟡', NON_DISPONIBILE: '🔴', TEST_DRIVE: '⚪', IN_PIAZZALE: '🔵' };
+    const zeri = () => Object.fromEntries(Object.keys(STATI).map(k => [k, 0]));   // { DISPONIBILE: 0, ... } per tutti i bollini
 
     const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const pad = n => String(n).padStart(2, '0');
@@ -68,7 +72,8 @@
         return d;
     }
     const post = (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
-    const bollino = (s, grande) => `<i class="sa-dot ${s ? STATI[s].c : 'grigio'}${grande ? ' g' : ''}" aria-hidden="true"></i>`;
+    // senza stato (CRM chiuso / non ancora in salone): bollino VUOTO; il grigio pieno e' il Test drive
+    const bollino = (s, grande) => `<i class="sa-dot ${s && STATI[s] ? STATI[s].c : 'vuoto'}${grande ? ' g' : ''}" aria-hidden="true"></i>`;
     function toast(t) {
         const n = document.createElement('div'); n.className = 'sa-toast'; n.textContent = t;
         document.body.appendChild(n); setTimeout(() => n.classList.add('via'), 2600); setTimeout(() => n.remove(), 3000);
@@ -91,6 +96,131 @@
         const b = document.getElementById('navSalone');
         if (b) b.style.display = can() ? 'flex' : 'none';
         if (can()) { avviaNotifiche(); Presenza.avvia(); }
+        if (aperta) setTimeout(Menu.entra, 0);   // app.js rimette il menu ☰ dopo refreshNav: lo risistemo
+    }
+
+    /* ---------- MENU ☰ in alto a sinistra ----------
+       In Appuntamenti e ingressi "Mostra Grafici" non c'entra: si nasconde. Per chi non e' Admin
+       il ☰ sparisce; per l'Admin resta con una sola voce: "Elimina storico ingressi e appuntamenti". */
+    const Menu = (function () {
+        let voce = null, attivo = false;
+        const W = () => document.getElementById('hamburgerMenuWrapper'), D = () => document.getElementById('hamburgerMenuDropdown');
+        const admin = () => typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'ADMIN';
+        function entra() {
+            const w = W(), d = D(); if (!w || !d) return;
+            attivo = true;
+            [...d.children].forEach(c => { if (c !== voce && !c.dataset.saNascosto) { c.dataset.saNascosto = c.style.display || '-'; c.style.display = 'none'; } });
+            d.style.display = 'none';
+            if (!admin()) { w.style.display = 'none'; return; }
+            if (!voce) {
+                voce = document.createElement('button');
+                voce.type = 'button';
+                voce.setAttribute('style', 'width:100%;text-align:left;padding:12px 16px;background:none;border:none;color:#ff8a8d;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px');
+                voce.innerHTML = '🗑 Elimina storico ingressi e appuntamenti';
+                voce.addEventListener('click', () => { d.style.display = 'none'; apriElimina(); });
+            }
+            if (voce.parentElement !== d) d.appendChild(voce);
+            voce.style.display = 'flex';
+            w.style.display = 'block';
+        }
+        function esci() {
+            if (!attivo) return;
+            attivo = false;
+            const w = W(), d = D(); if (!w || !d) return;
+            [...d.children].forEach(c => { if (c.dataset.saNascosto) { c.style.display = c.dataset.saNascosto === '-' ? '' : c.dataset.saNascosto; delete c.dataset.saNascosto; } });
+            if (voce) voce.remove();
+            d.style.display = 'none';
+            w.style.display = typeof hasAccess === 'function' && hasAccess('GRAFICI') ? 'block' : 'none';
+        }
+        return { entra, esci };
+    })();
+
+    /* ---------- ELIMINA STORICO (solo Admin, con password) ----------
+       1) si sceglie cosa (walk-in, appuntamenti importati, storico degli import) e il periodo, o tutto
+       2) finestra di conferma al centro con la password; il server la ricontrolla (SaloneController). */
+    function apriElimina() {
+        const ov = document.createElement('div');
+        ov.className = 'sa-ov sa-ov-c';
+        ov.innerHTML = `<div class="sa-modal sa-del" role="dialog" aria-modal="true" aria-label="Elimina storico">
+          <header><div><small>SOLO ADMIN · APPUNTAMENTI E INGRESSI</small><h3>Elimina storico</h3></div><button type="button" class="sa-x" data-chiudi aria-label="Chiudi">✕</button></header>
+          <div class="sa-mbody">
+            <div class="sa-lbl" style="margin-top:0">Cosa eliminare</div>
+            <label class="sa-chk"><input type="checkbox" data-w checked> <span><b>Walk-in</b> · i clienti registrati in salone (ingressi)</span></label>
+            <label class="sa-chk"><input type="checkbox" data-ap checked> <span><b>Appuntamenti</b> · quelli arrivati dagli import (per data dell'appuntamento)</span></label>
+            <label class="sa-chk"><input type="checkbox" data-im> <span><b>Storico degli import</b> · l'elenco degli import fatti e cosa era cambiato</span></label>
+            <label class="sa-chk"><input type="checkbox" data-st> <span><b>Stati dei consulenti</b> · lo storico dei cambi di stato (verde / giallo / rosso); con "Tutto" anche lo stato attuale</span></label>
+            <label class="sa-chk"><input type="checkbox" data-ch> <span><b>Chat</b> · i messaggi del gruppo e delle chat private</span></label>
+            <button type="button" class="sa-btn2 sa-tutti" data-tutti>☑ Seleziona tutto</button>
+            <div class="sa-lbl">Periodo</div>
+            <label class="sa-chk"><input type="radio" name="saDelP" value="p" checked> <span>Solo un periodo</span></label>
+            <div class="sa-row2" data-per><label>Dal<input type="date" data-da></label><label>Al<input type="date" data-a></label></div>
+            <label class="sa-chk"><input type="radio" name="saDelP" value="t"> <span><b>Tutto</b> · azzera completamente i dati scelti sopra</span></label>
+            <p class="sa-hint" style="margin-top:12px">Report e grafici si calcolano da walk-in e stati dei consulenti: eliminandoli si azzerano anche loro. Permessi e utenti non si toccano mai.</p>
+            <div class="sa-err" data-err></div>
+          </div>
+          <footer><button type="button" class="sa-btn2" data-chiudi>Annulla</button><button type="button" class="sa-btn sa-btn-red" data-avanti>Continua</button></footer>
+        </div>`;
+        document.body.appendChild(ov);
+        const q = x => ov.querySelector(x);
+        q('[data-da]').value = oggi().slice(0, 8) + '01'; q('[data-a]').value = oggi();
+        const chiudi = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+        const onKey = e => { if (e.key === 'Escape') chiudi(); };
+        document.addEventListener('keydown', onKey);
+        ov.addEventListener('change', () => { q('[data-per]').style.opacity = ov.querySelector('[name="saDelP"]:checked').value === 'p' ? '' : '.4'; });
+        ov.addEventListener('click', e => {
+            if (e.target === ov || e.target.closest('[data-chiudi]')) { chiudi(); return; }
+            if (e.target.closest('[data-tutti]')) {
+                const box = ['[data-w]', '[data-ap]', '[data-im]', '[data-st]', '[data-ch]'].map(q), tutti = box.every(x => x.checked);
+                box.forEach(x => { x.checked = !tutti; });
+                e.target.closest('[data-tutti]').textContent = tutti ? '☑ Seleziona tutto' : '☐ Togli tutto';
+                return;
+            }
+            if (!e.target.closest('[data-avanti]')) return;
+            const scelta = { walkin: q('[data-w]').checked, appuntamenti: q('[data-ap]').checked, storicoImport: q('[data-im]').checked,
+                stati: q('[data-st]').checked, chat: q('[data-ch]').checked,
+                tutto: ov.querySelector('[name="saDelP"]:checked').value === 't', da: q('[data-da]').value, a: q('[data-a]').value };
+            const err = q('[data-err]');
+            if (!scelta.walkin && !scelta.appuntamenti && !scelta.storicoImport && !scelta.stati && !scelta.chat) { err.textContent = 'Scegli almeno una cosa da eliminare.'; return; }
+            if (!scelta.tutto && (!scelta.da || !scelta.a)) { err.textContent = 'Scegli il periodo: dal / al.'; return; }
+            chiudi(); confermaElimina(scelta);
+        });
+    }
+    function confermaElimina(sc) {
+        const cosa = [sc.walkin && 'walk-in', sc.appuntamenti && 'appuntamenti importati', sc.storicoImport && 'storico degli import',
+            sc.stati && 'stati dei consulenti', sc.chat && 'messaggi della chat'].filter(Boolean).join(', ');
+        const quando = sc.tutto ? '<b>TUTTO</b> (nessun limite di date)' : `dal <b>${esc(sc.da.split('-').reverse().join('/'))}</b> al <b>${esc(sc.a.split('-').reverse().join('/'))}</b>`;
+        const ov = document.createElement('div');
+        ov.className = 'sa-ov sa-ov-c';
+        ov.innerHTML = `<div class="sa-modal sa-conf" role="alertdialog" aria-modal="true" aria-label="Conferma eliminazione">
+          <div class="sa-conf-i">⚠️</div>
+          <h3>Confermi l'eliminazione?</h3>
+          <p>Stai per eliminare <b>${esc(cosa)}</b> ${quando}.<br>L'operazione <b>non si può annullare</b>.</p>
+          <label class="sa-conf-pw">Scrivi la password per procedere<input type="password" data-pw autocomplete="off"></label>
+          <div class="sa-err" data-err></div>
+          <div class="sa-conf-b"><button type="button" class="sa-btn2" data-chiudi>Annulla</button><button type="button" class="sa-btn sa-btn-red" data-ok>Elimina definitivamente</button></div>
+        </div>`;
+        document.body.appendChild(ov);
+        const pw = ov.querySelector('[data-pw]'), err = ov.querySelector('[data-err]'), ok = ov.querySelector('[data-ok]');
+        pw.focus();
+        const chiudi = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+        const onKey = e => { if (e.key === 'Escape') chiudi(); if (e.key === 'Enter' && document.activeElement === pw) vai(); };
+        document.addEventListener('keydown', onKey);
+        async function vai() {
+            if (!pw.value) { err.textContent = 'Scrivi la password.'; return; }
+            ok.disabled = true; ok.textContent = 'Eliminazione…';
+            try {
+                const d = await post('/storico/elimina', Object.assign({}, sc, { password: pw.value }));
+                chiudi();
+                toast(`Eliminati: ${d.walkin} walk-in, ${d.appuntamenti} appuntamenti, ${d.import} import, ${d.cambi} cambi di stato, ${d.messaggi} messaggi`);
+                caricaStati();
+                st.app.caricato = false; st.rep.dati = null;
+                if (st.tab === 'walkin') caricaGiorno(st.giorno); else if (st.tab === 'app') caricaApp(st.app.giorno); else caricaReport();
+            } catch (e) { err.textContent = e.message; ok.disabled = false; ok.textContent = 'Elimina definitivamente'; pw.select(); }
+        }
+        ov.addEventListener('click', e => {
+            if (e.target === ov || e.target.closest('[data-chiudi]')) { chiudi(); return; }
+            if (e.target.closest('[data-ok]')) vai();
+        });
     }
 
     /* ---------- PRESENZA: il consulente risulta Disponibile in automatico finche' il CRM resta aperto ----------
@@ -157,11 +287,13 @@
         window.scrollTo(0, 0);
         caricaGiorno(st.giorno);
         caricaStati();
+        Menu.entra();
     }
     function hide() {
         const page = document.getElementById('salonePage'); if (page) page.style.display = 'none';
         if (aperta) { const links = document.querySelector('.nav-links'); if (links) links.style.visibility = ''; }
         aperta = false;
+        Menu.esci();
         Chat.mostra(false);
     }
 
@@ -226,6 +358,7 @@
             const d = await api('/stati');
             st.stati = d.stati || []; st.mio = d.mio || null; st.cambiaTutti = !!d.cambiaTutti; st.online = d.online || [];
             disegnaStati();
+            Controllo.verifica();
         } catch (e) { /* rete: si riprova */ }
     }
     const statoDi = nome => st.stati.find(x => x.nome === nome) || { nome, stato: null };
@@ -234,8 +367,8 @@
         return `<div class="sa-card sa-stati" id="saStati">${barraStatiIn()}</div>`;
     }
     function barraStatiIn() {
-        const conta = { DISPONIBILE: 0, OCCUPATO: 0, NON_DISPONIBILE: 0 };
-        st.stati.forEach(s => { if (s.stato) conta[s.stato]++; });
+        const conta = zeri();
+        st.stati.forEach(s => { if (s.stato && s.stato in conta) conta[s.stato]++; });
         const mio = st.mio ? statoDi(st.mio) : null;
         return `<div class="sa-stati-h">
             <div><h3>Consulenti in salone <span class="sa-live">● in tempo reale</span></h3>
@@ -247,12 +380,12 @@
           <div class="sa-stati-l">${st.stati.map(s => {
               // senza il CRM aperto il consulente resta "non in salone": il suo stato non si puo' cambiare da fuori
               const io = st.mio === s.nome, conn = io || (st.online || []).includes(s.nome), puo = io || (st.cambiaTutti && conn);
-              return `<div class="sa-cs ${s.stato ? STATI[s.stato].c : 'grigio'} ${io ? 'io' : ''}">
+              return `<div class="sa-cs ${s.stato && STATI[s.stato] ? STATI[s.stato].c : 'vuoto'} ${io ? 'io' : ''}">
                 <button type="button" class="sa-cs-b" ${puo ? `data-menu="${esc(s.nome)}"` : 'disabled'} title="${puo ? 'Cambia stato' : st.cambiaTutti && !conn ? 'Non ha il CRM aperto: lo stato torna disponibile quando accede' : ''}">
                   ${bollino(s.stato, true)}
                   <span class="sa-cs-t"><b>${esc(s.nome)}${io ? ' (tu)' : ''}</b>
                   <em>${s.stato ? STATI[s.stato].t + ' · da ' + durata(minDa(s.dal)) : conn ? 'CRM aperto · fuori orario del salone' : s.uscitoAt && isoRoma(new Date(s.uscitoAt)) === oggi() && !/^Non connesso|riavvio/.test(s.motivo || '') ? 'Uscito dal CRM alle ' + ora(s.uscitoAt) : 'Non ancora in salone oggi'}</em>
-                  ${s.stato === 'OCCUPATO' && s.cliente ? `<em class="sa-cs-cl">con ${esc(s.cliente)}</em>` : ''}</span>
+                  ${s.stato && s.stato !== 'DISPONIBILE' && s.stato !== 'NON_DISPONIBILE' && s.cliente ? `<em class="sa-cs-cl">con ${esc(s.cliente)}</em>` : ''}</span>
                 </button></div>`;
           }).join('')}</div>`;
     }
@@ -260,7 +393,7 @@
         const el = document.getElementById('saStati');
         if (el && !el.querySelector('.sa-menu')) el.innerHTML = barraStatiIn();
         const chips = document.querySelectorAll('.sa-ov [data-c]');
-        chips.forEach(b => { const s = statoDi(b.dataset.c).stato; const d = b.querySelector('.sa-dot'); if (d) d.className = 'sa-dot ' + (s ? STATI[s].c : 'grigio'); });
+        chips.forEach(b => { const s = statoDi(b.dataset.c).stato; const d = b.querySelector('.sa-dot'); if (d) d.className = 'sa-dot ' + (s && STATI[s] ? STATI[s].c : 'vuoto'); });
     }
     async function cambiaStato(stato, nome) {
         try {
@@ -343,7 +476,7 @@
             : `<span class="sa-st wait">⏳ Notificato alle ${ora(r.assegnatoAt)} · da prendere in carico</span>`;
         const sc = r.consulente ? statoDi(r.consulente).stato : null;
         const sel = st.puoGestire && r.data === oggi()
-            ? `<select class="sa-sel" data-assegna="${esc(r.id)}"><option value="">— Assegna a —</option>${st.consulenti.map(c => { const s = statoDi(c).stato; return `<option value="${esc(c)}" ${c === r.consulente ? 'selected' : ''}>${s === 'DISPONIBILE' ? '🟢' : s === 'OCCUPATO' ? '🟡' : s === 'NON_DISPONIBILE' ? '🔴' : '⚪'} ${esc(c)}</option>`; }).join('')}</select>`
+            ? `<select class="sa-sel" data-assegna="${esc(r.id)}"><option value="">— Assegna a —</option>${st.consulenti.map(c => { const s = statoDi(c).stato; return `<option value="${esc(c)}" ${c === r.consulente ? 'selected' : ''}>${EMO[s] || '○'} ${esc(c)}</option>`; }).join('')}</select>`
             : `<b class="sa-cons">${r.consulente ? bollino(sc) + ' ' + esc(r.consulente) : '—'}</b>`;
         const mioCliente = st.io && r.consulente && st.mio === r.consulente;
         return `<article class="sa-in ${r.presoAt ? 'preso' : r.consulente ? 'att' : 'nuovo'}">
@@ -450,7 +583,7 @@
             }
         });
     }
-    const ordStato = s => ({ DISPONIBILE: 0, OCCUPATO: 1, NON_DISPONIBILE: 2 }[s] ?? 3);
+    const ordStato = s => ({ DISPONIBILE: 0, IN_PIAZZALE: 1, OCCUPATO: 2, TEST_DRIVE: 3, NON_DISPONIBILE: 4 }[s] ?? 5);
     // marchio: il solito menu a tendina con ricerca (elenco marchi del CRM)
     function rigaVettura() {
         const r = document.createElement('div');
@@ -475,6 +608,64 @@
         r.querySelector('.sa-x').addEventListener('click', () => { const c = r.parentElement; if (c.children.length > 1) r.remove(); else { inp.value = ''; r.querySelector('.sa-modello').value = ''; } });
         return r;
     }
+
+    /* ================= CONTROLLO DEI 15 MINUTI (solo ruolo Consulenza) =================
+       15 minuti dopo la presa in carico di un walk-in, se il consulente e' ancora Occupato e nel frattempo
+       non ha cambiato stato (nessun movimento: test drive, piazzale...), compare al centro:
+       "Sono passati 15 minuti dall'inizio della consulenza, sei nuovamente disponibile?"
+         No (rosso)        -> resta Occupato, la domanda torna tra 10 minuti
+         Si' + 60 secondi  -> Disponibile; se non risponde nessuno, allo scadere diventa Disponibile da solo
+       L'ora del controllo la tiene il server (controlloAt), quindi vale anche dopo un F5. */
+    const Controllo = (function () {
+        let aperto = null, visto = null;
+        const consulenza = () => typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'CONSULENZA';
+        function verifica() {
+            const m = st.mio ? statoDi(st.mio) : null;
+            const dovuto = consulenza() && m && m.stato === 'OCCUPATO' && m.controlloAt && Date.now() >= new Date(m.controlloAt).getTime();
+            if (!dovuto) { if (aperto) chiudi(); return; }
+            if (aperto || visto === m.controlloAt) return;
+            visto = m.controlloAt;
+            mostra(m);
+        }
+        function chiudi() { if (aperto) { clearInterval(aperto.t); aperto.ov.remove(); aperto = null; } }
+        function mostra(m) {
+            const ov = document.createElement('div');
+            ov.className = 'sa-ov sa-ov-c sa-ctl-ov';
+            const giaRinviato = m.rinvii > 0;
+            ov.innerHTML = `<div class="sa-modal sa-ctl" role="alertdialog" aria-modal="true" aria-label="Sei nuovamente disponibile?">
+                <div class="sa-ctl-i">⏱️</div>
+                <h3>Sono passati ${giaRinviato ? 'altri 10 minuti' : '15 minuti dall\'inizio della consulenza'}</h3>
+                <p>${m.cliente ? `Cliente: <b>${esc(m.cliente)}</b><br>` : ''}Sei nuovamente disponibile?</p>
+                <div class="sa-ctl-b">
+                  <button type="button" class="sa-ctl-no" data-no>No, ancora occupato</button>
+                  <button type="button" class="sa-ctl-si" data-si>Sì, sono disponibile <span class="sa-ctl-t">60</span></button>
+                </div>
+                <small>Se non rispondi entro 60 secondi risulterai disponibile.</small>
+              </div>`;
+            document.body.appendChild(ov);
+            beep();
+            let resta = 60;
+            const t = setInterval(() => {
+                resta--;
+                const el = ov.querySelector('.sa-ctl-t'); if (el) el.textContent = resta;
+                ov.querySelector('.sa-ctl').style.setProperty('--p', (resta / 60 * 100) + '%');
+                if (resta <= 0) rispondi('auto');
+            }, 1000);
+            aperto = { ov, t };
+            ov.querySelector('[data-no]').addEventListener('click', () => rispondi('no'));
+            ov.querySelector('[data-si]').addEventListener('click', () => rispondi('si'));
+        }
+        async function rispondi(c) {
+            if (!aperto) return;
+            chiudi();
+            try {
+                if (c === 'no') { const d = await post('/stati/rinvio'); st.stati = d.stati || st.stati; toast('Resti occupato: te lo richiedo tra 10 minuti'); }
+                else { const d = await post('/stati', { stato: 'DISPONIBILE', controllo: c }); st.stati = d.stati || st.stati; toast(c === 'auto' ? 'Nessuna risposta: ora risulti disponibile' : 'Ora risulti disponibile'); }
+                disegnaStati();
+            } catch (e) { alert(e.message); }
+        }
+        return { verifica };
+    })();
 
     /* ================= notifica al consulente ================= */
     let notifT = null;
@@ -761,9 +952,9 @@
         });
         // tempo negli stati: cambi chiusi + stati ancora aperti oggi
         const T = {};
-        cons.forEach(c => { T[c] = { DISPONIBILE: 0, OCCUPATO: 0, NON_DISPONIBILE: 0, giorni: new Set(), periodi: { DISPONIBILE: 0, OCCUPATO: 0, NON_DISPONIBILE: 0 }, cambi: 0 }; });
+        cons.forEach(c => { T[c] = Object.assign(zeri(), { giorni: new Set(), periodi: zeri(), cambi: 0 }); });
         const add = (nome, s, min, giorno) => {
-            if (!s || !T[nome]) return;
+            if (!s || !T[nome] || !(s in STATI)) return;
             T[nome][s] += min; T[nome].periodi[s]++; T[nome].giorni.add(giorno);
         };
         (D.cambi || []).forEach(e => {
@@ -775,7 +966,7 @@
         // serie nel tempo (per i grafici a linee): giorno per giorno, o mese per mese se il periodo e' lungo
         const B = periodiAsse(D.da, D.a), bk = g => B.mensile ? String(g).slice(0, 7) : String(g).slice(0, 10);
         const vuota = () => Object.fromEntries(B.chiavi.map(k => [k, 0]));
-        const tCons = {}, tMarchi = {}, tStati = { DISPONIBILE: vuota(), OCCUPATO: vuota(), NON_DISPONIBILE: vuota() }, tPres = {};
+        const tCons = {}, tMarchi = {}, tStati = Object.fromEntries(Object.keys(STATI).map(k => [k, vuota()])), tPres = {};
         ass.forEach(r => { const k = bk(r.data); (tCons[r.consulente] = tCons[r.consulente] || vuota())[k] = (tCons[r.consulente][k] || 0) + 1; });
         I.forEach(r => [...new Set((r.vetture || []).map(v => (v.marca || 'Non indicato').trim() || 'Non indicato'))].forEach(m => {
             const k = bk(r.data); (tMarchi[m] = tMarchi[m] || vuota())[k] = (tMarchi[m][k] || 0) + 1; }));
@@ -859,8 +1050,8 @@
           <div class="sa-card"><div class="sa-card-h"><div><h3>Minuti medi al giorno in ogni stato</h3><p class="sa-hint">${{ bar: 'Media sui giorni in cui il consulente è stato in salone.', doughnut: 'Come si divide il tempo di tutto il salone nel periodo.', line: 'Minuti medi per consulente presente, ' + (C.B.mensile ? 'mese per mese.' : 'giorno per giorno.') }[tipoG('stati', 'bar')]} Uno stato lasciato aperto la sera viene chiuso in automatico alle 21:00.</p></div>${bottoniTipo('stati', 'bar')}</div>
             ${tipoG('stati', 'bar') === 'bar' ? `<div class="sa-legend">${Object.keys(STATI).map(k => `<span>${bollino(k)} ${STATI[k].t}</span>`).join('')}</div>` : ''}
             <div class="sa-chart" style="height:${tipoG('stati', 'bar') === 'bar' ? cons.length * 34 + 60 : 280}px"><canvas id="saChStati" role="img" aria-label="Minuti in ogni stato"></canvas></div>
-            <table class="sa-tbl"><thead><tr><th>Consulente</th><th>Giorni</th><th>${bollino('DISPONIBILE')} Disponibile / giorno</th><th>${bollino('OCCUPATO')} Occupato / giorno</th><th>${bollino('NON_DISPONIBILE')} Non disponibile / giorno</th><th>Durata media di uno stato</th><th>Cambi di stato</th></tr></thead><tbody>
-              ${cons.map(c => { const t = C.T[c], g = t.giorni.size || 0, tot = t.DISPONIBILE + t.OCCUPATO + t.NON_DISPONIBILE, np = t.periodi.DISPONIBILE + t.periodi.OCCUPATO + t.periodi.NON_DISPONIBILE;
+            <table class="sa-tbl"><thead><tr><th>Consulente</th><th>Giorni</th>${Object.keys(STATI).map(k => `<th>${bollino(k)} ${STATI[k].t} / giorno</th>`).join('')}<th>Durata media di uno stato</th><th>Cambi di stato</th></tr></thead><tbody>
+              ${cons.map(c => { const t = C.T[c], g = t.giorni.size || 0, tot = Object.keys(STATI).reduce((a, k) => a + t[k], 0), np = Object.keys(STATI).reduce((a, k) => a + t.periodi[k], 0);
                   return `<tr><td>${esc(c)}</td><td>${g}</td>${Object.keys(STATI).map(k => `<td>${g ? durata(t[k] / g) : '—'}<small class="sa-hint"> ${tot ? pct(t[k], tot) : ''}</small></td>`).join('')}<td>${np ? durata(tot / np) : '—'}</td><td>${t.cambi}</td></tr>`; }).join('')}
             </tbody></table></div>
 
@@ -1001,9 +1192,17 @@
             await giro();
             timer = setInterval(giro, 3000);
         }
+        let azzerata = null;
         async function giro() {
             try {
-                const d = await api('/chat/aggiornamenti?dopo=' + dopo);
+                let d = await api('/chat/aggiornamenti?dopo=' + dopo);
+                // un Admin ha eliminato le chat: si svuota tutto e si ricarica da capo
+                if (azzerata !== null && d.azzerata && d.azzerata !== azzerata) {
+                    Object.keys(msgs).forEach(k => delete msgs[k]); dopo = 0;
+                    d = await api('/chat/aggiornamenti?dopo=0');
+                    if (aperto && conv) disegnaMsgs();
+                }
+                azzerata = d.azzerata || 0;
                 let cambiato = false;
                 Object.entries(d.conv || {}).forEach(([k, v]) => {
                     const L = msgs[k] = msgs[k] || [];
