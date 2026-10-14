@@ -51,7 +51,9 @@ public class RolePermissionService {
     // input sia per costruire la matrice completa (ogni ruolo × ogni sezione,
     // anche quelle senza nessuna riga salvata nel database).
     public static final List<String> ROLES = List.of(
-        "UTENTE", "BACK_OFFICE", "MODERATORE", "GESTORE", "ADMIN", "NOLEGGIO", "SERVICE"
+        "UTENTE", "BACK_OFFICE", "MODERATORE", "GESTORE", "ADMIN", "NOLEGGIO", "SERVICE",
+        // NUOVO: salone (Appuntamenti e ingressi). Entrano direttamente in quella pagina.
+        "FRONT_OFFICE", "CONSULENZA"
     );
     public static final List<String> SECTIONS = List.of(
         "DASHBOARD", "FOLLOWUPS", "WAITING", "CONTACTS", "PROMO", "ADMIN", "RENT", "SERVICE", "GRAFICI", "VEICOLI", "PREVENTIVI",
@@ -64,7 +66,10 @@ public class RolePermissionService {
         // il Commerciale continua a vederlo esattamente come prima.
         "COMMERCIALE",
         // NUOVO: gestione degli Allert (Completo = gestisce, Admin = anche riapre i gestiti)
-        "ALLERT"
+        "ALLERT",
+        // NUOVO: Appuntamenti e ingressi (walk-in, appuntamenti, chat del salone).
+        // Solo lettura = vede e usa la chat · Completo = registra e assegna i clienti
+        "SALONE"
     );
     // ===== NUOVO: PERMESSI DEI GRAFICI =====
     // Un grafico e' una "sezione" come le altre, salvata nella stessa tabella
@@ -149,7 +154,11 @@ public class RolePermissionService {
         adminDefaults.put("CONSEGNE", "ADMIN_FULL");
         adminDefaults.put("STOCK", "ADMIN_FULL");
         adminDefaults.put("ALLERT", "ADMIN_FULL");
+        adminDefaults.put("SALONE", "ADMIN_FULL");
         DEFAULTS.put("ADMIN", adminDefaults);
+        // NUOVO: Front Office registra e assegna i clienti; Consulenza riceve le notifiche e usa la chat
+        DEFAULTS.put("FRONT_OFFICE", Map.of("SALONE", "FULL"));
+        DEFAULTS.put("CONSULENZA", Map.of("SALONE", "READ_ONLY"));
         DEFAULTS.put("NOLEGGIO", Map.of("RENT", "FULL"));
         DEFAULTS.put("SERVICE", Map.of("SERVICE", "FULL"));
     }

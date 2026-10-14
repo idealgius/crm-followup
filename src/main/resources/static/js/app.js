@@ -241,6 +241,8 @@ function applyRolePermissions(role) {
     // NUOVO: voce "Seleziona Area" nel menu del nome e clic sul logo, solo
     // per chi ha accesso a Consegne (permesso CONSEGNE, vedi /js/macro-home.js)
     if (window.MacroHome) MacroHome.refreshNav();
+    // NUOVO: voce "Appuntamenti e ingressi" nel menu del nome (permesso SALONE) e notifiche ai consulenti
+    if (window.Salone) Salone.refreshNav();
     Object.entries(NAV_ID_BY_SECTION).forEach(([section, navId]) => {
         const el = document.getElementById(navId);
         if (!el) return;
@@ -340,6 +342,7 @@ async function showPage(page, updateHash = true) {
     // NUOVO: aprendo una qualunque pagina di In bound si chiudono la home
     // "macro categorie" e l'area Consegne (vedi /js/macro-home.js).
     if (window.MacroHome) MacroHome.onShowPage();
+    if (window.Salone) Salone.hide();
     const role = currentUser?.role || 'UTENTE';
 
     if (!VALID_PAGES.includes(page)) page = 'dashboard';
@@ -350,6 +353,13 @@ async function showPage(page, updateHash = true) {
     // alla prima pagina accessibile secondo l'ordine di priorità.
     if (!hasAccess(PAGE_TO_SECTION[page], role)) {
         page = getDefaultPageForRole(role);
+    }
+    // NUOVO: chi non ha nessuna pagina di In bound ma ha Appuntamenti e ingressi (es. Front
+    // Office, Consulenza) va li' invece che in una pagina che non puo' vedere
+    if (!hasAccess(PAGE_TO_SECTION[page], role) && window.Salone && Salone.can()) {
+        hideLoadingOverlay();
+        Salone.open();
+        return;
     }
 
     sessionStorage.setItem('currentPage', page);
@@ -560,7 +570,12 @@ window.onload = function() {
             const macroHomeOk = !openAlertId && window.MacroHome && MacroHome.canShow(data.role);
             // (ogni area BI con il suo permesso: senza, si apre la pagina BI)
             const puo = f => !MacroHome[f] || MacroHome[f]();
-            if (macroHomeOk && urlHash === 'consegne' && puo('canConsegne')) {
+            // NUOVO: Front Office e Consulenza entrano direttamente in Appuntamenti e ingressi;
+            // #salone nell'URL (F5 dentro la pagina) la riapre per chi ha il permesso
+            if (!openAlertId && window.Salone && (Salone.entraDiretto(data.role) || (urlHash === 'salone' && Salone.can()))) {
+                Salone.open();
+                hideLoadingOverlay();
+            } else if (macroHomeOk && urlHash === 'consegne' && puo('canConsegne')) {
                 MacroHome.openConsegne();
                 hideLoadingOverlay();
             } else if (macroHomeOk && urlHash === 'commerciale' && MacroHome.openCommerciale && puo('canCommerciale')) {

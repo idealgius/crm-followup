@@ -70,6 +70,7 @@
         if (stockP) stockP.style.display = 'none';
         const commP = document.getElementById('commercialePage');
         if (commP) commP.style.display = 'none';
+        if (window.Salone) Salone.hide();   // Appuntamenti e ingressi
         document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
     }
 

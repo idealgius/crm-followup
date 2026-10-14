@@ -1,0 +1,1026 @@
+/* =====================================================================
+   APPUNTAMENTI E INGRESSI (salone) — Gruppo Autoscala CRM
+   ---------------------------------------------------------------------
+   Pagina #salonePage (contenuto costruito qui, stili in /css/salone.css, prefisso sa-).
+   Schede, come Tempistiche / Analisi delle Consegne:
+     🚶 WALK-IN       barra in tempo reale dello stato dei consulenti (bollini verde / giallo / rosso),
+                      calendario del mese + elenco degli ingressi del giorno (ordinabile),
+                      "＋ Registra ingresso" (nome, cognome, cellulare, vetture, consulente).
+                      Il consulente riceve la notifica e "Prende in carico": diventa Occupato.
+     📅 APPUNTAMENTI  da import CSV (solo sede Gruppo Auto Scala srl = Agnano), calendario,
+                      elenco del giorno, "Da assegnare" se il venditore non e' di Agnano.
+                      Import e storico degli import: dal livello 2.
+     📊 REPORT        (livello 3) walk-in per consulente, marchi richiesti, tempo negli stati,
+                      tempo dalla presa in carico al ritorno disponibile, storico dei cambi di stato.
+   💬 CHAT in basso a sinistra (su tutte le schede).
+
+   Chi vede cosa (voce "Appuntamenti e ingressi" della pagina Permessi, a livelli):
+     Livello 1 vede tutto ma non registra e non importa (Consulenza a livello 1: solo i propri)
+     Livello 2 registra walk-in e importa · Livello 3 anche la scheda Report.
+   Tutti gli orari sono mostrati in ora italiana (Europe/Rome), qualunque sia il PC.
+   API: /api/salone/... (SaloneController.java)
+   ===================================================================== */
+(function () {
+    const API = '/api/salone';
+    const TZ = 'Europe/Rome';
+    const PAGE_IDS = ['dashboardPage', 'followupsPage', 'waitingPage', 'contactsPage', 'promoPage',
+        'adminPage', 'rentPage', 'servicePage', 'veicoliPage', 'preventiviPage', 'allChartsPage', 'consegnePage', 'stockPage', 'commercialePage'];
+    const MESI = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+    const GG = ['lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom'];
+    const MARCHE_RISERVA = ['Alfa Romeo', 'Audi', 'BMW', 'BYD', 'Citroën', 'Cupra', 'Dacia', 'DR', 'DS', 'Fiat', 'Ford', 'Hyundai', 'ICH-X', 'Jeep', 'Kia', 'Lancia', 'Mazda',
+        'Mercedes-Benz', 'MG', 'Mini', 'Nissan', 'Opel', 'Peugeot', 'Renault', 'Seat', 'Skoda', 'Sportequipe', 'Suzuki', 'Tesla', 'Toyota', 'Volkswagen', 'Volvo'];
+    const marche = () => (typeof MARCHE_LIST !== 'undefined' && Array.isArray(MARCHE_LIST) && MARCHE_LIST.length ? MARCHE_LIST : MARCHE_RISERVA);
+    /* bollini */
+    const STATI = {
+        DISPONIBILE: { t: 'Disponibile', c: 'verde' },
+        OCCUPATO: { t: 'Occupato', c: 'giallo' },
+        NON_DISPONIBILE: { t: 'Non disponibile', c: 'rosso' }
+    };
+    const COL = { DISPONIBILE: '#22c55e', OCCUPATO: '#f5b301', NON_DISPONIBILE: '#ef4444' };
+
+    const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const pad = n => String(n).padStart(2, '0');
+    const up1 = s => String(s || '').replace(/^./, c => c.toUpperCase());
+    /* ---- tempo: sempre ora italiana ---- */
+    const F_DATA = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+    const F_ORA = new Intl.DateTimeFormat('it-IT', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false });
+    const F_DO = new Intl.DateTimeFormat('it-IT', { timeZone: TZ, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+    const isoRoma = d => F_DATA.format(d);                   // aaaa-mm-gg in Italia
+    const oggi = () => isoRoma(new Date());
+    const ora = s => s ? F_ORA.format(new Date(s)) : '';
+    const dataOra = s => s ? F_DO.format(new Date(s)).replace(',', ' alle') : '';
+    const giornoLungo = g => new Date(g + 'T12:00:00Z').toLocaleDateString('it-IT', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const giornoCorto = g => new Date(g + 'T12:00:00Z').toLocaleDateString('it-IT', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' });
+    const durata = min => {
+        if (min == null || isNaN(min)) return '—';
+        const m = Math.round(min);
+        if (m < 60) return m + ' min';
+        return Math.floor(m / 60) + ' h ' + pad(m % 60) + ' min';
+    };
+    const minDa = s => s ? (Date.now() - new Date(s).getTime()) / 60000 : 0;
+    const nomeCliente = r => [r.nome, r.cognome].filter(Boolean).join(' ') || 'Cliente';
+    const vettTxt = r => (r.vetture || []).map(v => [v.marca, v.modello].filter(Boolean).join(' ')).filter(Boolean);
+    async function api(path, opt) {
+        const res = await fetch(API + path, Object.assign({ credentials: 'same-origin' }, opt || {}));
+        let d = null; try { d = await res.json(); } catch (e) { /* */ }
+        if (!res.ok) throw new Error((d && d.error) || ('Errore ' + res.status));
+        return d;
+    }
+    const post = (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+    const bollino = (s, grande) => `<i class="sa-dot ${s ? STATI[s].c : 'grigio'}${grande ? ' g' : ''}" aria-hidden="true"></i>`;
+    function toast(t) {
+        const n = document.createElement('div'); n.className = 'sa-toast'; n.textContent = t;
+        document.body.appendChild(n); setTimeout(() => n.classList.add('via'), 2600); setTimeout(() => n.remove(), 3000);
+    }
+
+    /* ================= permessi e navigazione ================= */
+    const can = () => typeof hasAccess === 'function' && typeof currentUser !== 'undefined' && !!currentUser && hasAccess('SALONE');
+    const canFull = () => typeof canWrite === 'function' && canWrite('SALONE');
+    const entraDiretto = role => ['FRONT_OFFICE', 'CONSULENZA'].includes(role || (typeof currentUser !== 'undefined' && currentUser && currentUser.role)) && can();
+
+    let root = null, aperta = false;
+    const st = {
+        tab: 'walkin', giorno: oggi(), mese: oggi().slice(0, 7), giorni: {}, ingressi: [], consulenti: [], puoGestire: false, vedeTutti: false, vedeReport: false, puoImportare: false,
+        verso: 'desc', io: null, stati: [], mio: null, cambiaTutti: false,
+        app: { giorno: oggi(), mese: oggi().slice(0, 7), giorni: {}, daAss: {}, lista: [], verso: 'asc', filtro: '', info: null, caricato: false },
+        rep: { da: null, a: null, preset: '30', dati: null }
+    };
+
+    function refreshNav() {
+        const b = document.getElementById('navSalone');
+        if (b) b.style.display = can() ? 'flex' : 'none';
+        if (can()) { avviaNotifiche(); Presenza.avvia(); }
+    }
+
+    /* ---------- PRESENZA: il consulente risulta Disponibile in automatico finche' il CRM resta aperto ----------
+       Ogni 25 s questa finestra dice al server "ci sono". Se il consulente chiude la finestra, preme Esci,
+       la sessione scade o il CRM viene ridistribuito (deploy), i segnali si fermano e dopo poco risulta
+       "non in salone". Un semplice F5 non conta come uscita. Se ha scelto lui Occupato o Non disponibile
+       il segnale non lo cambia. Il server lo fa solo dalle 8:00 alle 21:00. */
+    const Presenza = (function () {
+        let t = null, agganciato = false;
+        const tabId = (() => { try { let x = sessionStorage.getItem('saTab'); if (!x) { x = Math.random().toString(36).slice(2, 10); sessionStorage.setItem('saTab', x); } return x; } catch (e) { return 'x'; } })();
+        async function segnale() {
+            if (!can()) return;
+            try {
+                const d = await post('/stati/presenza', { tab: tabId });
+                if (!d.consulente) { ferma(); return; }        // non e' un consulente del salone
+                aggancia();
+                const prima = st.mio ? statoDi(st.mio).stato : undefined;
+                if (aperta && (prima === undefined || prima !== d.stato)) caricaStati();
+            } catch (e) { /* rete o sessione scaduta: si riprova */ }
+        }
+        function aggancia() {
+            if (agganciato) return;
+            agganciato = true;
+            window.addEventListener('pagehide', () => {
+                if (!t) return;
+                try { navigator.sendBeacon(API + '/stati/uscita', new Blob([JSON.stringify({ tab: tabId })], { type: 'application/json' })); } catch (e) { /* */ }
+            });
+            document.addEventListener('visibilitychange', () => { if (t && document.visibilityState === 'visible') segnale(); });
+            // "Esci" dal menu: esce subito (non aspetta)
+            if (typeof window.logout === 'function' && !window.logout.__sa) {
+                const orig = window.logout;
+                const w = function () {
+                    const self = this, args = arguments, era = !!t;
+                    ferma();
+                    if (!era) return orig.apply(self, args);
+                    fetch(API + '/stati/uscita', { method: 'POST', credentials: 'same-origin', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tab: tabId, esci: true }) })
+                        .catch(() => { /* */ }).finally(() => orig.apply(self, args));
+                };
+                w.__sa = true; window.logout = w;
+            }
+        }
+        function avvia() { if (t) return; t = setInterval(segnale, 25000); segnale(); }
+        function ferma() { clearInterval(t); t = null; }
+        return { avvia, ferma };
+    })();
+
+    function open() {
+        if (!can()) return;
+        if (window.MacroHome) { try { MacroHome.hide(); } catch (e) { /* */ } }
+        if (window.BIHome) { try { BIHome.hide(); } catch (e) { /* */ } }
+        PAGE_IDS.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+        if (typeof stopContactPolling === 'function') stopContactPolling();
+        if (typeof disconnectContactWebSocket === 'function') disconnectContactWebSocket();
+        const links = document.querySelector('.nav-links'); if (links) links.style.visibility = 'hidden';
+        document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+        document.body.removeAttribute('data-role-theme');
+        const badge = document.getElementById('navBrandBadge'); if (badge) badge.textContent = 'SALONE';
+        const page = document.getElementById('salonePage'); if (!page) return;
+        page.style.display = 'block';
+        aperta = true;
+        build();
+        history.replaceState(null, '', window.location.pathname + '#salone');
+        sessionStorage.setItem('currentPage', 'salone');
+        window.scrollTo(0, 0);
+        caricaGiorno(st.giorno);
+        caricaStati();
+        Chat.mostra(true);
+    }
+    function hide() {
+        const page = document.getElementById('salonePage'); if (page) page.style.display = 'none';
+        if (aperta) { const links = document.querySelector('.nav-links'); if (links) links.style.visibility = ''; }
+        aperta = false;
+        Chat.mostra(false);
+    }
+
+    /* ================= pagina ================= */
+    function build() {
+        if (root) return;
+        root = document.getElementById('saloneRoot');
+        root.innerHTML = `
+          <div class="sa-band">
+            <div class="sa-band-in">
+              <div><small>SALONE · AGNANO</small><h1>Appuntamenti e ingressi</h1><p>Clienti in salone, consulenti e appuntamenti della giornata</p></div>
+              <div class="sa-clock" id="saClock"></div>
+            </div>
+            <div class="sa-tabs" role="tablist"></div>
+          </div>
+          <div class="sa-wrap" id="saBody"></div>`;
+        disegnaSchede();
+        root.querySelector('.sa-tabs').addEventListener('click', e => {
+            const b = e.target.closest('[data-tab]'); if (!b) return;
+            st.tab = b.dataset.tab;
+            disegnaSchede();
+            if (st.tab === 'app' && !st.app.caricato) caricaApp(st.app.giorno);
+            else if (st.tab === 'report' && !st.rep.dati) caricaReport();
+            else render();
+        });
+        root.addEventListener('click', onClick);
+        root.addEventListener('change', onChange);
+        const tick = () => { const c = document.getElementById('saClock'); if (c) { const d = new Date(); c.innerHTML = `<b>${F_ORA.format(d)}</b><span>${d.toLocaleDateString('it-IT', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long' })}</span>`; } };
+        tick(); setInterval(tick, 20000);
+        // aggiornamento automatico (altri front office, prese in carico, stati)
+        setInterval(() => { if (aperta && st.tab === 'walkin' && !document.querySelector('.sa-ov')) caricaGiorno(st.giorno, true); }, 15000);
+        setInterval(() => { if (aperta) caricaStati(); }, 5000);
+        setInterval(() => { if (aperta) disegnaStati(); }, 30000);   // "da 12 min" sempre aggiornato
+    }
+    function disegnaSchede() {
+        const t = root.querySelector('.sa-tabs');
+        const L = [['walkin', '🚶 Walk-in'], ['app', '📅 Appuntamenti']].concat(st.vedeReport ? [['report', '📊 Report']] : []);
+        if (!L.some(x => x[0] === st.tab)) st.tab = 'walkin';
+        t.innerHTML = L.map(([k, n]) => `<button type="button" class="sa-tab ${st.tab === k ? 'on' : ''}" data-tab="${k}" role="tab" aria-selected="${st.tab === k}">${n}</button>`).join('');
+    }
+
+    async function caricaGiorno(g, silenzioso) {
+        st.giorno = g;
+        try {
+            const [d, m] = await Promise.all([api('/ingressi?data=' + g), api('/giorni?mese=' + st.mese)]);
+            const eraRep = st.vedeReport;
+            st.ingressi = d.ingressi || []; st.consulenti = d.consulenti || []; st.puoGestire = !!d.puoGestire; st.io = d.io || null;
+            st.vedeTutti = !!d.vedeTutti; st.vedeReport = !!d.vedeReport; st.puoImportare = !!d.puoImportare;
+            st.giorni = m.giorni || {};
+            st.err = '';
+            if (eraRep !== st.vedeReport && root) disegnaSchede();
+        } catch (e) { st.err = e.message; }
+        if (st.tab !== 'walkin') return;
+        if (!silenzioso || !document.activeElement || !root.contains(document.activeElement) || document.activeElement.tagName === 'BUTTON') render();
+    }
+
+    /* ---------- stato dei consulenti (bollini) ---------- */
+    async function caricaStati() {
+        try {
+            const d = await api('/stati');
+            st.stati = d.stati || []; st.mio = d.mio || null; st.cambiaTutti = !!d.cambiaTutti;
+            disegnaStati();
+        } catch (e) { /* rete: si riprova */ }
+    }
+    const statoDi = nome => st.stati.find(x => x.nome === nome) || { nome, stato: null };
+    function barraStati() {
+        if (!st.stati.length) return '<div class="sa-card sa-stati" id="saStati"><span class="sa-hint">Caricamento stato dei consulenti…</span></div>';
+        return `<div class="sa-card sa-stati" id="saStati">${barraStatiIn()}</div>`;
+    }
+    function barraStatiIn() {
+        const conta = { DISPONIBILE: 0, OCCUPATO: 0, NON_DISPONIBILE: 0 };
+        st.stati.forEach(s => { if (s.stato) conta[s.stato]++; });
+        const mio = st.mio ? statoDi(st.mio) : null;
+        return `<div class="sa-stati-h">
+            <div><h3>Consulenti in salone <span class="sa-live">● in tempo reale</span></h3>
+              <p>${Object.entries(conta).map(([k, n]) => `${bollino(k)} ${n} ${STATI[k].t.toLowerCase()}`).join(' · ')}</p>
+              ${mio ? '<p class="sa-hint">Con il CRM aperto risulti disponibile in automatico; quando lo chiudi o premi Esci risulti fuori dal salone.</p>' : ''}</div>
+            ${mio ? `<div class="sa-mio" role="group" aria-label="Il tuo stato"><span>Il tuo stato</span>
+              ${Object.keys(STATI).map(k => `<button type="button" class="sa-mio-b ${STATI[k].c} ${mio.stato === k ? 'on' : ''}" data-stato="${k}">${bollino(k)} ${STATI[k].t}</button>`).join('')}</div>` : ''}
+          </div>
+          <div class="sa-stati-l">${st.stati.map(s => {
+              const io = st.mio === s.nome, puo = st.cambiaTutti || io;
+              return `<div class="sa-cs ${s.stato ? STATI[s.stato].c : 'grigio'} ${io ? 'io' : ''}">
+                <button type="button" class="sa-cs-b" ${puo ? `data-menu="${esc(s.nome)}"` : 'disabled'} title="${puo ? 'Cambia stato' : ''}">
+                  ${bollino(s.stato, true)}
+                  <span class="sa-cs-t"><b>${esc(s.nome)}${io ? ' (tu)' : ''}</b>
+                  <em>${s.stato ? STATI[s.stato].t + ' · da ' + durata(minDa(s.dal)) : s.uscitoAt && isoRoma(new Date(s.uscitoAt)) === oggi() ? 'Uscito dal CRM alle ' + ora(s.uscitoAt) : 'Non ancora in salone oggi'}</em>
+                  ${s.stato === 'OCCUPATO' && s.cliente ? `<em class="sa-cs-cl">con ${esc(s.cliente)}</em>` : ''}</span>
+                </button></div>`;
+          }).join('')}</div>`;
+    }
+    function disegnaStati() {
+        const el = document.getElementById('saStati');
+        if (el && !el.querySelector('.sa-menu')) el.innerHTML = barraStatiIn();
+        const chips = document.querySelectorAll('.sa-ov [data-c]');
+        chips.forEach(b => { const s = statoDi(b.dataset.c).stato; const d = b.querySelector('.sa-dot'); if (d) d.className = 'sa-dot ' + (s ? STATI[s].c : 'grigio'); });
+    }
+    async function cambiaStato(stato, nome) {
+        try {
+            const d = await post('/stati', nome && nome !== st.mio ? { stato, nome } : { stato });
+            st.stati = d.stati || st.stati; disegnaStati();
+            toast((nome && nome !== st.mio ? nome + ': ' : 'Ora sei ') + STATI[stato].t.toLowerCase());
+        } catch (e) { alert(e.message); }
+    }
+    function menuStato(btn, nome) {
+        document.querySelectorAll('.sa-menu').forEach(x => x.remove());
+        const m = document.createElement('div'); m.className = 'sa-menu';
+        m.innerHTML = `<small>${esc(nome)}</small>` + Object.keys(STATI).map(k => `<button type="button" data-set="${k}">${bollino(k)} ${STATI[k].t}</button>`).join('');
+        btn.parentElement.appendChild(m);
+        m.addEventListener('click', ev => { const b = ev.target.closest('[data-set]'); if (!b) return; ev.stopPropagation(); m.remove(); cambiaStato(b.dataset.set, nome); });
+        setTimeout(() => document.addEventListener('click', function via(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('click', via); } }), 0);
+    }
+
+    /* ================= render ================= */
+    function render() {
+        const body = root && root.querySelector('#saBody'); if (!body) return;
+        if (st.tab === 'app') { renderApp(body); return; }
+        if (st.tab === 'report') { renderReport(body); return; }
+        const L = st.ingressi.slice().sort((a, b) => (a.ora < b.ora ? -1 : a.ora > b.ora ? 1 : 0) * (st.verso === 'desc' ? -1 : 1));
+        const isOggi = st.giorno === oggi();
+        const assegnati = st.ingressi.filter(r => r.consulente).length, presi = st.ingressi.filter(r => r.presoAt).length;
+        const perCons = {}; st.ingressi.forEach(r => { if (r.consulente) perCons[r.consulente] = (perCons[r.consulente] || 0) + 1; });
+        body.innerHTML = `
+          ${st.err ? `<div class="sa-msg err">${esc(st.err)}</div>` : ''}
+          ${barraStati()}
+          <div class="sa-grid">
+            <aside class="sa-side">
+              <div class="sa-card">${calendario(st.mese, st.giorno, st.giorni, null, false)}</div>
+              <div class="sa-card sa-sum">
+                <h3>${st.vedeTutti ? 'Riepilogo del giorno' : 'I tuoi clienti del giorno'}</h3>
+                <div class="sa-kpis"><div><b>${st.ingressi.length}</b><span>ingressi</span></div><div><b>${assegnati}</b><span>assegnati</span></div><div><b>${presi}</b><span>presi in carico</span></div></div>
+                ${st.vedeTutti ? st.consulenti.map(c => `<div class="sa-cons-row"><span>${bollino(statoDi(c).stato)} ${esc(c)}</span><b>${perCons[c] || 0}</b></div>`).join('') : ''}
+              </div>
+            </aside>
+            <section class="sa-main">
+              <div class="sa-card">
+                <div class="sa-list-h">
+                  <div><h2>${esc(up1(giornoLungo(st.giorno)))}</h2><p>${L.length} ingress${L.length === 1 ? 'o' : 'i'}${isOggi ? ' · oggi' : ''}${st.vedeTutti ? '' : ' · solo i clienti assegnati a te'}</p></div>
+                  <div class="sa-list-a">
+                    <button type="button" class="sa-btn2" data-act="verso">${st.verso === 'desc' ? '⬇️ Più recenti prima' : '⬆️ Meno recenti prima'}</button>
+                    ${!isOggi ? '<button type="button" class="sa-btn2" data-act="oggi">Oggi</button>' : ''}
+                    ${st.puoGestire && isOggi ? '<button type="button" class="sa-btn" data-act="nuovo">＋ Registra ingresso</button>' : ''}
+                  </div>
+                </div>
+                <div class="sa-list">${L.length ? L.map(card).join('') : `<div class="sa-none">${isOggi ? (st.vedeTutti ? 'Nessun cliente registrato oggi.' + (st.puoGestire ? ' Usa “＋ Registra ingresso” quando entra un cliente.' : '') : 'Nessun cliente assegnato a te oggi.') : 'Nessun ingresso in questo giorno.'}</div>`}</div>
+              </div>
+            </section>
+          </div>`;
+    }
+
+    /* calendario riusato da walk-in (solo passato) e appuntamenti (anche futuro) */
+    function calendario(mese, sel, giorni, rossi, futuro) {
+        const [y, m] = mese.split('-').map(Number);
+        const primo = new Date(Date.UTC(y, m - 1, 1)), giorniMese = new Date(Date.UTC(y, m, 0)).getUTCDate();
+        const vuoti = (primo.getUTCDay() + 6) % 7;      // lunedi' = 0
+        const og = oggi();
+        let celle = '';
+        for (let i = 0; i < vuoti; i++) celle += '<span></span>';
+        for (let d = 1; d <= giorniMese; d++) {
+            const g = `${y}-${pad(m)}-${pad(d)}`, n = giorni[g] || 0, r = rossi ? rossi[g] || 0 : 0;
+            const off = !futuro && g > og;
+            celle += `<button type="button" class="sa-day ${g === sel ? 'sel' : ''} ${g === og ? 'oggi' : ''} ${off ? 'fut' : ''}" data-giorno="${g}" ${off ? 'disabled' : ''} ${r ? `title="${r} da assegnare"` : ''}>
+              <span>${d}</span>${n ? `<i>${n}</i>` : ''}${r ? '<b class="sa-day-r"></b>' : ''}</button>`;
+        }
+        return `<div class="sa-cal-h"><button type="button" class="sa-nav" data-mese="-1" aria-label="Mese prima">‹</button>
+            <b>${up1(MESI[m - 1])} ${y}</b>
+            <button type="button" class="sa-nav" data-mese="1" aria-label="Mese dopo" ${!futuro && mese >= og.slice(0, 7) ? 'disabled' : ''}>›</button></div>
+          <div class="sa-cal">${GG.map(g => `<em>${g}</em>`).join('')}${celle}</div>`;
+    }
+
+    function card(r) {
+        const v = vettTxt(r);
+        const stato = !r.consulente ? '<span class="sa-st da">Da assegnare</span>'
+            : r.liberoAt ? `<span class="sa-st ok">✓ Seguito per ${durata(r.minutiCliente)} · libero alle ${ora(r.liberoAt)}</span>`
+            : r.presoAt ? `<span class="sa-st ok">✓ Preso in carico alle ${ora(r.presoAt)}</span>`
+            : `<span class="sa-st wait">⏳ Notificato alle ${ora(r.assegnatoAt)} · da prendere in carico</span>`;
+        const sc = r.consulente ? statoDi(r.consulente).stato : null;
+        const sel = st.puoGestire && r.data === oggi()
+            ? `<select class="sa-sel" data-assegna="${esc(r.id)}"><option value="">— Assegna a —</option>${st.consulenti.map(c => { const s = statoDi(c).stato; return `<option value="${esc(c)}" ${c === r.consulente ? 'selected' : ''}>${s === 'DISPONIBILE' ? '🟢' : s === 'OCCUPATO' ? '🟡' : s === 'NON_DISPONIBILE' ? '🔴' : '⚪'} ${esc(c)}</option>`; }).join('')}</select>`
+            : `<b class="sa-cons">${r.consulente ? bollino(sc) + ' ' + esc(r.consulente) : '—'}</b>`;
+        const mioCliente = st.io && r.consulente && st.mio === r.consulente;
+        return `<article class="sa-in ${r.presoAt ? 'preso' : r.consulente ? 'att' : 'nuovo'}">
+            <div class="sa-in-t"><b>${ora(r.ora)}</b></div>
+            <div class="sa-in-c">
+              <div class="sa-in-n">${esc(nomeCliente(r))}${r.cellulare ? ` <a href="tel:${esc(r.cellulare)}" class="sa-tel">📞 ${esc(r.cellulare)}</a>` : ''}</div>
+              <div class="sa-in-v">${v.length ? v.map(x => `<span class="sa-car">🚗 ${esc(x)}</span>`).join('') : '<span class="sa-hint">Nessuna vettura indicata</span>'}</div>
+              ${r.note ? `<div class="sa-in-note">📝 ${esc(r.note)}</div>` : ''}
+              <div class="sa-in-f">Inserito il ${esc(dataOra(r.ora))} da ${esc(r.registratoDa || '')}${r.assegnatoAt ? ` · assegnato alle ${ora(r.assegnatoAt)}` : ''}</div>
+            </div>
+            <div class="sa-in-a">${sel}${stato}
+              ${st.puoGestire && r.data === oggi() ? `<button type="button" class="sa-x" data-elimina="${esc(r.id)}" title="Elimina l'ingresso">🗑</button>` : ''}
+              ${(mioCliente || st.puoGestire) && r.consulente && !r.presoAt && r.data === oggi() ? `<button type="button" class="sa-btn" data-presa="${esc(r.id)}">${mioCliente ? 'Prendo in carico ✓' : 'Segna preso in carico'}</button>` : ''}
+            </div>
+          </article>`;
+    }
+
+    async function onClick(e) {
+        const mn = e.target.closest('[data-menu]'); if (mn) { menuStato(mn, mn.dataset.menu); return; }
+        const so = e.target.closest('[data-stato]'); if (so) { cambiaStato(so.dataset.stato); return; }
+        if (st.tab === 'app' && await onClickApp(e)) return;
+        if (st.tab === 'report' && onClickReport(e)) return;
+        const g = e.target.closest('[data-giorno]'); if (g) { caricaGiorno(g.dataset.giorno); return; }
+        const m = e.target.closest('[data-mese]');
+        if (m) { st.mese = spostaMese(st.mese, Number(m.dataset.mese)); caricaGiorno(st.giorno); return; }
+        const a = e.target.closest('[data-act]');
+        if (a) {
+            if (a.dataset.act === 'verso') { st.verso = st.verso === 'desc' ? 'asc' : 'desc'; render(); }
+            if (a.dataset.act === 'oggi') { st.mese = oggi().slice(0, 7); caricaGiorno(oggi()); }
+            if (a.dataset.act === 'nuovo') apriForm();
+            return;
+        }
+        const el = e.target.closest('[data-elimina]');
+        if (el) {
+            if (!confirm('Eliminare questo ingresso?')) return;
+            try { await post('/ingressi/' + encodeURIComponent(el.dataset.elimina), { elimina: true }); caricaGiorno(st.giorno); } catch (x) { alert(x.message); }
+            return;
+        }
+        const p = e.target.closest('[data-presa]');
+        if (p) { try { await post('/ingressi/' + encodeURIComponent(p.dataset.presa) + '/presa'); caricaGiorno(st.giorno); caricaStati(); } catch (x) { alert(x.message); } }
+    }
+    const spostaMese = (mese, d) => { const [y, mm] = mese.split('-').map(Number); const n = new Date(Date.UTC(y, mm - 1 + d, 1)); return n.getUTCFullYear() + '-' + pad(n.getUTCMonth() + 1); };
+    async function onChange(e) {
+        if (st.tab === 'app') { onChangeApp(e); return; }
+        if (st.tab === 'report') { onChangeReport(e); return; }
+        const s = e.target.closest('[data-assegna]'); if (!s) return;
+        const ss = statoDi(s.value).stato;
+        if (s.value && ss !== 'DISPONIBILE' && !confirm(`${s.value} risulta ${ss ? STATI[ss].t.toLowerCase() : 'non ancora in salone'}. Assegnare comunque?`)) { caricaGiorno(st.giorno); return; }
+        try { await post('/ingressi/' + encodeURIComponent(s.dataset.assegna), { consulente: s.value }); caricaGiorno(st.giorno); }
+        catch (x) { alert(x.message); caricaGiorno(st.giorno); }
+    }
+
+    /* ================= registra ingresso ================= */
+    function apriForm() {
+        const ov = document.createElement('div');
+        ov.className = 'sa-ov';
+        const ordinati = st.consulenti.slice().sort((a, b) => ordStato(statoDi(a).stato) - ordStato(statoDi(b).stato));
+        ov.innerHTML = `<div class="sa-modal" role="dialog" aria-modal="true" aria-label="Registra ingresso">
+          <header><div><small>WALK-IN · ${dataOra(new Date().toISOString())}</small><h3>Registra ingresso</h3></div><button type="button" class="sa-x" data-chiudi aria-label="Chiudi">✕</button></header>
+          <div class="sa-mbody">
+            <div class="sa-row3">
+              <label>Nome<input type="text" id="saNome" autocomplete="off"></label>
+              <label>Cognome<input type="text" id="saCognome" autocomplete="off"></label>
+              <label>Cellulare<input type="tel" id="saCell" autocomplete="off" inputmode="tel"></label>
+            </div>
+            <div class="sa-lbl">Vetture di cui chiede informazioni</div>
+            <div id="saVett"></div>
+            <button type="button" class="sa-btn2" data-addv>＋ Aggiungi vettura</button>
+            <div class="sa-lbl">Assegna a un consulente (salone di Agnano) · prima i disponibili</div>
+            <div class="sa-chips" id="saCons">${ordinati.map(c => `<button type="button" class="sa-chip" data-c="${esc(c)}">${bollino(statoDi(c).stato)} ${esc(c)}</button>`).join('')}</div>
+            <label class="sa-full">Note (facoltative)<textarea id="saNote" rows="2"></textarea></label>
+            <div class="sa-err" id="saErr"></div>
+          </div>
+          <footer><button type="button" class="sa-btn2" data-chiudi>Annulla</button><button type="button" class="sa-btn" data-salva>Registra e notifica</button></footer>
+        </div>`;
+        document.body.appendChild(ov);
+        let cons = '';
+        const vett = ov.querySelector('#saVett');
+        const addV = () => { vett.appendChild(rigaVettura()); };
+        addV();
+        ov.querySelector('#saNome').focus();
+        const chiudi = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+        const onKey = e => { if (e.key === 'Escape' && !ov.querySelector('.sa-dd.open')) chiudi(); };
+        document.addEventListener('keydown', onKey);
+        ov.addEventListener('click', async e => {
+            if (e.target === ov || e.target.closest('[data-chiudi]')) { chiudi(); return; }
+            if (e.target.closest('[data-addv]')) { addV(); return; }
+            const c = e.target.closest('[data-c]');
+            if (c) { cons = cons === c.dataset.c ? '' : c.dataset.c; ov.querySelectorAll('[data-c]').forEach(x => x.classList.toggle('on', x.dataset.c === cons)); return; }
+            if (e.target.closest('[data-salva]')) {
+                const body = {
+                    nome: ov.querySelector('#saNome').value, cognome: ov.querySelector('#saCognome').value, cellulare: ov.querySelector('#saCell').value,
+                    note: ov.querySelector('#saNote').value, consulente: cons,
+                    vetture: [...vett.querySelectorAll('.sa-vrow')].map(r => ({ marca: r.querySelector('.sa-marca').value, modello: r.querySelector('.sa-modello').value }))
+                };
+                const err = ov.querySelector('#saErr');
+                if (!body.nome.trim() && !body.cognome.trim()) { err.textContent = 'Scrivi almeno il nome o il cognome del cliente.'; return; }
+                if (!cons && !confirm('Non hai scelto il consulente: registrare comunque? Potrai assegnarlo dopo dall\'elenco.')) return;
+                const sc = cons ? statoDi(cons).stato : 'DISPONIBILE';
+                if (sc !== 'DISPONIBILE' && !confirm(`${cons} risulta ${sc ? STATI[sc].t.toLowerCase() : 'non ancora in salone'}. Assegnare comunque?`)) return;
+                const b = e.target.closest('[data-salva]'); b.disabled = true; b.textContent = 'Salvataggio…';
+                try { await post('/ingressi', body); chiudi(); st.giorno = oggi(); st.mese = oggi().slice(0, 7); caricaGiorno(oggi()); toast(cons ? 'Registrato: notifica inviata a ' + cons : 'Ingresso registrato'); }
+                catch (x) { err.textContent = x.message; b.disabled = false; b.textContent = 'Registra e notifica'; }
+            }
+        });
+    }
+    const ordStato = s => ({ DISPONIBILE: 0, OCCUPATO: 1, NON_DISPONIBILE: 2 }[s] ?? 3);
+    // marchio: il solito menu a tendina con ricerca (elenco marchi del CRM)
+    function rigaVettura() {
+        const r = document.createElement('div');
+        r.className = 'sa-vrow';
+        r.innerHTML = `<div class="sa-dd"><input type="text" class="sa-marca" placeholder="Clicca o cerca marchio..." autocomplete="off"><div class="sa-dd-l"></div></div>
+          <input type="text" class="sa-modello" placeholder="Modello (es. 208 1.2 PureTech)" autocomplete="off">
+          <button type="button" class="sa-x" title="Togli questa vettura">✕</button>`;
+        const inp = r.querySelector('.sa-marca'), dd = r.querySelector('.sa-dd'), list = r.querySelector('.sa-dd-l');
+        const draw = () => {
+            const q = inp.value.trim().toLowerCase();
+            const L = marche().filter(m => !q || m.toLowerCase().includes(q));
+            list.innerHTML = L.map(m => `<button type="button" data-m="${esc(m)}">${esc(m)}</button>`).join('') || '<div class="sa-hint" style="padding:8px 10px">Nessun marchio</div>';
+        };
+        inp.addEventListener('focus', () => { dd.classList.add('open'); draw(); });
+        inp.addEventListener('input', () => { dd.classList.add('open'); draw(); });
+        inp.addEventListener('keydown', e => {
+            if (e.key === 'Enter') { e.preventDefault(); const f = list.querySelector('[data-m]'); if (f) { inp.value = f.dataset.m; dd.classList.remove('open'); r.querySelector('.sa-modello').focus(); } }
+            if (e.key === 'Escape') dd.classList.remove('open');
+        });
+        list.addEventListener('mousedown', e => { const b = e.target.closest('[data-m]'); if (!b) return; e.preventDefault(); inp.value = b.dataset.m; dd.classList.remove('open'); r.querySelector('.sa-modello').focus(); });
+        inp.addEventListener('blur', () => setTimeout(() => dd.classList.remove('open'), 120));
+        r.querySelector('.sa-x').addEventListener('click', () => { const c = r.parentElement; if (c.children.length > 1) r.remove(); else { inp.value = ''; r.querySelector('.sa-modello').value = ''; } });
+        return r;
+    }
+
+    /* ================= notifica al consulente ================= */
+    let notifT = null;
+    const visti = new Set();
+    function avviaNotifiche() {
+        if (notifT) return;
+        const giro = async () => {
+            if (!can()) return;
+            try {
+                const d = await api('/notifiche');
+                (d.notifiche || []).forEach(r => { const k = r.id + '|' + r.assegnatoAt; if (!visti.has(k)) { visti.add(k); mostraNotifica(r); } });
+            } catch (e) { /* rete: si riprova */ }
+        };
+        giro(); notifT = setInterval(giro, 6000);
+    }
+    function beep() {
+        try {
+            const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
+            const c = new C(), o = c.createOscillator(), g = c.createGain();
+            o.type = 'sine'; o.frequency.value = 880; o.connect(g); g.connect(c.destination);
+            g.gain.setValueAtTime(.0001, c.currentTime); g.gain.exponentialRampToValueAtTime(.25, c.currentTime + .02); g.gain.exponentialRampToValueAtTime(.0001, c.currentTime + .6);
+            o.start(); o.stop(c.currentTime + .62);
+        } catch (e) { /* */ }
+    }
+    function mostraNotifica(r) {
+        let box = document.getElementById('saNotif');
+        if (!box) { box = document.createElement('div'); box.id = 'saNotif'; box.className = 'sa-notif-box'; document.body.appendChild(box); }
+        const v = vettTxt(r);
+        const n = document.createElement('div');
+        n.className = 'sa-notif';
+        n.innerHTML = `<div class="sa-notif-h"><span class="sa-pulse"></span><small>CLIENTE IN ARRIVO PER TE · ${ora(r.assegnatoAt)}</small></div>
+          <b class="sa-notif-n">${esc(nomeCliente(r))}</b>
+          ${r.cellulare ? `<div class="sa-notif-t">📞 ${esc(r.cellulare)}</div>` : ''}
+          <div class="sa-notif-v">${v.length ? v.map(x => `<span>🚗 ${esc(x)}</span>`).join('') : '<span>Nessuna vettura indicata</span>'}</div>
+          ${r.note ? `<div class="sa-notif-note">📝 ${esc(r.note)}</div>` : ''}
+          <div class="sa-notif-f">Ti è stato assegnato da ${esc(r.assegnatoDa || '')} · prendendolo in carico risulterai <b>Occupato</b></div>
+          <button type="button" class="sa-btn">Prendo in carico ✓</button>`;
+        n.querySelector('button').addEventListener('click', async ev => {
+            const b = ev.currentTarget; b.disabled = true;
+            try { await post('/ingressi/' + encodeURIComponent(r.id) + '/presa'); }
+            catch (e) { b.disabled = false; alert(e.message); return; }
+            n.classList.add('via'); setTimeout(() => n.remove(), 300);
+            toast('Cliente preso in carico: ora risulti occupato');
+            if (aperta) { caricaGiorno(st.giorno, true); caricaStati(); }
+        });
+        box.prepend(n);
+        beep();
+        try { if (window.Notification && Notification.permission === 'granted') new Notification('Cliente in arrivo: ' + nomeCliente(r), { body: v.join(', ') }); } catch (e) { /* */ }
+    }
+
+    /* =====================================================================
+       APPUNTAMENTI
+       ===================================================================== */
+    async function caricaApp(g) {
+        const A = st.app;
+        A.giorno = g;
+        try {
+            const [d, m] = await Promise.all([api('/appuntamenti?data=' + g), api('/appuntamenti/giorni?mese=' + A.mese)]);
+            A.lista = d.appuntamenti || []; A.info = d; A.giorni = m.giorni || {}; A.daAss = m.daAssegnare || {};
+            st.vedeTutti = !!d.vedeTutti; st.vedeReport = !!d.vedeReport; st.puoImportare = !!d.puoImportare; A.err = ''; A.caricato = true;
+        } catch (e) { A.err = e.message; }
+        if (st.tab === 'app') render();
+    }
+    const cliApp = r => [String(r.nome || '').replace(/^\.+$/, ''), r.cognome].filter(Boolean).join(' ') || r.ragioneSociale || 'Cliente';
+    const vettApp = r => [r.marca && !/^marca generica$/i.test(r.marca) ? r.marca : '', r.modello && r.modello !== 'X' ? r.modello : ''].filter(Boolean).join(' ');
+    function renderApp(body) {
+        const A = st.app;
+        let L = A.lista.slice();
+        if (A.filtro === '__da') L = L.filter(r => !r.consulente);
+        else if (A.filtro) L = L.filter(r => r.consulente === A.filtro);
+        L.sort((a, b) => String(a.appOra || '99').localeCompare(String(b.appOra || '99')) * (A.verso === 'desc' ? -1 : 1));
+        const perCons = {}; let da = 0;
+        A.lista.forEach(r => { if (r.consulente) perCons[r.consulente] = (perCons[r.consulente] || 0) + 1; else da++; });
+        const info = A.info || {};
+        body.innerHTML = `
+          ${A.err ? `<div class="sa-msg err">${esc(A.err)}</div>` : ''}
+          ${st.vedeTutti && info.daAssegnareProssimi ? `<div class="sa-msg warn">⚠️ ${info.daAssegnareProssimi} appuntament${info.daAssegnareProssimi === 1 ? 'o' : 'i'} da oggi in poi ${info.daAssegnareProssimi === 1 ? 'è' : 'sono'} ancora <b>da assegnare</b> (il venditore nel CSV non è un consulente di Agnano). Al prossimo import si aggiornano da soli.</div>` : ''}
+          <div class="sa-grid">
+            <aside class="sa-side">
+              <div class="sa-card">${calendario(A.mese, A.giorno, A.giorni, st.vedeTutti ? A.daAss : null, true)}
+                ${st.vedeTutti ? '<p class="sa-hint" style="margin:10px 0 0"><b class="sa-day-r sa-inl"></b> giorno con appuntamenti da assegnare</p>' : ''}</div>
+              <div class="sa-card sa-sum">
+                <h3>${st.vedeTutti ? 'Appuntamenti del giorno' : 'I tuoi appuntamenti del giorno'}</h3>
+                <div class="sa-kpis"><div><b>${A.lista.length}</b><span>appuntamenti</span></div><div><b>${A.lista.length - da}</b><span>assegnati</span></div><div><b class="${da ? 'sa-red' : ''}">${da}</b><span>da assegnare</span></div></div>
+                ${st.vedeTutti ? st.consulenti.map(c => `<div class="sa-cons-row"><span>${esc(c)}</span><b>${perCons[c] || 0}</b></div>`).join('') : ''}
+              </div>
+              ${info.ultimoImport ? `<div class="sa-card sa-hint">Ultimo import: <b>${esc(info.ultimoImport.atIt)}</b> da ${esc(info.ultimoImport.chi)}${info.ultimoImport.file ? '<br>' + esc(info.ultimoImport.file) : ''}</div>` : ''}
+            </aside>
+            <section class="sa-main">
+              <div class="sa-card">
+                <div class="sa-list-h">
+                  <div><h2>${esc(up1(giornoLungo(A.giorno)))}</h2><p>${L.length} appuntament${L.length === 1 ? 'o' : 'i'}${A.giorno === oggi() ? ' · oggi' : ''}${st.vedeTutti ? '' : ' · solo i tuoi'}</p></div>
+                  <div class="sa-list-a">
+                    ${st.vedeTutti ? `<select class="sa-sel sa-sel-a" data-filtro><option value="">Tutti i consulenti</option><option value="__da" ${A.filtro === '__da' ? 'selected' : ''}>Solo da assegnare</option>${st.consulenti.map(c => `<option ${A.filtro === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>` : ''}
+                    <button type="button" class="sa-btn2" data-aact="verso">${A.verso === 'asc' ? '⬆️ Dal primo orario' : '⬇️ Dall\'ultimo orario'}</button>
+                    ${A.giorno !== oggi() ? '<button type="button" class="sa-btn2" data-aact="oggi">Oggi</button>' : ''}
+                    ${st.puoImportare ? `<button type="button" class="sa-btn2" data-aact="storico">🕘 Storico import</button>
+                      <label class="sa-btn sa-file">⬆ Importa CSV<input type="file" accept=".csv,text/csv" data-import hidden></label>` : ''}
+                  </div>
+                </div>
+                <div class="sa-list">${L.length ? L.map(cardApp).join('') : `<div class="sa-none">${A.caricato ? 'Nessun appuntamento in questo giorno.' + (st.puoImportare && !info.ultimoImport ? ' Importa il CSV dei lead con “⬆ Importa CSV”.' : '') : 'Caricamento…'}</div>`}</div>
+              </div>
+            </section>
+          </div>`;
+    }
+    function cardApp(r) {
+        const v = vettApp(r);
+        const dett = [r.origine, r.canale !== r.origine ? r.canale : '', r.tipoVeicolo, r.tipoRichiesta, Number(r.importo) > 0 ? '€ ' + Number(r.importo).toLocaleString('it-IT') : ''].filter(Boolean);
+        const posseduta = [r.marcaPosseduta, r.modelloPosseduto, r.annoPosseduto, Number(r.kmPosseduto) > 0 ? Number(r.kmPosseduto).toLocaleString('it-IT') + ' km' : ''].filter(Boolean).join(' ');
+        return `<article class="sa-in sa-app ${r.consulente ? 'preso' : 'nuovo da'}">
+            <div class="sa-in-t"><b>${esc(r.appOra || '—')}</b>${r.fonteData === 'Note' ? '<small title="Orario letto dalle note del lead">dalle note</small>' : ''}</div>
+            <div class="sa-in-c">
+              <div class="sa-in-n">${esc(cliApp(r))}${r.telefono ? ` <a href="tel:${esc(r.telefono.replace(/\s/g, ''))}" class="sa-tel">📞 ${esc(r.telefono)}</a>` : ''}</div>
+              <div class="sa-in-v">${v ? `<span class="sa-car">🚗 ${esc(v)}</span>` : ''}${posseduta ? `<span class="sa-car perm">🔁 Permuta: ${esc(posseduta)}</span>` : ''}${dett.map(x => `<span class="sa-tag">${esc(x)}</span>`).join('')}</div>
+              ${r.note ? `<details class="sa-in-note"><summary>📝 Note del lead</summary><div>${esc(r.note)}</div></details>` : ''}
+              <div class="sa-in-f">Lead ${esc(r.id)} · inserito ${esc(r.dataInserimento || '')}${r.inseritoDa ? ' da ' + esc(r.inseritoDa) : ''}${r.caller ? ' · caller ' + esc(r.caller.replace(/\s*\(ID \d+\)/, '')) : ''}</div>
+            </div>
+            <div class="sa-in-a">
+              ${r.consulente ? `<b class="sa-cons">${bollino(statoDi(r.consulente).stato)} ${esc(r.consulente)}</b>` : `<span class="sa-st no">Da assegnare</span>${r.venditore ? `<span class="sa-hint">Nel CSV: ${esc(r.venditore)}</span>` : ''}`}
+              ${r.status ? `<span class="sa-st ${/fall|chius|perso/i.test(r.status) ? 'no' : 'wait'}">${esc(r.status)}</span>` : ''}
+            </div>
+          </article>`;
+    }
+    async function onClickApp(e) {
+        const A = st.app;
+        const g = e.target.closest('[data-giorno]'); if (g) { caricaApp(g.dataset.giorno); return true; }
+        const m = e.target.closest('[data-mese]'); if (m) { A.mese = spostaMese(A.mese, Number(m.dataset.mese)); caricaApp(A.giorno); return true; }
+        const a = e.target.closest('[data-aact]');
+        if (a) {
+            if (a.dataset.aact === 'verso') { A.verso = A.verso === 'asc' ? 'desc' : 'asc'; render(); }
+            if (a.dataset.aact === 'oggi') { A.mese = oggi().slice(0, 7); caricaApp(oggi()); }
+            if (a.dataset.aact === 'storico') apriStorico();
+            return true;
+        }
+        return false;
+    }
+    function onChangeApp(e) {
+        const f = e.target.closest('[data-filtro]'); if (f) { st.app.filtro = f.value; render(); return; }
+        const i = e.target.closest('[data-import]'); if (i && i.files && i.files[0]) importaCsv(i.files[0]);
+    }
+
+    /* ---------- import CSV (solo admin) ---------- */
+    // intestazioni del CSV dei lead -> nomi dei campi che manda al server
+    const COLONNE = {
+        'ID': 'id', 'Tipo': 'tipo', 'Origine': 'origine', 'Canale': 'canale', 'Cognome': 'cognome', 'Nome': 'nome', 'Ragione sociale': 'ragioneSociale',
+        'E-mail 1': 'email', 'Telefono 1': 'telefono', 'Telefono 2': 'telefono2', 'Venditore': 'venditore', 'Caller': 'caller', 'Marca': 'marca', 'Modello': 'modello',
+        'Importo': 'importo', 'Tipo richiesta': 'tipoRichiesta', 'Tipo veicolo richiesto': 'tipoVeicolo', 'Data inserimento': 'dataInserimento', 'Inserito da': 'inseritoDa',
+        'Data lead': 'dataLead', 'Esito alert': 'esitoAlert', 'Esito ultima attività': 'esitoAttivita', 'Data ricontatto': 'dataRicontatto', 'Status': 'status', 'Note': 'note',
+        'Città': 'citta', 'Provincia': 'provincia', 'Sede': 'sede', 'Team': 'team', 'Etichette Lead': 'etichetteLead', 'Marca Posseduta': 'marcaPosseduta',
+        'Modello Posseduto': 'modelloPosseduto', 'Km': 'kmPosseduto', 'Anno Immatricolazione': 'annoPosseduto', 'Formula di Acquisto': 'formulaAcquisto'
+    };
+    function leggiTesto(buf) {
+        try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); }
+        catch (e) { return new TextDecoder('windows-1252').decode(buf); }
+    }
+    /* CSV con ; (o ,) e virgolette, anche con a capo dentro le note */
+    function parseCsv(txt) {
+        txt = txt.replace(/^﻿/, '');
+        const primaRiga = (txt.split(/\r?\n/).find(l => /\bID\b/.test(l) && /Venditore/i.test(l)) || '');
+        const sep = (primaRiga.match(/;/g) || []).length >= (primaRiga.match(/,/g) || []).length ? ';' : ',';
+        const rows = []; let row = [], f = '', q = false;
+        for (let i = 0; i < txt.length; i++) {
+            const ch = txt[i];
+            if (q) {
+                if (ch === '"') { if (txt[i + 1] === '"') { f += '"'; i++; } else q = false; }
+                else f += ch;
+            } else if (ch === '"') q = true;
+            else if (ch === sep) { row.push(f); f = ''; }
+            else if (ch === '\n' || ch === '\r') { if (ch === '\r' && txt[i + 1] === '\n') i++; row.push(f); rows.push(row); row = []; f = ''; }
+            else f += ch;
+        }
+        if (f || row.length) { row.push(f); rows.push(row); }
+        const h = rows.findIndex(r => r.some(c => c.trim().replace(/^﻿/, '') === 'ID') && r.some(c => c.trim() === 'Venditore'));
+        if (h < 0) throw new Error('Non trovo le colonne "ID" e "Venditore": è il CSV dei lead?');
+        const head = rows[h].map(c => c.trim().replace(/^﻿/, ''));
+        const out = [];
+        for (const r of rows.slice(h + 1)) {
+            if (r.length < 3 || !r.some(c => c.trim())) continue;
+            const o = {};
+            head.forEach((k, i) => { if (COLONNE[k]) o[COLONNE[k]] = (r[i] || '').trim(); });
+            if (o.id) out.push(o);
+        }
+        return out;
+    }
+    async function importaCsv(file) {
+        let righe;
+        try { righe = parseCsv(leggiTesto(await file.arrayBuffer())); }
+        catch (e) { alert('File non letto: ' + e.message); return; }
+        if (!righe.length) { alert('Il file non contiene lead.'); return; }
+        if (!confirm(`Importare ${righe.length} lead da “${file.name}”?\nVerranno presi solo quelli con sede Gruppo Auto Scala srl (Agnano): Nola e Salerno vengono scartati.`)) return;
+        const lab = root.querySelector('.sa-file'); if (lab) lab.classList.add('busy');
+        try {
+            const d = await post('/appuntamenti/import', { file: file.name, righe });
+            mostraEsito(d.import);
+            st.app.caricato = false; caricaApp(st.app.giorno);
+        } catch (e) { alert('Import non riuscito: ' + e.message); if (lab) lab.classList.remove('busy'); }
+    }
+    function riepilogoImport(x) {
+        return `<div class="sa-kpis sa-kpis5">
+            <div><b>${x.righeFile}</b><span>righe nel file</span></div>
+            <div><b>${x.nuovi}</b><span>nuovi</span></div>
+            <div><b>${x.aggiornati}</b><span>aggiornati</span></div>
+            <div><b>${x.invariati}</b><span>invariati</span></div>
+            <div><b>${x.esclusi}</b><span>scartati (non Agnano)</span></div></div>
+          <p class="sa-hint">${x.daAssegnare ? `<b class="sa-red">${x.daAssegnare} da assegnare</b> (venditore non di Agnano) · ` : ''}${x.assegnatiDaImport ? `${x.assegnatiDaImport} assegnati in automatico da questo import · ` : ''}${x.senzaData ? `${x.senzaData} senza data di appuntamento leggibile · ` : ''}import di ${esc(x.chi)} il ${esc(x.atIt)}</p>`;
+    }
+    function dettaglioImport(x) {
+        const motivi = Object.entries(x.esclusiPerMotivo || {});
+        return `${(x.nuoviElenco || []).length ? `<h4>Nuovi (${x.nuovi})</h4><table class="sa-tbl"><thead><tr><th>Lead</th><th>Cliente</th><th>Appuntamento</th><th>Consulente</th></tr></thead><tbody>
+              ${x.nuoviElenco.map(n => `<tr><td>${esc(n.id)}</td><td>${esc(n.cliente)}</td><td>${esc(fmtApp(n.appuntamento))}</td><td class="${n.consulente === 'Da assegnare' ? 'sa-red' : ''}">${esc(n.consulente)}</td></tr>`).join('')}</tbody></table>` : ''}
+          ${(x.cambi || []).length ? `<h4>Cosa è cambiato (${x.aggiornati} lead)</h4><table class="sa-tbl"><thead><tr><th>Lead</th><th>Cliente</th><th>Campo</th><th>Prima</th><th>Dopo</th></tr></thead><tbody>
+              ${x.cambi.map(c => `<tr><td>${esc(c.id)}</td><td>${esc(c.cliente)}</td><td><b>${esc(c.campo)}</b></td><td class="sa-old">${esc(c.campo === 'Appuntamento' ? fmtApp(c.prima) : c.prima || '—')}</td><td>${esc(c.campo === 'Appuntamento' ? fmtApp(c.dopo) : c.dopo || '—')}</td></tr>`).join('')}</tbody></table>` : ''}
+          ${motivi.length ? `<h4>Scartati (${x.esclusi})</h4><p class="sa-hint">${motivi.map(([m, n]) => `${esc(m)}: <b>${n}</b>`).join(' · ')}</p>
+              ${(x.esclusiElenco || []).length ? `<table class="sa-tbl"><thead><tr><th>Lead</th><th>Cliente</th><th>Motivo</th></tr></thead><tbody>${x.esclusiElenco.map(c => `<tr><td>${esc(c.id)}</td><td>${esc(c.cliente)}</td><td>${esc(c.motivo)}</td></tr>`).join('')}</tbody></table>` : ''}` : ''}
+          ${!(x.nuoviElenco || []).length && !(x.cambi || []).length && !motivi.length ? '<p class="sa-hint">Nessuna novità: tutti i lead erano già aggiornati.</p>' : ''}`;
+    }
+    const fmtApp = s => { if (!s) return '—'; const [g, o] = String(s).split(' '); return g ? giornoCorto(g) + (o ? ' ' + o : '') : s; };
+    function modale(titolo, sotto, html) {
+        const ov = document.createElement('div'); ov.className = 'sa-ov';
+        ov.innerHTML = `<div class="sa-modal sa-wide" role="dialog" aria-modal="true" aria-label="${esc(titolo)}">
+            <header><div><small>${esc(sotto)}</small><h3>${esc(titolo)}</h3></div><button type="button" class="sa-x" data-chiudi aria-label="Chiudi">✕</button></header>
+            <div class="sa-mbody">${html}</div></div>`;
+        document.body.appendChild(ov);
+        const chiudi = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+        const onKey = e => { if (e.key === 'Escape') chiudi(); };
+        document.addEventListener('keydown', onKey);
+        ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-chiudi]')) chiudi(); });
+        return ov;
+    }
+    function mostraEsito(x) { modale('Import completato', 'APPUNTAMENTI · ' + (x.file || ''), riepilogoImport(x) + dettaglioImport(x)); }
+    async function apriStorico() {
+        let L;
+        try { L = (await api('/appuntamenti/storico')).storico || []; } catch (e) { alert(e.message); return; }
+        modale('Storico import', 'APPUNTAMENTI · ' + L.length + ' import', L.length ? L.map((x, i) => `<details class="sa-imp" ${i === 0 ? 'open' : ''}>
+            <summary><b>${esc(x.atIt)}</b><span>${esc(x.file || 'file')}</span><em>+${x.nuovi} nuovi · ${x.aggiornati} aggiornati · ${x.esclusi} scartati</em></summary>
+            ${riepilogoImport(x)}${dettaglioImport(x)}</details>`).join('') : '<p class="sa-hint">Nessun import ancora.</p>');
+    }
+
+    /* =====================================================================
+       REPORT (solo admin)
+       ===================================================================== */
+    const grafici = [];
+    function periodo(preset) {
+        const a = oggi(), d = new Date(a + 'T12:00:00Z');
+        const meno = n => { const x = new Date(d); x.setUTCDate(x.getUTCDate() - n); return x.toISOString().slice(0, 10); };
+        if (preset === 'oggi') return [a, a];
+        if (preset === '7') return [meno(6), a];
+        if (preset === 'mese') return [a.slice(0, 8) + '01', a];
+        return [meno(29), a];
+    }
+    async function caricaReport() {
+        const R = st.rep;
+        if (!R.da) [R.da, R.a] = periodo(R.preset);
+        R.err = ''; R.carica = true; if (st.tab === 'report') render();
+        try { R.dati = await api(`/report?da=${R.da}&a=${R.a}`); } catch (e) { R.err = e.message; }
+        R.carica = false;
+        if (st.tab === 'report') render();
+    }
+    function calcola(D) {
+        const cons = D.consulenti || [];
+        const I = D.ingressi || [];
+        const tot = I.length, ass = I.filter(r => r.consulente), presi = I.filter(r => r.presoAt);
+        const media = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+        const risp = r => (new Date(r.presoAt) - new Date(r.assegnatoAt)) / 60000;
+        const per = {};
+        cons.forEach(c => { per[c] = { n: 0, presi: 0, risp: [], cliente: [] }; });
+        ass.forEach(r => {
+            const p = per[r.consulente] || (per[r.consulente] = { n: 0, presi: 0, risp: [], cliente: [] });
+            p.n++;
+            if (r.presoAt) { p.presi++; if (r.assegnatoAt) p.risp.push(risp(r)); }
+            if (r.minutiCliente != null && r.liberoAt) p.cliente.push(Number(r.minutiCliente));
+        });
+        // marchi: quanti walk-in chiedono quel marchio (un cliente con due Peugeot conta 1)
+        const marchi = {};
+        I.forEach(r => {
+            const visti = new Set();
+            (r.vetture || []).forEach(v => {
+                const m = (v.marca || 'Non indicato').trim() || 'Non indicato';
+                const k = marchi[m] || (marchi[m] = { walkin: 0, vetture: 0, modelli: {}, presi: 0 });
+                k.vetture++;
+                if (v.modello) k.modelli[v.modello] = (k.modelli[v.modello] || 0) + 1;
+                if (!visti.has(m)) { visti.add(m); k.walkin++; if (r.presoAt) k.presi++; }
+            });
+        });
+        // tempo negli stati: cambi chiusi + stati ancora aperti oggi
+        const T = {};
+        cons.forEach(c => { T[c] = { DISPONIBILE: 0, OCCUPATO: 0, NON_DISPONIBILE: 0, giorni: new Set(), periodi: { DISPONIBILE: 0, OCCUPATO: 0, NON_DISPONIBILE: 0 }, cambi: 0 }; });
+        const add = (nome, s, min, giorno) => {
+            if (!s || !T[nome]) return;
+            T[nome][s] += min; T[nome].periodi[s]++; T[nome].giorni.add(giorno);
+        };
+        (D.cambi || []).forEach(e => {
+            if (T[e.nome]) T[e.nome].cambi++;
+            if (e.da && e.inizio) add(e.nome, e.da, Number(e.minuti) || 0, isoRoma(new Date(e.inizio)));
+        });
+        const oggiIn = oggi() >= D.da && oggi() <= D.a;
+        if (oggiIn) (D.stati || []).forEach(s => { if (s.stato && s.dal) add(s.nome, s.stato, minDa(s.dal), oggi()); });
+        return { tot, ass: ass.length, presi: presi.length, rispMedia: media(ass.filter(r => r.presoAt && r.assegnatoAt).map(risp)),
+            clienteMedia: media(I.filter(r => r.liberoAt && r.minutiCliente != null).map(r => Number(r.minutiCliente))), per, marchi, T, media };
+    }
+    const pct = (n, t) => t ? Math.round(n / t * 1000) / 10 + '%' : '—';
+    function renderReport(body) {
+        grafici.splice(0).forEach(g => { try { g.destroy(); } catch (e) { /* */ } });
+        const R = st.rep, D = R.dati;
+        const barraPeriodo = `<div class="sa-card sa-rep-h">
+            <div><h2>Report walk-in e consulenti</h2><p>${D ? `Dal ${esc(giornoCorto(D.da))} al ${esc(giornoCorto(D.a))} · ora italiana` : ''}</p></div>
+            <div class="sa-list-a">
+              ${[['oggi', 'Oggi'], ['7', '7 giorni'], ['30', '30 giorni'], ['mese', 'Questo mese']].map(([k, n]) => `<button type="button" class="sa-btn2 ${R.preset === k ? 'on' : ''}" data-preset="${k}">${n}</button>`).join('')}
+              <label class="sa-dt">Dal <input type="date" data-rda value="${esc(R.da || '')}"></label>
+              <label class="sa-dt">al <input type="date" data-ra value="${esc(R.a || '')}"></label>
+            </div></div>`;
+        if (R.err) { body.innerHTML = barraPeriodo + `<div class="sa-msg err">${esc(R.err)}</div>`; return; }
+        if (!D) { body.innerHTML = barraPeriodo + '<div class="sa-card sa-none">Caricamento del report…</div>'; return; }
+        const C = calcola(D), cons = D.consulenti || [];
+        const righeCons = Object.keys(C.per).filter(c => cons.includes(c) || C.per[c].n);
+        const marchi = Object.entries(C.marchi).sort((a, b) => b[1].walkin - a[1].walkin);
+        const conVetture = (D.ingressi || []).filter(r => (r.vetture || []).length).length;
+        const filtro = R.filtroCons || '';
+        const cambi = (D.cambi || []).filter(e => !filtro || e.nome === filtro).slice().sort((a, b) => String(b.at).localeCompare(String(a.at)));
+        const lab = s => s ? `${bollino(s)} ${STATI[s].t}` : '<span class="sa-hint">non in salone</span>';
+        body.innerHTML = barraPeriodo + `
+          ${R.carica ? '<div class="sa-msg">Aggiornamento…</div>' : ''}
+          <div class="sa-tiles">
+            <div class="sa-card sa-tile"><span>Walk-in</span><b>${C.tot}</b><em>${(D.ingressi || []).length ? 'nel periodo' : 'nessuno nel periodo'}</em></div>
+            <div class="sa-card sa-tile"><span>Assegnati</span><b>${C.ass}</b><em>${pct(C.ass, C.tot)} dei walk-in</em></div>
+            <div class="sa-card sa-tile"><span>Presi in carico</span><b>${C.presi}</b><em>${pct(C.presi, C.ass)} degli assegnati</em></div>
+            <div class="sa-card sa-tile"><span>Tempo medio di risposta</span><b>${durata(C.rispMedia)}</b><em>da assegnato a preso in carico</em></div>
+            <div class="sa-card sa-tile"><span>Tempo medio con il cliente</span><b>${durata(C.clienteMedia)}</b><em>da preso in carico a di nuovo disponibile</em></div>
+          </div>
+
+          <div class="sa-rep-2">
+            <div class="sa-card"><h3>Walk-in assegnati per consulente</h3><p class="sa-hint">Quanti clienti ha ricevuto ciascuno e che percentuale del totale assegnato.</p>
+              <div class="sa-chart"><canvas id="saChCons" role="img" aria-label="Walk-in assegnati per consulente"></canvas></div>
+              <table class="sa-tbl"><thead><tr><th>Consulente</th><th>Assegnati</th><th>% sul totale</th><th>Presi in carico</th><th>Risposta media</th><th>Con il cliente (media)</th></tr></thead><tbody>
+                ${righeCons.map(c => { const p = C.per[c]; return `<tr><td>${esc(c)}</td><td><b>${p.n}</b></td><td>${pct(p.n, C.ass)}</td><td>${p.presi}</td><td>${durata(C.media(p.risp))}</td><td>${durata(C.media(p.cliente))}</td></tr>`; }).join('')}
+              </tbody></table></div>
+            <div class="sa-card"><h3>Marchi richiesti nei walk-in</h3><p class="sa-hint">Su ${conVetture} walk-in con almeno una vettura indicata. Un cliente che chiede due modelli dello stesso marchio conta una volta.</p>
+              <div class="sa-chart" style="height:${Math.max(180, Math.min(marchi.length, 12) * 30 + 40)}px"><canvas id="saChMarchi" role="img" aria-label="Marchi richiesti nei walk-in"></canvas></div>
+              <table class="sa-tbl"><thead><tr><th>Marchio</th><th>Walk-in</th><th>% walk-in</th><th>Vetture chieste</th><th>Presi in carico</th><th>Modelli più chiesti</th></tr></thead><tbody>
+                ${marchi.map(([m, k]) => `<tr><td>${esc(m)}</td><td><b>${k.walkin}</b></td><td>${pct(k.walkin, conVetture)}</td><td>${k.vetture}</td><td>${pct(k.presi, k.walkin)}</td><td class="sa-hint">${esc(Object.entries(k.modelli).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([n, q]) => n + (q > 1 ? ' ×' + q : '')).join(', '))}</td></tr>`).join('') || '<tr><td colspan="6" class="sa-hint">Nessuna vettura indicata nel periodo.</td></tr>'}
+              </tbody></table></div>
+          </div>
+
+          <div class="sa-card"><h3>Minuti medi al giorno in ogni stato</h3><p class="sa-hint">Media sui giorni in cui il consulente è stato in salone. Uno stato lasciato aperto la sera viene chiuso in automatico alle 21:00.</p>
+            <div class="sa-legend">${Object.keys(STATI).map(k => `<span>${bollino(k)} ${STATI[k].t}</span>`).join('')}</div>
+            <div class="sa-chart" style="height:${cons.length * 34 + 50}px"><canvas id="saChStati" role="img" aria-label="Minuti medi al giorno in ogni stato per consulente"></canvas></div>
+            <table class="sa-tbl"><thead><tr><th>Consulente</th><th>Giorni</th><th>${bollino('DISPONIBILE')} Disponibile / giorno</th><th>${bollino('OCCUPATO')} Occupato / giorno</th><th>${bollino('NON_DISPONIBILE')} Non disponibile / giorno</th><th>Durata media di uno stato</th><th>Cambi di stato</th></tr></thead><tbody>
+              ${cons.map(c => { const t = C.T[c], g = t.giorni.size || 0, tot = t.DISPONIBILE + t.OCCUPATO + t.NON_DISPONIBILE, np = t.periodi.DISPONIBILE + t.periodi.OCCUPATO + t.periodi.NON_DISPONIBILE;
+                  return `<tr><td>${esc(c)}</td><td>${g}</td>${Object.keys(STATI).map(k => `<td>${g ? durata(t[k] / g) : '—'}<small class="sa-hint"> ${tot ? pct(t[k], tot) : ''}</small></td>`).join('')}<td>${np ? durata(tot / np) : '—'}</td><td>${t.cambi}</td></tr>`; }).join('')}
+            </tbody></table></div>
+
+          <div class="sa-card"><div class="sa-list-h"><div><h3>Storico dei cambi di stato</h3><p class="sa-hint">Ogni cambio con la durata dello stato precedente. ${cambi.length > 400 ? 'Mostro gli ultimi 400.' : ''}</p></div>
+              <select class="sa-sel sa-sel-a" data-fcons><option value="">Tutti i consulenti</option>${cons.map(c => `<option ${filtro === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
+            <div class="sa-scroll"><table class="sa-tbl"><thead><tr><th>Quando</th><th>Consulente</th><th>Da</th><th>A</th><th>Durata stato precedente</th><th>Motivo</th><th>Cliente</th></tr></thead><tbody>
+              ${cambi.slice(0, 400).map(e => `<tr><td>${esc(e.atIt || dataOra(e.at))}</td><td>${esc(e.nome)}</td><td>${lab(e.da)}</td><td>${lab(e.a)}</td><td>${e.da ? durata(e.minuti) : '—'}</td><td class="sa-hint">${esc(e.motivo || '')}${e.chi && !/consulente|sistema/i.test(e.motivo || '') && !String(e.motivo || '').includes(e.chi) ? ' · ' + esc(e.chi) : ''}</td><td>${esc(e.clientePrec || '')}</td></tr>`).join('') || '<tr><td colspan="7" class="sa-hint">Nessun cambio di stato nel periodo.</td></tr>'}
+            </tbody></table></div></div>`;
+        disegnaGrafici(C, righeCons, marchi, cons);
+    }
+    function disegnaGrafici(C, righeCons, marchi, cons) {
+        if (typeof Chart === 'undefined') return;
+        const css = getComputedStyle(document.getElementById('salonePage'));
+        const ink2 = css.getPropertyValue('--sa-ink2').trim() || '#9aa3b2', line = css.getPropertyValue('--sa-line').trim() || '#2a2e3b';
+        const acc = '#22c3a6';
+        const base = (asse, extra) => Object.assign({
+            responsive: true, maintainAspectRatio: false, animation: false,
+            plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+            scales: { x: { grid: { color: asse === 'x' ? line : 'transparent' }, ticks: { color: ink2 }, border: { display: false } },
+                      y: { grid: { color: asse === 'y' ? line : 'transparent' }, ticks: { color: ink2 }, border: { display: false } } }
+        }, extra || {});
+        const c1 = document.getElementById('saChCons');
+        if (c1) grafici.push(new Chart(c1, { type: 'bar', data: { labels: righeCons, datasets: [{ label: 'Walk-in assegnati', data: righeCons.map(c => C.per[c].n), backgroundColor: acc, borderRadius: 4, maxBarThickness: 34 }] },
+            options: base('y', { plugins: { legend: { display: false }, tooltip: { callbacks: { label: x => ` ${x.raw} walk-in · ${pct(x.raw, C.ass)} del totale` } } }, scales: { x: { grid: { display: false }, ticks: { color: ink2, maxRotation: 40, minRotation: 0 } }, y: { beginAtZero: true, ticks: { color: ink2, precision: 0 }, grid: { color: line }, border: { display: false } } } }) }));
+        const c2 = document.getElementById('saChMarchi');
+        const top = marchi.slice(0, 12);
+        if (c2 && top.length) grafici.push(new Chart(c2, { type: 'bar', data: { labels: top.map(x => x[0]), datasets: [{ label: 'Walk-in', data: top.map(x => x[1].walkin), backgroundColor: '#4a90d9', borderRadius: 4, maxBarThickness: 22 }] },
+            options: base('x', { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { callbacks: { label: x => ` ${x.raw} walk-in` } } }, scales: { x: { beginAtZero: true, ticks: { color: ink2, precision: 0 }, grid: { color: line }, border: { display: false } }, y: { grid: { display: false }, ticks: { color: ink2 } } } }) }));
+        const c3 = document.getElementById('saChStati');
+        if (c3) grafici.push(new Chart(c3, { type: 'bar', data: { labels: cons, datasets: Object.keys(STATI).map(k => ({
+                label: STATI[k].t, data: cons.map(c => { const t = C.T[c], g = t.giorni.size; return g ? Math.round(t[k] / g) : 0; }),
+                backgroundColor: COL[k], borderColor: css.getPropertyValue('--sa-card').trim() || '#171a23', borderWidth: { right: 2 }, borderSkipped: false, maxBarThickness: 22 })) },
+            options: base('x', { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, callbacks: { label: x => ` ${x.dataset.label}: ${durata(x.raw)} al giorno` } } },
+                scales: { x: { stacked: true, beginAtZero: true, title: { display: true, text: 'minuti medi al giorno', color: ink2 }, ticks: { color: ink2 }, grid: { color: line }, border: { display: false } }, y: { stacked: true, grid: { display: false }, ticks: { color: ink2 } } } }) }));
+    }
+    function onClickReport(e) {
+        const p = e.target.closest('[data-preset]');
+        if (p) { st.rep.preset = p.dataset.preset; [st.rep.da, st.rep.a] = periodo(p.dataset.preset); caricaReport(); return true; }
+        return false;
+    }
+    function onChangeReport(e) {
+        const R = st.rep;
+        if (e.target.matches('[data-rda],[data-ra]')) {
+            const da = root.querySelector('[data-rda]').value, a = root.querySelector('[data-ra]').value;
+            if (da && a) { R.da = da <= a ? da : a; R.a = da <= a ? a : da; R.preset = ''; caricaReport(); }
+            return;
+        }
+        if (e.target.matches('[data-fcons]')) { R.filtroCons = e.target.value; render(); }
+    }
+
+    /* ================= CHAT ================= */
+    const EMOJI = ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '🙂', '😉', '😍', '😘', '😎', '🤩', '🥳', '😏', '🤔', '🤨', '😐', '🙄', '😬', '😴', '😮', '😯', '😲', '😳', '🥺', '😢', '😭', '😤', '😡', '🤯', '😱', '🤗', '🤫', '🤐', '😇',
+        '👍', '👎', '👌', '✌️', '🤞', '👏', '🙌', '🙏', '💪', '👋', '🤝', '👀', '❤️', '🧡', '💛', '💚', '💙', '💜', '🔥', '⭐', '✨', '🎉', '✅', '❌', '⚠️', '❗', '❓', '💯', '⏰', '📞', '📅', '📝', '💶', '🚗', '🚙', '🔑', '🏁', '☕', '🍕'];
+    const RAPIDE = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+    const Chat = (function () {
+        let el = null, aperto = false, conv = null, dopo = 0, timer = null, io = null, utenti = [], risposta = null;
+        const msgs = {}, nonLetti = {};
+        const nomeConv = k => k === 'GRUPPO' ? '👥 Gruppo salone' : (() => { const [, a, b] = k.split('_').map(Number); const altro = io && a === io.id ? b : a; const u = utenti.find(x => x.id === altro); return u ? u.nome : 'Chat privata'; })();
+        const convCon = id => 'P_' + Math.min(io.id, id) + '_' + Math.max(io.id, id);
+        function crea() {
+            if (el) return;
+            el = document.createElement('div');
+            el.className = 'sa-chat';
+            el.innerHTML = `<button type="button" class="sa-chat-fab" aria-label="Apri la chat">💬 <span>Chat</span><i class="sa-badge" hidden></i></button>
+              <div class="sa-chat-p" hidden>
+                <header><button type="button" class="sa-chat-back" hidden aria-label="Torna alle chat">‹</button><b class="sa-chat-tit">Chat</b><button type="button" class="sa-chat-min" aria-label="Riduci">—</button></header>
+                <div class="sa-chat-list"></div>
+                <div class="sa-chat-conv" hidden><div class="sa-chat-msgs"></div>
+                  <div class="sa-chat-reply" hidden></div>
+                  <div class="sa-chat-in"><button type="button" class="sa-emo-b" title="Emoji">😊</button><textarea rows="1" placeholder="Scrivi un messaggio…"></textarea><button type="button" class="sa-send" title="Invia">➤</button></div>
+                  <div class="sa-emo" hidden>${EMOJI.map(x => `<button type="button" data-emo="${x}">${x}</button>`).join('')}</div>
+                </div>
+              </div>`;
+            document.body.appendChild(el);
+            el.querySelector('.sa-chat-fab').addEventListener('click', () => apri(true));
+            el.querySelector('.sa-chat-min').addEventListener('click', () => apri(false));
+            el.querySelector('.sa-chat-back').addEventListener('click', () => { conv = null; vista(); });
+            el.querySelector('.sa-chat-list').addEventListener('click', e => { const b = e.target.closest('[data-conv]'); if (b) entra(b.dataset.conv); });
+            const ta = el.querySelector('textarea');
+            ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); invia(); } });
+            ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(110, ta.scrollHeight) + 'px'; });
+            el.querySelector('.sa-send').addEventListener('click', invia);
+            el.querySelector('.sa-emo-b').addEventListener('click', () => { const p = el.querySelector('.sa-emo'); p.hidden = !p.hidden; });
+            el.querySelector('.sa-emo').addEventListener('click', e => { const b = e.target.closest('[data-emo]'); if (!b) return; ta.value += b.dataset.emo; ta.focus(); });
+            el.querySelector('.sa-chat-reply').addEventListener('click', e => { if (e.target.closest('[data-annulla]')) { risposta = null; barraRisposta(); } });
+            el.querySelector('.sa-chat-msgs').addEventListener('click', onMsgClick);
+        }
+        function mostra(on) {
+            if (on && !can()) return;
+            crea(); el.style.display = on ? '' : 'none';
+            if (on) avvia(); else { clearInterval(timer); timer = null; }
+        }
+        function apri(on) {
+            aperto = on;
+            el.querySelector('.sa-chat-fab').hidden = on;
+            el.querySelector('.sa-chat-p').hidden = !on;
+            if (on) { vista(); if (conv) segnaLetto(conv); }
+        }
+        async function avvia() {
+            if (timer) return;
+            try { const d = await api('/chat/utenti'); utenti = d.utenti || []; io = d.io; } catch (e) { /* */ }
+            await giro();
+            timer = setInterval(giro, 3000);
+        }
+        async function giro() {
+            try {
+                const d = await api('/chat/aggiornamenti?dopo=' + dopo);
+                let cambiato = false;
+                Object.entries(d.conv || {}).forEach(([k, v]) => {
+                    const L = msgs[k] = msgs[k] || [];
+                    (v.messaggi || []).forEach(m => { const i = L.findIndex(x => x.id === m.id); if (i >= 0) L[i] = m; else L.push(m); cambiato = true; });
+                    L.sort((a, b) => a.ts - b.ts);
+                    nonLetti[k] = (aperto && conv === k) ? 0 : v.nonLetti || 0;
+                });
+                dopo = Math.max(dopo, d.ora || 0);
+                badge();
+                if (aperto) { if (conv) { if (cambiato) disegnaMsgs(); if (nonLetti[conv] === 0 && cambiato) segnaLetto(conv); } else vista(); }
+            } catch (e) { /* rete: si riprova */ }
+        }
+        function badge() {
+            const n = Object.values(nonLetti).reduce((a, b) => a + b, 0), b = el.querySelector('.sa-badge');
+            b.hidden = !n; b.textContent = n > 99 ? '99+' : n;
+        }
+        function vista() {
+            const lista = el.querySelector('.sa-chat-list'), cv = el.querySelector('.sa-chat-conv');
+            el.querySelector('.sa-chat-back').hidden = !conv;
+            el.querySelector('.sa-chat-tit').textContent = conv ? nomeConv(conv) : 'Chat del salone';
+            lista.hidden = !!conv; cv.hidden = !conv;
+            if (conv) { disegnaMsgs(); return; }
+            const ultimo = k => { const L = msgs[k] || []; return L[L.length - 1]; };
+            const righe = [{ k: 'GRUPPO', nome: '👥 Gruppo salone', sub: 'Tutti' }].concat(utenti.map(u => ({ k: convCon(u.id), nome: u.nome, sub: ruolo(u.role) })));
+            righe.sort((a, b) => ((ultimo(b.k) || {}).ts || (b.k === 'GRUPPO' ? 1 : 0)) - ((ultimo(a.k) || {}).ts || (a.k === 'GRUPPO' ? 1 : 0)));
+            lista.innerHTML = righe.map(r => { const u = ultimo(r.k), n = nonLetti[r.k] || 0; return `<button type="button" class="sa-cl ${n ? 'nl' : ''}" data-conv="${r.k}">
+                <span class="sa-av">${r.k === 'GRUPPO' ? '👥' : esc(iniziali(r.nome))}</span>
+                <span class="sa-cl-t"><b>${esc(r.nome.replace('👥 ', ''))}</b><em>${u ? esc((u.da === io.id ? 'Tu: ' : r.k === 'GRUPPO' ? u.nome.split(' ')[0] + ': ' : '') + u.testo.slice(0, 60)) : esc(r.sub)}</em></span>
+                ${u ? `<small>${ora(u.ts)}</small>` : ''}${n ? `<i class="sa-badge">${n}</i>` : ''}</button>`; }).join('')
+                + (utenti.length ? '' : '<p class="sa-hint" style="padding:10px 14px">Nessun altro utente con accesso al salone, per ora.</p>');
+        }
+        const ruolo = r => ({ FRONT_OFFICE: 'Front Office', CONSULENZA: 'Consulenza', ADMIN: 'Admin' }[r] || r || '');
+        const iniziali = n => String(n || '').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+        function entra(k) { conv = k; risposta = null; barraRisposta(); vista(); segnaLetto(k); el.querySelector('textarea').focus(); }
+        async function segnaLetto(k) { nonLetti[k] = 0; badge(); try { await post('/chat/letto', { conv: k }); } catch (e) { /* */ } }
+        function disegnaMsgs() {
+            const box = el.querySelector('.sa-chat-msgs'), L = msgs[conv] || [];
+            const inFondo = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+            let giornoPrec = '';
+            box.innerHTML = L.length ? L.map(m => {
+                const mio = io && m.da === io.id, g = isoRoma(new Date(m.ts));
+                const sep = g !== giornoPrec ? `<div class="sa-sep"><span>${g === oggi() ? 'Oggi' : giornoLungo(g)}</span></div>` : ''; giornoPrec = g;
+                const rif = m.rispostaA ? L.find(x => x.id === m.rispostaA) : null;
+                const rz = Object.entries(m.reazioni || {});
+                return sep + `<div class="sa-m ${mio ? 'mio' : ''}" data-id="${m.id}">
+                  <div class="sa-bub">
+                    ${!mio && conv === 'GRUPPO' ? `<b class="sa-m-n">${esc(m.nome)}</b>` : ''}
+                    ${rif ? `<button type="button" class="sa-quote" data-vai="${rif.id}"><b>${esc(rif.da === (io && io.id) ? 'Tu' : rif.nome)}</b><span>${esc(rif.testo.slice(0, 90))}</span></button>` : ''}
+                    <div class="sa-m-t">${esc(m.testo).replace(/\n/g, '<br>')}</div>
+                    <small>${ora(m.ts)}</small>
+                    <div class="sa-m-a"><button type="button" data-rispondi="${m.id}" title="Rispondi">↩</button><button type="button" data-reagisci="${m.id}" title="Reagisci">😊</button></div>
+                  </div>
+                  ${rz.length ? `<div class="sa-rz">${rz.map(([e, chi]) => `<button type="button" class="${io && chi.includes(io.nome) ? 'mia' : ''}" data-rz="${m.id}" data-e="${e}" title="${esc(chi.join(', '))}">${e} ${chi.length}</button>`).join('')}</div>` : ''}
+                </div>`;
+            }).join('') : '<p class="sa-hint" style="text-align:center;padding:24px">Nessun messaggio: scrivi il primo.</p>';
+            if (inFondo || !box.dataset.v) box.scrollTop = box.scrollHeight;
+            box.dataset.v = '1';
+        }
+        async function onMsgClick(e) {
+            const r = e.target.closest('[data-rispondi]');
+            if (r) { risposta = (msgs[conv] || []).find(x => x.id === r.dataset.rispondi) || null; barraRisposta(); el.querySelector('textarea').focus(); return; }
+            const re = e.target.closest('[data-reagisci]');
+            if (re) {
+                document.querySelectorAll('.sa-rapide').forEach(x => x.remove());
+                const p = document.createElement('div'); p.className = 'sa-rapide';
+                p.innerHTML = RAPIDE.map(x => `<button type="button" data-e="${x}">${x}</button>`).join('');
+                re.closest('.sa-bub').appendChild(p);
+                p.addEventListener('click', ev => { const b = ev.target.closest('[data-e]'); if (!b) return; ev.stopPropagation(); p.remove(); reagisci(re.dataset.reagisci, b.dataset.e); });
+                setTimeout(() => document.addEventListener('click', function via(ev) { if (!p.contains(ev.target)) { p.remove(); document.removeEventListener('click', via); } }), 0);
+                return;
+            }
+            const z = e.target.closest('[data-rz]'); if (z) { reagisci(z.dataset.rz, z.dataset.e); return; }
+            const v = e.target.closest('[data-vai]');
+            if (v) { const t = el.querySelector(`.sa-m[data-id="${v.dataset.vai}"]`); if (t) { t.scrollIntoView({ block: 'center', behavior: 'smooth' }); t.classList.add('lampo'); setTimeout(() => t.classList.remove('lampo'), 1200); } }
+        }
+        async function reagisci(id, emoji) {
+            try { const d = await post('/chat/reazione', { conv, id, emoji }); const L = msgs[conv] || [], i = L.findIndex(x => x.id === id); if (i >= 0 && d.messaggio) L[i] = d.messaggio; disegnaMsgs(); }
+            catch (e) { alert(e.message); }
+        }
+        function barraRisposta() {
+            const b = el.querySelector('.sa-chat-reply');
+            b.hidden = !risposta;
+            if (risposta) b.innerHTML = `<div><b>Rispondi a ${esc(risposta.da === (io && io.id) ? 'te stesso' : risposta.nome)}</b><span>${esc(risposta.testo.slice(0, 100))}</span></div><button type="button" data-annulla aria-label="Annulla risposta">✕</button>`;
+        }
+        async function invia() {
+            const ta = el.querySelector('textarea'), testo = ta.value.trim();
+            if (!testo || !conv) return;
+            ta.value = ''; ta.style.height = 'auto'; el.querySelector('.sa-emo').hidden = true;
+            const rid = risposta && risposta.id; risposta = null; barraRisposta();
+            try { const d = await post('/chat/messaggi', { conv, testo, rispostaA: rid }); (msgs[conv] = msgs[conv] || []).push(d.messaggio); disegnaMsgs(); el.querySelector('.sa-chat-msgs').scrollTop = 1e9; }
+            catch (e) { ta.value = testo; alert('Messaggio non inviato: ' + e.message); }
+        }
+        return { mostra };
+    })();
+
+    window.Salone = { can, canFull, entraDiretto, refreshNav, open, hide };
+})();

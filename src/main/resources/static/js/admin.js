@@ -59,6 +59,8 @@ function renderUsers(users) {
                             <option value="GESTORE" ${u.role === 'GESTORE' ? 'selected' : ''}>Gestore</option>
                             <option value="NOLEGGIO" ${u.role === 'NOLEGGIO' ? 'selected' : ''}>Noleggio</option>
                             <option value="SERVICE" ${u.role === 'SERVICE' ? 'selected' : ''}>Service</option>
+                            <option value="FRONT_OFFICE" ${u.role === 'FRONT_OFFICE' ? 'selected' : ''}>Front Office</option>
+                            <option value="CONSULENZA" ${u.role === 'CONSULENZA' ? 'selected' : ''}>Consulenza</option>
                             ${isAdmin ? `<option value="ADMIN" ${u.role === 'ADMIN' ? 'selected' : ''}>Admin</option>` : ''}
                         </select>
                     ` : `
@@ -82,7 +84,9 @@ function formatRole(role) {
         'GESTORE': 'Gestore',
         'ADMIN': 'Admin',
         'NOLEGGIO': 'Noleggio',
-        'SERVICE': 'Service'
+        'SERVICE': 'Service',
+        'FRONT_OFFICE': 'Front Office',
+        'CONSULENZA': 'Consulenza'
     };
     return map[role] || role;
 }
@@ -217,6 +221,9 @@ const PERMISSION_SECTIONS = [
     { key: 'CONSEGNE', icon: '🔑', label: 'Consegne', group: 'BI' },
     { key: 'STOCK', icon: '🚘', label: 'Stock · Completo = importa il file', group: 'BI' },
     { key: 'COMMERCIALE', icon: '💼', label: 'Commerciale · Completo = importa le trattative', group: 'BI' },
+    // Salone: Appuntamenti e ingressi (Front Office e Consulenza entrano direttamente qui)
+    // Livelli: 1 vede tutto (Consulenza: solo i propri) · 2 registra walk-in e importa · 3 anche Report
+    { key: 'SALONE', icon: '🚶', label: 'Appuntamenti e ingressi', group: 'Salone' },
     { key: 'ADMIN', icon: '⚙️', label: 'Utenti/Permessi', group: 'Gestione' },
     { key: 'ALLERT', icon: '🔔', label: 'Allert (Completo = gestisce · Admin = anche riapre i gestiti)', group: 'Gestione' }
 ];
@@ -228,6 +235,15 @@ const ACCESS_LEVEL_META = {
     FULL: { icon: '✏️', label: 'Completo' },
     ADMIN_FULL: { icon: '🛡️', label: 'Accesso Admin' }
 };
+
+// NUOVO: per "Appuntamenti e ingressi" i 4 pulsanti si leggono come livelli (stessi valori salvati)
+const SALONE_LEVEL_META = {
+    NONE: { icon: '🚫', label: 'Nessuno: non vede la sezione' },
+    READ_ONLY: { icon: '1', label: 'Livello 1: vede tutto come il Front Office, ma non registra walk-in e non importa (Consulenza: solo i propri clienti)' },
+    FULL: { icon: '2', label: 'Livello 2: registra e assegna i walk-in, importa gli appuntamenti' },
+    ADMIN_FULL: { icon: '3', label: 'Livello 3: come il 2 + scheda Report' }
+};
+const levelMetaFor = key => key === 'SALONE' ? SALONE_LEVEL_META : ACCESS_LEVEL_META;
 
 let permissionMatrixCache = null;
 let permissionRolesCache = [];
@@ -304,7 +320,7 @@ function renderPermissionMatrix() {
     PERMISSION_SECTIONS.forEach(section => {
         if (section.group !== gruppo) {
             gruppo = section.group;
-            html += `<tr><td colspan="${permissionRolesCache.length + 1}" style="text-align:left;font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--text-secondary);padding-top:14px">${gruppo}${gruppo === 'BI' ? ' · 👁 Solo lettura = vede · ✏️ Completo = importa e modifica · la pagina BI la vede chi ha almeno una delle tre' : ''}</td></tr>`;
+            html += `<tr><td colspan="${permissionRolesCache.length + 1}" style="text-align:left;font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--text-secondary);padding-top:14px">${gruppo}${gruppo === 'BI' ? ' · 👁 Solo lettura = vede · ✏️ Completo = importa e modifica · la pagina BI la vede chi ha almeno una delle tre' : ''}${gruppo === 'Salone' ? ' · livelli: 1 = vede tutto (Consulenza: solo i propri) · 2 = registra walk-in e importa · 3 = anche Report' : ''}</td></tr>`;
         }
         html += `<tr>
             <td style="text-align:left;font-weight:700;white-space:nowrap">${section.icon} ${section.label}</td>
@@ -312,7 +328,7 @@ function renderPermissionMatrix() {
                 const current = permissionMatrixCache[role]?.[section.key] || 'NONE';
                 return `<td>
                     <div class="permission-cell-group" data-role="${role}" data-section="${section.key}">
-                        ${Object.entries(ACCESS_LEVEL_META).map(([level, meta]) => `
+                        ${Object.entries(levelMetaFor(section.key)).map(([level, meta]) => `
                             <button type="button"
                                 class="permission-cell-btn ${current === level ? 'active' : ''} level-${level}"
                                 title="${meta.label}"
@@ -444,7 +460,7 @@ async function setPermission(role, section, access, btnEl) {
         // celle per un cambiamento che ne riguarda solo una.
         if (group) {
             group.querySelectorAll('.permission-cell-btn').forEach(b => {
-                b.classList.toggle('active', b.title === ACCESS_LEVEL_META[access].label);
+                b.classList.toggle('active', b.classList.contains('level-' + access));
             });
         }
     } catch (err) {
@@ -522,7 +538,7 @@ function renderOperatorPermissions() {
                         <div class="permission-cell-group" data-user="${u.id}" data-section="${sectionKey}">
                             <button type="button" class="permission-cell-btn ${currentOverride === 'INHERIT' ? 'active' : ''}"
                                 title="Eredita da ruolo" onclick="setOperatorPermission(${u.id},'${sectionKey}','INHERIT', this)">↩️</button>
-                            ${Object.entries(ACCESS_LEVEL_META).map(([level, lm]) => `
+                            ${Object.entries(levelMetaFor(sectionKey)).map(([level, lm]) => `
                                 <button type="button" class="permission-cell-btn ${currentOverride === level ? 'active' : ''} level-${level}"
                                     title="${lm.label}" onclick="setOperatorPermission(${u.id},'${sectionKey}','${level}', this)">${lm.icon}</button>
                             `).join('')}
