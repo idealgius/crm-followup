@@ -89,6 +89,32 @@
 
     let rootEl = null, loaded = false, loading = false, info = null, msgErr = '', msgOk = '';
     let TR = [], AF = [], PT = [], vend = [], anni = [];
+    let TRall = [], AFall = [], PTall = [];      // tutto, prima della scelta fissata
+
+    /* ---------- 📌 scelta fissata: origine / tipo / marca scelti in un elenco valgono per
+       tutto il Commerciale (KPI, grafici, classifiche, report) finche' non si preme
+       "Mostra tutto". Resta salvata in questo browser (come nelle Consegne e nello Stock).
+       Consulente e sede non si fissano: hanno gia' le loro viste nel menu a sinistra. */
+    const LS_FISSA = 'commerciale_fissa_v1';
+    const FISSABILI = { origine: 'Origine', tipo: 'Tipo', marca: 'Marca' };
+    let fissa = null;
+    try { fissa = JSON.parse(localStorage.getItem(LS_FISSA) || 'null'); } catch (e) { fissa = null; }
+    const okFissa = r => !fissa || Object.keys(FISSABILI).every(k => !fissa[k] || String(r[k] == null ? '' : r[k]) === fissa[k]);
+    function applicaFissa() {
+        TR = TRall.filter(okFissa); AF = AFall.filter(okFissa);
+        // preventivi telefonici: hanno solo la marca
+        PT = PTall.filter(p => !fissa || !fissa.marca || p.marca === fissa.marca);
+    }
+    function salvaFissa(v) {
+        fissa = v && Object.keys(FISSABILI).some(k => v[k]) ? v : null;
+        try { if (fissa) localStorage.setItem(LS_FISSA, JSON.stringify(fissa)); else localStorage.removeItem(LS_FISSA); } catch (e) { /* */ }
+        applicaFissa();
+        rootEl.querySelectorAll('.cm-ov').forEach(o => o.close && o.close());
+        shellSrc(); render();
+    }
+    // nel sottotitolo degli Excel (bi-tools.js)
+    if (window.BiTools) BiTools.contesto.COMMERCIALE = () => fissa ? '📌 Solo ' + fissaLbl(fissa) : '';
+    const fissaLbl = v => Object.keys(FISSABILI).filter(k => v[k]).map(k => FISSABILI[k] + ': ' + v[k]).join(' · ');
     let view = { k: 'all' }, anno = new Date().getFullYear(), da = 1, a = 12, b2bOn = false, recOn = true;
     let listF = { f: 'contratti' }, marcheS = 'all', annS = 'all';
     const charts = {};
@@ -271,6 +297,7 @@
                 if (r.ok) list = await r.json(); else info.ptErr = r.status === 403 ? 'non hai il permesso di vedere i preventivi telefonici' : 'errore ' + r.status;
             } catch (e) { info.ptErr = e.message; }
             buildPT(list);
+            TRall = TR; AFall = AF; PTall = PT; applicaFissa();
             // controlli sul solo CSV del Commerciale (le recuperate dalle Consegne non contano)
             const propri = info.trattAll.filter(t => !t.rec);
             info.senzaStato = propri.length > 0 && !propri.some(t => t.stato);
@@ -368,6 +395,7 @@
             ` <button type="button" class="cm-link" data-act="storico">Storico import (${st.length})</button>` +
             ` &nbsp;|&nbsp; Foglio AVANZAMENTO: <b>${d ? nf(d.righe || 0) + ' righe · ' + when(d.aggiornatoAt) : 'non ancora letto'}</b> &nbsp;|&nbsp; Preventivi telefonici: <b>${info && info.ptErr ? 'non disponibili (' + esc(info.ptErr) + ')' : nf(PT.length)}</b>` +
             (msgOk ? `<div class="cm-msg">${esc(msgOk)}</div>` : '') +
+            (fissa ? `<div class="cm-msg cm-fissa"><span>📌 Stai vedendo solo: <b>${esc(fissaLbl(fissa))}</b> · ${nf(TR.length)} trattative su ${nf(TRall.length)}</span><button type="button" class="cm-link" data-act="fissa-reset">Mostra tutto</button></div>` : '') +
             (nRec ? `<div class="cm-msg">${nf(nRec)} contratti chiusi sono nel CSV delle Consegne ma non in quello del Commerciale (trattative aperte prima del periodo esportato): ${recOn ? 'sono <b>contati</b>' : 'per ora <b>non sono contati</b>'}, con il bollino "Recuperata da Consegne". <button type="button" class="cm-link" data-list='${esc(JSON.stringify({ t: 'Contratti recuperati dalle Consegne', vw: { k: 'any' }, w: 'recAll' }))}'>Vedi elenco</button></div>` : '') +
             (vecchio ? `<div class="cm-msg">L'ultimo CSV trattative è stato importato prima della BI Commerciale: l'origine e il Noleggio arrivano dal prossimo import (pulsante "Importa trattative").</div>` : '') +
             (!vecchio && info && info.senzaStato ? `<div class="cm-msg err"><b>Reimporta il CSV delle trattative.</b> L'ultimo import è stato fatto con la versione precedente della pagina e non contiene lo stato delle trattative: per ora le chiuse si riconoscono dalla data di chiusura, ma fallite e motivi non si vedono. Prima di reimportare aggiorna la pagina con Ctrl+F5.</div>` : '') +
@@ -390,6 +418,8 @@
             if (act.dataset.act === 'reload') load(true);
             if (act.dataset.act === 'storico') openStorico();
             if (act.dataset.act === 'export') openExport();
+            if (act.dataset.act === 'fissa-reset') salvaFissa(null);
+            if (act.dataset.act === 'fissa') { try { salvaFissa(JSON.parse(act.dataset.v)); } catch (x) { /* */ } }
             return;
         }
         const tog = e.target.closest('[data-tog]');
@@ -628,28 +658,40 @@
         const st = { q: '' }; F.forEach(f => { st[f[0]] = ''; });
         box.innerHTML = `<div class="cm-tools"><input type="search" placeholder="Cerca cliente, consulente, veicolo, targa…" data-q>
           ${F.map(([k, l, fn]) => `<select data-f="${k}"><option value="">${l}: tutti</option>${[...new Set(recs.map(fn))].filter(Boolean).sort((x, y) => String(x).localeCompare(String(y), 'it')).map(v => `<option>${esc(v)}</option>`).join('')}</select>`).join('')}
-          <span class="cm-hint cm-cnt"></span></div><div class="cm-rl"></div>`;
+          <span class="cm-pinbox"></span><span class="cm-hint cm-cnt"></span></div><div class="cm-rl"></div>`;
         const draw = () => {
             const q = st.q.trim().toLowerCase();
             let L = recs.filter(r => F.every(([k, , fn]) => !st[k] || String(fn(r)) === st[k]));
             if (q) L = L.filter(r => (r.cliente + ' ' + r.vend + ' ' + (r.veicolo || r.marca + ' ' + (r.modello || '')) + ' ' + (r.targa || '') + ' ' + (r.origine || '') + ' ' + (r.op || '')).toLowerCase().includes(q));
             L = L.slice().sort(sortD);
             box.querySelector('.cm-cnt').textContent = nf(L.length) + (L.length === 1 ? ' riga' : ' righe');
-            const S = L.slice(0, 500);
+            // 📌 origine / tipo / marca scelti -> si possono fissare per tutto il Commerciale
+            const sc = {}; F.forEach(([k]) => { if (FISSABILI[k] && st[k]) sc[k] = st[k]; });
+            const nuovo = Object.keys(sc).length && JSON.stringify(sc) !== JSON.stringify(fissa);
+            box.querySelector('.cm-pinbox').innerHTML = nuovo
+                ? `<button type="button" class="cm-pin" data-act="fissa" data-v="${esc(JSON.stringify(sc))}" title="KPI, grafici, classifiche e report del Commerciale conteranno solo queste trattative (resta salvato in questo browser)">📌 Usa ${esc(fissaLbl(sc))} in tutto il Commerciale</button>`
+                : fissa ? `<button type="button" class="cm-pin" data-act="fissa-reset" title="Torna a contare tutte le trattative">📌 Commerciale: mostra tutto</button>` : '';
+            const S = box._tutte ? L : L.slice(0, 500);      // _tutte: per l'Excel servono tutte le righe
             box.querySelector('.cm-rl').innerHTML = !S.length ? '<p class="cm-empty">Nessuna riga</p>' : kind === 'pt'
                 ? `<div class="cm-scroll"><table class="cm-t cm-sort"><tr><th>Data</th><th class="l">Cliente</th><th class="l">Consulente</th><th class="l">Operatore</th><th class="l">Veicolo</th><th class="l">Stato</th><th class="l">Contratto</th></tr>
                    ${S.map(p => `<tr><td style="text-align:left">${dd(p.data)}</td><td class="l">${esc(p.cliente)}</td><td class="l">${esc(p.vend)}</td><td class="l">${esc(p.op)}</td><td class="l">${esc(p.marca + ' ' + p.modello)}</td><td class="l"><span class="cm-es" style="--c:${STC[p.st]}">${STL[p.st]}</span></td><td class="l">${p.contr ? '✓ ' + dd(p.contr.data) : ''}</td></tr>`).join('')}</table></div>`
                 : `<div class="cm-scroll"><table class="cm-t cm-sort"><tr><th>Data</th><th class="l">Cliente</th><th class="l">Consulente</th><th class="l">Veicolo</th><th class="l">Tipo</th><th class="l">Origine</th><th class="l">Esito</th></tr>
                    ${S.map(r => `<tr><td style="text-align:left">${dd(r.data)}</td><td class="l">${esc(r.cliente)} ${r.b2b ? '<span class="cm-b2b">B2B</span>' : ''}${r.noleggio ? ' <span class="cm-csv">Noleggio</span>' : ''}${provBadge(r)}</td><td class="l">${esc(r.vend)}</td><td class="l">${esc(r.veicolo)}</td><td class="l">${r.tipo}</td>
                      <td class="l">${esc(r.origine)}${r.tel ? ` <span class="cm-tel" title="Preventivo telefonico del ${dd(r.tel.data)} · ${esc(r.tel.op)}">📞 Da preventivo telefonico</span>` : ''}</td><td class="l">${esitoBadge(r)}</td></tr>`).join('')}</table></div>`;
-            if (L.length > 500) box.querySelector('.cm-rl').insertAdjacentHTML('beforeend', '<p class="cm-hint">Mostrate le prime 500 righe: usa la ricerca o i filtri per restringere</p>');
+            if (L.length > S.length) box.querySelector('.cm-rl').insertAdjacentHTML('beforeend', '<p class="cm-hint">Mostrate le prime 500 righe: usa la ricerca o i filtri per restringere</p>');
         };
+        box._draw = draw;
         box.querySelector('[data-q]').addEventListener('input', e => { st.q = e.target.value; draw(); });
         box.querySelectorAll('[data-f]').forEach(s => s.addEventListener('change', e => { st[e.target.dataset.f] = e.target.value; draw(); }));
         draw();
     }
     function openRecs(title, recs, kind) {
-        const ov = modal(`${title} · ${nf(recs.length)}`, '<div class="cm-rbox"></div>', true);
+        const ov = modal(`${title} · ${nf(recs.length)}`, '<div class="cm-rbox"></div>', true, {
+            titolo: 'Commerciale · ' + title,
+            sottotitolo: () => [ov.querySelector('.cm-cnt').textContent, 'Periodo ' + per(), BiTools.filtriAttivi(ov.querySelector('.cm-tools'))].filter(Boolean).join(' · '),
+            prima: () => { const b = ov.querySelector('.cm-rbox'); b._tutte = true; b._draw(); },
+            dopo: () => { const b = ov.querySelector('.cm-rbox'); if (b._tutte) { b._tutte = false; b._draw(); } }
+        });
         mountRecList(ov.querySelector('.cm-rbox'), recs, kind);
     }
     function sortTable(th) {
@@ -933,10 +975,21 @@
     }
 
     /* ================= finestre: storico import ================= */
-    function modal(title, html, wide) {
+    // tools: se c'e' una tabella, Schermo intero + Excel (bi-tools.js) nell'intestazione
+    function modal(title, html, wide, tools) {
         const ov = document.createElement('div'); ov.className = 'cm-ov';
         ov.innerHTML = `<div class="cm-modal ${wide ? 'cm-wide-m' : ''}" role="dialog" aria-modal="true" aria-label="${esc(title)}"><header><h3>${esc(title)}</h3><button type="button" aria-label="Chiudi" data-x>✕</button></header><div class="cm-mbody">${html}</div></div>`;
-        const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+        let bar = null;
+        if (tools && window.BiTools) {
+            bar = BiTools.toolbar(Object.assign({
+                sezione: 'COMMERCIALE', titolo: 'Commerciale · ' + title,
+                table: () => ov.querySelector('.cm-mbody table'),
+                fs: ov.querySelector('.cm-modal')
+            }, tools));
+            const hd = ov.querySelector('.cm-modal header');
+            hd.insertBefore(bar, hd.querySelector('[data-x]'));
+        }
+        const close = () => { if (bar) bar._reset(); ov.remove(); document.removeEventListener('keydown', onKey); };
         const onKey = e => { if (e.key === 'Escape') close(); };
         ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-x]')) close(); });
         document.addEventListener('keydown', onKey);
@@ -950,7 +1003,7 @@
         modal('Storico import trattative', st.length ? `<div class="cm-scroll"><table class="cm-t"><tr><th>Quando</th><th class="l">Chi</th><th class="l">Da</th><th class="l">File</th><th>Righe</th><th>Chiuse</th><th>Vendita</th><th>Noleggio</th><th class="l">Periodo nel file</th><th>Nuove</th><th>Tolte</th></tr>
           ${st.map((r, i) => `<tr><td style="text-align:left">${when(r.quando)}${i === 0 ? ' <span class="cm-b2b">ultimo</span>' : ''}</td><td class="l">${esc(r.chi || '')}</td><td class="l">${esc(r.da || '')}</td><td class="l">${esc(r.file || '')}</td><td>${nf(r.righe)}</td><td>${r.chiuse != null ? nf(r.chiuse) : '–'}</td><td>${r.vendita != null ? nf(r.vendita) : '–'}</td><td>${r.noleggio != null ? nf(r.noleggio) : '–'}</td><td class="l">${r.dal ? esc(r.dal) + ' – ' + esc(r.al) : ''}</td><td>${r.nuove != null ? nf(r.nuove) : '–'}</td><td>${r.tolte != null ? nf(r.tolte) : '–'}</td></tr>`).join('')}</table></div>
           <p class="cm-hint" style="margin-top:10px">Ogni import sostituisce il precedente per tutti, solo nel Commerciale (le Consegne hanno il loro import). Nuove/Tolte = trattative presenti solo nel nuovo file / solo nel file precedente.</p>`
-            : '<p class="cm-empty">Nessun import registrato finora: lo storico parte dal prossimo import.</p>', true);
+            : '<p class="cm-empty">Nessun import registrato finora: lo storico parte dal prossimo import.</p>', true, st.length ? { titolo: 'Commerciale · Storico import trattative' } : null);
     }
     function importa(input) {
         const file = input.files && input.files[0]; if (!file) return;
@@ -1303,5 +1356,8 @@
         requestAnimationFrame(render);
     }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
-    window.CommercialeBI = { init };
+    // link precisi dalla pagina BI (bi-home.js): apre il Commerciale direttamente su una vista
+    // ({k:'all'} panoramica, {k:'sede',s:'Agnano'}, {k:'b2b'}, {k:'marche'}, {k:'pt'}, {k:'ann'}, {k:'list'})
+    function vista(vw) { view = vw || { k: 'all' }; }
+    window.CommercialeBI = { init, vista };
 })();

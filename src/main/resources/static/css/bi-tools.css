@@ -1,0 +1,133 @@
+/* =====================================================================
+   STRUMENTI COMUNI DELLA BI (bi-tools.js): Schermo intero + Excel
+   Usati nelle finestre degli elenchi di Consegne, Stock e Commerciale.
+   ===================================================================== */
+.bi-tools { display:flex; gap:6px; align-items:center; margin-left:auto; flex-shrink:0; }
+.bi-tools button { display:inline-flex; align-items:center; gap:6px; height:34px; padding:0 12px; border-radius:10px;
+    border:1px solid rgba(20,30,45,.14); background:rgba(255,255,255,.6); color:inherit; font:inherit; font-size:12.5px; font-weight:700;
+    cursor:pointer; white-space:nowrap; transition:background .15s, border-color .15s; }
+/* nel Commerciale i pulsanti dell'intestazione sono quadrati (chiudi): questi no */
+.cm-modal header .bi-tools button { width:auto; height:34px; padding:0 12px; font-size:12.5px; background:rgba(255,255,255,.04); border:1px solid rgba(20,30,45,.14); }
+[data-theme="dark"] .cm-modal header .bi-tools button { border-color:rgba(255,255,255,.18); }
+.bi-tools button:hover { background:rgba(20,30,45,.06); border-color:rgba(20,30,45,.28); }
+.bi-tools button:disabled { opacity:.6; cursor:wait; }
+.bi-tools button[aria-pressed="true"] { background:rgba(20,30,45,.08); }
+.bi-tools .bi-i { font-size:14px; line-height:1; }
+[data-theme="dark"] .bi-tools button { border-color:rgba(255,255,255,.18); background:rgba(255,255,255,.04); }
+[data-theme="dark"] .bi-tools button:hover { background:rgba(255,255,255,.1); }
+@media (max-width:640px) { .bi-tools .bi-l { display:none; } .bi-tools button { padding:0 10px; } }
+
+/* ---------- schermo intero ---------- */
+html.bi-fs-on, html.bi-fs-on body { overflow:hidden; }
+.bi-fs-ov { padding:0 !important; }
+.bi-fs { position:fixed !important; inset:0 !important; width:100vw !important; max-width:none !important; height:100vh !important;
+    max-height:none !important; margin:0 !important; border-radius:0 !important; z-index:10060 !important;
+    display:flex !important; flex-direction:column; overflow:hidden !important; box-shadow:none !important; }
+.bi-fs.st-embed, .bi-fs.cg-card { background:var(--cg-card, #fff); }
+/* la parte con la tabella prende tutto lo spazio e scorre solo in verticale */
+.bi-fs .cg-m-body, .bi-fs .cm-mbody { flex:1 1 auto; min-height:0; overflow-y:auto !important; overflow-x:hidden !important; }
+.bi-fs #stMList { display:flex; flex-direction:column; flex:1 1 auto; min-height:0; }
+.bi-fs #stMList .cg-m-tools { flex:none; }
+.bi-fs #stMDet { flex:1 1 auto; min-height:0; overflow:auto; }
+.bi-fs .cm-rbox { display:flex; flex-direction:column; min-height:100%; }
+/* niente scorrimento laterale: la tabella si adatta alla larghezza e il testo va a capo */
+.bi-fs .cg-scroll, .bi-fs .cm-scroll { overflow-x:visible !important; margin:0 !important; }
+.bi-fs table.cg-list, .bi-fs table.cm-t { min-width:0 !important; width:100% !important; table-layout:auto; }
+.bi-fs .cg-list th, .bi-fs .cm-t th { white-space:normal !important; }
+.bi-fs .cg-list td, .bi-fs .cm-t td { white-space:normal !important; overflow-wrap:break-word; font-size:12.5px; padding:7px 7px; }
+.bi-fs .cm-t th { padding:8px 7px; }
+.bi-fs .cg-m-head, .bi-fs .cm-modal header, .bi-fs.cm-modal > header { flex:none; }
+@media (min-width:1500px) { .bi-fs .cg-list td, .bi-fs .cm-t td { font-size:13px; } }
+
+/* ---------- riquadri (card) della pagina ---------- */
+.bi-tools-card { margin-left:6px; gap:4px; }
+/* nei riquadri pulsanti compatti (icona) per non schiacciare il titolo; il nome e' nel suggerimento */
+.bi-tools-card button { height:30px; min-width:30px; padding:0 8px; font-size:12px; justify-content:center; }
+.bi-tools-card .bi-l { display:none; }
+.bi-tools-card .bi-t-xls::after { content:'XLS'; font-size:10px; font-weight:800; letter-spacing:.3px; }
+.bi-tools-card .bi-t-xls .bi-i { font-size:12px; }
+.bi-fs .bi-tools-card .bi-l { display:inline; }
+.bi-fs .bi-tools-card .bi-t-xls::after { content:none; }
+.bi-tools-float { float:right; margin:0 0 8px 12px; position:relative; z-index:2; }
+.cg-an-hbtns .bi-tools button, .cm-cc-btns .bi-tools button { width:auto; min-width:0; }
+/* riquadro a schermo intero: tutto il contenuto scorre in verticale */
+.bi-fs.cg-card, .bi-fs.cm-card { display:block !important; overflow-y:auto !important; overflow-x:hidden !important; padding:22px 32px 32px !important; }
+.bi-fs.cg-card { background:var(--cg-card, #fff) !important; }
+.bi-fs.cm-card { background:var(--cm-card, #fff) !important; }
+.bi-fs .bi-tools-float { position:sticky; top:0; }
+/* grafici piu' grandi */
+.bi-fs .cm-cc-c { height:calc(100vh - 200px) !important; min-height:320px; }
+.bi-fs .cg-an-canvas, .bi-fs .st-chart-box { height:calc(100vh - 220px) !important; min-height:320px; }
+/* qualsiasi tabella: niente scorrimento laterale */
+.bi-fs table { min-width:0 !important; width:100% !important; }
+.bi-fs th, .bi-fs td { white-space:normal !important; overflow-wrap:break-word; }
+
+/* ---------- ◎ solo questo riquadro ---------- */
+.bi-hide { display:none !important; }
+.bi-path { display:block !important; }
+.bi-focus { width:100% !important; max-width:none !important; grid-column:1 / -1 !important; margin:0 !important; }
+.bi-focus .cm-cc-c { height:min(62vh, 640px) !important; }
+.bi-focus .cg-an-canvas, .bi-focus .st-chart-box { height:min(58vh, 600px) !important; }
+.bi-focus .cg-an-chart, .bi-focus .cm-cc-b, .bi-focus .st-giac-grid { grid-template-columns:minmax(0, 3fr) minmax(220px, 1fr) !important; }
+.bi-tit-click { cursor:pointer; }
+.bi-tit-click:hover { text-decoration:underline; text-underline-offset:3px; }
+.bi-tools-card .bi-t-focus .bi-i { font-size:13px; }
+.bi-focus .bi-tools-card .bi-t-focus .bi-l { display:inline; }
+.bi-focus-bar { display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin:0 0 14px; padding:12px 16px; border-radius:16px;
+    background:var(--cm-card, var(--cg-card, #fff)); border:1px solid var(--cm-line, var(--cg-line, rgba(0,0,0,.1))); box-shadow:0 6px 20px -12px rgba(0,0,0,.35); }
+.bi-focus-bar button { border:1px solid var(--cm-line, var(--cg-line, rgba(0,0,0,.15))); background:transparent; color:inherit; font:inherit; font-size:13px; font-weight:700;
+    padding:8px 14px; border-radius:10px; cursor:pointer; white-space:nowrap; }
+.bi-focus-bar button:hover:not(:disabled) { background:rgba(127,127,127,.12); }
+.bi-focus-bar button:disabled { opacity:.4; cursor:default; }
+.bi-fb-back { background:var(--cm-acc-soft, rgba(70,120,200,.14)) !important; }
+.bi-fb-t { display:flex; flex-direction:column; min-width:0; }
+.bi-fb-t small { font-size:11px; opacity:.65; text-transform:uppercase; letter-spacing:.4px; }
+.bi-fb-t b { font-size:16px; }
+.bi-fb-nav { margin-left:auto; display:flex; align-items:center; gap:8px; font-size:12.5px; }
+.bi-fb-nav span { opacity:.7; }
+/* in evidenza */
+.bi-evid { margin:12px 0 16px; clear:both; }
+.bi-ev-h { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; opacity:.7; margin-bottom:8px; }
+.bi-ev-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:10px; }
+.bi-ev { padding:10px 12px; border-radius:12px; background:rgba(127,127,127,.08); border:1px solid rgba(127,127,127,.14); min-width:0; }
+.bi-ev small { display:block; font-size:11px; opacity:.7; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.bi-ev b { display:block; font-size:16px; line-height:1.25; overflow-wrap:anywhere; }
+.bi-ev span { display:block; font-size:11.5px; opacity:.75; margin-top:2px; }
+.bi-ev.top { border-color:var(--cm-acc, var(--cg-teal, #3aa)); }
+.bi-ev.up span { color:#2e9e6b; opacity:1; }
+.bi-ev.down span { color:#d0564f; opacity:1; }
+@media (max-width:700px) { .bi-fb-nav { margin-left:0; width:100%; justify-content:space-between; } .bi-focus .cg-an-chart, .bi-focus .cm-cc-b, .bi-focus .st-giac-grid { grid-template-columns:1fr !important; } }
+
+/* ---------- pagina BI (bi-home.js): sezione aperta + "Mostra opzioni" ---------- */
+/* cliccando un capitolo restano solo quel capitolo e la sua animazione */
+#biPage .bh-ch.bh-x-hid { display:none !important; }
+#biPage .bh-rail.bh-x-on .bh-ch .bh-bar i { animation-play-state:paused !important; }
+#biPage .bh-x-back { display:inline-flex; align-items:center; gap:6px; margin:0 0 10px; padding:8px 14px; border-radius:12px; cursor:pointer;
+    border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.05); color:#e8edf3; font:inherit; font-size:13px; font-weight:700; }
+#biPage .bh-x-back:hover { background:rgba(255,255,255,.1); border-color:var(--acc, #3fcfae); }
+/* "Mostra opzioni": in basso accanto a "Entra" (stessa altezza, stile secondario) */
+#biPage .bh-x-tog { position:absolute; left:176px; bottom:30px; display:flex; align-items:center; gap:6px; height:54px; padding:0 14px; border-radius:16px; cursor:pointer; white-space:nowrap;
+    border:1.5px solid var(--acc, #3fcfae); background:rgba(255,255,255,.04); color:#fff; font:inherit; font-size:13px; font-weight:800; transition:background .2s, border-color .8s; }
+#biPage .bh-x-tog span { color:var(--acc, #3fcfae); }
+#biPage .bh-x-tog:hover, #biPage .bh-x-tog[aria-expanded="true"] { background:rgba(255,255,255,.09); }
+/* "Mostra opzioni": al posto delle tre voci, l'elenco con tutte le voci in colonna (scorre) */
+#biPage .bh-rail.bh-x-open .bh-sub { display:none !important; }
+#biPage .bh-x-list { margin-top:10px; overflow-y:auto; overscroll-behavior:contain; padding-right:4px; display:flex; flex-direction:column; gap:6px;
+    scrollbar-width:thin; scrollbar-color:var(--acc, #3fcfae) transparent; animation:bh-xl-in .25s ease-out; }
+#biPage .bh-x-list::-webkit-scrollbar { width:5px; }
+#biPage .bh-x-list::-webkit-scrollbar-thumb { background:var(--acc, #3fcfae); border-radius:3px; }
+@keyframes bh-xl-in { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+#biPage .bh-x-msg { margin:0 0 4px; font-size:12px; color:#aab4c2; }
+#biPage .bh-xo { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:12px; cursor:pointer; text-align:left; flex:none;
+    background:rgba(255,255,255,.035); border:1px solid rgba(255,255,255,.07); transition:border-color .15s, background .15s; }
+#biPage .bh-xo:hover, #biPage .bh-xo:focus-visible { border-color:var(--acc, #3fcfae); background:rgba(255,255,255,.07); outline:none; }
+#biPage .bh-xo.off { cursor:default; opacity:.45; }
+#biPage .bh-xo.off:hover { border-color:rgba(255,255,255,.07); background:rgba(255,255,255,.035); }
+#biPage .bh-xo-i { flex:none; width:28px; height:28px; border-radius:9px; display:grid; place-items:center; font-size:14px; background:rgba(255,255,255,.06); }
+#biPage .bh-xo-t { flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; }
+#biPage .bh-xo-t b { font-size:13px; font-weight:800; line-height:1.25; color:#f1f4f8; }
+#biPage .bh-xo-t em { font-style:normal; font-size:11px; color:#8e97a5; line-height:1.3; }
+#biPage .bh-xo-c { display:flex; flex-wrap:wrap; gap:5px; margin-top:5px; }
+#biPage .bh-xo-c button { border:1px solid rgba(255,255,255,.16); background:rgba(255,255,255,.05); color:#e8edf3; font:inherit; font-size:11.5px; font-weight:700;
+    padding:4px 9px; border-radius:8px; cursor:pointer; }
+#biPage .bh-xo-c button:hover { border-color:var(--acc, #3fcfae); background:rgba(255,255,255,.1); }

@@ -339,8 +339,15 @@ function renderRentTrattative(list) {
     // anche senza leggere l'etichetta.
     const DAY_BOX_COLORS = ['#4a90d9', '#00c853', '#f0c040', '#e91e63', '#7c4dff', '#ff6b35'];
 
+    // ORDINE CRONOLOGICO (anni, mesi, settimane, giorni) secondo il pulsante
+    // "Più recenti prima" / "Meno recenti prima". Prima i mesi erano ordinati per
+    // nome (agosto, luglio, ottobre, settembre...) e le settimane come testo.
+    const verso = rentTrattativeSortDir === 'desc' ? -1 : 1;
+    const per = (x, y) => (x < y ? -1 : x > y ? 1 : 0) * verso;
+    const primoGiorno = weeks => Object.values(weeks).flatMap(w => Object.keys(w.days)).sort()[0] || '';
+
     container.innerHTML = `<div style="position:relative;padding-left:4px">
-        ${Object.entries(tree).sort((a,b) => b[0]-a[0]).map(([year, months]) => {
+        ${Object.entries(tree).sort((a,b) => per(+a[0], +b[0])).map(([year, months]) => {
             const yearKey = `rtl-year-${year}`;
             const flat = Object.values(months).flatMap(w => Object.values(w)).flatMap(w => Object.values(w.days)).flat();
             const yearCount = flat.length;
@@ -355,7 +362,7 @@ function renderRentTrattative(list) {
                     <span id="arrow-${yearKey}" style="margin-left:auto;color:var(--text-secondary);font-size:11px;transition:transform 0.3s;${isYearOpen?'':'transform:rotate(-90deg)'}">▼</span>
                 </div>
                 <div id="body-${yearKey}" style="display:${isYearOpen?'block':'none'};margin-top:10px">
-                    ${Object.entries(months).sort().map(([month, weeks]) => {
+                    ${Object.entries(months).sort((a,b) => per(primoGiorno(a[1]), primoGiorno(b[1]))).map(([month, weeks]) => {
                         const monthKey = `rtl-month-${year}-${month.replace(/\s/g,'_')}`;
                         const monthFlat = Object.values(weeks).flatMap(w => Object.values(w.days)).flat();
                         const monthCount = monthFlat.length;
@@ -370,7 +377,7 @@ function renderRentTrattative(list) {
                                 <span id="arrow-${monthKey}" style="margin-left:auto;color:var(--text-secondary);font-size:10px;transition:transform 0.3s;${isCurrentMonth?'':'transform:rotate(-90deg)'}">▼</span>
                             </div>
                             <div id="body-${monthKey}" style="display:${isCurrentMonth?'block':'none'};margin-top:8px">
-                                ${Object.entries(weeks).sort().map(([week, weekData]) => {
+                                ${Object.entries(weeks).sort((a,b) => per(a[1].monday.getTime(), b[1].monday.getTime())).map(([week, weekData]) => {
                                     const weekKey = `rtl-week-${week.replace(/[\s—]/g,'_')}-${month.replace(/\s/g,'_')}`;
                                     const weekFlat = Object.values(weekData.days).flat();
                                     const weekCount = weekFlat.length;
@@ -384,7 +391,7 @@ function renderRentTrattative(list) {
                                             <span id="arrow-${weekKey}" style="margin-left:auto;font-size:9px;transition:transform 0.3s;${isCurrentWeek?'':'transform:rotate(-90deg)'}">▼</span>
                                         </div>
                                         <div id="body-${weekKey}" style="display:${isCurrentWeek?'block':'none'}">
-                                            ${Object.entries(weekData.days).sort((a,b) => b[0].localeCompare(a[0])).map(([date, items], dayIdx) => {
+                                            ${Object.entries(weekData.days).sort((a,b) => per(a[0], b[0])).map(([date, items], dayIdx) => {
                                                 const itemsSorted = [...items].sort((a,b) => rentTrattativeSortDir === 'desc'
                                                     ? (b.createdAt||'').localeCompare(a.createdAt||'')
                                                     : (a.createdAt||'').localeCompare(b.createdAt||''));

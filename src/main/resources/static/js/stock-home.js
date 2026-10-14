@@ -41,7 +41,50 @@
 
     let rootEl = null;
     let meta = null;      // risposta del server (ultimo import, permessi)
-    let rows = [];        // vetture normalizzate
+    let rows = [];        // vetture normalizzate (solo quelle della scelta fissata con 📌, se c'e')
+    let tutte = [];       // tutte le vetture dell'ultimo import
+
+    /* ---------- 📌 scelta fissata: i filtri di un elenco valgono per tutto lo Stock ----------
+       Si fissa dalla finestra di un elenco ("📌 Usa questi filtri in tutto lo Stock"):
+       panoramica, grafici, menu ed elenchi contano solo quelle vetture finche' non si
+       preme "Mostra tutte". Resta salvata in questo browser (come nelle Consegne). */
+    const LS_FISSA = 'stock_fissa_v1';
+    let fissa = null;
+    try { fissa = JSON.parse(localStorage.getItem(LS_FISSA) || 'null'); } catch (e) { fissa = null; }
+    function fissaOk(r) {
+        if (!fissa) return true;
+        if (fissa.f && !match(r, fissa.f)) return false;
+        if (fissa.stato && r.stato !== fissa.stato) return false;
+        if (fissa.tipo && r.tipo !== fissa.tipo) return false;
+        for (const k in (fissa.sel || {})) if (!fissa.sel[k].includes(r[k] || '—')) return false;
+        for (const [k] of RNG) {
+            const v = r[k], mn = (fissa.rng || {})[k + '_min'], mx = (fissa.rng || {})[k + '_max'];
+            if ((mn != null || mx != null) && v == null) return false;
+            if (mn != null && v < mn) return false;
+            if (mx != null && v > mx) return false;
+        }
+        return true;
+    }
+    function salvaFissa(v) {
+        fissa = v;
+        try { if (v) localStorage.setItem(LS_FISSA, JSON.stringify(v)); else localStorage.removeItem(LS_FISSA); } catch (e) { /* */ }
+        rows = tutte.filter(fissaOk);
+        closeModal();
+        render();
+    }
+    // la scelta dell'elenco aperto (base dell'elenco + chip + menu + intervalli)
+    const F_LBL = { stato: 'Stato', tipo: 'Tipo', marca: 'Marchio', carb: 'Motorizzazione', sede: 'Sede', ubic: 'Ubicazione', ubicDet: 'Sede', giac: 'Giacenza' };
+    function sceltaDi(v) {
+        const f = {}; Object.keys(F_LBL).forEach(k => { if (v.f && v.f[k]) f[k] = v.f[k]; });
+        const sel = {}; Object.keys(v.sel || {}).forEach(k => { sel[k] = [...v.sel[k]]; });
+        const rng = {}; Object.keys(v.rng || {}).forEach(k => { if (v.rng[k] != null) rng[k] = v.rng[k]; });
+        const vuota = !Object.keys(f).length && !v.stato && !v.tipo && !Object.keys(sel).length && !Object.keys(rng).length;
+        if (vuota) return null;
+        const lbl = [...Object.keys(f).map(k => F_LBL[k] + ': ' + (f[k] === '__none' ? 'non indicato' : f[k])),
+            v.stato ? 'Stato: ' + v.stato : '', v.tipo ? 'Tipo: ' + v.tipo : '', selTxt(v), rangeTxt(v)].filter(Boolean).join(' · ');
+        return { f, stato: v.stato || '', tipo: v.tipo || '', sel, rng, lbl };
+    }
+    const stessaScelta = (a, b) => JSON.stringify(a && { ...a, lbl: '' }) === JSON.stringify(b && { ...b, lbl: '' });
     let rimosse = [];     // vetture uscite dallo stock (dal server)
     let lastAt = '';      // data/ora dell'ultimo caricamento (per "Nuova entrata" e "Rimosse nell'ultimo")
     let charts = [];
@@ -340,7 +383,10 @@
         <div class="cg-wrap" id="stBody"></div>`;
         rootEl.querySelector('#stFile').addEventListener('change', e => importFile(e.target));
         // link "Vedi nuove" / "Vedi rimosse" nel messaggio dopo l'import
-        rootEl.querySelector('#stSrc').addEventListener('click', e => { const b = e.target.closest('[data-goview]'); if (b && rows.length) showView(b.dataset.goview); });
+        rootEl.querySelector('#stSrc').addEventListener('click', e => {
+            if (e.target.closest('[data-fissa-reset]')) { salvaFissa(null); return; }
+            const b = e.target.closest('[data-goview]'); if (b && rows.length) showView(b.dataset.goview);
+        });
     }
 
     function setSrc(msg, isErr) {
@@ -349,12 +395,14 @@
         if (imp) imp.style.display = meta && meta.puoImportare ? '' : 'none';
         rootEl.querySelector('#stSrc').innerHTML =
             `Ultimo import stock: <b>${s ? fmt(s.righe || 0) + ' vetture · ' + when(s.aggiornatoAt) + (s.aggiornatoDa ? ' da ' + esc(s.aggiornatoDa) : '') : 'nessuno'}</b>` +
-            (msg ? `<div class="cg-msg ${isErr ? 'err' : ''}">${msg}</div>` : '');
+            (msg ? `<div class="cg-msg ${isErr ? 'err' : ''}">${msg}</div>` : '') +
+            (fissa ? `<div class="cg-vista st-fissa"><span>📌 Stai vedendo solo: <b>${esc(fissa.lbl)}</b> · ${fmt(rows.length)} vetture su ${fmt(tutte.length)}</span><button type="button" data-fissa-reset>Mostra tutte</button></div>` : '');
     }
 
     function applyServerData(d) {
         meta = d;
-        rows = (d.stock && Array.isArray(d.stock.rows) ? d.stock.rows : []).map((r, i) => { const u = ubicazione(r.sede); return { ...r, _i: i, ubic: u.g, ubicDet: u.d }; });
+        tutte = (d.stock && Array.isArray(d.stock.rows) ? d.stock.rows : []).map((r, i) => { const u = ubicazione(r.sede); return { ...r, _i: i, ubic: u.g, ubicDet: u.d }; });
+        rows = tutte.filter(fissaOk);
         rimosse = (Array.isArray(d.rimosse) ? d.rimosse : []).map(r => { const u = ubicazione(r.ultimaSede || r.sede); return { ...r, ubic: u.g, ubicDet: u.d }; });
         const st = Array.isArray(d.storico) ? d.storico : [];
         lastAt = st.length ? String(st[st.length - 1].at || '') : '';
@@ -417,6 +465,11 @@
         destroyCharts();
         setSrc(msg);
         const body = rootEl.querySelector('#stBody');
+        if (!rows.length && tutte.length && fissa) {
+            body.innerHTML = `<div class="cg-card cg-empty"><h2>Nessuna vettura con la scelta fissata</h2><p>${esc(fissa.lbl)}</p><button type="button" class="cg-chip cg-chip-save" data-fissa-reset>📌 Mostra tutte le vetture</button></div>`;
+            body.querySelector('[data-fissa-reset]').addEventListener('click', () => salvaFissa(null));
+            return;
+        }
         if (!rows.length) {
             const canImp = meta && meta.puoImportare;
             body.innerHTML = `<div class="cg-card cg-empty"><h2>Nessuno stock caricato</h2>
@@ -556,7 +609,7 @@
         const pc = n => tot ? Math.round(n / tot * 100) + '% del totale' : '';
         const nD = stato.get('Disponibile') || 0, nP = stato.get('Prenotata') || 0, nV = stato.get('Venduta') || 0;
         main.innerHTML = `
-        <div class="st-vhead"><h2>Panoramica</h2><p>Tutto lo stock · ${fmt(tot)} vetture</p></div>
+        <div class="st-vhead"><h2>Panoramica</h2><p>${fissa ? '📌 ' + esc(fissa.lbl) : 'Tutto lo stock'} · ${fmt(tot)} vetture</p></div>
         <div class="cg-kpis">
           ${kpiHtml('🚗', 'var(--cg-teal-soft)', 'Totale vetture', tot, {}, `${fmt(nD)} disponibili · ${fmt(nP)} prenotate · ${fmt(nV)} vendute`)}
           ${kpiHtml('✨', 'var(--cg-teal-soft)', 'Nuove', tipo.get('Nuova') || 0, { tipo: 'Nuova' }, pc(tipo.get('Nuova') || 0))}
@@ -982,13 +1035,42 @@
             <div id="stMList">
               <div class="cg-m-tools"><input type="search" id="stMSearch" placeholder="Cerca modello, versione, targa, telaio, cliente…">
                 <div class="cg-chips" id="stMStato"></div><div class="cg-chips" id="stMTipo"></div>
-                <div class="st-fbar" id="stMFilt"></div></div>
+                <div class="st-fbar" id="stMFilt"></div><div class="st-pin" id="stMPin"></div></div>
               <div class="cg-m-body" id="stMBody"></div>
             </div>
             <div id="stMDet" style="display:none"></div>`;
+    // Schermo intero + Excel (bi-tools.js) nell'intestazione dell'elenco
+    function addTools(root) {
+        if (!window.BiTools) return;
+        const att = () => { ov = root; view = root._view; };
+        const bar = BiTools.toolbar({
+            sezione: 'STOCK',
+            titolo: () => 'Stock · ' + ((root._view && root._view.title) || 'Vetture'),
+            sottotitolo: () => [[...root.querySelector('#stMStat').children].map(x => x.textContent.trim()).join(' '), BiTools.filtriAttivi(root.querySelector('.cg-m-tools')),
+                selTxt(root._view), rangeTxt(root._view)].filter(Boolean).join(' · '),
+            table: () => root.querySelector('#stMBody table'),
+            // nell'Excel vanno TUTTE le vetture filtrate, non solo le prime 200 mostrate
+            prima: () => { att(); view._lim = view.limit; view.limit = Infinity; renderList('__keep'); },
+            dopo: () => { att(); if (view._lim) { view.limit = view._lim; delete view._lim; renderList('__keep'); } },
+            fs: root.classList.contains('cg-ov') ? root.querySelector('.cg-modal') : root
+        });
+        const head = root.querySelector('.cg-m-head'), x = head.querySelector('.cg-x');
+        if (x) head.insertBefore(bar, x); else head.appendChild(bar);
+        root._tools = bar;
+    }
+    const selTxt = v => !v || !v.sel ? '' : MS.filter(([k]) => v.sel[k]).map(([k, l]) => {
+        const x = [...v.sel[k]]; return l + ': ' + (x.length > 6 ? x.slice(0, 6).join(', ') + ' e altri ' + (x.length - 6) : x.join(', ') || 'nessuno');
+    }).join(' · ');
+    const rangeTxt = v => !v || !v.rng ? '' : RNG.filter(([k]) => v.rng[k + '_min'] != null || v.rng[k + '_max'] != null)
+        .map(([k, l]) => l + ' ' + [v.rng[k + '_min'], v.rng[k + '_max']].map(n => n == null ? '…' : fmt(n)).join('–')).join(' · ');
     function wireList(root) {
+        addTools(root);
         const use = fn => e => { ov = root; view = root._view; fn(e); };
         const filt = root.querySelector('#stMFilt');
+        root.querySelector('#stMPin').addEventListener('click', use(e => {
+            if (e.target.closest('[data-fissa]')) { const sc = sceltaDi(view); if (sc) salvaFissa(sc); return; }
+            if (e.target.closest('[data-fissa-reset]')) salvaFissa(null);
+        }));
         root.querySelector('#stMSearch').addEventListener('input', use(e => { view.q = e.target.value; renderList(); }));
         root.querySelector('#stMStato').addEventListener('click', use(e => { const b = e.target.closest('[data-v]'); if (b) { view.stato = b.dataset.v; renderList(); } }));
         root.querySelector('#stMTipo').addEventListener('click', use(e => { const b = e.target.closest('[data-v]'); if (b) { view.tipo = b.dataset.v; renderList(); } }));
@@ -1050,7 +1132,7 @@
         }
         ov = ovModal;
     }
-    function closeModal() { if (ovModal) ovModal.classList.remove('open'); }
+    function closeModal() { if (ovModal) { if (ovModal._tools) ovModal._tools._reset(); ovModal.classList.remove('open'); } }
     function startList(title, f) {
         view = { base: rows.filter(r => match(r, f)), title, f, stato: '', tipo: '', q: '', hasMarca: !!f.marca,
             sel: {}, rng: {}, psq: {}, sort: { k: '', dir: 1 }, limit: 200 };
@@ -1178,6 +1260,11 @@
         ov.querySelector('#stMTitle').textContent = view.title;
         const d = list.filter(r => r.stato === 'Disponibile').length, p = list.filter(r => r.stato === 'Prenotata').length, v = list.filter(r => r.stato === 'Venduta').length;
         ov.querySelector('#stMStat').innerHTML = `<span class="cg-n">${fmt(list.length)}</span><span class="cg-of">vetture · ${fmt(d)} disponibili · ${fmt(p)} prenotate · ${fmt(v)} vendute</span>`;
+        // 📌 fissa la scelta per tutto lo Stock
+        const sc = view.f && view.f.ids ? null : sceltaDi(view), pin = ov.querySelector('#stMPin');
+        pin.innerHTML = sc && !stessaScelta(sc, fissa)
+            ? `<button type="button" class="cg-chip cg-chip-save" data-fissa title="Panoramica, grafici, menu ed elenchi dello Stock conteranno solo queste vetture (resta salvato in questo browser)">📌 Usa questi filtri in tutto lo Stock</button>`
+            : fissa ? `<button type="button" class="cg-chip cg-chip-save" data-fissa-reset title="Torna a contare tutte le vetture">📌 Stock: mostra tutte</button>` : '';
 
         const body = ov.querySelector('#stMBody');
         if (!list.length) { body.innerHTML = '<div class="cg-empty-msg">Nessuna vettura con questi filtri.</div>'; return; }
@@ -1203,7 +1290,7 @@
     const tag = s => !s ? '' : `<span class="cg-tag ${s === 'Disponibile' ? 'st-tag-d' : s === 'Prenotata' ? 'st-tag-p' : s === 'Venduta' ? 'st-tag-v' : ''}">${esc(s)}</span>`;
 
     function showDetail(i) {
-        const r = rows[i]; if (!r) return;
+        const r = tutte[i]; if (!r) return;
         const field = (label, val) => (val === undefined || val === null || val === '') ? '' : `<div class="st-f"><small>${label}</small><b>${esc(val)}</b></div>`;
         const box = (title, html, cls) => html ? `<div class="st-box ${cls || ''}"><h5>${title}</h5>${html}</div>` : '';
         const det = ov.querySelector('#stMDet');
@@ -1368,5 +1455,8 @@
         requestAnimationFrame(() => { destroyCharts(); drawCharts(); });
     }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
-    window.StockHome = { init };
+    // link precisi dalla pagina BI (bi-home.js): apre lo Stock direttamente su una vista
+    // ('panoramica', 'marchi', 'tutte', 'nuove', 'rimosse', 'storico', 'g:<sezione>')
+    function vista(key) { window.__stockLinkView = key || 'panoramica'; curView = null; }
+    window.StockHome = { init, vista };
 })();

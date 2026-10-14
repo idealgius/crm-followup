@@ -30,15 +30,25 @@
     let inStock = false;
     let inComm = false;   // area Commerciale (capitolo 03 della BI)
 
-    // La selezione area (e l'area Consegne) la vede SOLO chi ha il permesso
-    // CONSEGNE (pagina Permessi per Ruolo / per Operatore; default:
-    // Moderatore, Gestore, Admin). Tutti gli altri entrano direttamente in
-    // In bound. Il parametro role resta per compatibilita' con le chiamate
-    // esistenti: vale il permesso effettivo dell'utente loggato.
-    function canShow() {
-        if (typeof currentUser === 'undefined' || !currentUser) return false;
-        return typeof hasAccess === 'function' && hasAccess('CONSEGNE');
+    // PERMESSI DELLA BI (pagina Permessi, gruppo BI):
+    //  - CONSEGNE    -> capitolo 01 Consegne
+    //  - STOCK       -> capitolo 02 Stock
+    //  - COMMERCIALE -> capitolo 03 Commerciale (se il server non lo conosce ancora,
+    //                   segue CONSEGNE come prima)
+    // La selezione area e la pagina BI le vede chi ha ALMENO UNO dei tre; tutti gli
+    // altri entrano direttamente in In bound. Il parametro role resta per
+    // compatibilita' con le chiamate esistenti: vale il permesso effettivo dell'utente.
+    const loggato = () => typeof currentUser !== 'undefined' && !!currentUser && typeof hasAccess === 'function';
+    function conosciuto(sez) {
+        const eff = (typeof myEffectivePermissions !== 'undefined' && myEffectivePermissions) || {};
+        if (Object.prototype.hasOwnProperty.call(eff, sez)) return true;
+        const m = (typeof permissionMatrix !== 'undefined' && permissionMatrix) || {};
+        return !!(m[currentUser.role] && Object.prototype.hasOwnProperty.call(m[currentUser.role], sez));
     }
+    function canConsegne() { return loggato() && hasAccess('CONSEGNE'); }
+    function canStockRaw() { return loggato() && hasAccess('STOCK'); }
+    function canCommRaw() { return loggato() && (conosciuto('COMMERCIALE') ? hasAccess('COMMERCIALE') : hasAccess('CONSEGNE')); }
+    function canShow() { return canConsegne() || canStockRaw() || canCommRaw(); }
 
     // Voce "Seleziona Area" nel menu del nome e clic sul logo: solo per chi puo'
     function refreshNav() {
@@ -167,7 +177,7 @@
     function hideBI() { if (window.BIHome) BIHome.hide(); }
 
     function openConsegne() {
-        if (!canShow()) return;
+        if (!canConsegne()) return;
         hide();
         hideBI();
         stopInboundLiveUpdates();
@@ -185,12 +195,8 @@
     }
 
     // Area Stock (capitolo 02 della BI): pagina #stockPage, contenuto costruito da /js/stock-home.js.
-    // Serve il permesso STOCK (almeno "Solo lettura") oltre a quello di accesso alla BI.
-    function canStock() {
-        if (!canShow()) return false;
-        const a = hasAccess('STOCK');
-        return !!a && a !== 'NONE';
-    }
+    // Serve il permesso STOCK (almeno "Solo lettura").
+    function canStock() { return canStockRaw(); }
     function openStock() {
         if (!canStock()) return;
         hide();
@@ -210,8 +216,8 @@
     }
 
     // Area Commerciale (capitolo 03 della BI): pagina #commercialePage, contenuto
-    // costruito da /js/commerciale.js. La vede chi puo' entrare nella BI.
-    function canCommerciale() { return canShow(); }
+    // costruito da /js/commerciale.js. Serve il permesso COMMERCIALE (almeno "Solo lettura").
+    function canCommerciale() { return canCommRaw(); }
     function openCommerciale() {
         if (!canCommerciale()) return;
         hide();
@@ -437,6 +443,7 @@
         hide: hide,
         onShowPage: onShowPage,
         openConsegne: openConsegne,
+        canConsegne: canConsegne,
         openBI: openBI,
         openStock: openStock,
         canStock: canStock,

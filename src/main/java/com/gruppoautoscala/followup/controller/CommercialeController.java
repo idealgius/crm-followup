@@ -36,7 +36,13 @@ import java.util.*;
  * (tutte le trattative), salvato nella tabella consegne_dataset con la chiave
  * "COMMERCIALE_TRATTATIVE". Lo storico usa la chiave "TRATTATIVE_STORICO" (ultimi 60 import).
  * Il foglio AVANZAMENTO e' unico e lo leggono entrambe.
- * Serve almeno "Solo lettura" sul permesso CONSEGNE (accesso alla BI).
+ * Permessi: sezione COMMERCIALE della pagina Permessi (ruolo + operatore; finche' non e'
+ * impostata segue CONSEGNE).
+ *  - vedere: almeno "Solo lettura"
+ *  - importare le trattative: "Completo" o superiore (prima: solo Admin, Gestore, Moderatore,
+ *    che sono proprio i ruoli con "Completo" di default)
+ *  - lo storico import si aggiorna anche dopo un import fatto dalle Consegne: basta
+ *    "Completo" su COMMERCIALE oppure su CONSEGNE
  */
 @RestController
 @RequestMapping("/api/commerciale")
@@ -45,7 +51,6 @@ public class CommercialeController {
     private static final String CHIAVE_STORICO = "TRATTATIVE_STORICO";
     private static final String CHIAVE_TRATTATIVE = "COMMERCIALE_TRATTATIVE";
     private static final int MAX_STORICO = 60;
-    private static final List<String> IMPORT_ROLES = List.of("ADMIN", "GESTORE", "MODERATORE");
     private static final ZoneId ITALY = ZoneId.of("Europe/Rome");
 
     @Autowired private ConsegneDatasetRepository repository;
@@ -58,10 +63,18 @@ public class CommercialeController {
         Long userId = (Long) session.getAttribute("userId");
         String role = (String) session.getAttribute("userRole");
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
-        if (!rolePermissionService.hasAtLeast(rolePermissionService.getEffectiveAccess(userId, role, "CONSEGNE"), "READ_ONLY"))
-            return ResponseEntity.status(403).body(Map.of("error", "Non hai il permesso per la BI"));
+        if (!rolePermissionService.hasAtLeast(rolePermissionService.getEffectiveAccess(userId, role, "COMMERCIALE"), "READ_ONLY"))
+            return ResponseEntity.status(403).body(Map.of("error", "Non hai il permesso per il Commerciale"));
         return null;
     }
+
+    /** "Completo" (o superiore) su una sezione */
+    private boolean completo(HttpSession session, String sezione) {
+        Long userId = (Long) session.getAttribute("userId");
+        String role = (String) session.getAttribute("userRole");
+        return userId != null && rolePermissionService.hasAtLeast(rolePermissionService.getEffectiveAccess(userId, role, sezione), "FULL");
+    }
+    private boolean puoImportare(HttpSession session) { return completo(session, "COMMERCIALE"); }
 
     private String nome(HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");
@@ -92,7 +105,7 @@ public class CommercialeController {
             out.put("trattative", t);
         } else out.put("trattative", null);
         out.put("storico", leggiStorico());
-        out.put("puoImportare", IMPORT_ROLES.contains(role));
+        out.put("puoImportare", puoImportare(session));
         return ResponseEntity.ok(out);
     }
 
@@ -101,7 +114,7 @@ public class CommercialeController {
         ResponseEntity<?> no = controlla(session);
         if (no != null) return no;
         String role = (String) session.getAttribute("userRole");
-        if (!IMPORT_ROLES.contains(role)) return ResponseEntity.status(403).body(Map.of("error", "Solo Admin, Gestore o Moderatore possono importare le trattative"));
+        if (!puoImportare(session)) return ResponseEntity.status(403).body(Map.of("error", "Per importare le trattative serve il permesso Completo sul Commerciale"));
         Object rows = body.get("rows");
         if (!(rows instanceof List<?> lista) || lista.isEmpty())
             return ResponseEntity.badRequest().body(Map.of("error", "Il file non contiene trattative valide"));
@@ -129,7 +142,7 @@ public class CommercialeController {
         ResponseEntity<?> no = controlla(session);
         if (no != null) return no;
         String role = (String) session.getAttribute("userRole");
-        return ResponseEntity.ok(Map.of("storico", leggiStorico(), "puoImportare", IMPORT_ROLES.contains(role)));
+        return ResponseEntity.ok(Map.of("storico", leggiStorico(), "puoImportare", puoImportare(session)));
     }
 
     @PostMapping("/storico-import")
@@ -137,7 +150,7 @@ public class CommercialeController {
         ResponseEntity<?> no = controlla(session);
         if (no != null) return no;
         String role = (String) session.getAttribute("userRole");
-        if (!IMPORT_ROLES.contains(role)) return ResponseEntity.status(403).body(Map.of("error", "Solo Admin, Gestore o Moderatore possono importare"));
+        if (!puoImportare(session) && !completo(session, "CONSEGNE")) return ResponseEntity.status(403).body(Map.of("error", "Per importare serve il permesso Completo"));
         try {
             List<Map<String, Object>> lista = leggiStorico();
             Map<String, Object> riga = new LinkedHashMap<>();

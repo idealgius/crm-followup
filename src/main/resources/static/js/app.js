@@ -558,12 +558,20 @@ window.onload = function() {
             // tutti gli altri entrano direttamente in In bound.
             const urlHash = window.location.hash.replace('#', '').trim();
             const macroHomeOk = !openAlertId && window.MacroHome && MacroHome.canShow(data.role);
-            if (macroHomeOk && urlHash === 'consegne') {
+            // (ogni area BI con il suo permesso: senza, si apre la pagina BI)
+            const puo = f => !MacroHome[f] || MacroHome[f]();
+            if (macroHomeOk && urlHash === 'consegne' && puo('canConsegne')) {
                 MacroHome.openConsegne();
                 hideLoadingOverlay();
-            } else if (macroHomeOk && (urlHash === 'stock' || urlHash.startsWith('stock/')) && MacroHome.openStock) {
+            } else if (macroHomeOk && urlHash === 'commerciale' && MacroHome.openCommerciale && puo('canCommerciale')) {
+                MacroHome.openCommerciale();
+                hideLoadingOverlay();
+            } else if (macroHomeOk && (urlHash === 'stock' || urlHash.startsWith('stock/')) && MacroHome.openStock && puo('canStock')) {
                 window.__stockLinkView = decodeURIComponent(urlHash.split('/')[1] || '');
                 MacroHome.openStock();
+                hideLoadingOverlay();
+            } else if (macroHomeOk && (['consegne', 'commerciale', 'stock'].includes(urlHash) || urlHash.startsWith('stock/'))) {
+                MacroHome.openBI();
                 hideLoadingOverlay();
             } else if (macroHomeOk && urlHash === 'bi') {
                 MacroHome.openBI();

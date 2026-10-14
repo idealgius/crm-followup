@@ -199,24 +199,28 @@ function hideNewUserForm() {
 // Etichette e icone identiche a quelle già usate nella navbar (stessa fonte
 // visiva, per coerenza con il resto dell'app) — vedi i link #dashboard,
 // #followups, ecc. in index.html.
+// Divise in gruppi (righe di titolo nella tabella): In bound, BI, Gestione.
+// BI: Solo lettura = vede · Completo = importa i file e modifica (verifiche, motivi...).
 const PERMISSION_SECTIONS = [
-    { key: 'DASHBOARD', icon: '📊', label: 'Dashboard' },
-    { key: 'FOLLOWUPS', icon: '📋', label: 'Follow-up' },
-    { key: 'WAITING', icon: '🔔', label: 'Recall' },
-    { key: 'CONTACTS', icon: '📞', label: 'Registro Contatti' },
-    { key: 'PROMO', icon: '🎯', label: 'Promo' },
-    { key: 'RENT', icon: '🚗', label: 'Rent' },
-    { key: 'SERVICE', icon: '🔧', label: 'Service' },
-    { key: 'GRAFICI', icon: '☰', label: 'Menu Grafici' },
-    { key: 'ADMIN', icon: '⚙️', label: 'Utenti/Permessi' },
-    { key: 'VEICOLI', icon: '🚙', label: 'Vetture in Consegna' },
-    // NUOVO: area Consegne (tempistiche) + selezione area dopo il login.
-    // Chi non ce l'ha entra direttamente in In bound.
-    { key: 'CONSEGNE', icon: '🔑', label: 'BI (selezione area)' },
-    // NUOVO: area Stock (macro-sezione BI). Solo lettura = vede; Completo = importa il file.
-    { key: 'STOCK', icon: '🚘', label: 'Stock' },
-    { key: 'ALLERT', icon: '🔔', label: 'Allert (Completo = gestisce · Admin = anche riapre i gestiti)' }
+    { key: 'DASHBOARD', icon: '📊', label: 'Dashboard', group: 'In bound' },
+    { key: 'FOLLOWUPS', icon: '📋', label: 'Follow-up', group: 'In bound' },
+    { key: 'WAITING', icon: '🔔', label: 'Recall', group: 'In bound' },
+    { key: 'CONTACTS', icon: '📞', label: 'Registro Contatti', group: 'In bound' },
+    { key: 'PREVENTIVI', icon: '🧾', label: 'Preventivi telefonici (servono anche al Commerciale)', group: 'In bound' },
+    { key: 'PROMO', icon: '🎯', label: 'Promo', group: 'In bound' },
+    { key: 'RENT', icon: '🚗', label: 'Rent', group: 'In bound' },
+    { key: 'SERVICE', icon: '🔧', label: 'Service', group: 'In bound' },
+    { key: 'VEICOLI', icon: '🚙', label: 'Vetture in Consegna', group: 'In bound' },
+    { key: 'GRAFICI', icon: '☰', label: 'Menu Grafici', group: 'In bound' },
+    // BI: la selezione area e la pagina BI le vede chi ha almeno una delle tre sezioni BI;
+    // chi non ne ha nessuna entra direttamente in In bound.
+    { key: 'CONSEGNE', icon: '🔑', label: 'Consegne', group: 'BI' },
+    { key: 'STOCK', icon: '🚘', label: 'Stock · Completo = importa il file', group: 'BI' },
+    { key: 'COMMERCIALE', icon: '💼', label: 'Commerciale · Completo = importa le trattative', group: 'BI' },
+    { key: 'ADMIN', icon: '⚙️', label: 'Utenti/Permessi', group: 'Gestione' },
+    { key: 'ALLERT', icon: '🔔', label: 'Allert (Completo = gestisce · Admin = anche riapre i gestiti)', group: 'Gestione' }
 ];
+
 
 const ACCESS_LEVEL_META = {
     NONE: { icon: '🚫', label: 'Nessuno' },
@@ -289,7 +293,12 @@ function renderPermissionMatrix() {
         </thead>
         <tbody>`;
 
+    let gruppo = null;
     PERMISSION_SECTIONS.forEach(section => {
+        if (section.group !== gruppo) {
+            gruppo = section.group;
+            html += `<tr><td colspan="${permissionRolesCache.length + 1}" style="text-align:left;font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--text-secondary);padding-top:14px">${gruppo}${gruppo === 'BI' ? ' · 👁 Solo lettura = vede · ✏️ Completo = importa e modifica · la pagina BI la vede chi ha almeno una delle tre' : ''}</td></tr>`;
+        }
         html += `<tr>
             <td style="text-align:left;font-weight:700;white-space:nowrap">${section.icon} ${section.label}</td>
             ${permissionRolesCache.map(role => {

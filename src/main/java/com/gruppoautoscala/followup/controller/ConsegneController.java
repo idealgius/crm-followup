@@ -30,6 +30,8 @@ import java.util.Optional;
  *  POST /api/consegne/verifiche           -> segna / toglie la verifica manuale di una pratica ("i")
  *
  * Permessi: sezione CONSEGNE della pagina Permessi (ruolo + operatore).
+ *  - i dati (GET /data) li legge anche il Commerciale: basta "Solo lettura" su CONSEGNE
+ *    oppure su COMMERCIALE (in quel caso senza poter importare o modificare)
  *  - vedere i dati e aggiornare il foglio: almeno "Solo lettura"
  *  - importare trattative e segnare/togliere verifiche: "Completo" o superiore
  */
@@ -70,7 +72,12 @@ public class ConsegneController {
     @GetMapping("/data")
     public ResponseEntity<?> getData(HttpSession session) {
         String acc = access(session);
-        if (!puoVedere(acc)) return negato(acc);
+        if (!puoVedere(acc)) {
+            // il Commerciale usa questi dati (foglio AVANZAMENTO, contratti recuperati)
+            Long userId = (Long) session.getAttribute("userId");
+            String role = (String) session.getAttribute("userRole");
+            if (userId == null || !puoVedere(rolePermissionService.getEffectiveAccess(userId, role, "COMMERCIALE"))) return negato(acc);
+        }
         try {
             return ResponseEntity.ok(buildData(acc));
         } catch (Exception e) {

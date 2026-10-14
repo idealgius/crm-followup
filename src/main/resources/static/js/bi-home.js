@@ -12,9 +12,108 @@
    I capitoli scorrono da soli (pausa con il mouse sopra), il cambio e' una
    lama di luce che attraversa il palco. Le animazioni girano solo mentre
    la pagina e' visibile (start/stop). Stili in /css/bi-home.css (prefisso bh-).
+
+   SEZIONE APERTA: cliccando un capitolo (01 Consegne, 02 Stock...) gli altri si
+   nascondono, lo scorrimento automatico si ferma e al posto dell'animazione compare
+   la scheda della sezione con tutte le sue voci. Ogni voce apre ESATTAMENTE quella
+   parte: la scheda giusta, la vista giusta del menu o il solo riquadro richiesto
+   (vista "Solo questo" di bi-tools.js, con "← Torna a ..."). "← Tutte le sezioni"
+   (o Esc) torna alla pagina BI normale. Stili in /css/bi-tools.css (prefisso bh-x).
    ===================================================================== */
 (function () {
     let root = null, scene = null;
+
+    /* ---------- link precisi: aprono proprio la parte scelta ---------- */
+    // aspetta che la pagina abbia disegnato quello che serve (i dati arrivano dal server)
+    const aspetta = (test, ms = 10000) => new Promise(res => {
+        const t0 = Date.now();
+        (function giro() { let v = null; try { v = test(); } catch (e) { /* */ } if (v) return res(v); if (Date.now() - t0 > ms) return res(null); setTimeout(giro, 150); })();
+    });
+    const vede = el => !!el && !!(el.offsetParent || el.getClientRects().length);
+    function trovaRiquadro(rootId, titolo) {
+        const r = document.getElementById(rootId); if (!r) return null;
+        const t = titolo.toLowerCase();
+        return [...r.querySelectorAll('.cg-card, .cm-card')].find(c => {
+            const h = c.querySelector('h2, h3');
+            return h && h.textContent.trim().toLowerCase().startsWith(t) && vede(c);
+        }) || null;
+    }
+    // mostra solo quel riquadro (bi-tools.js: "Solo questo"), con la barra "← Torna a ..."
+    async function soloRiquadro(rootId, titolo) {
+        const c = await aspetta(() => trovaRiquadro(rootId, titolo));
+        if (!c) return;
+        await new Promise(r => setTimeout(r, 350));       // i grafici si disegnano
+        const c2 = trovaRiquadro(rootId, titolo) || c;
+        if (window.BiTools && BiTools.focus) BiTools.focus(c2, true); else c2.scrollIntoView({ block: 'start' });
+        window.scrollTo(0, 0);
+    }
+    async function clicca(sel) { const b = await aspetta(() => { const x = document.querySelector(sel); return vede(x) ? x : null; }); if (b) b.click(); }
+    // CONSEGNE: scheda (tempi / analisi) e poi, se serve, il riquadro o il pulsante
+    async function consegne(tab, dopo) {
+        if (!window.MacroHome) return;
+        if (window.BiTools && BiTools.esciFocus) BiTools.esciFocus();
+        MacroHome.openConsegne();
+        const b = await aspetta(() => document.querySelector(`#consegneRoot .cg-tab[data-tab="${tab}"]`));
+        if (b && !b.classList.contains('on')) b.click();
+        if (dopo) await dopo();
+    }
+    async function stock(vista, titolo) {
+        if (!window.MacroHome) return;
+        if (window.BiTools && BiTools.esciFocus) BiTools.esciFocus();
+        if (window.StockHome && StockHome.vista) StockHome.vista(vista);
+        MacroHome.openStock();
+        if (titolo) await soloRiquadro('stockRoot', titolo);
+    }
+    async function commerciale(vw, titolo) {
+        if (!window.MacroHome) return;
+        if (window.BiTools && BiTools.esciFocus) BiTools.esciFocus();
+        if (window.CommercialeBI && CommercialeBI.vista) CommercialeBI.vista(vw);
+        MacroHome.openCommerciale();
+        if (titolo) await soloRiquadro('commercialeRoot', titolo);
+    }
+    // Le voci di ogni sezione. SUB: le tre in evidenza sotto i capitoli (indici di OPZ).
+    const OPZ = [
+        [   // 01 CONSEGNE
+            { i: '⏱️', t: 'Tempistiche consegne', d: 'Per mese di contratto: consegnate nello stesso mese, dopo 1, 2… mesi', go: () => consegne('tempi', () => soloRiquadro('consegneRoot', 'Tempistiche consegne')) },
+            { i: '⏳', t: 'Da consegnare, per motivo', d: 'Le vetture ancora da consegnare, divise per stato del foglio', go: () => consegne('tempi', () => soloRiquadro('consegneRoot', 'Da consegnare')) },
+            { i: '✓', t: 'Verifiche e quadratura', d: 'Il controllo che i conti tornino tra foglio e CSV, con il dettaglio', go: () => consegne('tempi', () => clicca('#cgQuad')) },
+            { i: '🔍', t: 'Da verificare a mano', d: 'Pratiche da controllare una per una (abbinamenti incerti)', go: () => consegne('tempi', () => clicca('#cgVerify')) },
+            { i: '📄', t: 'Solo nel foglio Google', d: 'Contratti nel foglio DATABASE senza trattativa nel CSV', go: () => consegne('tempi', () => clicca('#cgSolo')) },
+            { i: '📊', t: 'Analisi avanzamento', d: "Tutti i grafici dell'analisi, con i filtri", go: () => consegne('analisi') },
+            { i: '📈', t: 'Vendite del periodo', d: 'Consegnate, da consegnare e annullate', go: () => consegne('analisi', () => soloRiquadro('consegneRoot', 'Vendite:')) },
+            { i: '👤', t: 'Consulenti', d: 'Vendite, consegnate, in lavorazione e annullate per consulente', go: () => consegne('analisi', () => soloRiquadro('consegneRoot', 'Consulenti:')) },
+            { i: '💳', t: 'Pagamento e finanziamenti', d: 'Metodo di pagamento dei contratti', go: () => consegne('analisi', () => soloRiquadro('consegneRoot', 'Metodo di pagamento')) },
+            { i: '🛡️', t: 'Servizi venduti', d: 'Mawdy, FIR, pack manutenzione, Lojack, Blockshaft (uno per volta)', go: () => consegne('analisi', () => soloRiquadro('consegneRoot', 'Solo Mawdy')) }
+        ],
+        [   // 02 STOCK
+            { i: '📊', t: 'Panoramica e grafici', d: 'Totale vetture, nuove / usate / Km 0 e tutti i grafici', go: () => stock('panoramica') },
+            { i: '🏷️', t: 'Per marchio e modello', d: 'Tutti i marchi in ordine alfabetico, poi modelli e vetture', go: () => stock('marchi') },
+            { i: '🚦', t: 'Disponibili, prenotate, vendute', d: 'Solo il grafico dello stato delle vetture, con i numeri in evidenza', go: () => stock('panoramica', 'Disponibili, prenotate e vendute') },
+            { i: '🔁', t: 'Nuove, usate e Km 0', d: 'Solo il grafico per tipo di vettura', go: () => stock('panoramica', 'Nuove, usate e Km 0') },
+            { i: '⛽', t: 'Per motorizzazione', d: 'Benzina, diesel, ibrido, elettrico…', go: () => stock('panoramica', 'Per motorizzazione') },
+            { i: '🕒', t: 'Giacenza', d: 'Da quanti giorni le vetture sono in stock (fasce di giorni)', go: () => stock('panoramica', 'Giacenza') },
+            { i: '⚠️', t: 'Giacenza per marchio', d: 'Modelli critici e vetture ferme da troppo tempo', go: () => stock('panoramica', 'Giacenza per marchio') },
+            { i: '📋', t: 'Tutte le vetture', d: "L'elenco completo, con ricerca e filtri", go: () => stock('tutte') },
+            { i: '🆕', t: 'Nuove entrate', d: "Le vetture entrate con l'ultimo caricamento", go: () => stock('nuove') },
+            { i: '📤', t: 'Rimosse', d: 'Vetture uscite dallo stock, con il motivo', go: () => stock('rimosse') }
+        ],
+        [   // 03 COMMERCIALE
+            { i: '📊', t: 'Panoramica', d: 'Preventivi, contratti, conversione e annullati di tutte le sedi', go: () => commerciale({ k: 'all' }) },
+            { i: '🏢', t: 'Per sede', d: 'Ognuna con i suoi consulenti', chips: [['Agnano', () => commerciale({ k: 'sede', s: 'Agnano' })], ['Casamarciano', () => commerciale({ k: 'sede', s: 'Casamarciano' })], ['Salerno', () => commerciale({ k: 'sede', s: 'Salerno' })]] },
+            { i: '🏆', t: 'Classifica consulenti', d: 'Preventivi, contratti e conversione di ogni consulente', go: () => commerciale({ k: 'all' }, 'Classifica consulenti') },
+            { i: '💼', t: 'B2B e Noleggio', d: 'I contratti B2B e quelli del Noleggio', chips: [['B2B', () => commerciale({ k: 'b2b' })], ['Noleggio', () => commerciale({ k: 'sede', s: 'Noleggio' })]] },
+            { i: '📈', t: 'Andamento mensile', d: 'Preventivi, contratti, annullati e fallite mese per mese', go: () => commerciale({ k: 'all' }, 'Andamento mensile') },
+            { i: '🧭', t: 'Origini', d: 'Da dove arrivano preventivi e contratti (sito, Autoscout, ingresso…)', go: () => commerciale({ k: 'all' }, 'Preventivi e contratti per origine') },
+            { i: '🏷️', t: 'Performance marchi', d: 'Preventivi, contratti e conversione per marca', go: () => commerciale({ k: 'marche' }) },
+            { i: '📞', t: 'Preventivi telefonici', d: 'I preventivi fatti al telefono e quanti diventano contratti', go: () => commerciale({ k: 'pt' }) },
+            { i: '↩️', t: 'Contratti annullati', d: 'Annullati per sede, con il motivo e la fonte', go: () => commerciale({ k: 'ann' }) },
+            { i: '📋', t: 'Tutte le trattative', d: "L'elenco completo con ricerca e filtri", go: () => commerciale({ k: 'list' }) }
+        ],
+        [   // 04 SERVICE (in arrivo)
+            { i: '📦', t: 'Magazzino ricambi', d: 'In arrivo' }, { i: '🧾', t: 'Ordini di lavoro', d: 'In arrivo' }, { i: '🛎️', t: 'Accettazione', d: 'In arrivo' }
+        ]
+    ];
+    const SUB = [[0, 5, 2], [0, 1, 2], [0, 2, 7], [0, 1, 2]];
 
     // SERVICE: officina "connessa" — la Sportequipe sale sul ponte, una scansione
     // la attraversa e compaiono i punti di diagnosi; l'ordine di lavoro si spunta da solo.
@@ -241,11 +340,19 @@
   addEventListener('resize', () => { if (active) scale(); });
 
   const CH = [
-    { acc: '#f4a83a', tint: 'rgba(244,168,58,.28)', sub: [['Tempistiche consegne'], ['Analisi avanzamento'], ['Verifiche e quadratura']] },
-    { acc: '#3fcfae', tint: 'rgba(63,207,174,.26)', sub: [['Panoramica e grafici'], ['Per marchio e modello'], ['Disponibili, prenotate, vendute']], off: !(window.MacroHome && MacroHome.canStock && MacroHome.canStock()) },
-    { acc: '#ff7a1a', tint: 'rgba(255,106,26,.18)', sub: [['Panoramica e sedi'], ['Consulenti, B2B e noleggio'], ['Preventivi telefonici']], off: !(window.MacroHome && MacroHome.canCommerciale && MacroHome.canCommerciale()) },
+    { acc: '#f4a83a', tint: 'rgba(244,168,58,.28)', sub: SUB[0].map(k => [OPZ[0][k].t]) },
+    { acc: '#3fcfae', tint: 'rgba(63,207,174,.26)', sub: SUB[1].map(k => [OPZ[1][k].t]) },
+    { acc: '#ff7a1a', tint: 'rgba(255,106,26,.18)', sub: SUB[2].map(k => [OPZ[2][k].t]) },
     { acc: '#4aa8ff', tint: 'rgba(74,168,255,.22)', sub: [['Magazzino ricambi', 'In arrivo'], ['Ordini di lavoro', 'In arrivo'], ['Accettazione', 'In arrivo']], off: true }
   ];
+  // permessi: si rileggono ogni volta che la pagina si apre
+  function permessi() {
+    const M = window.MacroHome || {};
+    CH[0].off = !(M.canConsegne ? M.canConsegne() : true);
+    CH[1].off = !(M.canStock && M.canStock());
+    CH[2].off = !(M.canCommerciale && M.canCommerciale());
+  }
+  permessi();
   const DUR = 9000;
   let cur = -1, timer = null, paused = false;
   let trT = null;
@@ -263,6 +370,7 @@
     const c = CH[i];
     sw.style.setProperty('--acc', c.acc); sw.style.setProperty('--tint', c.tint);
     document.querySelectorAll('#biPage .bh-ch').forEach(b => { b.classList.remove('bh-on'); if (+b.dataset.c === i) { void b.offsetWidth; b.classList.add('bh-on'); b.style.setProperty('--dur', DUR + 'ms'); } });
+    if (xp >= 0 && xp !== i) chiudi();
     $('bh-enter').classList.toggle('bh-off', !!c.off);
     $('bh-enter').firstChild.textContent = c.off ? 'In arrivo ' : 'Entra ';
     const sub = $('bh-sub'); sub.innerHTML = c.sub.map((s, k) => `<li data-sub="${i}|${k}"><i></i><span>${s[0]}</span>${s[1] ? `<em>${s[1]}</em>` : ''}</li>`).join('');
@@ -278,7 +386,51 @@
     }
     cur = i;
   };
-  function restart() { clearInterval(timer); if (active && !paused && !reduce) timer = setInterval(() => go((cur + 1) % CH.length), DUR); }
+  function restart() { clearInterval(timer); if (active && !paused && !reduce && xp < 0) timer = setInterval(() => go((cur + 1) % CH.length), DUR); }
+
+  /* ---------- SEZIONE APERTA: solo quel capitolo, con tutte le sue voci ---------- */
+  let xp = -1;
+  const rail = document.querySelector('#biPage .bh-rail'), stage = $('bh-stage');
+  // Sotto le tre voci del capitolo c'e' sempre "Mostra opzioni". Solo cliccandolo restano
+  // il capitolo e la sua animazione (gli altri capitoli si nascondono, lo scorrimento
+  // automatico si ferma) e nella colonna compare l'elenco con TUTTE le voci della sezione
+  // (scorre se non ci sta). "Nascondi opzioni" / "← Tutte le sezioni" / Esc tornano come prima.
+  const tg = document.createElement('button');
+  tg.type = 'button'; tg.className = 'bh-x-tog'; tg.innerHTML = 'Mostra opzioni <span>▾</span>';
+  // in basso, accanto a "Entra" (nella colonna non c'e' spazio sotto i quattro capitoli)
+  $('bh-enter').insertAdjacentElement('afterend', tg);
+  const posTog = () => { const e = $('bh-enter'); tg.style.left = (e.offsetLeft + e.offsetWidth + 10) + 'px'; tg.style.display = cur === 3 ? 'none' : ''; };   // Service: in arrivo, niente opzioni
+  function espandi(i) {
+    xp = i; clearInterval(timer);
+    rail.classList.add('bh-x-on', 'bh-x-open');
+    document.querySelectorAll('#biPage .bh-ch').forEach(b => b.classList.toggle('bh-x-hid', +b.dataset.c !== i));
+    let back = rail.querySelector('.bh-x-back');
+    if (!back) { back = document.createElement('button'); back.type = 'button'; back.className = 'bh-x-back'; back.textContent = '← Tutte le sezioni'; rail.insertBefore(back, rail.firstChild); }
+    const c = CH[i], vietato = c.off && i !== 3;
+    let l = rail.querySelector('.bh-x-list');
+    if (!l) { l = document.createElement('div'); l.className = 'bh-x-list'; rail.appendChild(l); }
+    l.innerHTML = (vietato ? '<p class="bh-x-msg">Non hai il permesso per questa sezione: chiedilo a un amministratore (pagina Permessi).</p>' : i === 3 ? '<p class="bh-x-msg">In arrivo: saranno disponibili presto.</p>' : '') +
+      OPZ[i].map((o, k) => { const ok = !vietato && (o.go || o.chips); return `<div class="bh-xo ${ok ? '' : 'off'}" ${ok && o.go ? `data-xo="${i}|${k}" role="button" tabindex="0"` : ''}>
+        <span class="bh-xo-i">${o.i}</span><span class="bh-xo-t"><b>${o.t}</b><em>${o.d}</em>${o.chips && ok ? `<span class="bh-xo-c">${o.chips.map((ch, j) => `<button type="button" data-xc="${i}|${k}|${j}">${ch[0]}</button>`).join('')}</span>` : ''}</span></div>`; }).join('');
+    // l'elenco arriva fino a sopra il pulsante "Entra" e poi scorre (misure del palco, non scalate)
+    l.style.maxHeight = Math.max(120, $('bh-enter').offsetTop - (rail.offsetTop + l.offsetTop) - 14) + 'px';
+    l.scrollTop = 0;
+    tg.innerHTML = 'Nascondi <span>▴</span>'; tg.setAttribute('aria-expanded', 'true');
+  }
+  function chiudi() {
+    if (xp < 0) return;
+    xp = -1;
+    rail.classList.remove('bh-x-on', 'bh-x-open');
+    document.querySelectorAll('#biPage .bh-ch').forEach(b => b.classList.remove('bh-x-hid'));
+    rail.querySelectorAll('.bh-x-list, .bh-x-back').forEach(x => x.remove());
+    tg.innerHTML = 'Mostra opzioni <span>▾</span>'; tg.setAttribute('aria-expanded', 'false');
+    restart();
+  }
+  rail.addEventListener('click', e => { if (e.target.closest('.bh-x-back')) chiudi(); });
+  tg.addEventListener('click', () => { if (xp >= 0) chiudi(); else espandi(cur); });
+  // la rotellina scorre l'elenco senza muovere la pagina
+  rail.addEventListener('wheel', e => { const l = e.target.closest('.bh-x-list'); if (l && l.scrollHeight > l.clientHeight) e.stopPropagation(); }, { passive: true });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && active && xp >= 0) chiudi(); });
   document.querySelectorAll('#biPage .bh-ch').forEach(b => b.addEventListener('click', () => { go(+b.dataset.c); restart(); }));
   $('bh-frame').addEventListener('pointerenter', () => { paused = true; sw.classList.add('bh-paused'); clearInterval(timer); });
   $('bh-frame').addEventListener('pointerleave', () => { paused = false; sw.classList.remove('bh-paused'); restart(); });
@@ -367,16 +519,17 @@
   const svRun = () => { if (!sv || reduce) return; sv.classList.remove('sv-run'); void sv.offsetWidth; sv.classList.add('sv-run'); svT0 = performance.now(); };
   setInterval(() => { if (active && cur === 3) svRun(); }, 10500);
   setInterval(() => { if (!active || cur !== 3 || !svPct) return; const s = (performance.now() - svT0) / 1000; svPct.textContent = Math.max(0, Math.min(100, Math.round((s - 1.2) / 3.8 * 100))); }, 80);
-  const go0 = go; go = function (i, f) { go0(i, f); if (i === 2) cmRun(); else if (i === 1) stockSpin(); else if (i === 3) svRun(); };
+  const go0 = go; go = function (i, f) { go0(i, f); posTog(); if (i === 2) cmRun(); else if (i === 1) stockSpin(); else if (i === 3) svRun(); };
   // Avvio/arresto: tutto gira solo mentre la pagina BI e' visibile
   function start() {
+    permessi(); chiudi(); setTimeout(posTog, 0);
     scale(); active = true; paused = false; settle();
     if (cur < 0) go(0, true); else if (cur === 2) cmRun(); else if (cur === 1) stockSpin(); else if (cur === 3) svRun();
     restart();
     if (!reduce) requestAnimationFrame(frame);
   }
   function stop() { active = false; clearInterval(timer); }
-  return { start, stop };
+  return { start, stop, chiudi };
   }
 
 
@@ -390,6 +543,7 @@
         if (nav && nav.parentNode) nav.parentNode.insertBefore(root, nav.nextSibling);
         else document.getElementById('mainApp').appendChild(root);
         // azioni
+        root.addEventListener('keydown', e => { const x = e.target.closest && e.target.closest('[data-xo]'); if (e.key === 'Enter' && x) x.click(); });
         root.addEventListener('click', e => {
             if (e.target.closest('#bh-enter')) {
                 if (!e.target.closest('#bh-enter').classList.contains('bh-off')) {
@@ -401,12 +555,18 @@
                 return;
             }
             if (e.target.closest('.bh-back')) { if (window.MacroHome) MacroHome.show(); return; }
+            // voci della sezione aperta (e chip, es. le sedi)
+            const xc = e.target.closest('[data-xc]');
+            if (xc) { const [c, k, j] = xc.dataset.xc.split('|').map(Number); const o = OPZ[c][k]; if (o && o.chips && o.chips[j]) o.chips[j][1](); return; }
+            const xo = e.target.closest('[data-xo]');
+            if (xo) { const [c, k] = xo.dataset.xo.split('|').map(Number); const o = OPZ[c][k]; if (o && o.go) o.go(); return; }
+            // le tre voci sotto i capitoli: aprono proprio quella parte
             const li = e.target.closest('[data-sub]');
-            if (li) {
+            if (li && window.MacroHome) {
                 const [c, k] = li.dataset.sub.split('|').map(Number);
-                if (c === 0) openTab(k === 1 ? 'analisi' : 'tempi');
-                else if (c === 1 && window.MacroHome && MacroHome.canStock && MacroHome.canStock()) MacroHome.openStock();
-                else if (c === 2 && window.MacroHome && MacroHome.canCommerciale && MacroHome.canCommerciale()) MacroHome.openCommerciale();
+                const permesso = c === 0 ? (!MacroHome.canConsegne || MacroHome.canConsegne()) : c === 1 ? MacroHome.canStock && MacroHome.canStock() : c === 2 ? MacroHome.canCommerciale && MacroHome.canCommerciale() : false;
+                const o = SUB[c] && OPZ[c][SUB[c][k]];
+                if (permesso && o && o.go) o.go();
             }
         });
         scene = initScene();

@@ -531,7 +531,7 @@
           <div class="cg-band-top">
             <div>
               <div class="cg-back-row">
-                <button type="button" class="cg-back" onclick="MacroHome.show()">&larr; Home</button>
+                <button type="button" class="cg-back" onclick="(window.MacroHome && MacroHome.openBI) ? MacroHome.openBI() : MacroHome.show()">&larr; BI</button>
               </div>
               <h1>Power BI</h1>
               <p>Consegne, tempistiche e analisi dell'avanzamento</p>
@@ -882,6 +882,21 @@
             <div class="cg-m-body"><table class="cg-list" id="cgMList"></table><div id="cgMInfo"></div></div>
             <div class="cg-m-foot" id="cgMFoot"></div></div>`;
         document.body.appendChild(ov);
+        // Schermo intero + Excel (bi-tools.js): esporta la tabella che si vede, con i filtri scelti
+        if (window.BiTools) {
+            const mInfo = () => ov.querySelector('#cgMList').style.display === 'none';
+            ovTools = BiTools.toolbar({
+                sezione: 'CONSEGNE',
+                titolo: () => 'Consegne · ' + ov.querySelector('#cgMTitle').textContent,
+                sottotitolo: () => [[...ov.querySelector('#cgMStat').children].map(x => x.textContent.trim()).filter(Boolean).join(' '),
+                    mInfo() ? '' : BiTools.filtriAttivi(ov.querySelector('.cg-m-tools')),
+                    !mInfo() && colCount() ? 'Filtri colonna: ' + Object.entries(colF).filter(([, v]) => v.size).map(([k, v]) => COLS[k] + ' = ' + [...v].join(', ')).join(' · ') : ''].filter(Boolean).join(' · '),
+                table: () => mInfo() ? ov.querySelector('#cgMInfo table') : ov.querySelector('#cgMList'),
+                fs: ov.querySelector('.cg-modal')
+            });
+            const head = ov.querySelector('.cg-m-head');
+            head.insertBefore(ovTools, head.querySelector('.cg-x'));
+        }
         ov.querySelector('.cg-x').addEventListener('click', closeModal);
         ov.addEventListener('click', e => { if (e.target === ov) closeModal(); });
         document.addEventListener('keydown', e => { if (e.key === 'Escape' && ov.classList.contains('open')) closeModal(); });
@@ -932,6 +947,12 @@
         ov.querySelector('#cgMList').style.display = list ? '' : 'none';
         ov.querySelector('#cgMInfo').style.display = list ? 'none' : '';
         if (!list) ov.querySelector('#cgMFoot').innerHTML = '';
+        xlsVisibile();
+    }
+    // il pulsante Excel si vede solo se nella finestra c'e' una tabella
+    function xlsVisibile() {
+        const b = ovTools && ovTools.querySelector('.bi-t-xls'); if (!b) return;
+        b.style.display = ov.querySelector('#cgMList').style.display !== 'none' || ov.querySelector('#cgMInfo table') ? '' : 'none';
     }
     function openInfo(title, html) {
         ensureModal();
@@ -940,6 +961,7 @@
         ov.querySelector('#cgMTitle').textContent = title;
         ov.querySelector('#cgMStat').innerHTML = '';
         ov.querySelector('#cgMInfo').innerHTML = html;
+        xlsVisibile();
         ov.classList.add('open');
     }
     function openModal(title, rows, base, opts = {}) {
@@ -1156,8 +1178,9 @@
     }
     document.addEventListener('click', e => { if (colPop && !e.target.closest('.cg-colpop') && !e.target.closest('[data-colf]')) closeColPop(); });
 
+    let ovTools = null;
     function closeModal() {
-        closeColPop(); ov.classList.remove('open'); if (lastFocus && lastFocus.focus) lastFocus.focus(); }
+        closeColPop(); if (ovTools) ovTools._reset(); ov.classList.remove('open'); if (lastFocus && lastFocus.focus) lastFocus.focus(); }
 
     /* ================= import CSV delle Consegne ================= */
     // Legge il CSV, lo riduce e lo salva sul server (sostituisce il precedente).

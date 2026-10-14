@@ -255,3 +255,10 @@ html[data-bi="commerciale"] { --navbar-bg:#5a1726; }
 html[data-theme="dark"][data-bi="commerciale"] { --navbar-bg:#3e1420; }
 html[data-bi="commerciale"] .navbar { background:var(--navbar-bg); }
 html[data-bi="commerciale"] .cm-band { border-top:0; }
+
+/* 📌 scelta fissata (origine / tipo / marca valgono per tutto il Commerciale) */
+.cm-pin { border:1.5px solid var(--cm-acc-ink, #8a2a3f); background:transparent; color:var(--cm-acc-ink, #8a2a3f); border-radius:10px; padding:6px 12px; font-weight:700; font-size:12.5px; cursor:pointer; white-space:nowrap; }
+.cm-pin:hover { background:var(--cm-acc-soft, rgba(138,42,63,.12)); }
+.cm-pinbox:empty { display:none; }
+.cm-msg.cm-fissa { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.cm-msg.cm-fissa .cm-link { margin-left:auto; font-weight:700; }

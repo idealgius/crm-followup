@@ -302,3 +302,8 @@ table.st-rim td.st-mot input:disabled { opacity:.6; }
 .st-lnk:hover { box-shadow:inset 0 0 0 1.5px var(--cg-teal); }
 .st-up { color:#1f9d6f !important; font-weight:700; }
 .st-down { color:#e5484d !important; font-weight:700; }
+
+/* 📌 scelta fissata (i filtri di un elenco valgono per tutto lo Stock) */
+.st-pin { display:flex; align-items:center; }
+.st-pin:empty { display:none; }
+.cg-vista.st-fissa { margin:10px 0 0; }

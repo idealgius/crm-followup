@@ -726,6 +726,8 @@
         });
     }
 
+    // filtri dell'analisi nel sottotitolo degli Excel di riquadri ed elenchi (bi-tools.js)
+    if (window.BiTools) BiTools.contesto.CONSEGNE = () => el && (el.offsetParent || el.getClientRects().length) ? filtriTesto() : '';
     function filtriTesto() {
         const p = [];
         if (F.dal || F.al) p.push(`Periodo: ${F.dal || '…'} → ${F.al || '…'}`);

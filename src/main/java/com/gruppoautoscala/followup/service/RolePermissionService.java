@@ -30,6 +30,9 @@ public class RolePermissionService {
     // copre il caso di una modifica fatta direttamente sul database.
     private static final long CACHE_TTL_MS = 60_000;
     private volatile Map<String, Map<String, String>> matrixCache;
+    // ruoli per cui l'admin ha salvato esplicitamente COMMERCIALE (gli altri seguono CONSEGNE)
+    private volatile Set<String> commercialeSalvato = Set.of();
+    private static final String COMMERCIALE = "COMMERCIALE", COMMERCIALE_SEGUE = "CONSEGNE";
     private volatile long matrixCacheAt = 0;
     private final Map<Long, UserOverridesCache> userOverridesCache = new ConcurrentHashMap<>();
 
@@ -56,6 +59,10 @@ public class RolePermissionService {
         "CONSEGNE",
         // NUOVO: area Stock (capitolo 02 della BI)
         "STOCK",
+        // NUOVO: area Commerciale (capitolo 03 della BI). Finche' l'admin non la imposta
+        // dalla pagina Permessi segue CONSEGNE (vedi COMMERCIALE_SEGUE), cosi' chi vedeva
+        // il Commerciale continua a vederlo esattamente come prima.
+        "COMMERCIALE",
         // NUOVO: gestione degli Allert (Completo = gestisce, Admin = anche riapre i gestiti)
         "ALLERT"
     );
@@ -195,11 +202,17 @@ public class RolePermissionService {
             }
             matrix.put(role, row);
         }
+        Set<String> salvato = new HashSet<>();
         for (RolePermission rp : rolePermissionRepository.findAll()) {
             if (matrix.containsKey(rp.getRole()) && matrix.get(rp.getRole()).containsKey(rp.getSection())) {
                 matrix.get(rp.getRole()).put(rp.getSection(), rp.getAccess());
+                if (COMMERCIALE.equals(rp.getSection())) salvato.add(rp.getRole());
             }
         }
+        // COMMERCIALE non ancora impostato per il ruolo: stesso valore di CONSEGNE
+        for (Map.Entry<String, Map<String, String>> e : matrix.entrySet())
+            if (!salvato.contains(e.getKey())) e.getValue().put(COMMERCIALE, e.getValue().get(COMMERCIALE_SEGUE));
+        commercialeSalvato = salvato;
         return matrix;
     }
 
@@ -226,9 +239,14 @@ public class RolePermissionService {
     // VINCE SEMPRE (override totale); altrimenti si applica il permesso di
     // ruolo, calcolato come sopra.
     public String getEffectiveAccess(Long userId, String role, String section) {
-        String override = getUserOverrides(userId).get(section);
+        Map<String, String> ov = getUserOverrides(userId);
+        String override = ov.get(section);
         if (override != null) return override;
         Map<String, String> row = matrixSnapshot().getOrDefault(role, Map.of());
+        // COMMERCIALE mai impostato (ne' per l'operatore ne' per il ruolo): segue CONSEGNE,
+        // anche l'eccezione personale su CONSEGNE
+        if (COMMERCIALE.equals(section) && !commercialeSalvato.contains(role) && ov.get(COMMERCIALE_SEGUE) != null)
+            return ov.get(COMMERCIALE_SEGUE);
         return row.getOrDefault(section, "NONE");
     }
 
