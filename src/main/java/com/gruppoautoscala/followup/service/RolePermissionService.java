@@ -282,6 +282,29 @@ public class RolePermissionService {
         return result;
     }
 
+    // ===== NUOVO: RIPRISTINO DEI PERMESSI INIZIALI =====
+    // Ruolo: si cancellano le righe salvate dall'admin per quel ruolo (sezioni e
+    // grafici), cosi' tornano a valere i DEFAULT STORICI qui sopra.
+    // Ruolo null = tutti i ruoli. Restituisce quante personalizzazioni sono state tolte.
+    public int resetRole(String role) {
+        if (role != null && !ROLES.contains(role)) throw new IllegalArgumentException("Ruolo non valido");
+        List<RolePermission> righe = new ArrayList<>();
+        for (RolePermission rp : rolePermissionRepository.findAll())
+            if (role == null || role.equals(rp.getRole())) righe.add(rp);
+        for (RolePermission rp : righe) rolePermissionRepository.delete(rp);
+        invalidateCaches();
+        return righe.size();
+    }
+
+    // Operatore: si cancellano tutte le sue eccezioni personali, cosi' segue in
+    // tutto il suo ruolo (come premere "Eredita da ruolo" su ogni sezione e grafico).
+    public int resetUser(Long userId) {
+        List<UserPermission> righe = new ArrayList<>(userPermissionRepository.findByUserId(userId));
+        for (UserPermission up : righe) userPermissionRepository.delete(up);
+        invalidateCaches();
+        return righe.size();
+    }
+
     // Imposta l'override personale di UN utente per UNA sezione. Se access è
     // null, l'override viene RIMOSSO (l'utente torna a ereditare il
     // permesso del suo ruolo).

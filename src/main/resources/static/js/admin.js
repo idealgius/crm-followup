@@ -284,11 +284,18 @@ function renderPermissionMatrix() {
 
     const roleLabel = (r) => formatRole(r);
 
-    let html = `<table class="permission-matrix-table">
+    // NUOVO: ripristino dei permessi iniziali (solo Admin). "↺" sotto ogni ruolo = quel
+    // ruolo torna come scritto nel programma; "Ripristina tutti i ruoli" = tutti.
+    // Non e' "Eredita da ruolo" (quello e' per il singolo operatore, vedi sotto).
+    const puoRipristinare = currentUser?.role === 'ADMIN';
+    let html = (puoRipristinare ? `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+            <span style="font-size:12.5px;color:var(--text-secondary)">↺ sotto un ruolo = quel ruolo torna ai permessi iniziali (quelli di partenza del CRM), grafici compresi.</span>
+            <button type="button" class="btn-small btn-secondary" onclick="resetRolePermissions('TUTTI')">↺ Ripristina tutti i ruoli</button>
+        </div>` : '') + `<table class="permission-matrix-table">
         <thead>
             <tr>
                 <th style="text-align:left">Sezione</th>
-                ${permissionRolesCache.map(r => `<th>${roleLabel(r)}</th>`).join('')}
+                ${permissionRolesCache.map(r => `<th>${roleLabel(r)}${puoRipristinare ? `<br><button type="button" onclick="resetRolePermissions('${r}')" title="Riporta ${roleLabel(r)} ai permessi iniziali" style="margin-top:4px;border:1px solid var(--border);background:transparent;color:var(--text-secondary);border-radius:6px;font-size:10.5px;font-weight:700;padding:2px 7px;cursor:pointer">↺ Iniziali</button>` : ''}</th>`).join('')}
             </tr>
         </thead>
         <tbody>`;
@@ -383,6 +390,40 @@ async function setChartPermission(role, key, access, btnEl) {
     }
 }
 
+// NUOVO: ripristino dei permessi iniziali di un ruolo ('TUTTI' = tutti i ruoli)
+async function resetRolePermissions(role) {
+    const nome = role === 'TUTTI' ? 'TUTTI i ruoli' : 'il ruolo ' + formatRole(role);
+    if (!confirm(`Riportare ${nome} ai permessi iniziali?\n\nLe modifiche fatte a mano su sezioni e grafici si perdono. Le eccezioni dei singoli operatori restano.`)) return;
+    try {
+        const res = await fetch('/api/permissions/reset/role', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role }) });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) { alert(data?.error || 'Ripristino non riuscito'); return; }
+        permissionMatrixCache = data.matrix || permissionMatrixCache;
+        renderPermissionMatrix();
+        if (typeof loadPermissionMatrix === 'function') { await loadPermissionMatrix(); if (typeof applyRolePermissions === 'function') applyRolePermissions(currentUser?.role); }
+        alert(data.tolte ? `Fatto: ${data.tolte} modific${data.tolte === 1 ? 'a tolta' : 'he tolte'}.` : 'Era gia\' tutto ai permessi iniziali.');
+    } catch (err) {
+        console.error('Errore ripristino permessi ruolo:', err);
+        alert('Errore di connessione nel ripristino');
+    }
+}
+
+// NUOVO: l'operatore perde tutte le sue eccezioni e segue in tutto il suo ruolo
+async function resetOperatorPermissions(userId) {
+    const u = operatorPermissionsCache.find(x => x.id === userId);
+    if (!confirm(`Togliere tutte le eccezioni personali di ${u ? u.fullName : 'questo operatore'}?\n\nSeguirà in tutto i permessi del suo ruolo (${u ? formatRole(u.role) : ''}), come oggi sono impostati.`)) return;
+    try {
+        const res = await fetch('/api/permissions/reset/user', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId }) });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) { alert(data?.error || 'Ripristino non riuscito'); return; }
+        if (u) u.overrides = {};
+        renderOperatorPermissions();
+    } catch (err) {
+        console.error('Errore ripristino permessi operatore:', err);
+        alert('Errore di connessione nel ripristino');
+    }
+}
+
 async function setPermission(role, section, access, btnEl) {
     const group = btnEl?.closest('.permission-cell-group');
     try {
@@ -469,7 +510,7 @@ function renderOperatorPermissions() {
                     <div class="waiting-name">${u.fullName}</div>
                     <div class="waiting-details" style="margin-top:4px">${u.email} · <span class="status-badge status-${u.role}">${formatRole(u.role)}</span></div>
                 </div>
-                ${overrideCount > 0 ? `<span style="font-size:12px;color:var(--text-secondary)">🛡️ ${overrideCount} eccezion${overrideCount === 1 ? 'e' : 'i'} personalizzat${overrideCount === 1 ? 'a' : 'e'}</span>` : ''}
+                ${overrideCount > 0 ? `<span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="font-size:12px;color:var(--text-secondary)">🛡️ ${overrideCount} eccezion${overrideCount === 1 ? 'e' : 'i'} personalizzat${overrideCount === 1 ? 'a' : 'e'}</span>${currentUser?.role === 'ADMIN' ? `<button type="button" class="btn-small btn-secondary" onclick="resetOperatorPermissions(${u.id})" title="Toglie tutte le eccezioni: l'operatore segue in tutto il suo ruolo">↩️ Eredita tutto dal ruolo</button>` : ''}</span>` : ''}
             </div>
             <div style="display:flex;flex-direction:column;gap:8px">
                 ${operatorSectionsCache.map(sectionKey => {
