@@ -97,7 +97,9 @@ public class RolePermissionService {
     // 4° livello "ADMIN_FULL" — come FULL ma può toccare anche i record
     // creati da un utente ADMIN. L'ordine della lista è anche l'ordine di
     // "forza" del permesso, usato da hasAtLeast() sotto.
-    public static final List<String> ACCESS_LEVELS = List.of("NONE", "READ_ONLY", "FULL", "ADMIN_FULL");
+    // NUOVO: "LIVELLO_4" (solo per Appuntamenti e ingressi) = come ADMIN_FULL + chat del salone.
+    // Sta in fondo alla lista, quindi per hasAtLeast() vale "piu' di ADMIN_FULL".
+    public static final List<String> ACCESS_LEVELS = List.of("NONE", "READ_ONLY", "FULL", "ADMIN_FULL", "LIVELLO_4");
 
     // ===== DEFAULT STORICI =====
     // Riproducono ESATTAMENTE il comportamento hardcoded che c'era in app.js
@@ -154,7 +156,7 @@ public class RolePermissionService {
         adminDefaults.put("CONSEGNE", "ADMIN_FULL");
         adminDefaults.put("STOCK", "ADMIN_FULL");
         adminDefaults.put("ALLERT", "ADMIN_FULL");
-        adminDefaults.put("SALONE", "ADMIN_FULL");
+        adminDefaults.put("SALONE", "LIVELLO_4");      // Appuntamenti e ingressi: livello 4 = tutto + chat
         DEFAULTS.put("ADMIN", adminDefaults);
         // NUOVO: Front Office registra e assegna i clienti; Consulenza riceve le notifiche e usa la chat
         DEFAULTS.put("FRONT_OFFICE", Map.of("SALONE", "FULL"));

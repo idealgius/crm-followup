@@ -12,7 +12,8 @@
                       Import e storico degli import: dal livello 2.
      📊 REPORT        (livello 3) walk-in per consulente, marchi richiesti, tempo negli stati,
                       tempo dalla presa in carico al ritorno disponibile, storico dei cambi di stato.
-   💬 CHAT in basso a sinistra (su tutte le schede).
+   💬 CHAT in basso a sinistra (su tutte le schede): solo livello 4 e ruoli Front Office / Consulenza / Back Office.
+   Grafici del Report: 3 formati (ciambella / barre / linee nel tempo), scelta ricordata nel browser.
 
    Chi vede cosa (voce "Appuntamenti e ingressi" della pagina Permessi, a livelli):
      Livello 1 vede tutto ma non registra e non importa (Consulenza a livello 1: solo i propri)
@@ -156,7 +157,6 @@
         window.scrollTo(0, 0);
         caricaGiorno(st.giorno);
         caricaStati();
-        Chat.mostra(true);
     }
     function hide() {
         const page = document.getElementById('salonePage'); if (page) page.style.display = 'none';
@@ -210,6 +210,8 @@
             const eraRep = st.vedeReport;
             st.ingressi = d.ingressi || []; st.consulenti = d.consulenti || []; st.puoGestire = !!d.puoGestire; st.io = d.io || null;
             st.vedeTutti = !!d.vedeTutti; st.vedeReport = !!d.vedeReport; st.puoImportare = !!d.puoImportare;
+            st.chat = !!d.chat;
+            if (aperta) Chat.mostra(st.chat);      // chat: solo livello 4 e ruoli del salone
             st.giorni = m.giorni || {};
             st.err = '';
             if (eraRep !== st.vedeReport && root) disegnaSchede();
@@ -770,10 +772,48 @@
         });
         const oggiIn = oggi() >= D.da && oggi() <= D.a;
         if (oggiIn) (D.stati || []).forEach(s => { if (s.stato && s.dal) add(s.nome, s.stato, minDa(s.dal), oggi()); });
-        return { tot, ass: ass.length, presi: presi.length, rispMedia: media(ass.filter(r => r.presoAt && r.assegnatoAt).map(risp)),
+        // serie nel tempo (per i grafici a linee): giorno per giorno, o mese per mese se il periodo e' lungo
+        const B = periodiAsse(D.da, D.a), bk = g => B.mensile ? String(g).slice(0, 7) : String(g).slice(0, 10);
+        const vuota = () => Object.fromEntries(B.chiavi.map(k => [k, 0]));
+        const tCons = {}, tMarchi = {}, tStati = { DISPONIBILE: vuota(), OCCUPATO: vuota(), NON_DISPONIBILE: vuota() }, tPres = {};
+        ass.forEach(r => { const k = bk(r.data); (tCons[r.consulente] = tCons[r.consulente] || vuota())[k] = (tCons[r.consulente][k] || 0) + 1; });
+        I.forEach(r => [...new Set((r.vetture || []).map(v => (v.marca || 'Non indicato').trim() || 'Non indicato'))].forEach(m => {
+            const k = bk(r.data); (tMarchi[m] = tMarchi[m] || vuota())[k] = (tMarchi[m][k] || 0) + 1; }));
+        const addT = (nome, s, min, giorno) => { if (!s || !tStati[s]) return; const k = bk(giorno); tStati[s][k] = (tStati[s][k] || 0) + min; (tPres[k] = tPres[k] || new Set()).add(nome + '|' + giorno); };
+        (D.cambi || []).forEach(e => { if (e.da && e.inizio) addT(e.nome, e.da, Number(e.minuti) || 0, isoRoma(new Date(e.inizio))); });
+        if (oggiIn) (D.stati || []).forEach(s => { if (s.stato && s.dal) addT(s.nome, s.stato, minDa(s.dal), oggi()); });
+        return { B, tCons, tMarchi, tStati, tPres, tot, ass: ass.length, presi: presi.length, rispMedia: media(ass.filter(r => r.presoAt && r.assegnatoAt).map(risp)),
             clienteMedia: media(I.filter(r => r.liberoAt && r.minutiCliente != null).map(r => Number(r.minutiCliente))), per, marchi, T, media };
     }
     const pct = (n, t) => t ? Math.round(n / t * 1000) / 10 + '%' : '—';
+    /* asse del tempo: giorno per giorno fino a 62 giorni, poi mese per mese */
+    function periodiAsse(da, a) {
+        const g0 = new Date(da + 'T12:00:00Z'), g1 = new Date(a + 'T12:00:00Z');
+        const giorni = Math.round((g1 - g0) / 864e5) + 1, mensile = giorni > 62;
+        const chiavi = [], etichette = [];
+        if (mensile) {
+            for (let d = new Date(Date.UTC(g0.getUTCFullYear(), g0.getUTCMonth(), 1)); d <= g1; d.setUTCMonth(d.getUTCMonth() + 1)) {
+                chiavi.push(d.toISOString().slice(0, 7)); etichette.push(d.toLocaleDateString('it-IT', { timeZone: 'UTC', month: 'short', year: '2-digit' }));
+            }
+        } else for (let d = new Date(g0); d <= g1; d.setUTCDate(d.getUTCDate() + 1)) {
+            chiavi.push(d.toISOString().slice(0, 10)); etichette.push(d.toLocaleDateString('it-IT', { timeZone: 'UTC', day: 'numeric', month: 'short' }));
+        }
+        return { chiavi, etichette, mensile };
+    }
+    /* tre formati per ogni grafico, come nelle altre sezioni: ciambella / colonne / linee nel tempo (scelta ricordata) */
+    const ICO_T = {
+        doughnut: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/><path d="M12 4v4.5"/></svg>',
+        bar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 6h10M4 12h16M4 18h7"/></svg>',
+        line: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 3 5-7 4 4"/></svg>'
+    };
+    const NOMI_T = { doughnut: 'Ciambella', bar: 'Barre', line: 'Linee nel tempo' };
+    const LS_T = 'saloneTipiGrafico';
+    let tipiG = {}; try { tipiG = JSON.parse(localStorage.getItem(LS_T) || '{}') || {}; } catch (e) { tipiG = {}; }
+    const tipoG = (id, def) => (NOMI_T[tipiG[id]] ? tipiG[id] : def);
+    const bottoniTipo = (id, def) => `<div class="sa-types" role="group" aria-label="Formato del grafico">${Object.keys(NOMI_T).map(t => `<button type="button" title="${NOMI_T[t]}" aria-label="${NOMI_T[t]}" class="${tipoG(id, def) === t ? 'on' : ''}" data-ct="${id}|${t}">${ICO_T[t]}</button>`).join('')}</div>`;
+    /* colori per serie (consulenti, marchi): sempre nello stesso ordine, il colore segue il nome */
+    const SERIE = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'];
+    const ALTRI = '#7b8494';
     function renderReport(body) {
         grafici.splice(0).forEach(g => { try { g.destroy(); } catch (e) { /* */ } });
         const R = st.rep, D = R.dati;
@@ -804,21 +844,21 @@
           </div>
 
           <div class="sa-rep-2">
-            <div class="sa-card"><h3>Walk-in assegnati per consulente</h3><p class="sa-hint">Quanti clienti ha ricevuto ciascuno e che percentuale del totale assegnato.</p>
-              <div class="sa-chart"><canvas id="saChCons" role="img" aria-label="Walk-in assegnati per consulente"></canvas></div>
+            <div class="sa-card"><div class="sa-card-h"><div><h3>Walk-in assegnati per consulente</h3><p class="sa-hint">Quanti clienti ha ricevuto ciascuno e che percentuale del totale assegnato.</p></div>${bottoniTipo('cons', 'bar')}</div>
+              <div class="sa-chart" style="height:${altezza(tipoG('cons', 'bar'), righeCons.length)}px"><canvas id="saChCons" role="img" aria-label="Walk-in assegnati per consulente"></canvas></div>
               <table class="sa-tbl"><thead><tr><th>Consulente</th><th>Assegnati</th><th>% sul totale</th><th>Presi in carico</th><th>Risposta media</th><th>Con il cliente (media)</th></tr></thead><tbody>
                 ${righeCons.map(c => { const p = C.per[c]; return `<tr><td>${esc(c)}</td><td><b>${p.n}</b></td><td>${pct(p.n, C.ass)}</td><td>${p.presi}</td><td>${durata(C.media(p.risp))}</td><td>${durata(C.media(p.cliente))}</td></tr>`; }).join('')}
               </tbody></table></div>
-            <div class="sa-card"><h3>Marchi richiesti nei walk-in</h3><p class="sa-hint">Su ${conVetture} walk-in con almeno una vettura indicata. Un cliente che chiede due modelli dello stesso marchio conta una volta.</p>
-              <div class="sa-chart" style="height:${Math.max(180, Math.min(marchi.length, 12) * 30 + 40)}px"><canvas id="saChMarchi" role="img" aria-label="Marchi richiesti nei walk-in"></canvas></div>
+            <div class="sa-card"><div class="sa-card-h"><div><h3>Marchi richiesti nei walk-in</h3><p class="sa-hint">Su ${conVetture} walk-in con almeno una vettura indicata. Un cliente che chiede due modelli dello stesso marchio conta una volta.</p></div>${bottoniTipo('marchi', 'bar')}</div>
+              <div class="sa-chart" style="height:${altezza(tipoG('marchi', 'bar'), Math.min(marchi.length, 12))}px"><canvas id="saChMarchi" role="img" aria-label="Marchi richiesti nei walk-in"></canvas></div>
               <table class="sa-tbl"><thead><tr><th>Marchio</th><th>Walk-in</th><th>% walk-in</th><th>Vetture chieste</th><th>Presi in carico</th><th>Modelli più chiesti</th></tr></thead><tbody>
                 ${marchi.map(([m, k]) => `<tr><td>${esc(m)}</td><td><b>${k.walkin}</b></td><td>${pct(k.walkin, conVetture)}</td><td>${k.vetture}</td><td>${pct(k.presi, k.walkin)}</td><td class="sa-hint">${esc(Object.entries(k.modelli).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([n, q]) => n + (q > 1 ? ' ×' + q : '')).join(', '))}</td></tr>`).join('') || '<tr><td colspan="6" class="sa-hint">Nessuna vettura indicata nel periodo.</td></tr>'}
               </tbody></table></div>
           </div>
 
-          <div class="sa-card"><h3>Minuti medi al giorno in ogni stato</h3><p class="sa-hint">Media sui giorni in cui il consulente è stato in salone. Uno stato lasciato aperto la sera viene chiuso in automatico alle 21:00.</p>
-            <div class="sa-legend">${Object.keys(STATI).map(k => `<span>${bollino(k)} ${STATI[k].t}</span>`).join('')}</div>
-            <div class="sa-chart" style="height:${cons.length * 34 + 50}px"><canvas id="saChStati" role="img" aria-label="Minuti medi al giorno in ogni stato per consulente"></canvas></div>
+          <div class="sa-card"><div class="sa-card-h"><div><h3>Minuti medi al giorno in ogni stato</h3><p class="sa-hint">${{ bar: 'Media sui giorni in cui il consulente è stato in salone.', doughnut: 'Come si divide il tempo di tutto il salone nel periodo.', line: 'Minuti medi per consulente presente, ' + (C.B.mensile ? 'mese per mese.' : 'giorno per giorno.') }[tipoG('stati', 'bar')]} Uno stato lasciato aperto la sera viene chiuso in automatico alle 21:00.</p></div>${bottoniTipo('stati', 'bar')}</div>
+            ${tipoG('stati', 'bar') === 'bar' ? `<div class="sa-legend">${Object.keys(STATI).map(k => `<span>${bollino(k)} ${STATI[k].t}</span>`).join('')}</div>` : ''}
+            <div class="sa-chart" style="height:${tipoG('stati', 'bar') === 'bar' ? cons.length * 34 + 60 : 280}px"><canvas id="saChStati" role="img" aria-label="Minuti in ogni stato"></canvas></div>
             <table class="sa-tbl"><thead><tr><th>Consulente</th><th>Giorni</th><th>${bollino('DISPONIBILE')} Disponibile / giorno</th><th>${bollino('OCCUPATO')} Occupato / giorno</th><th>${bollino('NON_DISPONIBILE')} Non disponibile / giorno</th><th>Durata media di uno stato</th><th>Cambi di stato</th></tr></thead><tbody>
               ${cons.map(c => { const t = C.T[c], g = t.giorni.size || 0, tot = t.DISPONIBILE + t.OCCUPATO + t.NON_DISPONIBILE, np = t.periodi.DISPONIBILE + t.periodi.OCCUPATO + t.periodi.NON_DISPONIBILE;
                   return `<tr><td>${esc(c)}</td><td>${g}</td>${Object.keys(STATI).map(k => `<td>${g ? durata(t[k] / g) : '—'}<small class="sa-hint"> ${tot ? pct(t[k], tot) : ''}</small></td>`).join('')}<td>${np ? durata(tot / np) : '—'}</td><td>${t.cambi}</td></tr>`; }).join('')}
@@ -831,32 +871,67 @@
             </tbody></table></div></div>`;
         disegnaGrafici(C, righeCons, marchi, cons);
     }
+    const altezza = (tipo, n) => tipo === 'bar' ? Math.max(160, n * 32 + 40) : 280;
     function disegnaGrafici(C, righeCons, marchi, cons) {
         if (typeof Chart === 'undefined') return;
         const css = getComputedStyle(document.getElementById('salonePage'));
-        const ink2 = css.getPropertyValue('--sa-ink2').trim() || '#9aa3b2', line = css.getPropertyValue('--sa-line').trim() || '#2a2e3b';
-        const acc = '#22c3a6';
-        const base = (asse, extra) => Object.assign({
-            responsive: true, maintainAspectRatio: false, animation: false,
-            plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
-            scales: { x: { grid: { color: asse === 'x' ? line : 'transparent' }, ticks: { color: ink2 }, border: { display: false } },
-                      y: { grid: { color: asse === 'y' ? line : 'transparent' }, ticks: { color: ink2 }, border: { display: false } } }
-        }, extra || {});
-        const c1 = document.getElementById('saChCons');
-        if (c1) grafici.push(new Chart(c1, { type: 'bar', data: { labels: righeCons, datasets: [{ label: 'Walk-in assegnati', data: righeCons.map(c => C.per[c].n), backgroundColor: acc, borderRadius: 4, maxBarThickness: 34 }] },
-            options: base('y', { plugins: { legend: { display: false }, tooltip: { callbacks: { label: x => ` ${x.raw} walk-in · ${pct(x.raw, C.ass)} del totale` } } }, scales: { x: { grid: { display: false }, ticks: { color: ink2, maxRotation: 40, minRotation: 0 } }, y: { beginAtZero: true, ticks: { color: ink2, precision: 0 }, grid: { color: line }, border: { display: false } } } }) }));
-        const c2 = document.getElementById('saChMarchi');
-        const top = marchi.slice(0, 12);
-        if (c2 && top.length) grafici.push(new Chart(c2, { type: 'bar', data: { labels: top.map(x => x[0]), datasets: [{ label: 'Walk-in', data: top.map(x => x[1].walkin), backgroundColor: '#4a90d9', borderRadius: 4, maxBarThickness: 22 }] },
-            options: base('x', { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { callbacks: { label: x => ` ${x.raw} walk-in` } } }, scales: { x: { beginAtZero: true, ticks: { color: ink2, precision: 0 }, grid: { color: line }, border: { display: false } }, y: { grid: { display: false }, ticks: { color: ink2 } } } }) }));
-        const c3 = document.getElementById('saChStati');
-        if (c3) grafici.push(new Chart(c3, { type: 'bar', data: { labels: cons, datasets: Object.keys(STATI).map(k => ({
+        const ink = css.getPropertyValue('--sa-ink').trim() || '#eef1f6', ink2 = css.getPropertyValue('--sa-ink2').trim() || '#9aa3b2';
+        const line = css.getPropertyValue('--sa-line').trim() || '#2a2e3b', card = css.getPropertyValue('--sa-card').trim() || '#171a23';
+        const nuovo = (id, cfg) => { const el = document.getElementById(id); if (el) grafici.push(new Chart(el, cfg)); };
+        const tip = { backgroundColor: '#0b0e14', borderColor: line, borderWidth: 1, titleColor: ink, bodyColor: ink, padding: 10 };
+        const legenda = { display: true, position: 'bottom', labels: { color: ink2, boxWidth: 10, boxHeight: 10, usePointStyle: true, pointStyle: 'circle', padding: 14 } };
+        // barre ORIZZONTALI: i nomi si leggono dritti a sinistra, mai storti
+        const barre = (labels, data, colori, fmt) => ({ type: 'bar', data: { labels, datasets: [{ data, backgroundColor: colori, borderRadius: 4, maxBarThickness: 22 }] },
+            options: { responsive: true, maintainAspectRatio: false, animation: false, indexAxis: 'y',
+                plugins: { legend: { display: false }, tooltip: Object.assign({ callbacks: { label: x => ' ' + fmt(x.raw) } }, tip) },
+                scales: { x: { beginAtZero: true, ticks: { color: ink2, precision: 0 }, grid: { color: line }, border: { display: false } },
+                          y: { grid: { display: false }, ticks: { color: ink, autoSkip: false, font: { size: 12.5 } }, border: { display: false } } } } });
+        const ciambella = (labels, data, colori, fmt) => ({ type: 'doughnut', data: { labels, datasets: [{ data, backgroundColor: colori, borderColor: card, borderWidth: 2 }] },
+            options: { responsive: true, maintainAspectRatio: false, animation: false, cutout: '62%',
+                plugins: { legend: Object.assign({}, legenda, { position: 'right' }), tooltip: Object.assign({ callbacks: { label: x => ` ${x.label}: ${fmt(x.raw)}` } }, tip) } } });
+        const linee = (series, fmt, asseY) => ({ type: 'line', data: { labels: C.B.etichette, datasets: series.map(s => ({ label: s.nome, data: s.dati, borderColor: s.col, backgroundColor: s.col,
+                borderWidth: 2, pointRadius: C.B.chiavi.length > 40 ? 0 : 3, pointHoverRadius: 5, tension: .25, spanGaps: true })) },
+            options: { responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: 'index', intersect: false },
+                plugins: { legend: legenda, tooltip: Object.assign({ callbacks: { label: x => ` ${x.dataset.label}: ${fmt(x.raw)}` } }, tip) },
+                scales: { x: { grid: { display: false }, ticks: { color: ink2, maxRotation: 0, autoSkip: true, autoSkipPadding: 14 }, border: { display: false } },
+                          y: { beginAtZero: true, ticks: { color: ink2, precision: 0 }, grid: { color: line }, border: { display: false }, title: asseY ? { display: true, text: asseY, color: ink2 } : undefined } } } });
+        const fWalk = v => `${v} walk-in`;
+        // 1) walk-in per consulente: ogni consulente ha sempre il suo colore
+        const colCons = n => SERIE[cons.indexOf(n) % SERIE.length] || ALTRI;
+        const t1 = tipoG('cons', 'bar');
+        if (t1 === 'bar') nuovo('saChCons', barre(righeCons, righeCons.map(c => C.per[c].n), '#22c3a6', v => `${v} walk-in · ${pct(v, C.ass)} del totale`));
+        else if (t1 === 'doughnut') { const L = righeCons.filter(c => C.per[c].n); nuovo('saChCons', ciambella(L, L.map(c => C.per[c].n), L.map(colCons), v => `${v} walk-in · ${pct(v, C.ass)}`)); }
+        else nuovo('saChCons', linee(righeCons.map(c => ({ nome: c, col: colCons(c), dati: C.B.chiavi.map(k => (C.tCons[c] || {})[k] || 0) })), fWalk, 'walk-in'));
+        // 2) marchi: i primi 7 col loro colore, il resto in "Altri marchi"
+        const t2 = tipoG('marchi', 'bar');
+        const top7 = marchi.slice(0, 7), resto = marchi.slice(7);
+        if (t2 === 'bar') { const top = marchi.slice(0, 12); nuovo('saChMarchi', barre(top.map(x => x[0]), top.map(x => x[1].walkin), '#3987e5', fWalk)); }
+        else if (t2 === 'doughnut') {
+            const L = top7.map(x => x[0]).concat(resto.length ? ['Altri marchi'] : []), V = top7.map(x => x[1].walkin).concat(resto.length ? [resto.reduce((a, x) => a + x[1].walkin, 0)] : []);
+            nuovo('saChMarchi', ciambella(L, V, L.map((n, i) => n === 'Altri marchi' ? ALTRI : SERIE[i]), fWalk));
+        } else {
+            const S = top7.map((x, i) => ({ nome: x[0], col: SERIE[i], dati: C.B.chiavi.map(k => (C.tMarchi[x[0]] || {})[k] || 0) }));
+            if (resto.length) S.push({ nome: 'Altri marchi', col: ALTRI, dati: C.B.chiavi.map(k => resto.reduce((a, x) => a + ((C.tMarchi[x[0]] || {})[k] || 0), 0)) });
+            nuovo('saChMarchi', linee(S, fWalk, 'walk-in'));
+        }
+        // 3) tempo negli stati: verde / giallo / rosso fissi (sono stati, non serie)
+        const t3 = tipoG('stati', 'bar');
+        if (t3 === 'bar') nuovo('saChStati', { type: 'bar', data: { labels: cons, datasets: Object.keys(STATI).map(k => ({
                 label: STATI[k].t, data: cons.map(c => { const t = C.T[c], g = t.giorni.size; return g ? Math.round(t[k] / g) : 0; }),
-                backgroundColor: COL[k], borderColor: css.getPropertyValue('--sa-card').trim() || '#171a23', borderWidth: { right: 2 }, borderSkipped: false, maxBarThickness: 22 })) },
-            options: base('x', { indexAxis: 'y', plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false, callbacks: { label: x => ` ${x.dataset.label}: ${durata(x.raw)} al giorno` } } },
-                scales: { x: { stacked: true, beginAtZero: true, title: { display: true, text: 'minuti medi al giorno', color: ink2 }, ticks: { color: ink2 }, grid: { color: line }, border: { display: false } }, y: { stacked: true, grid: { display: false }, ticks: { color: ink2 } } } }) }));
+                backgroundColor: COL[k], borderColor: card, borderWidth: { right: 2 }, borderSkipped: false, maxBarThickness: 22 })) },
+            options: { responsive: true, maintainAspectRatio: false, animation: false, indexAxis: 'y',
+                plugins: { legend: { display: false }, tooltip: Object.assign({ mode: 'index', intersect: false, callbacks: { label: x => ` ${x.dataset.label}: ${durata(x.raw)} al giorno` } }, tip) },
+                scales: { x: { stacked: true, beginAtZero: true, title: { display: true, text: 'minuti medi al giorno', color: ink2 }, ticks: { color: ink2 }, grid: { color: line }, border: { display: false } },
+                          y: { stacked: true, grid: { display: false }, ticks: { color: ink, autoSkip: false, font: { size: 12.5 } }, border: { display: false } } } } });
+        else if (t3 === 'doughnut') {
+            const K = Object.keys(STATI), V = K.map(k => Math.round(cons.reduce((a, c) => a + C.T[c][k], 0))), tot = V.reduce((a, b) => a + b, 0);
+            nuovo('saChStati', ciambella(K.map(k => STATI[k].t), V, K.map(k => COL[k]), v => `${durata(v)} · ${pct(v, tot)}`));
+        } else nuovo('saChStati', linee(Object.keys(STATI).map(k => ({ nome: STATI[k].t, col: COL[k],
+                dati: C.B.chiavi.map(b => { const n = C.tPres[b] ? C.tPres[b].size : 0; return n ? Math.round(C.tStati[k][b] / n) : null; }) })), v => durata(v), 'minuti per consulente'));
     }
     function onClickReport(e) {
+        const ct = e.target.closest('[data-ct]');
+        if (ct) { const [id, t] = ct.dataset.ct.split('|'); tipiG[id] = t; try { localStorage.setItem(LS_T, JSON.stringify(tipiG)); } catch (x) { /* */ } render(); return true; }
         const p = e.target.closest('[data-preset]');
         if (p) { st.rep.preset = p.dataset.preset; [st.rep.da, st.rep.a] = periodo(p.dataset.preset); caricaReport(); return true; }
         return false;
@@ -921,7 +996,8 @@
         }
         async function avvia() {
             if (timer) return;
-            try { const d = await api('/chat/utenti'); utenti = d.utenti || []; io = d.io; } catch (e) { /* */ }
+            try { const d = await api('/chat/utenti'); utenti = d.utenti || []; io = d.io; }
+            catch (e) { if (/chat/i.test(e.message)) { el.style.display = 'none'; return; } }
             await giro();
             timer = setInterval(giro, 3000);
         }

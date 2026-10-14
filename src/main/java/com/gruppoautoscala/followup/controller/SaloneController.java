@@ -29,7 +29,10 @@ import java.util.regex.Pattern;
  *  - Livello 2 (Completo): registra e assegna i walk-in, importa gli appuntamenti, storico import,
  *    cambia lo stato degli altri consulenti
  *  - Livello 3 (Accesso Admin): come il livello 2 + scheda Report
- *  Iniziali: Admin livello 3 · Front Office livello 2 · Consulenza livello 1 (solo i propri)
+ *  - Livello 4: come il livello 3 + chat del salone
+ *  CHAT: livello 4, oppure ruoli Front Office / Consulenza / Back Office a qualunque livello.
+ *        Gli altri (livelli 1-3) non la vedono e non possono ricevere messaggi.
+ *  Iniziali: Admin livello 4 · Front Office livello 2 (+ chat) · Consulenza livello 1 (solo i propri, + chat)
  *
  * WALK-IN
  *  GET   /api/salone/ingressi?data=2026-10-14   -> ingressi del giorno + consulenti + permessi
@@ -54,7 +57,7 @@ import java.util.regex.Pattern;
  * REPORT (livello 3)
  *  GET   /api/salone/report?da=2026-10-01&a=2026-10-14 -> ingressi del periodo + cambi di stato
  *
- * CHAT (gruppo con tutti + chat private): /chat/utenti, /chat/aggiornamenti, /chat/messaggi, /chat/reazione, /chat/letto
+ * CHAT (gruppo con tutti + chat private) — solo livello 4 e ruoli Front Office / Consulenza / Back Office: /chat/utenti, /chat/aggiornamenti, /chat/messaggi, /chat/reazione, /chat/letto
  *
  * I dati stanno nella tabella consegne_dataset (nessuna tabella nuova da creare):
  *   SALONE_<aaaa-mm-gg>        ingressi del giorno         SALONE_STATI            stato attuale consulenti
@@ -107,7 +110,18 @@ public class SaloneController {
     }
     private boolean report(Chi c) { return c != null && rolePermissionService.hasAtLeast(c.acc(), "ADMIN_FULL"); }
     private static String livello(String acc) {
-        return switch (acc == null ? "" : acc) { case "ADMIN_FULL" -> "3"; case "FULL" -> "2"; case "READ_ONLY" -> "1"; default -> "0"; };
+        return switch (acc == null ? "" : acc) { case "LIVELLO_4" -> "4"; case "ADMIN_FULL" -> "3"; case "FULL" -> "2"; case "READ_ONLY" -> "1"; default -> "0"; };
+    }
+    /** CHAT del salone: livello 4, oppure i ruoli del salone (permesso speciale, a qualunque livello).
+     *  Livelli 1, 2 e 3 degli altri ruoli: la chat non la vedono e non possono ricevere messaggi. */
+    private static final Set<String> RUOLI_CHAT = Set.of("FRONT_OFFICE", "CONSULENZA", "BACK_OFFICE");
+    private boolean chatOk(String acc, String role) {
+        if (!rolePermissionService.hasAtLeast(acc, "READ_ONLY")) return false;
+        return rolePermissionService.hasAtLeast(acc, "LIVELLO_4") || (role != null && RUOLI_CHAT.contains(role.toUpperCase(Locale.ROOT)));
+    }
+    private boolean chat(Chi c) { return c != null && chatOk(c.acc(), c.role()); }
+    private ResponseEntity<?> noChat(Chi c) {
+        return c == null ? no(null) : ResponseEntity.status(403).body(Map.of("error", "La chat del salone non e' attiva per il tuo livello"));
     }
     private ResponseEntity<?> no(Chi c) {
         return c == null ? ResponseEntity.status(401).body(Map.of("error", "Non autenticato"))
@@ -172,6 +186,7 @@ public class SaloneController {
         out.put("puoImportare", gestisce(c));
         out.put("vedeReport", report(c));
         out.put("livello", livello(c.acc()));
+        out.put("chat", chat(c));
         Map<String, Object> io = new LinkedHashMap<>();
         io.put("id", c.id()); io.put("nome", c.nome()); io.put("role", String.valueOf(c.role()));
         io.put("consulente", consulenteDi(c.nome()));
@@ -803,12 +818,12 @@ public class SaloneController {
     /* ================= CHAT ================= */
     @GetMapping("/chat/utenti")
     public ResponseEntity<?> utenti(HttpSession s) {
-        Chi c = chi(s); if (!vede(c)) return no(c);
+        Chi c = chi(s); if (!chat(c)) return noChat(c);
         List<Map<String, Object>> out = new ArrayList<>();
         for (User u : userRepository.findAll()) {
             if (u.getId() == null || u.getId().equals(c.id())) continue;
             String acc = rolePermissionService.getEffectiveAccess(u.getId(), u.getRole(), SEZ);
-            if (rolePermissionService.hasAtLeast(acc, "READ_ONLY"))
+            if (chatOk(acc, u.getRole()))
                 out.add(Map.of("id", u.getId(), "nome", String.valueOf(u.getFullName()), "role", String.valueOf(u.getRole())));
         }
         out.sort(Comparator.comparing(m -> String.valueOf(m.get("nome"))));
@@ -845,7 +860,7 @@ public class SaloneController {
 
     @GetMapping("/chat/aggiornamenti")
     public ResponseEntity<?> aggiornamenti(@RequestParam(required = false, defaultValue = "0") long dopo, HttpSession s) {
-        Chi c = chi(s); if (!vede(c)) return no(c);
+        Chi c = chi(s); if (!chat(c)) return noChat(c);
         Map<String, Object> conv = new LinkedHashMap<>();
         Map<String, Object> mieiLetti = letti().getOrDefault(String.valueOf(c.id()), Map.of());
         long max = dopo;
@@ -868,9 +883,16 @@ public class SaloneController {
 
     @PostMapping("/chat/messaggi")
     public ResponseEntity<?> invia(@RequestBody Map<String, Object> b, HttpSession s) {
-        Chi c = chi(s); if (!vede(c)) return no(c);
+        Chi c = chi(s); if (!chat(c)) return noChat(c);
         String conv = convValida(String.valueOf(b.get("conv")), c.id());
         if (conv == null) return ResponseEntity.badRequest().body(Map.of("error", "Conversazione non valida"));
+        if (!"GRUPPO".equals(conv)) {          // chat privata: anche l'altro deve avere la chat
+            String[] p = conv.split("_");
+            long altro = Long.parseLong(p[1]) == c.id() ? Long.parseLong(p[2]) : Long.parseLong(p[1]);
+            User u = userRepository.findById(altro).orElse(null);
+            if (u == null || !chatOk(rolePermissionService.getEffectiveAccess(u.getId(), u.getRole(), SEZ), u.getRole()))
+                return ResponseEntity.status(403).body(Map.of("error", "Questa persona non ha la chat del salone"));
+        }
         String testo = String.valueOf(b.getOrDefault("testo", "")).trim();
         if (testo.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "Messaggio vuoto"));
         if (testo.length() > 4000) testo = testo.substring(0, 4000);
@@ -898,7 +920,7 @@ public class SaloneController {
     @SuppressWarnings("unchecked")
     @PostMapping("/chat/reazione")
     public ResponseEntity<?> reazione(@RequestBody Map<String, Object> b, HttpSession s) {
-        Chi c = chi(s); if (!vede(c)) return no(c);
+        Chi c = chi(s); if (!chat(c)) return noChat(c);
         String conv = convValida(String.valueOf(b.get("conv")), c.id());
         String id = String.valueOf(b.get("id")), emoji = String.valueOf(b.getOrDefault("emoji", "")).trim();
         if (conv == null || emoji.isEmpty() || emoji.length() > 16) return ResponseEntity.badRequest().body(Map.of("error", "Reazione non valida"));
@@ -921,7 +943,7 @@ public class SaloneController {
 
     @PostMapping("/chat/letto")
     public ResponseEntity<?> letto(@RequestBody Map<String, Object> b, HttpSession s) {
-        Chi c = chi(s); if (!vede(c)) return no(c);
+        Chi c = chi(s); if (!chat(c)) return noChat(c);
         String conv = convValida(String.valueOf(b.get("conv")), c.id());
         if (conv == null) return ResponseEntity.badRequest().body(Map.of("error", "Conversazione non valida"));
         synchronized (LOCK) {

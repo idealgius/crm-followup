@@ -282,3 +282,11 @@ details.sa-in-note div { margin-top:6px; white-space:pre-wrap; line-height:1.5; 
 @media (max-width:700px) { .sa-tiles, .sa-kpis5 { grid-template-columns:repeat(2, minmax(0, 1fr)); } .sa-stati-l { grid-template-columns:1fr 1fr; } }
 .sa-tbl td:first-child { white-space:nowrap; }
 .sa-rep-2 .sa-tbl th { white-space:normal; }
+/* formato del grafico (ciambella / barre / linee), come nelle altre sezioni */
+.sa-card-h { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+.sa-types { display:flex; gap:4px; background:rgba(255,255,255,.06); border-radius:10px; padding:3px; flex-shrink:0; }
+.sa-types button { width:30px; height:28px; border:0; border-radius:8px; background:transparent; display:grid; place-items:center; cursor:pointer; color:var(--sa-ink2); }
+.sa-types button svg { width:16px; height:16px; }
+.sa-types button:hover { color:var(--sa-ink); }
+.sa-types button.on { background:var(--sa-card); color:var(--sa-ink); box-shadow:0 1px 3px rgba(0,0,0,.3); }
+[data-theme="light"] .sa-types { background:rgba(0,0,0,.05); }

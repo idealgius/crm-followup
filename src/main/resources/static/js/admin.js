@@ -222,7 +222,7 @@ const PERMISSION_SECTIONS = [
     { key: 'STOCK', icon: '🚘', label: 'Stock · Completo = importa il file', group: 'BI' },
     { key: 'COMMERCIALE', icon: '💼', label: 'Commerciale · Completo = importa le trattative', group: 'BI' },
     // Salone: Appuntamenti e ingressi (Front Office e Consulenza entrano direttamente qui)
-    // Livelli: 1 vede tutto (Consulenza: solo i propri) · 2 registra walk-in e importa · 3 anche Report
+    // Livelli: 1 vede tutto (Consulenza: solo i propri) · 2 registra walk-in e importa · 3 anche Report · 4 anche chat
     { key: 'SALONE', icon: '🚶', label: 'Appuntamenti e ingressi', group: 'Salone' },
     { key: 'ADMIN', icon: '⚙️', label: 'Utenti/Permessi', group: 'Gestione' },
     { key: 'ALLERT', icon: '🔔', label: 'Allert (Completo = gestisce · Admin = anche riapre i gestiti)', group: 'Gestione' }
@@ -241,7 +241,8 @@ const SALONE_LEVEL_META = {
     NONE: { icon: '🚫', label: 'Nessuno: non vede la sezione' },
     READ_ONLY: { icon: '1', label: 'Livello 1: vede tutto come il Front Office, ma non registra walk-in e non importa (Consulenza: solo i propri clienti)' },
     FULL: { icon: '2', label: 'Livello 2: registra e assegna i walk-in, importa gli appuntamenti' },
-    ADMIN_FULL: { icon: '3', label: 'Livello 3: come il 2 + scheda Report' }
+    ADMIN_FULL: { icon: '3', label: 'Livello 3: come il 2 + scheda Report (senza chat)' },
+    LIVELLO_4: { icon: '4', label: 'Livello 4: come il 3 + chat del salone' }
 };
 const levelMetaFor = key => key === 'SALONE' ? SALONE_LEVEL_META : ACCESS_LEVEL_META;
 
@@ -320,7 +321,7 @@ function renderPermissionMatrix() {
     PERMISSION_SECTIONS.forEach(section => {
         if (section.group !== gruppo) {
             gruppo = section.group;
-            html += `<tr><td colspan="${permissionRolesCache.length + 1}" style="text-align:left;font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--text-secondary);padding-top:14px">${gruppo}${gruppo === 'BI' ? ' · 👁 Solo lettura = vede · ✏️ Completo = importa e modifica · la pagina BI la vede chi ha almeno una delle tre' : ''}${gruppo === 'Salone' ? ' · livelli: 1 = vede tutto (Consulenza: solo i propri) · 2 = registra walk-in e importa · 3 = anche Report' : ''}</td></tr>`;
+            html += `<tr><td colspan="${permissionRolesCache.length + 1}" style="text-align:left;font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--text-secondary);padding-top:14px">${gruppo}${gruppo === 'BI' ? ' · 👁 Solo lettura = vede · ✏️ Completo = importa e modifica · la pagina BI la vede chi ha almeno una delle tre' : ''}${gruppo === 'Salone' ? ' · livelli: 1 = vede tutto (Consulenza: solo i propri) · 2 = registra walk-in e importa · 3 = anche Report · 4 = anche chat · la chat la hanno sempre Front Office, Consulenza e Back Office' : ''}</td></tr>`;
         }
         html += `<tr>
             <td style="text-align:left;font-weight:700;white-space:nowrap">${section.icon} ${section.label}</td>
