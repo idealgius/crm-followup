@@ -120,8 +120,9 @@ function getCategoryColor(category) {
 // acceso e distante — 7 tinte: blu, rosso, verde acqua, oro, magenta
 // acceso, verde, viola.
 const ACQUISTO_COLORS = ['#4a90d9', '#ff3d3d', '#009688', '#f0c040', '#8d6e63', '#00c853', '#e040fb', '#7c4dff', '#8a8faa'];
-const FONTE_LIST = ['Sito', 'Google ADS', 'Autoscout', 'Facebook', 'Instagram', 'TikTok', 'Richiesta cliente', 'Non ricorda'];
-const FONTE_COLORS = ['#1a4080', '#f0c040', '#e91e63', '#4a90d9', '#7c4dff', '#ff3d3d', '#00c853', '#8a8faa'];
+// NUOVO: Subito.it (fonte Info Vendita) — colore arancio, nella stessa posizione in entrambe le liste
+const FONTE_LIST = ['Sito', 'Google ADS', 'Autoscout', 'Subito.it', 'Facebook', 'Instagram', 'TikTok', 'Richiesta cliente', 'Non ricorda'];
+const FONTE_COLORS = ['#1a4080', '#f0c040', '#e91e63', '#ff8a00', '#4a90d9', '#7c4dff', '#ff3d3d', '#00c853', '#8a8faa'];
 const SERVICE_LIST = ['Tagliando', 'Dispositivo satellitare', 'Prenotazione', 'Lavorazione in corso', 'Doctor Glass', 'Cambio Gomme', 'Altro'];
 const SERVICE_COLORS = ['#f0c040', '#4a90d9', '#00c853', '#7c4dff', '#ff9800', '#00bcd4', '#8a8faa'];
 const SERVICE_SEDI_LIST = ['Agnano', 'Salerno'];
@@ -3656,7 +3657,7 @@ function selectServiceTipoCliente(tipo) {
 function selectFonte(fonte) {
     selectedFonte = fonte;
     document.getElementById('contactFonte').value = fonte;
-    const fonteKeyMap = { 'Sito':'Sito','Google ADS':'GoogleADS','Autoscout':'Autoscout','Facebook':'Facebook','Instagram':'Instagram','TikTok':'TikTok','Richiesta cliente':'RichiestaCliente','Non ricorda':'NonRicorda' };
+    const fonteKeyMap = { 'Sito':'Sito','Google ADS':'GoogleADS','Autoscout':'Autoscout','Subito.it':'Subito','Facebook':'Facebook','Instagram':'Instagram','TikTok':'TikTok','Richiesta cliente':'RichiestaCliente','Non ricorda':'NonRicorda' };
     Object.keys(fonteKeyMap).forEach(f => { const btn = document.getElementById(`fonte-${fonteKeyMap[f]}`); if (btn) btn.classList.toggle('btn-sede-active', f===fonte); });
 }
 function toggleNonComunicaNominativo() {
@@ -4216,7 +4217,7 @@ function hideNewContactForm() {
     SEDI_LIST.forEach(s => { const btn = document.getElementById(`sede-${s}`); if (btn) btn.classList.remove('btn-sede-active'); });
     SERVICE_SEDI_LIST.forEach(s => { const btn = document.getElementById(`serviceSede-${s}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['InfoConsegna','RitardoConsegna','InfoDocumentazione','SecondaChiave','InfoGeneriche','Furto','Saldo','CredenzialiLojack','AltroAcquisto'].forEach(k => { const btn = document.getElementById(`acquisto-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
-    ['Sito','GoogleADS','Autoscout','Facebook','Instagram','TikTok','RichiestaCliente','NonRicorda'].forEach(k => { const btn = document.getElementById(`fonte-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
+    ['Sito','GoogleADS','Autoscout','Subito','Facebook','Instagram','TikTok','RichiestaCliente','NonRicorda'].forEach(k => { const btn = document.getElementById(`fonte-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['Tagliando','DispositivoSatellitare','Prenotazione','LavorazioneInCorso','DoctorGlass','CambioGomme','Altro'].forEach(k => { const btn = document.getElementById(`service-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['Privato','PIVA','Aziende'].forEach(k => { const btn = document.getElementById(`noleggio-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
     ['SOLO_INFO','RICHIESTA_CLIENTE'].forEach(k => { const btn = document.getElementById(`noleggioRichiesta-${k}`); if (btn) btn.classList.remove('btn-sede-active'); });
@@ -4305,7 +4306,7 @@ function onCategoryChange() {
     if (!isVenditaLike) {
         selectedFonte='';
         const el=document.getElementById('contactFonte'); if(el) el.value='';
-        ['Sito','GoogleADS','Autoscout','Facebook','Instagram','TikTok','RichiestaCliente','NonRicorda'].forEach(k=>{const b=document.getElementById(`fonte-${k}`);if(b)b.classList.remove('btn-sede-active');});
+        ['Sito','GoogleADS','Autoscout','Subito','Facebook','Instagram','TikTok','RichiestaCliente','NonRicorda'].forEach(k=>{const b=document.getElementById(`fonte-${k}`);if(b)b.classList.remove('btn-sede-active');});
     }
     if (!isVenditaLike) {
         ['contactMarcaInput','contactMarca','contactModello','contactLinkAuto'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});
