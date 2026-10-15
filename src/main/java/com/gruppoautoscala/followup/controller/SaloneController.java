@@ -854,15 +854,27 @@ public class SaloneController {
         if (!gestisce(c)) return soloLivello(2);
         Set<String> ids = new HashSet<>();
         if (b.get("ids") instanceof List<?> l) for (Object o : l) ids.add(str(o));
+        String da = str(b.get("da")), a = str(b.get("a"));
         Map<String, Object> out = new LinkedHashMap<>();
+        List<Map<String, Object>> nelPeriodo = new ArrayList<>();
         for (Map<String, Object> r : leggi("SALONE_APP")) {
-            String id = str(r.get("id"));
-            if (!ids.contains(id)) continue;
-            out.put(id, mappa("appData", r.get("appData"), "appOra", r.get("appOra"), "controllo", r.get("controllo"),
-                "esitoAlert", str(r.get("esitoAlert")), "esitoAttivita", str(r.get("esitoAttivita")), "dataRicontatto", str(r.get("dataRicontatto")),
-                "consulente", r.get("consulente")));
+            String id = str(r.get("id")), g = str(r.get("appData"));
+            if (ids.contains(id)) {
+                Map<String, String> t = tracciati(r);
+                out.put(id, mappa("appData", r.get("appData"), "appOra", r.get("appOra"), "controllo", r.get("controllo"),
+                    "esitoAlert", str(r.get("esitoAlert")), "esitoAttivita", str(r.get("esitoAttivita")), "dataRicontatto", str(r.get("dataRicontatto")),
+                    "consulente", r.get("consulente"), "venditore", str(r.get("venditore")), "status", str(r.get("status")),
+                    "telefono", str(r.get("telefono")), "vettura", t.get("Vettura"), "note", str(r.get("note")), "cliente", cliente(r)));
+            } else if (!da.isEmpty() && !a.isEmpty() && !g.isEmpty() && g.compareTo(da) >= 0 && g.compareTo(a) <= 0) {
+                // in archivio in quei giorni ma non piu' nel file: "spariti"
+                nelPeriodo.add(mappa("id", id, "cliente", cliente(r), "appData", g, "appOra", r.get("appOra"), "consulente", r.get("consulente"),
+                    "status", str(r.get("status")), "venditore", str(r.get("venditore"))));
+            }
         }
-        return ResponseEntity.ok(Map.of("esistenti", out));
+        // con quale consulente finirebbe ogni venditore del file (stessa regola dell'import)
+        Map<String, Object> consulenti = new LinkedHashMap<>();
+        if (b.get("venditori") instanceof List<?> l) for (Object o : l) consulenti.put(str(o), consulenteDi(str(o)));
+        return ResponseEntity.ok(mappa("esistenti", out, "nelPeriodo", nelPeriodo, "consulenti", consulenti));
     }
 
     @PostMapping("/appuntamenti/import")
@@ -940,6 +952,17 @@ public class SaloneController {
                 perId.put(id, r);
                 if (cambiato) aggiornati++; else invariati++;
             }
+            // tolti dal calendario a mano nella finestra di controllo (cambiati, non allineati o spariti dal file)
+            List<Map<String, Object>> rimossiElenco = new ArrayList<>();
+            if (b.get("rimuovi") instanceof List<?> lr) for (Object o : lr) {
+                if (!(o instanceof Map<?, ?> m)) continue;
+                String id = str(m.get("id"));
+                Map<String, Object> prima = perId.remove(id);
+                if (prima == null) continue;
+                if (rimossiElenco.size() < 300) rimossiElenco.add(mappa("id", id, "cliente", cliente(prima),
+                    "appuntamento", (str(prima.get("appData")) + " " + str(prima.get("appOra"))).trim(),
+                    "consulente", prima.get("consulente") == null ? "Da assegnare" : prima.get("consulente"), "avviso", taglia(str(m.get("motivo")))));
+            }
             int considerati = nuovi + aggiornati + invariati;
             // appuntamenti piu' vecchi di 13 mesi: non servono piu' (tiene leggero l'archivio)
             String limite = LocalDate.now(ITALY).minusMonths(13).toString();
@@ -962,7 +985,15 @@ public class SaloneController {
                 imp.put("allineati", allineati); imp.put("modificati", modificati); imp.put("forzati", forzati);
                 imp.put("saltati", b.get("nSaltati") instanceof Number n ? n.intValue() : saltati.size());
                 imp.put("saltatiElenco", saltati); imp.put("modificatiElenco", modificatiElenco); imp.put("forzatiElenco", forzatiElenco);
+                List<Map<String, Object>> tenuti = new ArrayList<>();
+                if (b.get("tenuti") instanceof List<?> lt) for (Object o : lt) {
+                    if (!(o instanceof Map<?, ?> m) || tenuti.size() >= 300) continue;
+                    tenuti.add(mappa("id", str(m.get("id")), "cliente", str(m.get("cliente")), "avviso", "Non aggiornato: " + taglia(str(m.get("avviso")))));
+                }
+                imp.put("tenutiElenco", tenuti); imp.put("tenuti", tenuti.size());
+                imp.put("tenutiSpariti", b.get("tenutiSpariti") instanceof Number n ? n.intValue() : 0);
             }
+            imp.put("rimossi", rimossiElenco.size()); imp.put("rimossiElenco", rimossiElenco);
             imp.put("esclusi", esclusiPerMotivo.values().stream().mapToInt(Integer::intValue).sum());
             imp.put("esclusiPerMotivo", esclusiPerMotivo); imp.put("esclusiElenco", esclusi);
             imp.put("senzaData", senzaData); imp.put("daAssegnare", daAssegnare); imp.put("assegnatiDaImport", autoAssegnati);

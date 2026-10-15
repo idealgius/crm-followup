@@ -396,3 +396,20 @@ details.sa-in-note div { margin-top:6px; white-space:pre-wrap; line-height:1.5; 
 .sa-ck-riep { margin-top:-4px; }
 .sa-tag.sa-tag-w { background:rgba(244,168,58,.15); color:#ffc979; cursor:help; }
 @media (max-width:700px) { .sa-ck-campi { grid-template-columns:1fr; } .sa-ck-range { margin-left:0; } .sa-ck-top .sa-tag { margin-left:0; } }
+.sa-ck-r { color:#ff7b7b !important; }
+.sa-ck-b { color:#60a5fa !important; }
+.sa-ck-day i.r { color:#ff7b7b; }
+.sa-ck-pb.red { color:#ff9a9a; }
+.sa-ck-es.red { color:#ff7b7b; }
+.sa-ck-lab { margin:10px 0 0; font-size:11px; font-weight:800; letter-spacing:.6px; text-transform:uppercase; color:var(--sa-ink2); }
+.sa-ck-diff { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:6px; margin-top:8px; }
+.sa-ck-diff > div { border:1px solid rgba(96,165,250,.35); background:rgba(96,165,250,.07); border-radius:10px; padding:6px 10px; min-width:0; }
+.sa-ck-diff small { display:block; font-size:10px; font-weight:800; letter-spacing:.6px; text-transform:uppercase; color:#93c5fd; margin-bottom:2px; }
+.sa-ck-diff span { font-size:12.5px; overflow-wrap:anywhere; }
+.sa-ck-diff s { color:var(--sa-ink2); text-decoration-color:rgba(239,68,68,.7); }
+.sa-ck-row.agg-aggiorna { border-left-color:#60a5fa; }
+.sa-ck-row.agg-tieni, .sa-ck-row.sp-tieni { border-left-color:var(--sa-ink2); }
+.sa-ck-row.agg-togli, .sa-ck-row.sp-togli, .sa-ck-row.az-togli { border-left-color:#ef4444; }
+.sa-ck-seg button.on[data-az="togli"], .sa-ck-seg button.on[data-agg="togli"], .sa-ck-seg button.on[data-sp="togli"] { background:#ef4444; color:#fff; }
+.sa-ck-seg button.on[data-agg="aggiorna"] { background:#60a5fa; color:#08203f; }
+.sa-ck-seg button.on[data-agg="tieni"], .sa-ck-seg button.on[data-sp="tieni"] { background:rgba(154,163,178,.22); color:var(--sa-ink); }
