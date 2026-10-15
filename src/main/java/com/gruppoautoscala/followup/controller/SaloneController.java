@@ -419,9 +419,19 @@ public class SaloneController {
         LocalDate oggi = ora.toLocalDate();
         Instant now = ora.toInstant();
         boolean cambiato = false;
+        boolean orarioOra = fascia(ora) != null;
         for (Map<String, Object> r : m.values()) {
             Instant dal = inst(r.get("dal"));
-            if (r.get("stato") == null || dal == null) continue;
+            if (r.get("stato") == null || dal == null) {
+                // NUOVO: oggi era entrato (ha uno stato chiuso oggi) e ora, in orario, non ha il CRM aperto -> Non disponibile.
+                // Es. sabato: alle 13:30 gli stati si chiudono, alle 15:00 chi era venuto la mattina e non e' collegato risulta rosso.
+                Instant usc = inst(r.get("uscitoAt"));
+                if (orarioOra && usc != null && usc.atZone(ITALY).toLocalDate().equals(oggi) && !online(str(r.get("nome")), now)) {
+                    assente(r, now, "Non connesso al CRM (era entrato oggi): non disponibile in automatico");
+                    cambiato = true;
+                }
+                continue;
+            }
             ZonedDateTime zd = dal.atZone(ITALY);
             LocalDate g = zd.toLocalDate();
             LocalTime[] f = fascia(zd);
@@ -439,9 +449,13 @@ public class SaloneController {
             if (chiudiA != null) {
                 spegni(r, chiudiA, "sistema", perche);
                 cambiato = true;
+            } else if (Boolean.TRUE.equals(r.get("assente"))) {
+                // gia' "non disponibile" perche' non connesso: resta cosi' fino al rientro o alla chiusura del salone
             } else if (!online(str(r.get("nome")), now)) {
                 // REGOLA: senza un accesso al CRM in corso il consulente risulta "non in salone" (bollino vuoto),
-                // anche se lo stato era stato messo a mano da un Front Office / Admin
+                // anche se lo stato era stato messo a mano da un Front Office / Admin.
+                // NUOVO: in ORARIO, visto che oggi e' gia' entrato, risulta invece NON DISPONIBILE (rosso);
+                // torna disponibile da solo appena riapre il CRM.
                 // orario di uscita: l'ultimo segnale ricevuto (o la ripartenza del server dopo un deploy)
                 Long ult = ULTIMO.get(str(r.get("nome")));
                 Instant fine = Instant.ofEpochMilli(ult != null ? ult : AVVIO_MS);
@@ -450,12 +464,23 @@ public class SaloneController {
                 String motivo = ult != null ? "Uscito dal CRM (finestra chiusa o disconnesso)"
                     : dal.toEpochMilli() < AVVIO_MS ? "Uscito dal CRM (riavvio del CRM / nuovo deploy)"
                     : "Non connesso al CRM";
-                spegni(r, fine, "sistema", motivo);
+                if (orarioOra) assente(r, fine, motivo + ": non disponibile in automatico");
+                else spegni(r, fine, "sistema", motivo);
                 cambiato = true;
             }
         }
         if (cambiato) salvaStati(m, "sistema");
         return m;
+    }
+    /** non connesso in orario (ma entrato oggi): NON DISPONIBILE "automatico" (assente=true), chiude il walk-in aperto */
+    private void assente(Map<String, Object> r, Instant da, String motivo) throws Exception {
+        registraCambio(r, "NON_DISPONIBILE", da, "sistema", motivo);
+        if (r.get("walkinAperto") != null) chiudiWalkin(String.valueOf(r.get("walkinAperto")), da, "sistema", motivo);
+        r.put("stato", "NON_DISPONIBILE"); r.put("dal", da.toString()); r.put("dalIt", oraIt(da));
+        r.put("cliente", null); r.put("walkinId", null); r.put("walkinAperto", null);
+        r.put("motivo", motivo); r.put("chi", "sistema"); r.put("presenza", null);
+        r.put("controlloAt", null); r.put("rinvii", 0); r.put("assente", true);
+        if (r.get("uscitoAt") == null || inst(r.get("uscitoAt")).isBefore(da.minusSeconds(1))) { r.put("uscitoAt", da.toString()); r.put("uscitoIt", oraIt(da)); }
     }
     /** il consulente esce: chiude lo stato, chiude il walk-in eventualmente ancora aperto */
     private void spegni(Map<String, Object> r, Instant fine, String chi, String motivo) throws Exception {
@@ -463,7 +488,7 @@ public class SaloneController {
         if (r.get("walkinAperto") != null) chiudiWalkin(String.valueOf(r.get("walkinAperto")), fine, chi, motivo);
         r.put("stato", null); r.put("dal", null); r.put("dalIt", null); r.put("cliente", null); r.put("walkinId", null);
         r.put("walkinAperto", null); r.put("motivo", motivo); r.put("chi", chi); r.put("presenza", null);
-        r.put("controlloAt", null); r.put("rinvii", 0);
+        r.put("controlloAt", null); r.put("rinvii", 0); r.put("assente", null);
         r.put("uscitoAt", fine.toString()); r.put("uscitoIt", oraIt(fine));
     }
 
@@ -516,8 +541,9 @@ public class SaloneController {
                 Map<String, Object> r = m.get(nome);
                 boolean orario = fascia(ZonedDateTime.now(ITALY)) != null;
                 boolean salva = false;
-                if (r.get("stato") == null && orario) {
-                    cambiaStato(m, nome, "DISPONIBILE", c.nome(), "Accesso al CRM: disponibile in automatico", null, null, Instant.now());
+                boolean rientro = Boolean.TRUE.equals(r.get("assente"));   // era "non disponibile" perche' non connesso
+                if ((r.get("stato") == null || rientro) && orario) {
+                    cambiaStato(m, nome, "DISPONIBILE", c.nome(), rientro ? "Rientrato nel CRM: disponibile in automatico" : "Accesso al CRM: disponibile in automatico", null, null, Instant.now());
                     salva = true;
                 }
                 if (salva) salvaStati(m, c.nome());
@@ -589,7 +615,7 @@ public class SaloneController {
         // controllo dei 15 minuti: solo subito dopo la presa in carico; qualsiasi altro cambio lo toglie
         r.put("controlloAt", "OCCUPATO".equals(nuovo) && walkinId != null ? now.plusSeconds(CONTROLLO_MIN * 60).toString() : null);
         r.put("stato", nuovo); r.put("dal", now.toString()); r.put("dalIt", oraIt(now));
-        r.put("chi", chi); r.put("motivo", motivo); r.put("rinvii", 0);
+        r.put("chi", chi); r.put("motivo", motivo); r.put("rinvii", 0); r.put("assente", null);
         return true;
     }
     /** il consulente torna disponibile: sul walk-in resta quanto tempo e' passato dalla presa in carico */

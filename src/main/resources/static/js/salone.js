@@ -366,7 +366,8 @@
     }
     const statoDi = nome => st.stati.find(x => x.nome === nome) || { nome, stato: null };
     // "Occupato da 12 min con Rossi" / "Non ancora in salone": stato di un consulente in parole
-    const testoStato = s => s && s.stato ? STATI[s.stato].t + ' da ' + durata(minDa(s.dal)) + (s.cliente && s.stato !== 'DISPONIBILE' && s.stato !== 'NON_DISPONIBILE' ? ' con ' + s.cliente : '')
+    const testoStato = s => s && s.stato && s.assente ? 'Non disponibile · CRM chiuso da ' + durata(minDa(s.dal))
+        : s && s.stato ? STATI[s.stato].t + ' da ' + durata(minDa(s.dal)) + (s.cliente && s.stato !== 'DISPONIBILE' && s.stato !== 'NON_DISPONIBILE' ? ' con ' + s.cliente : '')
         : (st.online || []).includes(s && s.nome) ? 'CRM aperto · fuori orario' : 'Non in salone (CRM chiuso)';
     const min1 = t => String(t || '').replace(/^./, c => c.toLowerCase());   // "Occupato da..." -> "occupato da..." (il nome del cliente resta com'e')
     // bollino che si aggiorna da solo ogni 5 secondi (vedi disegnaStati)
@@ -382,7 +383,7 @@
         return `<div class="sa-stati-h">
             <div><h3>Consulenti in salone <span class="sa-live">● in tempo reale</span></h3>
               <p>${Object.entries(conta).map(([k, n]) => `${bollino(k)} ${n} ${STATI[k].t.toLowerCase()}`).join(' · ')}</p>
-              ${mio ? '<p class="sa-hint">Con il CRM aperto risulti disponibile in automatico; quando lo chiudi o premi Esci risulti fuori dal salone.</p>' : ''}</div>
+              ${mio ? '<p class="sa-hint">Con il CRM aperto risulti disponibile in automatico. Se in orario lo chiudi (o premi Esci, o non ricarichi dopo un aggiornamento) risulti <b>non disponibile</b> finché non rientri.</p>' : ''}</div>
             ${mio ? `<div class="sa-mio" role="group" aria-label="Il tuo stato"><span>Il tuo stato</span>
               ${Object.keys(STATI).map(k => `<button type="button" class="sa-mio-b ${STATI[k].c} ${mio.stato === k ? 'on' : ''}" data-stato="${k}">${bollino(k)} ${STATI[k].t}</button>`).join('')}</div>` : ''}
           </div>
@@ -390,10 +391,10 @@
               // senza il CRM aperto il consulente resta "non in salone": il suo stato non si puo' cambiare da fuori
               const io = st.mio === s.nome, conn = io || (st.online || []).includes(s.nome), puo = io || (st.cambiaTutti && conn);
               return `<div class="sa-cs ${s.stato && STATI[s.stato] ? STATI[s.stato].c : 'vuoto'} ${io ? 'io' : ''}">
-                <button type="button" class="sa-cs-b" ${puo ? `data-menu="${esc(s.nome)}"` : 'disabled'} title="${puo ? 'Cambia stato' : st.cambiaTutti && !conn ? 'Non ha il CRM aperto: lo stato torna disponibile quando accede' : ''}">
+                <button type="button" class="sa-cs-b" ${puo ? `data-menu="${esc(s.nome)}"` : 'disabled'} title="${puo ? 'Cambia stato' : s.assente ? 'Oggi era entrato ma ora non ha il CRM aperto: risulta non disponibile finché non rientra' : st.cambiaTutti && !conn ? 'Non ha il CRM aperto: lo stato torna disponibile quando accede' : ''}">
                   ${bollino(s.stato, true)}
                   <span class="sa-cs-t"><b>${esc(s.nome)}${io ? ' (tu)' : ''}</b>
-                  <em>${s.stato ? STATI[s.stato].t + ' · da ' + durata(minDa(s.dal)) : conn ? 'CRM aperto · fuori orario del salone' : s.uscitoAt && isoRoma(new Date(s.uscitoAt)) === oggi() && !/^Non connesso|riavvio/.test(s.motivo || '') ? 'Uscito dal CRM alle ' + ora(s.uscitoAt) : 'Non ancora in salone oggi'}</em>
+                  <em>${s.stato && s.assente ? 'Non disponibile · CRM chiuso da ' + durata(minDa(s.dal)) : s.stato ? STATI[s.stato].t + ' · da ' + durata(minDa(s.dal)) : conn ? 'CRM aperto · fuori orario del salone' : s.uscitoAt && isoRoma(new Date(s.uscitoAt)) === oggi() && !/^Non connesso|riavvio/.test(s.motivo || '') ? 'Uscito dal CRM alle ' + ora(s.uscitoAt) : 'Non ancora in salone oggi'}</em>
                   ${s.stato && s.stato !== 'DISPONIBILE' && s.stato !== 'NON_DISPONIBILE' && s.cliente ? `<em class="sa-cs-cl">con ${esc(s.cliente)}</em>` : ''}</span>
                 </button></div>`;
           }).join('')}</div>`;
