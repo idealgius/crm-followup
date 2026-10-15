@@ -413,3 +413,37 @@ details.sa-in-note div { margin-top:6px; white-space:pre-wrap; line-height:1.5; 
 .sa-ck-seg button.on[data-az="togli"], .sa-ck-seg button.on[data-agg="togli"], .sa-ck-seg button.on[data-sp="togli"] { background:#ef4444; color:#fff; }
 .sa-ck-seg button.on[data-agg="aggiorna"] { background:#60a5fa; color:#08203f; }
 .sa-ck-seg button.on[data-agg="tieni"], .sa-ck-seg button.on[data-sp="tieni"] { background:rgba(154,163,178,.22); color:var(--sa-ink); }
+/* ---- cliente dell'appuntamento in sede ---- */
+.sa-msg.ok { background:rgba(34,197,94,.12); border:1px solid rgba(34,197,94,.35); color:var(--sa-ink); }
+.sa-sd { display:inline-flex; align-items:center; gap:6px; }
+.sa-sd-t { font-size:11.5px; color:var(--sa-ink2); font-weight:600; }
+.sa-in.arrivato { border-left-color:#38bdf8; }
+.sa-in.arrivato.preso { border-left-color:var(--sa-acc); }
+.sa-arr { margin-top:10px; padding:9px 12px; border-radius:11px; font-size:13px; line-height:1.45; display:flex; flex-direction:column; gap:2px; }
+.sa-arr.wait { background:rgba(56,189,248,.12); border:1px solid rgba(56,189,248,.4); }
+.sa-arr.ok { background:rgba(34,195,166,.12); border:1px solid rgba(34,195,166,.4); }
+.sa-arr small { font-size:11.5px; color:var(--sa-ink2); }
+.sa-in-a .sa-arr-b { background:#38bdf8; color:#04263a; }
+.sa-in-a .sa-btn2 { padding:7px 12px; font-size:12.5px; }
+.sa-x2 { color:var(--sa-ink2) !important; }
+.sa-x2:hover { border-color:#ef4444 !important; color:#ff8a8a !important; }
+.sa-tag.sa-tag-app { background:rgba(56,189,248,.15); color:#7dd3fc; }
+.sa-notif-app { margin-top:4px; font-size:12.5px; color:#7dd3fc; }
+.sa-modal.sa-arr-m { width:min(640px, 100%); }
+.sa-arr-prev { display:flex; align-items:center; gap:14px; padding:12px 14px; border-radius:14px; border:1px solid var(--sa-line); background:rgba(255,255,255,.03); margin-bottom:6px; }
+.sa-arr-prev small { display:block; font-size:10.5px; font-weight:800; letter-spacing:.8px; color:var(--sa-ink2); }
+.sa-arr-prev b { display:block; font-size:16px; }
+.sa-arr-prev span { font-size:12.5px; color:var(--sa-ink2); }
+.sa-arr-prev.verde { border-color:rgba(34,197,94,.5); }
+.sa-arr-prev.giallo, .sa-arr-prev.rosso, .sa-arr-prev.grigio, .sa-arr-prev.azzurro { border-color:rgba(245,179,1,.5); }
+.sa-arr-l { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:8px; }
+.sa-arr-c { display:flex; align-items:center; gap:10px; text-align:left; border:1.5px solid var(--sa-line); background:transparent; color:var(--sa-ink); font:inherit; padding:9px 12px; border-radius:12px; cursor:pointer; opacity:.8; }
+.sa-arr-c span { display:flex; flex-direction:column; min-width:0; }
+.sa-arr-c b { font-size:13.5px; }
+.sa-arr-c b em { font-style:normal; font-weight:600; font-size:11.5px; color:var(--sa-acc); }
+.sa-arr-c small { font-size:11.5px; color:var(--sa-ink2); }
+.sa-arr-c.libero { opacity:1; }
+.sa-arr-c:hover { border-color:var(--sa-acc); opacity:1; }
+.sa-arr-c.on { border-color:var(--sa-acc); background:rgba(34,195,166,.14); opacity:1; box-shadow:0 0 0 2px rgba(34,195,166,.25); }
+.sa-arr-m footer .sa-btn small { font-weight:600; opacity:.8; }
+.sa-arr-m footer .sa-btn:disabled { opacity:.45; cursor:default; }

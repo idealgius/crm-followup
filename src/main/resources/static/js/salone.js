@@ -316,9 +316,9 @@
             const b = e.target.closest('[data-tab]'); if (!b) return;
             st.tab = b.dataset.tab;
             disegnaSchede();
-            if (st.tab === 'app' && !st.app.caricato) caricaApp(st.app.giorno);
+            if (st.tab === 'app') { if (!st.app.caricato) caricaApp(st.app.giorno); else { render(); caricaApp(st.app.giorno); } }
             else if (st.tab === 'report' && !st.rep.dati) caricaReport();
-            else render();
+            else { render(); if (st.tab === 'walkin') caricaGiorno(st.giorno, true); }   // dati sempre freschi cambiando scheda
         });
         root.addEventListener('click', onClick);
         root.addEventListener('change', onChange);
@@ -326,6 +326,8 @@
         tick(); setInterval(tick, 20000);
         // aggiornamento automatico (altri front office, prese in carico, stati)
         setInterval(() => { if (aperta && st.tab === 'walkin' && !document.querySelector('.sa-ov')) caricaGiorno(st.giorno, true); }, 15000);
+        // appuntamenti di oggi: chi e' arrivato e chi e' gia' stato preso in carico (non mentre si legge una nota o c'e' una finestra aperta)
+        setInterval(() => { if (aperta && st.tab === 'app' && st.app.giorno === oggi() && !document.querySelector('.sa-ov') && !root.querySelector('.sa-app details[open]')) caricaApp(st.app.giorno); }, 15000);
         setInterval(() => { if (aperta) caricaStati(); }, 5000);
         setInterval(() => { if (aperta) disegnaStati(); }, 30000);   // "da 12 min" sempre aggiornato
     }
@@ -363,6 +365,12 @@
         } catch (e) { /* rete: si riprova */ }
     }
     const statoDi = nome => st.stati.find(x => x.nome === nome) || { nome, stato: null };
+    // "Occupato da 12 min con Rossi" / "Non ancora in salone": stato di un consulente in parole
+    const testoStato = s => s && s.stato ? STATI[s.stato].t + ' da ' + durata(minDa(s.dal)) + (s.cliente && s.stato !== 'DISPONIBILE' && s.stato !== 'NON_DISPONIBILE' ? ' con ' + s.cliente : '')
+        : (st.online || []).includes(s && s.nome) ? 'CRM aperto · fuori orario' : 'Non in salone (CRM chiuso)';
+    const min1 = t => String(t || '').replace(/^./, c => c.toLowerCase());   // "Occupato da..." -> "occupato da..." (il nome del cliente resta com'e')
+    // bollino che si aggiorna da solo ogni 5 secondi (vedi disegnaStati)
+    const bollinoVivo = (nome, conTesto) => `<span class="sa-sd" data-sd="${esc(nome)}">${bollino(statoDi(nome).stato)}${conTesto ? `<small class="sa-sd-t">${esc(testoStato(statoDi(nome)))}</small>` : ''}</span>`;
     function barraStati() {
         if (!st.stati.length) return '<div class="sa-card sa-stati" id="saStati"><span class="sa-hint">Caricamento stato dei consulenti…</span></div>';
         return `<div class="sa-card sa-stati" id="saStati">${barraStatiIn()}</div>`;
@@ -393,6 +401,11 @@
     function disegnaStati() {
         const el = document.getElementById('saStati');
         if (el && !el.querySelector('.sa-menu')) el.innerHTML = barraStatiIn();
+        document.querySelectorAll('[data-sd]').forEach(el => {
+            const s = statoDi(el.dataset.sd), d = el.querySelector('.sa-dot'), t = el.querySelector('.sa-sd-t');
+            if (d) d.className = 'sa-dot ' + (s.stato && STATI[s.stato] ? STATI[s.stato].c : 'vuoto');
+            if (t) t.textContent = testoStato(s);
+        });
         const chips = document.querySelectorAll('.sa-ov [data-c]');
         chips.forEach(b => { const s = statoDi(b.dataset.c).stato; const d = b.querySelector('.sa-dot'); if (d) d.className = 'sa-dot ' + (s && STATI[s] ? STATI[s].c : 'vuoto'); });
     }
@@ -484,7 +497,7 @@
             <div class="sa-in-t"><b>${ora(r.ora)}</b></div>
             <div class="sa-in-c">
               <div class="sa-in-n">${esc(nomeCliente(r))}${r.cellulare ? ` <a href="tel:${esc(r.cellulare)}" class="sa-tel">📞 ${esc(r.cellulare)}</a>` : ''}</div>
-              <div class="sa-in-v">${v.length ? v.map(x => `<span class="sa-car">🚗 ${esc(x)}</span>`).join('') : '<span class="sa-hint">Nessuna vettura indicata</span>'}</div>
+              <div class="sa-in-v">${r.daApp ? `<span class="sa-tag sa-tag-app">📅 Appuntamento${r.appOra ? ' delle ' + esc(r.appOra) : ''}${r.consulentePrevisto && r.consulentePrevisto !== r.consulente ? ' · era di ' + esc(r.consulentePrevisto) : ''}</span>` : ''}${v.length ? v.map(x => `<span class="sa-car">🚗 ${esc(x)}</span>`).join('') : '<span class="sa-hint">Nessuna vettura indicata</span>'}</div>
               ${r.note ? `<div class="sa-in-note">📝 ${esc(r.note)}</div>` : ''}
               <div class="sa-in-f">Inserito il ${esc(dataOra(r.ora))} da ${esc(r.registratoDa || '')}${r.assegnatoAt ? ` · assegnato alle ${ora(r.assegnatoAt)}` : ''}</div>
             </div>
@@ -677,7 +690,10 @@
             if (!can()) return;
             try {
                 const d = await api('/notifiche');
-                (d.notifiche || []).forEach(r => { const k = r.id + '|' + r.assegnatoAt; if (!visti.has(k)) { visti.add(k); mostraNotifica(r); } });
+                const L = d.notifiche || [];
+                L.forEach(r => { const k = r.id + '|' + r.assegnatoAt; if (!visti.has(k)) { visti.add(k); mostraNotifica(r); } });
+                // affidato a un altro consulente o arrivo annullato: la notifica sparisce
+                document.querySelectorAll('#saNotif .sa-notif[data-id]').forEach(n => { if (!L.some(r => r.id === n.dataset.id)) { n.classList.add('via'); setTimeout(() => n.remove(), 300); } });
             } catch (e) { /* rete: si riprova */ }
         };
         giro(); notifT = setInterval(giro, 6000);
@@ -697,11 +713,14 @@
         const v = vettTxt(r);
         const n = document.createElement('div');
         n.className = 'sa-notif';
-        n.innerHTML = `<div class="sa-notif-h"><span class="sa-pulse"></span><small>CLIENTE IN ARRIVO PER TE · ${ora(r.assegnatoAt)}</small></div>
+        n.dataset.id = r.id;
+        const app = !!r.daApp, altro = app && r.consulentePrevisto && r.consulentePrevisto !== r.consulente;
+        n.innerHTML = `<div class="sa-notif-h"><span class="sa-pulse"></span><small>${app ? (altro ? 'APPUNTAMENTO AFFIDATO A TE' : 'IL TUO APPUNTAMENTO È IN SEDE') : 'CLIENTE IN ARRIVO PER TE'} · ${ora(r.assegnatoAt)}</small></div>
           <b class="sa-notif-n">${esc(nomeCliente(r))}</b>
+          ${app ? `<div class="sa-notif-app">📅 Appuntamento${r.appOra ? ' delle ' + esc(r.appOra) : ''}${altro ? ` di ${esc(r.consulentePrevisto)}` : ''} · <b>sta venendo alla tua scrivania</b></div>` : ''}
           ${r.cellulare ? `<div class="sa-notif-t">📞 ${esc(r.cellulare)}</div>` : ''}
           <div class="sa-notif-v">${v.length ? v.map(x => `<span>🚗 ${esc(x)}</span>`).join('') : '<span>Nessuna vettura indicata</span>'}</div>
-          ${r.note ? `<div class="sa-notif-note">📝 ${esc(r.note)}</div>` : ''}
+          ${r.note && !app ? `<div class="sa-notif-note">📝 ${esc(r.note)}</div>` : ''}
           <div class="sa-notif-f">Ti è stato assegnato da ${esc(r.assegnatoDa || '')} · prendendolo in carico risulterai <b>Occupato</b></div>
           <button type="button" class="sa-btn">Prendo in carico ✓</button>`;
         n.querySelector('button').addEventListener('click', async ev => {
@@ -725,13 +744,13 @@
         A.giorno = g;
         try {
             const [d, m] = await Promise.all([api('/appuntamenti?data=' + g), api('/appuntamenti/giorni?mese=' + A.mese)]);
-            A.lista = d.appuntamenti || []; A.info = d; A.giorni = m.giorni || {}; A.daAss = m.daAssegnare || {};
+            A.lista = d.appuntamenti || []; A.info = d; A.puoGestire = !!d.puoGestire; A.giorni = m.giorni || {}; A.daAss = m.daAssegnare || {};
             st.vedeTutti = !!d.vedeTutti; st.vedeReport = !!d.vedeReport; st.puoImportare = !!d.puoImportare; A.err = ''; A.caricato = true;
         } catch (e) { A.err = e.message; }
         if (st.tab === 'app') render();
     }
     const cliApp = r => [String(r.nome || '').replace(/^\.+$/, ''), r.cognome].filter(Boolean).join(' ') || r.ragioneSociale || 'Cliente';
-    const vettApp = r => [r.marca && !/^marca generica$/i.test(r.marca) ? r.marca : '', r.modello && r.modello !== 'X' ? r.modello : ''].filter(Boolean).join(' ');
+    const vettApp = r => [r.marca && !/^marca generica$/i.test(r.marca) ? r.marca : '', r.modello && !/^x$/i.test(r.modello) ? r.modello : ''].filter(Boolean).join(' ');
     function renderApp(body) {
         const A = st.app;
         let L = A.lista.slice();
@@ -776,17 +795,32 @@
         const v = vettApp(r);
         const dett = [r.origine, r.canale !== r.origine ? r.canale : '', r.tipoVeicolo, r.tipoRichiesta, Number(r.importo) > 0 ? '€ ' + Number(r.importo).toLocaleString('it-IT') : ''].filter(Boolean);
         const posseduta = [r.marcaPosseduta, r.modelloPosseduto, r.annoPosseduto, Number(r.kmPosseduto) > 0 ? Number(r.kmPosseduto).toLocaleString('it-IT') + ' km' : ''].filter(Boolean).join(' ');
-        return `<article class="sa-in sa-app ${r.consulente ? 'preso' : 'nuovo da'}">
+        const arr = r.arrivo || null, preso = arr && arr.presoAt, accolto = r.accoltoDa || (arr && arr.consulente) || null;
+        const oggiApp = r.appData === oggi(), gest = st.app.puoGestire;
+        const mioArr = r.arrivatoAt && !preso && st.mio && accolto === st.mio && r.ingressoId;
+        const blocco = r.arrivatoAt ? `<div class="sa-arr ${preso ? 'ok' : 'wait'}">
+              <span>${preso ? `✓ In sede dalle ${esc(ora(r.arrivatoAt))} · <b>preso in carico da ${esc(accolto)}</b> alle ${esc(ora(arr.presoAt))}${arr.liberoAt ? ` · seguito per ${esc(durata(arr.minutiCliente))}` : ''}`
+                : `🏁 <b>Cliente in sede</b> dalle ${esc(ora(r.arrivatoAt))} · avvisato <b>${esc(accolto || '')}</b>: sta andando alla sua scrivania`}</span>
+              ${accolto && r.consulente && accolto !== r.consulente ? `<small>Accolto da ${esc(accolto)} al posto di ${esc(r.consulente)}</small>` : ''}
+              <small>Segnato da ${esc(r.arrivatoDa || '')}</small></div>` : '';
+        const azioni = [
+            gest && oggiApp && !r.arrivatoAt ? `<button type="button" class="sa-btn sa-arr-b" data-arr="${esc(r.id)}">🏁 Cliente in sede</button>` : '',
+            gest && r.arrivatoAt && !preso ? `<button type="button" class="sa-btn2" data-arr="${esc(r.id)}">↪ Affida a un altro</button><button type="button" class="sa-btn2 sa-x2" data-arr-annulla="${esc(r.id)}" title="Segnato per sbaglio: togli l'arrivo">Annulla arrivo</button>` : '',
+            mioArr ? `<button type="button" class="sa-btn" data-presa-app="${esc(r.ingressoId)}">Prendo in carico ✓</button>` : ''
+        ].join('');
+        return `<article class="sa-in sa-app ${preso ? 'preso' : r.arrivatoAt ? 'att' : r.consulente ? 'preso' : 'nuovo da'} ${r.arrivatoAt ? 'arrivato' : ''}">
             <div class="sa-in-t"><b>${esc(r.appOra || '—')}</b>${r.fonteData === 'Note' ? '<small title="Orario letto dalle note del lead">dalle note</small>' : ''}</div>
             <div class="sa-in-c">
               <div class="sa-in-n">${esc(cliApp(r))}${r.telefono ? ` <a href="tel:${esc(r.telefono.replace(/\s/g, ''))}" class="sa-tel">📞 ${esc(r.telefono)}</a>` : ''}</div>
               <div class="sa-in-v">${v ? `<span class="sa-car">🚗 ${esc(v)}</span>` : ''}${posseduta ? `<span class="sa-car perm">🔁 Permuta: ${esc(posseduta)}</span>` : ''}${dett.map(x => `<span class="sa-tag">${esc(x)}</span>`).join('')}${st.puoImportare && (r.controllo === 'modificato' || r.controllo === 'forzato') ? `<span class="sa-tag sa-tag-w" title="${esc(r.avviso || '')}">${r.controllo === 'modificato' ? '✎ data modificata all’import' : '⚠ inserito senza i campi allineati'}</span>` : ''}</div>
               ${r.note ? `<details class="sa-in-note"><summary>📝 Note del lead</summary><div>${esc(r.note)}</div></details>` : ''}
               <div class="sa-in-f">Lead ${esc(r.id)} · inserito ${esc(r.dataInserimento || '')}${r.inseritoDa ? ' da ' + esc(r.inseritoDa) : ''}${r.caller ? ' · caller ' + esc(r.caller.replace(/\s*\(ID \d+\)/, '')) : ''}</div>
+              ${blocco}
             </div>
             <div class="sa-in-a">
-              ${r.consulente ? `<b class="sa-cons">${bollino(statoDi(r.consulente).stato)} ${esc(r.consulente)}</b>` : `<span class="sa-st no">Da assegnare</span>${r.venditore ? `<span class="sa-hint">Nel CSV: ${esc(r.venditore)}</span>` : ''}`}
+              ${r.consulente ? `<b class="sa-cons">${bollinoVivo(r.consulente)} ${esc(r.consulente)}</b>${oggiApp && !r.arrivatoAt ? `<span class="sa-hint" data-sd="${esc(r.consulente)}"><small class="sa-sd-t">${esc(testoStato(statoDi(r.consulente)))}</small></span>` : ''}` : `<span class="sa-st no">Da assegnare</span>${r.venditore ? `<span class="sa-hint">Nel CSV: ${esc(r.venditore)}</span>` : ''}`}
               ${r.status ? `<span class="sa-st ${/fall|chius|perso/i.test(r.status) ? 'no' : 'wait'}">${esc(r.status)}</span>` : ''}
+              ${azioni}
             </div>
           </article>`;
     }
@@ -794,6 +828,23 @@
         const A = st.app;
         const g = e.target.closest('[data-giorno]'); if (g) { caricaApp(g.dataset.giorno); return true; }
         const m = e.target.closest('[data-mese]'); if (m) { A.mese = spostaMese(A.mese, Number(m.dataset.mese)); caricaApp(A.giorno); return true; }
+        const ar = e.target.closest('[data-arr]');
+        if (ar) { const r = A.lista.find(x => String(x.id) === ar.dataset.arr); if (r) apriArrivo(r); return true; }
+        const an = e.target.closest('[data-arr-annulla]');
+        if (an) {
+            const r = A.lista.find(x => String(x.id) === an.dataset.arrAnnulla);
+            if (!r || !confirm(`Togliere l'arrivo di ${cliApp(r)}?\n${r.accoltoDa ? r.accoltoDa + ' non vedrà più la notifica.' : ''}`)) return true;
+            try { await post('/appuntamenti/' + encodeURIComponent(r.id) + '/arrivato', { annulla: true }); toast('Arrivo tolto'); caricaApp(A.giorno); } catch (x) { alert(x.message); }
+            return true;
+        }
+        const pa = e.target.closest('[data-presa-app]');
+        if (pa) {
+            try { await post('/ingressi/' + encodeURIComponent(pa.dataset.presaApp) + '/presa');
+                document.querySelectorAll('#saNotif .sa-notif').forEach(n => { if (n.dataset.id === pa.dataset.presaApp) n.remove(); });
+                toast('Cliente preso in carico: ora risulti occupato'); caricaApp(A.giorno); caricaStati(); }
+            catch (x) { alert(x.message); }
+            return true;
+        }
         const a = e.target.closest('[data-aact]');
         if (a) {
             if (a.dataset.aact === 'verso') { A.verso = A.verso === 'asc' ? 'desc' : 'asc'; render(); }
@@ -807,6 +858,64 @@
         const f = e.target.closest('[data-filtro]'); if (f) { st.app.filtro = f.value; render(); return; }
         const i = e.target.closest('[data-import]');
         if (i && i.files && i.files[0]) { const f = i.files[0]; i.value = ''; importaCsv(f); }   // value = '': si puo' riscegliere lo stesso file
+    }
+
+    /* ---------- CLIENTE DELL'APPUNTAMENTO IN SEDE ----------
+       Si apre con "🏁 Cliente in sede" (o "↪ Affida a un altro"). In alto lo stato del consulente
+       dell'appuntamento in tempo reale: se e' disponibile basta avvisarlo; se e' occupato / non disponibile /
+       non in salone la finestra lo dice e propone chi e' disponibile in questo momento.
+       Il consulente scelto riceve la notifica "sta venendo alla tua scrivania" (come i walk-in). */
+    async function apriArrivo(r) {
+        await caricaStati();
+        const previsto = r.accoltoDa || r.consulente || null;
+        const giaArrivato = !!r.arrivatoAt;
+        const disp = c => statoDi(c).stato === 'DISPONIBILE';
+        const elenco = st.consulenti.slice().sort((a, b) => ordStato(statoDi(a).stato) - ordStato(statoDi(b).stato) || a.localeCompare(b));
+        const liberi = elenco.filter(c => disp(c) && c !== previsto);
+        let scelto = !giaArrivato && previsto && disp(previsto) ? previsto : (liberi[0] || (giaArrivato ? '' : previsto) || '');
+        const ov = document.createElement('div'); ov.className = 'sa-ov';
+        ov.innerHTML = `<div class="sa-modal sa-arr-m" role="dialog" aria-modal="true" aria-label="Cliente in sede">
+            <header><div><small>APPUNTAMENTO${r.appOra ? ' DELLE ' + esc(r.appOra) : ''} · ${giaArrivato ? 'AFFIDA A UN ALTRO CONSULENTE' : 'CLIENTE IN SEDE'}</small><h3>${esc(cliApp(r))}</h3></div>
+              <button type="button" class="sa-x" data-chiudi aria-label="Chiudi">✕</button></header>
+            <div class="sa-mbody" data-z="corpo"></div>
+            <footer data-z="piede"></footer></div>`;
+        document.body.appendChild(ov);
+        const chiudi = () => { ov.remove(); document.removeEventListener('keydown', onKey); clearInterval(t); };
+        const onKey = e => { if (e.key === 'Escape') chiudi(); };
+        document.addEventListener('keydown', onKey);
+        function disegna() {
+            const sp = previsto ? statoDi(previsto) : null, ok = previsto && disp(previsto);
+            const libNow = elenco.filter(c => disp(c) && c !== previsto);
+            const avviso = !previsto
+                ? `<div class="sa-msg warn">Questo appuntamento non ha ancora un consulente: scegli chi accoglie il cliente.</div>`
+                : giaArrivato ? `<div class="sa-msg">Ora è affidato a <b>${esc(previsto)}</b> (${esc(min1(testoStato(sp)))}). Scegli a chi passarlo: riceverà subito la notifica.</div>`
+                : ok ? `<div class="sa-msg ok">✓ <b>${esc(previsto)}</b> è disponibile: riceverà la notifica che il cliente sta andando alla sua scrivania.</div>`
+                : `<div class="sa-msg warn">⚠ <b>${esc(previsto)}</b> risulta <b>${esc(min1(testoStato(sp)))}</b>. Vuoi farlo accomodare da un altro consulente?
+                    ${libNow.length ? `<br>Disponibil${libNow.length === 1 ? 'e' : 'i'} in questo momento: <b>${libNow.map(esc).join(', ')}</b>` : '<br>In questo momento nessun consulente risulta disponibile.'}</div>`;
+            ov.querySelector('[data-z="corpo"]').innerHTML = `${avviso}
+              ${previsto ? `<div class="sa-arr-prev ${sp.stato && STATI[sp.stato] ? STATI[sp.stato].c : 'vuoto'}">${bollino(sp.stato, true)}<div><small>${giaArrivato ? 'ORA AFFIDATO A' : 'CONSULENTE DELL’APPUNTAMENTO'}</small><b>${esc(previsto)}</b><span>${esc(testoStato(sp))}</span></div></div>` : ''}
+              <div class="sa-lbl">Chi accoglie il cliente · prima i disponibili</div>
+              <div class="sa-arr-l">${elenco.map(c => { const s2 = statoDi(c); return `<button type="button" class="sa-arr-c ${c === scelto ? 'on' : ''} ${disp(c) ? 'libero' : ''}" data-scegli="${esc(c)}" aria-pressed="${c === scelto}">
+                  ${bollino(s2.stato)}<span><b>${esc(c)}${c === r.consulente ? ' <em>· appuntamento</em>' : ''}</b><small>${esc(testoStato(s2))}</small></span></button>`; }).join('')}</div>`;
+            const sc = scelto ? statoDi(scelto) : null;
+            ov.querySelector('[data-z="piede"]').innerHTML = `<button type="button" class="sa-btn2" data-chiudi>Annulla</button>
+              <button type="button" class="sa-btn" data-invia ${scelto && scelto !== (giaArrivato ? previsto : '') ? '' : 'disabled'}>${!scelto ? 'Scegli il consulente'
+                : (scelto === r.consulente && !giaArrivato ? (disp(scelto) ? 'Avvisa ' : 'Avvisa comunque ') : (disp(scelto) ? 'Affida a ' : 'Affida comunque a ')) + esc(scelto)}${scelto && !disp(scelto) ? ` <small>(${esc(STATI[sc.stato] ? STATI[sc.stato].t.toLowerCase() : 'non in salone')})</small>` : ''}</button>`;
+        }
+        disegna();
+        const t = setInterval(() => { if (document.body.contains(ov)) disegna(); }, 5000);   // stati sempre aggiornati (caricaStati gira ogni 5 s)
+        ov.addEventListener('click', async e => {
+            if (e.target === ov || e.target.closest('[data-chiudi]')) { chiudi(); return; }
+            const c = e.target.closest('[data-scegli]'); if (c) { scelto = c.dataset.scegli; disegna(); return; }
+            const b = e.target.closest('[data-invia]'); if (!b || !scelto) return;
+            b.disabled = true; b.textContent = 'Invio…';
+            try {
+                await post('/appuntamenti/' + encodeURIComponent(r.id) + '/arrivato', { consulente: scelto });
+                chiudi();
+                toast(`${cliApp(r)}: notifica inviata a ${scelto}`);
+                caricaApp(st.app.giorno);
+            } catch (x) { alert(x.message); disegna(); }
+        });
     }
 
     /* ---------- import CSV (solo admin) ---------- */
@@ -1292,7 +1401,13 @@
         const R = st.rep;
         if (!R.da) [R.da, R.a] = periodo(R.preset);
         R.err = ''; R.carica = true; if (st.tab === 'report') render();
-        try { R.dati = await api(`/report?da=${R.da}&a=${R.a}`); } catch (e) { R.err = e.message; }
+        try {
+            R.dati = await api(`/report?da=${R.da}&a=${R.a}`);
+            // i clienti arrivati per un appuntamento passano dagli ingressi (notifica e presa in carico) ma non sono walk-in
+            const tutti = R.dati.ingressi || [];
+            R.dati.appArrivati = tutti.filter(r => r.daApp).length;
+            R.dati.ingressi = tutti.filter(r => !r.daApp);
+        } catch (e) { R.err = e.message; }
         R.carica = false;
         if (st.tab === 'report') render();
     }
@@ -1399,7 +1514,7 @@
         body.innerHTML = barraPeriodo + `
           ${R.carica ? '<div class="sa-msg">Aggiornamento…</div>' : ''}
           <div class="sa-tiles">
-            <div class="sa-card sa-tile"><span>Walk-in</span><b>${C.tot}</b><em>${(D.ingressi || []).length ? 'nel periodo' : 'nessuno nel periodo'}</em></div>
+            <div class="sa-card sa-tile"><span>Walk-in</span><b>${C.tot}</b><em>${(D.ingressi || []).length ? 'nel periodo' : 'nessuno nel periodo'}${D.appArrivati ? ` · in più ${D.appArrivati} client${D.appArrivati === 1 ? 'e' : 'i'} da appuntamento` : ''}</em></div>
             <div class="sa-card sa-tile"><span>Assegnati</span><b>${C.ass}</b><em>${pct(C.ass, C.tot)} dei walk-in</em></div>
             <div class="sa-card sa-tile"><span>Presi in carico</span><b>${C.presi}</b><em>${pct(C.presi, C.ass)} degli assegnati</em></div>
             <div class="sa-card sa-tile"><span>Tempo medio di risposta</span><b>${durata(C.rispMedia)}</b><em>da assegnato a preso in carico</em></div>
