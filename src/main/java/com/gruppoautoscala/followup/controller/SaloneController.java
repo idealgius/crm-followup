@@ -108,10 +108,27 @@ public class SaloneController {
     public static final List<String> STATI = List.of("DISPONIBILE", "OCCUPATO", "NON_DISPONIBILE", "TEST_DRIVE", "IN_PIAZZALE");
     /** controllo dopo la presa in carico di un walk-in: 15 minuti, "No" = altri 10 */
     private static final long CONTROLLO_MIN = 15, RINVIO_MIN = 10;
-    /** consulenti del salone di Agnano (per ora: in seguito si potranno gestire dalla pagina) */
+    /** consulenti del salone di Agnano (per ora: in seguito si potranno gestire dalla pagina)
+     *  VENDITA e NOLEGGIO sono due gruppi separati: chi vede tutto li trova distinti (stati, walk-in, appuntamenti) */
     public static final List<String> CONSULENTI_AGNANO = List.of(
         "Luca Ambrosino", "Marco Castaldo", "Roberto Castaldo", "Guido Fiore",
         "Enrico Palumbo", "Rosario Scala", "Davide Zaritto", "Mattia Zuppa");
+    public static final List<String> CONSULENTI_NOLEGGIO = List.of("Raffaele Crispo", "Francesco Sementa");
+    /** tutti i consulenti del salone (vendita + noleggio) */
+    public static final List<String> CONSULENTI;
+    static { List<String> t = new ArrayList<>(CONSULENTI_AGNANO); t.addAll(CONSULENTI_NOLEGGIO); CONSULENTI = List.copyOf(t); }
+    private static Map<String, String> reparti() {
+        Map<String, String> m = new LinkedHashMap<>();
+        for (String n : CONSULENTI) m.put(n, CONSULENTI_NOLEGGIO.contains(n) ? "NOLEGGIO" : "VENDITA");
+        return m;
+    }
+    private static String repartoDi(String cons) { return cons != null && CONSULENTI_NOLEGGIO.contains(cons) ? "NOLEGGIO" : "VENDITA"; }
+    /** reparto di un appuntamento: dal consulente, se no dalla sede del CSV ("Gruppo Autoscala Noleggio") */
+    private static String repartoApp(Map<String, Object> r) {
+        Object c = r.get("consulente");
+        if (c != null && CONSULENTI.contains(String.valueOf(c))) return repartoDi(String.valueOf(c));
+        return norm(str(r.get("sede"))).contains("noleggio") ? "NOLEGGIO" : "VENDITA";
+    }
 
     @Autowired private ConsegneDatasetRepository repository;
     @Autowired private UserRepository userRepository;
@@ -195,7 +212,7 @@ public class SaloneController {
         return x.equals(y);
     }
     private static String consulenteDi(String nome) {
-        for (String n : CONSULENTI_AGNANO) if (stessoNome(n, nome)) return n;
+        for (String n : CONSULENTI) if (stessoNome(n, nome)) return n;
         return null;
     }
     private static boolean mio(Chi c, Object cons) { return stessoNome(c.nome(), cons == null ? null : String.valueOf(cons)); }
@@ -254,7 +271,8 @@ public class SaloneController {
         out.put("data", g);
         out.put("oggi", oggi());
         out.put("ingressi", l);
-        out.put("consulenti", CONSULENTI_AGNANO);
+        out.put("consulenti", CONSULENTI);
+        out.put("reparti", reparti());
         out.put("puoGestire", gestisce(c));
         out.put("vedeTutti", vedeTutti(c));
         out.put("puoImportare", gestisce(c));
@@ -307,7 +325,7 @@ public class SaloneController {
         if (str(r.get("nome")).isEmpty() && str(r.get("cognome")).isEmpty())
             return ResponseEntity.badRequest().body(Map.of("error", "Scrivi almeno nome o cognome del cliente"));
         String cons = str(b.get("consulente"));
-        if (!cons.isEmpty() && !CONSULENTI_AGNANO.contains(cons)) return ResponseEntity.badRequest().body(Map.of("error", "Consulente non valido"));
+        if (!cons.isEmpty() && !CONSULENTI.contains(cons)) return ResponseEntity.badRequest().body(Map.of("error", "Consulente non valido"));
         Instant now = Instant.now();
         String g = now.atZone(ITALY).toLocalDate().toString();
         r.put("id", g + "-" + UUID.randomUUID().toString().substring(0, 8));
@@ -347,7 +365,7 @@ public class SaloneController {
             pulisci(b, r);
             if (b.containsKey("consulente")) {
                 String cons = str(b.get("consulente"));
-                if (!cons.isEmpty() && !CONSULENTI_AGNANO.contains(cons)) return ResponseEntity.badRequest().body(Map.of("error", "Consulente non valido"));
+                if (!cons.isEmpty() && !CONSULENTI.contains(cons)) return ResponseEntity.badRequest().body(Map.of("error", "Consulente non valido"));
                 assegna(r, cons, c.nome(), Instant.now());
             }
             if (Boolean.TRUE.equals(b.get("elimina"))) l.remove(r);
@@ -399,7 +417,7 @@ public class SaloneController {
     /** stato attuale di tutti i consulenti (chi non ha mai scelto: stato null = "non ancora in salone") */
     private Map<String, Map<String, Object>> statiMappa() {
         Map<String, Map<String, Object>> m = new LinkedHashMap<>();
-        for (String n : CONSULENTI_AGNANO) { Map<String, Object> r = new LinkedHashMap<>(); r.put("nome", n); r.put("stato", null); m.put(n, r); }
+        for (String n : CONSULENTI) { Map<String, Object> r = new LinkedHashMap<>(); r.put("nome", n); r.put("stato", null); m.put(n, r); }
         for (Map<String, Object> r : leggi("SALONE_STATI")) {
             String n = str(r.get("nome"));
             if (m.containsKey(n)) m.get(n).putAll(r);
@@ -518,7 +536,7 @@ public class SaloneController {
     private static List<String> connessi() {
         Instant now = Instant.now();
         List<String> out = new ArrayList<>();
-        for (String n : CONSULENTI_AGNANO) if (presente(n, now)) out.add(n);
+        for (String n : CONSULENTI) if (presente(n, now)) out.add(n);
         return out;
     }
     private static String tab(Map<String, Object> b) {
@@ -644,6 +662,7 @@ public class SaloneController {
             out.put("mio", consulenteDi(c.nome()));
             out.put("cambiaTutti", cambiaAltri(c));
             out.put("online", connessi());
+            out.put("reparti", reparti());
             return ResponseEntity.ok(out);
         } catch (Exception e) { return ResponseEntity.status(500).body(Map.of("error", e.getMessage())); }
     }
@@ -724,7 +743,8 @@ public class SaloneController {
             out.put("da", gi); out.put("a", gf);
             out.put("ingressi", ingressi); out.put("cambi", cambi);
             out.put("stati", new ArrayList<>(m.values()));
-            out.put("consulenti", CONSULENTI_AGNANO);
+            out.put("consulenti", CONSULENTI);
+            out.put("reparti", reparti());
             out.put("ora", Instant.now().toString());
             return ResponseEntity.ok(out);
         } catch (Exception e) { return ResponseEntity.status(500).body(Map.of("error", e.getMessage())); }
@@ -740,8 +760,9 @@ public class SaloneController {
         Map<String, List<Map<String, Object>>> giorniIngressi = new HashMap<>();
         for (Map<String, Object> r : leggi("SALONE_APP")) {
             // il consulente vede i suoi appuntamenti e quelli che gli sono stati affidati all'arrivo del cliente
-            if (!vedeTutti(c) && !mio(c, r.get("consulente")) && !mio(c, r.get("accoltoDa"))) continue;
-            if (g.equals(r.get("appData"))) { arricchisci(r, giorniIngressi); l.add(r); }
+            // il consulente vede i suoi, quelli affidati a lui all'arrivo e quelli SENZA consulente ma solo di OGGI (per prenotarli)
+            if (!vedeTutti(c) && !vedeSuo(c, r)) continue;
+            if (g.equals(r.get("appData"))) { arricchisci(r, giorniIngressi); r.put("reparto", repartoApp(r)); l.add(r); }
             if (r.get("consulente") == null && str(r.get("appData")).compareTo(oggi()) >= 0) daAssegnare++;
         }
         l.sort(Comparator.comparing(r -> str(r.get("appOra"))));
@@ -749,6 +770,9 @@ public class SaloneController {
         out.put("data", g); out.put("oggi", oggi());
         out.put("appuntamenti", l);
         out.put("puoGestire", gestisce(c));
+        out.put("mioConsulente", consulenteDi(c.nome()));     // e' uno dei consulenti: puo' prenotare e segnare "passato"
+        out.put("mioReparto", consulenteDi(c.nome()) == null ? null : repartoDi(consulenteDi(c.nome())));
+        out.put("reparti", reparti());
         out.put("daAssegnareProssimi", daAssegnare);
         out.put("vedeTutti", vedeTutti(c)); out.put("puoImportare", gestisce(c)); out.put("vedeReport", report(c));
         List<Map<String, Object>> st = leggi("SALONE_APP_STORICO");
@@ -767,7 +791,7 @@ public class SaloneController {
      *   { consulente }          segna l'arrivo / lo affida a un altro consulente (se non e' ancora preso in carico)
      *   { annulla: true }       toglie l'arrivo segnato per sbaglio (solo se non e' ancora preso in carico) */
     private static final List<String> CAMPI_ARRIVO = List.of("arrivatoAt", "arrivatoIt", "arrivatoDa", "ingressoId", "accoltoDa", "passato", "segnatoIt");
-    private static final List<String> CAMPI_MANO = List.of("consulenteMano", "assegnatoManoDa", "assegnatoManoIt");
+    private static final List<String> CAMPI_MANO = List.of("consulenteMano", "assegnatoManoDa", "assegnatoManoIt", "prenotato");
     /** aggiunge all'appuntamento lo stato dell'ingresso collegato (notificato / preso in carico / libero) */
     private void arricchisci(Map<String, Object> r, Map<String, List<Map<String, Object>>> giorni) {
         String iid = str(r.get("ingressoId"));
@@ -780,16 +804,27 @@ public class SaloneController {
     @PostMapping("/appuntamenti/{id}/arrivato")
     public ResponseEntity<?> arrivato(@PathVariable String id, @RequestBody Map<String, Object> b, HttpSession s) {
         Chi c = chi(s); if (!vede(c)) return no(c);
-        if (!gestisce(c)) return soloLivello(2);
         boolean annulla = Boolean.TRUE.equals(b.get("annulla")), passato = Boolean.TRUE.equals(b.get("passato"));
+        String io = consulenteDi(c.nome());
+        // NUOVO: il consulente (anche Consulenza) puo' segnare "Cliente passato" sui suoi appuntamenti o su quelli senza
+        // consulente (seguito da lui) e togliere un "passato" segnato su di lui. Il resto (in sede, affida) resta al Front office.
+        boolean daConsulente = !gestisce(c);
+        if (daConsulente && (io == null || !(passato || annulla))) return soloLivello(2);
+        if (daConsulente && passato) b.put("consulente", io);
         String cons = str(b.get("consulente"));
-        if (!annulla && !CONSULENTI_AGNANO.contains(cons)) return ResponseEntity.badRequest().body(Map.of("error", "Scegli il consulente che accoglie il cliente"));
+        if (!annulla && !CONSULENTI.contains(cons)) return ResponseEntity.badRequest().body(Map.of("error", "Scegli il consulente che accoglie il cliente"));
         Instant now = Instant.now();
         String g = now.atZone(ITALY).toLocalDate().toString();
         synchronized (LOCK) {
             List<Map<String, Object>> apps = leggi("SALONE_APP");
             Map<String, Object> a = apps.stream().filter(x -> id.equals(str(x.get("id")))).findFirst().orElse(null);
             if (a == null) return ResponseEntity.status(404).body(Map.of("error", "Appuntamento non trovato (forse tolto da un import)"));
+            if (daConsulente) {
+                if (passato && a.get("consulente") != null && !io.equals(a.get("consulente")))
+                    return ResponseEntity.status(403).body(Map.of("error", "E' un appuntamento di " + a.get("consulente")));
+                if (annulla && !(Boolean.TRUE.equals(a.get("passato")) && io.equals(a.get("accoltoDa"))))
+                    return ResponseEntity.status(403).body(Map.of("error", "Puoi togliere solo un \"passato\" segnato su di te"));
+            }
             String iid = str(a.get("ingressoId"));
             String gi = iid.length() >= 10 ? iid.substring(0, 10) : g;
             List<Map<String, Object>> l = leggi("SALONE_" + gi);
@@ -856,14 +891,22 @@ public class SaloneController {
     @PostMapping("/appuntamenti/{id}/consulente")
     public ResponseEntity<?> consulenteApp(@PathVariable String id, @RequestBody Map<String, Object> b, HttpSession s) {
         Chi c = chi(s); if (!vede(c)) return no(c);
-        if (!gestisce(c)) return soloLivello(2);
+        // NUOVO: un consulente puo' PRENOTARE alla propria scrivania un appuntamento di oggi ancora senza consulente
+        boolean prenota = !gestisce(c);
+        String io = consulenteDi(c.nome());
+        if (prenota && (io == null || !io.equals(str(b.get("consulente"))))) return soloLivello(2);
         String cons = str(b.get("consulente"));
-        if (!cons.isEmpty() && !CONSULENTI_AGNANO.contains(cons)) return ResponseEntity.badRequest().body(Map.of("error", "Consulente non valido"));
+        if (!cons.isEmpty() && !CONSULENTI.contains(cons)) return ResponseEntity.badRequest().body(Map.of("error", "Consulente non valido"));
         Instant now = Instant.now();
         synchronized (LOCK) {
             List<Map<String, Object>> apps = leggi("SALONE_APP");
             Map<String, Object> a = apps.stream().filter(x -> id.equals(str(x.get("id")))).findFirst().orElse(null);
             if (a == null) return ResponseEntity.status(404).body(Map.of("error", "Appuntamento non trovato"));
+            if (prenota) {
+                if (a.get("consulente") != null) return ResponseEntity.status(409).body(Map.of("error", "L'ha appena prenotato " + a.get("consulente")));
+                if (!oggi().equals(str(a.get("appData")))) return ResponseEntity.badRequest().body(Map.of("error", "Si possono prenotare solo gli appuntamenti di oggi"));
+                if (!repartoDi(io).equals(repartoApp(a))) return ResponseEntity.status(403).body(Map.of("error", "E' un appuntamento dell'altro reparto"));
+            }
             if (a.get("arrivatoAt") != null) return ResponseEntity.status(409).body(Map.of("error", "Il cliente e' gia' arrivato: usa \"Affida a un altro\""));
             if (cons.isEmpty()) {
                 for (String k : CAMPI_MANO) a.remove(k);
@@ -871,11 +914,20 @@ public class SaloneController {
             } else {
                 a.put("consulente", cons); a.put("consulenteMano", cons);
                 a.put("assegnatoManoDa", c.nome()); a.put("assegnatoManoIt", oraIt(now));
+                if (prenota) a.put("prenotato", true); else a.remove("prenotato");
             }
             try { scrivi("SALONE_APP", apps, apps.size(), c.nome()); }
             catch (Exception e) { return ResponseEntity.status(500).body(Map.of("error", "Non salvato: " + e.getMessage())); }
             return ResponseEntity.ok(mappa("appuntamento", a));
         }
+    }
+
+    /** per chi vede solo i propri: suo, affidato a lui, oppure senza consulente e di oggi */
+    private static boolean vedeSuo(Chi c, Map<String, Object> r) {
+        if (mio(c, r.get("consulente")) || mio(c, r.get("accoltoDa"))) return true;
+        if (r.get("consulente") != null || !oggi().equals(str(r.get("appData")))) return false;
+        String io = consulenteDi(c.nome());          // senza consulente: solo quelli del SUO reparto (vendita / noleggio)
+        return io == null || repartoDi(io).equals(repartoApp(r));
     }
 
     @GetMapping("/appuntamenti/giorni")
@@ -888,7 +940,7 @@ public class SaloneController {
         for (Map<String, Object> r : leggi("SALONE_APP")) {
             String g = str(r.get("appData"));
             if (!g.startsWith(pre)) continue;
-            if (!vedeTutti(c) && !mio(c, r.get("consulente"))) continue;
+            if (!vedeTutti(c) && !vedeSuo(c, r)) continue;
             out.merge(g, 1, Integer::sum);
             if (r.get("consulente") == null) daAss.merge(g, 1, Integer::sum);
         }

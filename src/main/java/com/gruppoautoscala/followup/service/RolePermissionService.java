@@ -171,7 +171,7 @@ public class RolePermissionService {
         // NUOVO: Front Office registra e assegna i clienti; Consulenza riceve le notifiche e usa la chat
         DEFAULTS.put("FRONT_OFFICE", Map.of("SALONE", "S_FO"));
         DEFAULTS.put("CONSULENZA", Map.of("SALONE", "S_CONS"));
-        DEFAULTS.put("NOLEGGIO", Map.of("RENT", "FULL"));
+        DEFAULTS.put("NOLEGGIO", Map.of("RENT", "FULL", "SALONE", "S_CONS"));   // consulenti del noleggio: come Consulenza, scheda accanto a RENT
         DEFAULTS.put("SERVICE", Map.of("SERVICE", "FULL"));
     }
 

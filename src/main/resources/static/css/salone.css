@@ -463,3 +463,18 @@ details.sa-in-note div { margin-top:6px; white-space:pre-wrap; line-height:1.5; 
 .sa-link:hover { color:var(--sa-acc); }
 .sa-arr-i { width:22px; text-align:center; }
 .sa-arr-m footer .sa-arr-csv { margin-right:auto; }
+.sa-in-a .sa-pren-b { background:var(--sa-warn); color:#2a1700; }
+/* ---- Vendita / Noleggio ---- */
+.sa-rep-h { margin:12px 0 6px; font-size:11px; font-weight:800; letter-spacing:1px; text-transform:uppercase; color:var(--sa-ink2); display:flex; align-items:center; gap:6px; }
+.sa-rep-h:first-child { margin-top:0; }
+.sa-stati-h + .sa-rep-h { margin-top:14px; }
+.sa-rep-h.sm { margin:12px 0 4px; font-size:10.5px; }
+.sa-rep-h em { font-style:normal; margin-left:auto; color:var(--sa-ink); }
+.sa-tag.sa-tag-nol { background:rgba(240,192,64,.16); color:#f6d77a; }
+.sa-arr-c b em.sa-altro { color:var(--sa-ink2); }
+#saCons .sa-chips { margin-bottom:4px; }
+
+/* scheda "APPUNTAMENTI E INGRESSI" nella barra in alto (es. Noleggio): numero di clienti che aspettano */
+#navSaloneTab { position:relative; }
+.sa-tab-n { position:absolute; top:-4px; right:-6px; min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:#ef4444; color:#fff; font-style:normal; font-size:11px; font-weight:900; display:inline-flex; align-items:center; justify-content:center; }
+.sa-tab-n[hidden] { display:none; }

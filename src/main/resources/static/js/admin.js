@@ -308,17 +308,17 @@ function tipDi(section, level) {
 }
 const escAttr = t => String(t).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 // dati per le panoramiche (permessi dei ruoli + operatori con le eccezioni): riletti ogni volta che si apre
-async function datiPermessi() {
+async function permDati() {
     const [pm, op] = await Promise.all([fetch('/api/permissions'), fetch('/api/permissions/operators')]);
     if (!pm.ok) throw new Error('Permessi non disponibili');
     const dm = await pm.json(), dop = op.ok ? await op.json() : { users: [] };
     return { matrix: dm.matrix || {}, roles: dm.roles || [], users: dop.users || [] };
 }
-const escH = t => String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-const nomeSez = sec => sec.label.split(' · ')[0].replace(/\s*\(.*\)$/, '');
+const permEsc = t => String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const permNomeSez = sec => sec.label.split(' · ')[0].replace(/\s*\(.*\)$/, '');
 // badge colorato del livello (stessi colori dei pulsanti della tabella)
-const badgeLiv = (section, v) => { const m = levelMetaFor(section)[v] || { icon: '?', label: v }; return `<span class="perm-lv lv-${v}">${m.icon} ${m.label}</span>`; };
-const iniziali = n => String(n || '?').trim().split(/\s+/).slice(0, 2).map(x => x[0]).join('').toUpperCase();
+const permBadge = (section, v) => { const m = levelMetaFor(section)[v] || { icon: '?', label: v }; return `<span class="perm-lv lv-${v}">${m.icon} ${m.label}</span>`; };
+const permIniziali = n => String(n || '?').trim().split(/\s+/).slice(0, 2).map(x => x[0]).join('').toUpperCase();
 // avviso se il file css/permessi.css non e' arrivato al browser (senza, la pagina e' senza stile)
 function avvisoCssPermessi(box) {
     if (!box || getComputedStyle(document.documentElement).getPropertyValue('--perm-css').trim()) return;
@@ -335,8 +335,8 @@ async function apriInfoSezione(key) {
     if (ov) ov.remove();
     ov = document.createElement('div');
     ov.id = 'permInfoOv'; ov.className = 'perm-info-ov';
-    ov.innerHTML = `<div class="perm-info" role="dialog" aria-modal="true" aria-label="${escAttr(nomeSez(sec))}">
-        <header><div class="perm-info-hd"><span class="perm-info-ico">${sec.icon}</span><div><small>PANORAMICA DELLA SEZIONE · ${escH(sec.group.toUpperCase())}</small><h3>${escH(nomeSez(sec))}</h3></div></div>
+    ov.innerHTML = `<div class="perm-info" role="dialog" aria-modal="true" aria-label="${escAttr(permNomeSez(sec))}">
+        <header><div class="perm-info-hd"><span class="perm-info-ico">${sec.icon}</span><div><small>PANORAMICA DELLA SEZIONE · ${permEsc(sec.group.toUpperCase())}</small><h3>${permEsc(permNomeSez(sec))}</h3></div></div>
           <button type="button" data-chiudi aria-label="Chiudi">✕</button></header>
         <div class="perm-info-b"><p class="perm-info-note">Caricamento…</p></div></div>`;
     document.body.appendChild(ov);
@@ -346,7 +346,7 @@ async function apriInfoSezione(key) {
     ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-chiudi]')) chiudi(); });
     const corpo = ov.querySelector('.perm-info-b');
     let D;
-    try { D = await datiPermessi(); } catch (e) { corpo.innerHTML = `<p class="perm-info-note">${escH(e.message)}</p>`; return; }
+    try { D = await permDati(); } catch (e) { corpo.innerHTML = `<p class="perm-info-note">${permEsc(e.message)}</p>`; return; }
     if (!document.body.contains(ov)) return;
 
     const metas = levelMetaFor(key), livelli = Object.keys(metas);
@@ -374,12 +374,12 @@ async function apriInfoSezione(key) {
         const ruoli = D.roles.filter(r => livRuolo(r) === l);
         const n = ops.filter(o => o.v === l).length;
         const desc = key === 'SALONE' && l !== 'NONE'
-            ? `<ul class="perm-caps">${SALONE_CAPS.map(([t, v]) => `<li class="${v[l] ? 'si' : 'no'}">${v[l] ? '✓' : '✗'} ${escH(t)}${typeof v[l] === 'string' ? ` <small>(${escH(v[l])})</small>` : ''}</li>`).join('')}</ul>`
-            : `<p>${escH(descrizioneLivello(key, l))}</p>`;
+            ? `<ul class="perm-caps">${SALONE_CAPS.map(([t, v]) => `<li class="${v[l] ? 'si' : 'no'}">${v[l] ? '✓' : '✗'} ${permEsc(t)}${typeof v[l] === 'string' ? ` <small>(${permEsc(v[l])})</small>` : ''}</li>`).join('')}</ul>`
+            : `<p>${permEsc(descrizioneLivello(key, l))}</p>`;
         return `<div class="perm-livcard lc-${l} ${ruoli.length || n ? '' : 'vuoto'}">
-            <div class="perm-livcard-h">${badgeLiv(key, l)}<span class="perm-livcard-n">${n} operator${n === 1 ? 'e' : 'i'}</span></div>
+            <div class="perm-livcard-h">${permBadge(key, l)}<span class="perm-livcard-n">${n} operator${n === 1 ? 'e' : 'i'}</span></div>
             ${desc}
-            <div class="perm-chips">${ruoli.length ? ruoli.map(r => `<span class="perm-chip">${escH(formatRole(r))}</span>`).join('') : '<span class="perm-chip muto">nessun ruolo</span>'}</div>
+            <div class="perm-chips">${ruoli.length ? ruoli.map(r => `<span class="perm-chip">${permEsc(formatRole(r))}</span>`).join('') : '<span class="perm-chip muto">nessun ruolo</span>'}</div>
           </div>`;
     }).join('');
 
@@ -388,13 +388,13 @@ async function apriInfoSezione(key) {
     corpo.innerHTML = `${intro ? `<p class="perm-info-intro">${intro}</p>` : ''}${tiles}
         <h4 class="perm-h4">Cosa permette ogni livello e chi ce l’ha</h4>
         <div class="perm-livgrid">${perLivello}</div>
-        ${key === 'SALONE' ? `<p class="perm-info-note">${escH(SALONE_NOTE)}</p>` : ''}
+        ${key === 'SALONE' ? `<p class="perm-info-note">${permEsc(SALONE_NOTE)}</p>` : ''}
         <h4 class="perm-h4">Operatori <span>(${ops.length})</span><input type="search" class="perm-cerca" placeholder="Cerca operatore o ruolo…" data-cerca></h4>
         <div class="perm-oplist">${elenco.map(o => `<div class="perm-oprow ${o.v === 'NONE' ? 'off' : ''}" data-txt="${escAttr((o.u.fullName + ' ' + (o.u.email || '') + ' ' + formatRole(o.u.role)).toLowerCase())}">
-            <span class="perm-av">${escH(iniziali(o.u.fullName))}</span>
-            <div class="perm-opn"><b>${escH(o.u.fullName)}</b><span>${escH(formatRole(o.u.role))}${o.u.email ? ' · ' + escH(o.u.email) : ''}</span></div>
+            <span class="perm-av">${permEsc(permIniziali(o.u.fullName))}</span>
+            <div class="perm-opn"><b>${permEsc(o.u.fullName)}</b><span>${permEsc(formatRole(o.u.role))}${o.u.email ? ' · ' + permEsc(o.u.email) : ''}</span></div>
             ${o.eccezione ? `<em class="perm-ecc" title="Il suo ruolo avrebbe: ${escAttr((metas[o.base] || {}).label || o.base)}">🛡️ eccezione personale</em>` : ''}
-            ${badgeLiv(key, o.v)}</div>`).join('') || '<p class="perm-info-note">Nessun operatore.</p>'}</div>`;
+            ${permBadge(key, o.v)}</div>`).join('') || '<p class="perm-info-note">Nessun operatore.</p>'}</div>`;
     const cerca = corpo.querySelector('[data-cerca]');
     cerca?.addEventListener('input', () => {
         const q = cerca.value.trim().toLowerCase();
@@ -461,18 +461,18 @@ const ROLE_INFO = {
     MODERATORE: 'Moderatore: ruolo di coordinamento. Cosa vede e cosa fa lo decidono i permessi qui sotto.',
     GESTORE: 'Gestore: ruolo di responsabilità. Cosa vede e cosa fa lo decidono i permessi qui sotto.',
     ADMIN: 'Admin: accesso a tutto, gestisce utenti e permessi; unico che può eliminare lo storico del salone.',
-    NOLEGGIO: 'Noleggio: lavora le richieste del Rent.',
+    NOLEGGIO: 'Noleggio: lavora le richieste del Rent. I consulenti del noleggio di Agnano (Raffaele Crispo, Francesco Sementa) hanno Appuntamenti e ingressi come scheda nella barra in alto accanto a RENT, con il profilo Consulenza: il proprio stato, i propri clienti, gli appuntamenti del noleggio e la chat.',
     SERVICE: 'Service: lavora le richieste dell\'assistenza.',
     FRONT_OFFICE: 'Front office del salone: accoglie i clienti, registra i walk-in e li assegna ai consulenti. Entra direttamente in Appuntamenti e ingressi.',
     CONSULENZA: 'Consulenti di vendita del salone: ricevono i clienti assegnati, cambiano il proprio stato e usano la chat. Entrano direttamente in Appuntamenti e ingressi.'
 };
-const ROLE_ICO = { UTENTE: '🎧', BACK_OFFICE: '🗂️', MODERATORE: '🧭', GESTORE: '📈', ADMIN: '🛡️', NOLEGGIO: '🚗', SERVICE: '🔧', FRONT_OFFICE: '🛎️', CONSULENZA: '🤝' };
+const PERM_ROLE_ICO = { UTENTE: '🎧', BACK_OFFICE: '🗂️', MODERATORE: '🧭', GESTORE: '📈', ADMIN: '🛡️', NOLEGGIO: '🚗', SERVICE: '🔧', FRONT_OFFICE: '🛎️', CONSULENZA: '🤝' };
 let infoRuoliDati = null, infoRuoloScelto = null;
 async function loadInfoRuoli() {
     const box = document.getElementById('infoRuoliContainer'); if (!box) return;
     if (!infoRuoliDati) box.innerHTML = '<div class="empty-state"><p>Caricamento…</p></div>';
-    try { infoRuoliDati = await datiPermessi(); }
-    catch (e) { box.innerHTML = `<div class="empty-state"><p>${escH(e.message)}</p></div>`; return; }
+    try { infoRuoliDati = await permDati(); }
+    catch (e) { box.innerHTML = `<div class="empty-state"><p>${permEsc(e.message)}</p></div>`; return; }
     renderInfoRuoli(box, infoRuoliDati.matrix, infoRuoliDati.roles, infoRuoliDati.users);
 }
 function renderInfoRuoli(box, matrix, roles, users) {
@@ -487,8 +487,8 @@ function renderInfoRuoli(box, matrix, roles, users) {
     const tessere = roles.map(r => {
         const x = riassunto(r);
         return `<button type="button" class="perm-rtile ${r === infoRuoloScelto ? 'on' : ''}" data-ruolo="${r}" aria-pressed="${r === infoRuoloScelto}">
-            <span class="perm-rtile-i">${ROLE_ICO[r] || '👤'}</span>
-            <span class="perm-rtile-t"><b>${escH(formatRole(r))}</b><small>${x.vis.length} sezion${x.vis.length === 1 ? 'e' : 'i'} · ${x.persone.length} operator${x.persone.length === 1 ? 'e' : 'i'}</small></span>
+            <span class="perm-rtile-i">${PERM_ROLE_ICO[r] || '👤'}</span>
+            <span class="perm-rtile-t"><b>${permEsc(formatRole(r))}</b><small>${x.vis.length} sezion${x.vis.length === 1 ? 'e' : 'i'} · ${x.persone.length} operator${x.persone.length === 1 ? 'e' : 'i'}</small></span>
           </button>`;
     }).join('');
 
@@ -500,31 +500,31 @@ function renderInfoRuoli(box, matrix, roles, users) {
         const S = PERMISSION_SECTIONS.filter(s => s.group === g);
         const si = S.filter(s => liv(role, s.key) !== 'NONE'), no = S.filter(s => liv(role, s.key) === 'NONE');
         return `<section class="perm-area ${si.length ? '' : 'vuota'}">
-            <h5>${escH(g)} <span>${si.length}/${S.length}</span></h5>
+            <h5>${permEsc(g)} <span>${si.length}/${S.length}</span></h5>
             ${si.map(s => {
                 const v = liv(role, s.key);
                 const d = s.key === 'SALONE'
-                    ? `<ul class="perm-caps">${SALONE_CAPS.filter(c => c[1][v]).map(([t, c]) => `<li class="si">✓ ${escH(t)}${typeof c[v] === 'string' ? ` <small>(${escH(c[v])})</small>` : ''}</li>`).join('')}</ul>`
-                    : `<p>${escH(descrizioneLivello(s.key, v))}</p>`;
+                    ? `<ul class="perm-caps">${SALONE_CAPS.filter(c => c[1][v]).map(([t, c]) => `<li class="si">✓ ${permEsc(t)}${typeof c[v] === 'string' ? ` <small>(${permEsc(c[v])})</small>` : ''}</li>`).join('')}</ul>`
+                    : `<p>${permEsc(descrizioneLivello(s.key, v))}</p>`;
                 return `<div class="perm-sezcard lc-${v}">
-                    <div class="perm-sezcard-h"><button type="button" class="perm-sec" onclick="apriInfoSezione('${s.key}')" title="Panoramica della sezione">${s.icon} ${escH(nomeSez(s))} <span class="perm-i">ⓘ</span></button>${badgeLiv(s.key, v)}</div>${d}</div>`;
+                    <div class="perm-sezcard-h"><button type="button" class="perm-sec" onclick="apriInfoSezione('${s.key}')" title="Panoramica della sezione">${s.icon} ${permEsc(permNomeSez(s))} <span class="perm-i">ⓘ</span></button>${permBadge(s.key, v)}</div>${d}</div>`;
             }).join('')}
-            ${no.length ? `<p class="perm-nonvede">🚫 Non vede: ${no.map(s => `<button type="button" class="perm-sec" onclick="apriInfoSezione('${s.key}')">${escH(nomeSez(s))}</button>`).join(', ')}</p>` : ''}
+            ${no.length ? `<p class="perm-nonvede">🚫 Non vede: ${no.map(s => `<button type="button" class="perm-sec" onclick="apriInfoSezione('${s.key}')">${permEsc(permNomeSez(s))}</button>`).join(', ')}</p>` : ''}
           </section>`;
     }).join('');
     const operatori = x.persone.length ? x.persone.map(u => {
         const ecc = Object.entries(u.overrides || {}).map(([k, v]) => {
             const s = PERMISSION_SECTIONS.find(p => p.key === k);
-            return s ? `<li>${s.icon} ${escH(nomeSez(s))}: ${badgeLiv(k, valoreVisto(k, v, u.role))} <small>invece di ${escH((levelMetaFor(k)[liv(role, k)] || {}).label || liv(role, k))}</small></li>` : '';
+            return s ? `<li>${s.icon} ${permEsc(permNomeSez(s))}: ${permBadge(k, valoreVisto(k, v, u.role))} <small>invece di ${permEsc((levelMetaFor(k)[liv(role, k)] || {}).label || liv(role, k))}</small></li>` : '';
         }).join('');
-        return `<div class="perm-opcard"><span class="perm-av">${escH(iniziali(u.fullName))}</span>
-            <div><b>${escH(u.fullName)}</b><span>${escH(u.email || '')}</span>${ecc ? `<ul class="perm-ecc-l">${ecc}</ul>` : '<em>Segue i permessi del ruolo</em>'}</div></div>`;
+        return `<div class="perm-opcard"><span class="perm-av">${permEsc(permIniziali(u.fullName))}</span>
+            <div><b>${permEsc(u.fullName)}</b><span>${permEsc(u.email || '')}</span>${ecc ? `<ul class="perm-ecc-l">${ecc}</ul>` : '<em>Segue i permessi del ruolo</em>'}</div></div>`;
     }).join('') : '<p class="perm-info-note">Nessun operatore con questo ruolo.</p>';
 
     box.innerHTML = `<div class="perm-ir">
         <aside class="perm-ir-side"><p class="perm-ir-lab">RUOLI</p>${tessere}</aside>
         <div class="perm-ir-main">
-          <div class="perm-ir-hd"><span class="perm-ir-ico">${ROLE_ICO[role] || '👤'}</span><div><small>RUOLO</small><h3>${escH(formatRole(role))}</h3><p>${escH(ROLE_INFO[role] || '')}</p></div></div>
+          <div class="perm-ir-hd"><span class="perm-ir-ico">${PERM_ROLE_ICO[role] || '👤'}</span><div><small>RUOLO</small><h3>${permEsc(formatRole(role))}</h3><p>${permEsc(ROLE_INFO[role] || '')}</p></div></div>
           <div class="perm-tiles">
             <div><b>${x.vis.length}<small>/${PERMISSION_SECTIONS.length}</small></b><span>sezioni che vede</span></div>
             <div><b>${x.mod.length}</b><span>in cui può modificare</span></div>
@@ -718,8 +718,14 @@ async function resetOperatorPermissions(userId) {
     }
 }
 
+// togliere un accesso al PROPRIO ruolo / a se stessi fa sparire la voce anche dal proprio menu: si chiede conferma
+function confermaTogliAMe(section, chi) {
+    const sec = PERMISSION_SECTIONS.find(s => s.key === section);
+    return confirm(`Stai togliendo ${chi} l'accesso a "${sec ? permNomeSez(sec) : section}".\nLa voce sparirà anche dal TUO menu.\n\nVuoi continuare?`);
+}
 async function setPermission(role, section, access, btnEl) {
     const group = btnEl?.closest('.permission-cell-group');
+    if (access === 'NONE' && role === currentUser?.role && !confermaTogliAMe(section, 'al tuo ruolo (' + formatRole(role) + ')')) return;
     try {
         const res = await fetch('/api/permissions', {
             method: 'PUT',
@@ -963,6 +969,7 @@ function renderOperatorChartOverrides(u) {
 
 async function setOperatorPermission(userId, section, access, btnEl) {
     const group = btnEl?.closest('.permission-cell-group');
+    if (access === 'NONE' && userId === currentUser?.id && !confermaTogliAMe(section, 'a te stesso')) return;
     try {
         const res = await fetch('/api/permissions/operators', {
             method: 'PUT',
