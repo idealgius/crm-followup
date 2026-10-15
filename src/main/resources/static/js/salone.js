@@ -102,7 +102,7 @@
     function refreshNav() {
         const b = document.getElementById('navSalone');
         if (b) b.style.display = can() && moderatoreSu() ? 'flex' : 'none';
-        if (can()) { avviaNotifiche(); Presenza.avvia(); Chat.mostra(true); }   // chat in TUTTO il CRM (se il profilo ce l'ha)
+        if (can()) { avviaNotifiche(); Presenza.avvia(); Chat.ascolta(); }   // la chat si vede solo nel salone, ma i messaggi suonano ovunque
         scheda = usaScheda();
         Scheda.mostra(scheda);
         if (aperta) setTimeout(Menu.entra, 0);   // app.js rimette il menu ☰ dopo refreshNav: lo risistemo
@@ -329,6 +329,7 @@
         Scheda.attiva(false);
         aperta = false;
         Menu.esci();
+        Chat.mostra(false);                     // il pulsante della chat solo dentro Appuntamenti e ingressi
     }
 
     /* ================= pagina ================= */
@@ -379,7 +380,7 @@
             st.ingressi = d.ingressi || []; st.consulenti = d.consulenti || []; if (d.reparti) st.reparti = d.reparti; st.puoGestire = !!d.puoGestire; st.io = d.io || null;
             st.vedeTutti = !!d.vedeTutti; st.vedeReport = !!d.vedeReport; st.puoImportare = !!d.puoImportare;
             st.chat = !!d.chat;
-            if (!st.chat) Chat.mostra(false);      // profilo senza chat (Solo visione, Visione + report)
+            if (aperta) Chat.mostra(st.chat);      // chat: solo nel salone e solo per i profili che ce l'hanno
             st.giorni = m.giorni || {};
             st.err = '';
             if (eraRep !== st.vedeReport && root) disegnaSchede();
@@ -1779,7 +1780,7 @@
         '👍', '👎', '👌', '✌️', '🤞', '👏', '🙌', '🙏', '💪', '👋', '🤝', '👀', '❤️', '🧡', '💛', '💚', '💙', '💜', '🔥', '⭐', '✨', '🎉', '✅', '❌', '⚠️', '❗', '❓', '💯', '⏰', '📞', '📅', '📝', '💶', '🚗', '🚙', '🔑', '🏁', '☕', '🍕'];
     const RAPIDE = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
     const Chat = (function () {
-        let el = null, aperto = false, conv = null, dopo = 0, timer = null, io = null, utenti = [], risposta = null, caricata = false;
+        let el = null, aperto = false, conv = null, dopo = 0, timer = null, io = null, utenti = [], risposta = null, caricata = false, vietata = false;
         const msgs = {}, nonLetti = {};
         const nomeConv = k => k === 'GRUPPO' ? '👥 Gruppo salone' : (() => { const [, a, b] = k.split('_').map(Number); const altro = io && a === io.id ? b : a; const u = utenti.find(x => x.id === altro); return u ? u.nome : 'Chat privata'; })();
         const convCon = id => 'P_' + Math.min(io.id, id) + '_' + Math.max(io.id, id);
@@ -1813,9 +1814,11 @@
         }
         function mostra(on) {
             if (on && !can()) return;
-            crea(); el.style.display = on ? '' : 'none';
-            if (on) avvia(); else { clearInterval(timer); timer = null; }
+            crea(); el.style.display = on && !vietata ? '' : 'none';
+            if (on) avvia();
         }
+        // fuori dal salone il pulsante non si vede, ma i messaggi continuano ad arrivare (suono, notifica, titolo)
+        function ascolta() { if (!can()) return; crea(); if (!aperta) el.style.display = 'none'; avvia(); }
         function apri(on) {
             aperto = on;
             el.querySelector('.sa-chat-fab').hidden = on;
@@ -1823,9 +1826,9 @@
             if (on) { vista(); if (conv) segnaLetto(conv); }
         }
         async function avvia() {
-            if (timer) return;
+            if (timer || vietata) return;
             try { const d = await api('/chat/utenti'); utenti = d.utenti || []; io = d.io; }
-            catch (e) { if (/chat/i.test(e.message)) { el.style.display = 'none'; return; } }
+            catch (e) { if (/chat/i.test(e.message)) { vietata = true; el.style.display = 'none'; return; } }
             await giro();
             timer = setInterval(giro, 3000);
         }
@@ -1856,7 +1859,7 @@
                 // messaggio nuovo di un altro: suono, avviso in alto, notifica del browser (non se sto gia' leggendo quella chat)
                 const leggo = k => aperto && conv === k && document.visibilityState === 'visible';
                 const daAvvisare = nuovi.filter(([k]) => !leggo(k));
-                if (daAvvisare.length) Avviso.messaggio(daAvvisare, k => { apri(true); entra(k); });
+                if (daAvvisare.length) Avviso.messaggio(daAvvisare, k => { if (!aperta) open(); apri(true); entra(k); });   // clic sulla notifica: si va nel salone con la chat aperta
                 caricata = true;
                 badge();
                 if (aperto) { if (conv) { if (cambiato) disegnaMsgs(); if (nonLetti[conv] === 0 && cambiato) segnaLetto(conv); } else vista(); }
@@ -1943,7 +1946,7 @@
             try { const d = await post('/chat/messaggi', { conv, testo, rispostaA: rid }); (msgs[conv] = msgs[conv] || []).push(d.messaggio); disegnaMsgs(); el.querySelector('.sa-chat-msgs').scrollTop = 1e9; }
             catch (e) { ta.value = testo; alert('Messaggio non inviato: ' + e.message); }
         }
-        return { mostra };
+        return { mostra, ascolta };
     })();
 
     window.Salone = { can, canFull, entraDiretto, refreshNav, open, hide };
