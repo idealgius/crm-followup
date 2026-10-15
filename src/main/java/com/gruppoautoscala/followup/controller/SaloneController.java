@@ -25,15 +25,9 @@ import java.util.regex.Pattern;
  * (Europe/Rome, ora legale compresa): campi "...It" es. "14/10/2026 16:46:12".
  *
  * CHI VEDE COSA (voce "Appuntamenti e ingressi" della pagina Permessi, a livelli)
- *  - Livello 1 (Solo lettura): vede tutti i walk-in e gli appuntamenti, non registra e non importa.
- *    Il ruolo Consulenza a questo livello vede solo i propri clienti e appuntamenti.
- *  - Livello 2 (Completo): registra e assegna i walk-in, importa gli appuntamenti, storico import,
- *    cambia lo stato degli altri consulenti
- *  - Livello 3 (Accesso Admin): come il livello 2 + scheda Report
- *  - Livello 4: come il livello 3 + chat del salone
- *  CHAT: livello 4, oppure ruoli Front Office / Consulenza / Back Office a qualunque livello.
- *        Gli altri (livelli 1-3) non la vedono e non possono ricevere messaggi.
- *  Iniziali: Admin livello 4 · Front Office livello 2 (+ chat) · Consulenza livello 1 (solo i propri, + chat)
+ *  PROFILI (vedi profilo() piu' sotto): Consulenza · Solo visione · Front office · Visione + report · Completo
+ *  Iniziali: Admin Completo · Front Office Front office · Consulenza Consulenza · altri Nessuno
+ *  CHAT: Consulenza, Front office, Completo. Gli altri non la vedono e non possono ricevere messaggi.
  *
  * WALK-IN
  *  GET   /api/salone/ingressi?data=2026-10-14   -> ingressi del giorno + consulenti + permessi
@@ -52,7 +46,8 @@ import java.util.regex.Pattern;
  *  Se a quell'ora e' ancora Occupato senza aver cambiato stato, alla Consulenza compare "sei nuovamente
  *  disponibile?" (salone.js): No = +10 minuti, Si' o nessuna risposta in 60 secondi = Disponibile.
  *  Ogni cambio finisce nello storico SALONE_STATI_LOG_<aaaa-mm> con la durata dello stato precedente.
- *  A fine giornata lo stato rimasto aperto viene chiuso alle 21:00 (CHIUSURA) e il giorno dopo si riparte da zero.
+ *  Orari del salone (ORARI): lun-ven 8:30-20:00, sab 8:30-13:30 e 15:00-18:00, dom 10:30-13:00.
+ *  A ogni chiusura gli stati rimasti accesi si chiudono da soli; fuori orario nessuno diventa disponibile da solo.
  *
  * APPUNTAMENTI (da import CSV, solo sede Gruppo Auto Scala srl = Agnano)
  *  GET   /api/salone/appuntamenti?data=          -> appuntamenti del giorno
@@ -86,7 +81,26 @@ public class SaloneController {
     private static final ZoneId ITALY = ZoneId.of("Europe/Rome");
     private static final DateTimeFormatter IT_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss");
     /** ora oltre la quale uno stato dimenticato aperto viene chiuso in automatico */
-    private static final LocalTime CHIUSURA = LocalTime.of(21, 0);
+    /** ORARI DEL SALONE (ora italiana). Fuori orario nessuno diventa Disponibile da solo; alla fine di ogni
+     *  fascia gli stati rimasti accesi si chiudono (sabato anche alle 13:30, poi alle 15:00 si riparte). */
+    private static final Map<DayOfWeek, List<LocalTime[]>> ORARI = new EnumMap<>(DayOfWeek.class);
+    static {
+        List<LocalTime[]> feriale = List.<LocalTime[]>of(new LocalTime[]{ LocalTime.of(8, 30), LocalTime.of(20, 0) });
+        for (DayOfWeek d : List.of(DayOfWeek.MONDAY, DayOfWeek.TUESDAY, DayOfWeek.WEDNESDAY, DayOfWeek.THURSDAY, DayOfWeek.FRIDAY)) ORARI.put(d, feriale);
+        ORARI.put(DayOfWeek.SATURDAY, List.of(new LocalTime[]{ LocalTime.of(8, 30), LocalTime.of(13, 30) }, new LocalTime[]{ LocalTime.of(15, 0), LocalTime.of(18, 0) }));
+        ORARI.put(DayOfWeek.SUNDAY, List.<LocalTime[]>of(new LocalTime[]{ LocalTime.of(10, 30), LocalTime.of(13, 0) }));
+    }
+    /** ora dell'ultima chiusura di quel giorno (null = salone chiuso tutto il giorno) */
+    private static Instant fineGiorno(LocalDate g) {
+        List<LocalTime[]> l = ORARI.getOrDefault(g.getDayOfWeek(), List.of());
+        return l.isEmpty() ? null : g.atTime(l.get(l.size() - 1)[1]).atZone(ITALY).toInstant();
+    }
+    /** la fascia di apertura in cui cade quel momento, oppure null se il salone e' chiuso */
+    private static LocalTime[] fascia(ZonedDateTime t) {
+        LocalTime h = t.toLocalTime();
+        for (LocalTime[] f : ORARI.getOrDefault(t.getDayOfWeek(), List.of())) if (!h.isBefore(f[0]) && h.isBefore(f[1])) return f;
+        return null;
+    }
     private static final int MAX_MSG = 1500;
     private static final int MAX_STORICO = 150;
     private static final Object LOCK = new Object();
@@ -110,32 +124,54 @@ public class SaloneController {
         Long id = (Long) s.getAttribute("userId");
         if (id == null) return null;
         String role = (String) s.getAttribute("userRole");
+        return new Chi(id, role, nomeUtente(id), rolePermissionService.getEffectiveAccess(id, role, SEZ));
+    }
+    /** nome dell'utente tenuto in memoria 10 minuti: le pagine del salone chiamano il server ogni pochi secondi */
+    private static final Map<Long, Object[]> NOMI = new java.util.concurrent.ConcurrentHashMap<>();
+    private String nomeUtente(Long id) {
+        Object[] v = NOMI.get(id);
+        if (v != null && System.currentTimeMillis() - (long) v[1] < 600_000) return (String) v[0];
         String nome = userRepository.findById(id).map(User::getFullName).orElse("");
-        return new Chi(id, role, nome, rolePermissionService.getEffectiveAccess(id, role, SEZ));
+        NOMI.put(id, new Object[]{ nome, System.currentTimeMillis() });
+        return nome;
     }
-    private boolean vede(Chi c) { return c != null && rolePermissionService.hasAtLeast(c.acc(), "READ_ONLY"); }
-    private boolean gestisce(Chi c) { return c != null && rolePermissionService.hasAtLeast(c.acc(), "FULL"); }
-    /** Admin e Front Office vedono tutto; Consulenza solo i propri clienti */
-    /** LIVELLI della voce "Appuntamenti e ingressi" (pagina Permessi):
-     *  Livello 1 = Solo lettura  -> vede tutto come il Front Office, ma non registra walk-in e non importa
-     *                               (ruolo Consulenza a questo livello: solo i propri clienti e appuntamenti)
-     *  Livello 2 = Completo      -> registra e assegna walk-in, importa gli appuntamenti, cambia lo stato degli altri
-     *  Livello 3 = Accesso Admin -> come il 2 + scheda Report */
-    private boolean vedeTutti(Chi c) {
-        if (gestisce(c)) return true;
-        return vede(c) && !"CONSULENZA".equalsIgnoreCase(c.role());
+    /* PROFILI di "Appuntamenti e ingressi" (pagina Permessi; i nomi uguali in admin.js):
+     *  S_CONS Consulenza       solo i propri walk-in e appuntamenti + chat
+     *  S_VIS  Solo visione      tutti i walk-in e appuntamenti, senza chat
+     *  S_FO   Front office      tutti i walk-in e appuntamenti + chat, registra e assegna i walk-in, importa (NON cambia lo stato degli altri)
+     *  S_REP  Visione + report  tutto in visione + scheda Report, senza chat
+     *  S_ALL  Completo          tutto (registra, importa, report) + chat
+     * Il proprio stato e la presa in carico dei propri clienti valgono per chiunque sia uno degli 8 consulenti.
+     * Elimina storico: solo il ruolo Admin. Domanda dei 15 minuti: solo il ruolo Consulenza.
+     * I vecchi livelli gia' salvati si traducono: READ_ONLY -> Consulenza (ruolo Consulenza) o Solo visione,
+     * FULL -> Front office, ADMIN_FULL -> Visione + report, LIVELLO_4 -> Completo. */
+    static String profilo(String acc, String role) {
+        if (acc == null) return "NONE";
+        switch (acc) {
+            case "S_CONS": case "S_VIS": case "S_FO": case "S_REP": case "S_ALL": return acc;
+            case "S_BO": return "S_FO";                     // profilo provato e tolto: vale come Front office
+            case "READ_ONLY": return "CONSULENZA".equalsIgnoreCase(role) ? "S_CONS" : "S_VIS";
+            case "FULL": return "S_FO";
+            case "ADMIN_FULL": return "S_REP";
+            case "LIVELLO_4": return "S_ALL";
+            default: return "NONE";
+        }
     }
-    private boolean report(Chi c) { return c != null && rolePermissionService.hasAtLeast(c.acc(), "ADMIN_FULL"); }
-    private static String livello(String acc) {
-        return switch (acc == null ? "" : acc) { case "LIVELLO_4" -> "4"; case "ADMIN_FULL" -> "3"; case "FULL" -> "2"; case "READ_ONLY" -> "1"; default -> "0"; };
+    private static String prof(Chi c) { return c == null ? "NONE" : profilo(c.acc(), c.role()); }
+    private boolean vede(Chi c) { return !"NONE".equals(prof(c)); }
+    /** registra e assegna i walk-in, importa gli appuntamenti */
+    private boolean gestisce(Chi c) { String p = prof(c); return p.equals("S_FO") || p.equals("S_ALL"); }
+    /** vede i walk-in e gli appuntamenti di tutti (la Consulenza solo i propri) */
+    private boolean vedeTutti(Chi c) { return vede(c) && !"S_CONS".equals(prof(c)); }
+    private boolean report(Chi c) { String p = prof(c); return p.equals("S_REP") || p.equals("S_ALL"); }
+    /** cambia lo stato degli altri consulenti (anche "Segna preso in carico" per loro): solo il profilo Completo */
+    private boolean cambiaAltri(Chi c) { return "S_ALL".equals(prof(c)); }
+    private static String livello(String p) {
+        return switch (p) { case "S_CONS" -> "Consulenza"; case "S_VIS" -> "Solo visione";
+            case "S_FO" -> "Front office"; case "S_REP" -> "Visione + report"; case "S_ALL" -> "Completo"; default -> "Nessuno"; };
     }
-    /** CHAT del salone: livello 4, oppure i ruoli del salone (permesso speciale, a qualunque livello).
-     *  Livelli 1, 2 e 3 degli altri ruoli: la chat non la vedono e non possono ricevere messaggi. */
-    private static final Set<String> RUOLI_CHAT = Set.of("FRONT_OFFICE", "CONSULENZA", "BACK_OFFICE");
-    private boolean chatOk(String acc, String role) {
-        if (!rolePermissionService.hasAtLeast(acc, "READ_ONLY")) return false;
-        return rolePermissionService.hasAtLeast(acc, "LIVELLO_4") || (role != null && RUOLI_CHAT.contains(role.toUpperCase(Locale.ROOT)));
-    }
+    private static final Set<String> PROFILI_CHAT = Set.of("S_CONS", "S_FO", "S_ALL");
+    private boolean chatOk(String acc, String role) { return PROFILI_CHAT.contains(profilo(acc, role)); }
     private boolean chat(Chi c) { return c != null && chatOk(c.acc(), c.role()); }
     private ResponseEntity<?> noChat(Chi c) {
         return c == null ? no(null) : ResponseEntity.status(403).body(Map.of("error", "La chat del salone non e' attiva per il tuo livello"));
@@ -144,7 +180,10 @@ public class SaloneController {
         return c == null ? ResponseEntity.status(401).body(Map.of("error", "Non autenticato"))
                          : ResponseEntity.status(403).body(Map.of("error", "Non hai il permesso per Appuntamenti e ingressi"));
     }
-    private static ResponseEntity<?> soloLivello(int n) { return ResponseEntity.status(403).body(Map.of("error", "Serve il livello " + n + " su Appuntamenti e ingressi")); }
+    private static ResponseEntity<?> soloLivello(int n) {
+        return ResponseEntity.status(403).body(Map.of("error", n >= 3 ? "Serve il profilo \"Visione + report\" o \"Completo\" su Appuntamenti e ingressi"
+            : "Serve il profilo \"Front office\" o \"Completo\" su Appuntamenti e ingressi"));
+    }
     private static String norm(String s) { return s == null ? "" : s.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " "); }
     private static String str(Object o) { return o == null ? "" : String.valueOf(o).trim(); }
     /** stesso nome anche se scritto "Cognome Nome" o con maiuscole diverse */
@@ -170,20 +209,38 @@ public class SaloneController {
         try { return LocalDate.parse(g).toString(); } catch (Exception e) { return oggi(); }
     }
 
-    /* ================= archivio (consegne_dataset) ================= */
+    /* ================= archivio (consegne_dataset) =================
+     * NUOVO: tutto quello che il salone legge sta anche IN MEMORIA nel server (CACHE). Il database si legge
+     * una sola volta per chiave e si riscrive solo quando qualcosa cambia: le pagine aperte chiedono
+     * aggiornamenti ogni pochi secondi e prima ogni richiesta rileggeva il database (traffico Supabase).
+     * Vale con un solo server (Railway con 1 istanza, come adesso). */
+    private record Voce(String json, Integer righe, ConsegneDataset ent) { }
+    private static final Map<String, Optional<Voce>> CACHE = new java.util.concurrent.ConcurrentHashMap<>();
+    private Optional<Voce> voce(String key) {
+        Optional<Voce> v = CACHE.get(key);
+        if (v != null) return v;
+        v = repository.findById(key).map(d -> new Voce(d.getContenuto(), d.getRighe(), d));
+        CACHE.put(key, v);
+        return v;
+    }
+    private static boolean pieno(Optional<Voce> v) { return v.isPresent() && v.get().righe() != null && v.get().righe() > 0; }
     private List<Map<String, Object>> leggi(String key) {
-        return repository.findById(key).map(d -> {
-            try { return objectMapper.readValue(d.getContenuto(), new TypeReference<List<Map<String, Object>>>() {}); }
+        return voce(key).map(v -> {
+            try { return objectMapper.readValue(v.json(), new TypeReference<List<Map<String, Object>>>() {}); }
             catch (Exception e) { return new ArrayList<Map<String, Object>>(); }
         }).orElseGet(ArrayList::new);
     }
     private void scrivi(String key, Object lista, int righe, String chi) throws Exception {
-        ConsegneDataset d = repository.findById(key).orElseGet(() -> { ConsegneDataset n = new ConsegneDataset(); n.setTipo(key); return n; });
-        d.setContenuto(objectMapper.writeValueAsString(lista));
+        String json = objectMapper.writeValueAsString(lista);
+        Optional<Voce> prima = voce(key);
+        if (prima.isPresent() && json.equals(prima.get().json())) return;      // niente di nuovo: non si scrive
+        ConsegneDataset d = prima.map(Voce::ent).orElseGet(() -> { ConsegneDataset n = new ConsegneDataset(); n.setTipo(key); return n; });
+        d.setContenuto(json);
         d.setRighe(righe);
         d.setAggiornatoAt(LocalDateTime.now(ITALY));
         d.setAggiornatoDa(chi);
-        repository.save(d);
+        ConsegneDataset salvato = repository.save(d);
+        CACHE.put(key, Optional.of(new Voce(json, righe, salvato)));
     }
 
     /* ================= WALK-IN ================= */
@@ -202,7 +259,7 @@ public class SaloneController {
         out.put("vedeTutti", vedeTutti(c));
         out.put("puoImportare", gestisce(c));
         out.put("vedeReport", report(c));
-        out.put("livello", livello(c.acc()));
+        out.put("livello", livello(prof(c)));
         out.put("chat", chat(c));
         Map<String, Object> io = new LinkedHashMap<>();
         io.put("id", c.id()); io.put("nome", c.nome()); io.put("role", String.valueOf(c.role()));
@@ -220,9 +277,9 @@ public class SaloneController {
         boolean tutti = vedeTutti(c);
         for (int d = 1; d <= ym.lengthOfMonth(); d++) {
             String g = ym.atDay(d).toString();
-            Optional<ConsegneDataset> ds = repository.findById("SALONE_" + g);
-            if (ds.isEmpty() || ds.get().getRighe() == null || ds.get().getRighe() == 0) continue;
-            int n = tutti ? ds.get().getRighe() : (int) leggi("SALONE_" + g).stream().filter(r -> mio(c, r.get("consulente"))).count();
+            Optional<Voce> ds = voce("SALONE_" + g);
+            if (!pieno(ds)) continue;
+            int n = tutti ? ds.get().righe() : (int) leggi("SALONE_" + g).stream().filter(r -> mio(c, r.get("consulente"))).count();
             if (n > 0) out.put(g, n);
         }
         return ResponseEntity.ok(Map.of("mese", ym.toString(), "giorni", out));
@@ -309,7 +366,7 @@ public class SaloneController {
             List<Map<String, Object>> l = leggi("SALONE_" + g);
             Map<String, Object> r = l.stream().filter(x -> id.equals(x.get("id"))).findFirst().orElse(null);
             if (r == null) return ResponseEntity.status(404).body(Map.of("error", "Ingresso non trovato"));
-            if (!mio(c, r.get("consulente")) && !gestisce(c))
+            if (!mio(c, r.get("consulente")) && !cambiaAltri(c))
                 return ResponseEntity.status(403).body(Map.of("error", "Il cliente e' assegnato a un altro consulente"));
             if (r.get("consulente") == null) return ResponseEntity.badRequest().body(Map.of("error", "Il cliente non e' ancora assegnato"));
             boolean prima = r.get("presoAt") == null;
@@ -353,7 +410,7 @@ public class SaloneController {
         scrivi("SALONE_STATI", new ArrayList<>(m.values()), m.size(), chi);
     }
     /** stati di oggi:
-     *  - uno stato rimasto aperto da un giorno precedente (o oltre le 21:00 di oggi) viene chiuso alle 21:00
+     *  - uno stato rimasto acceso oltre la chiusura del salone (ORARI) viene chiuso all'ora di chiusura
      *  - PRESENZA: chi e' diventato disponibile con l'accesso al CRM torna "non in salone" quando
      *    il CRM non e' piu' aperto (finestra chiusa, Esci, sessione scaduta o nuovo deploy) */
     private Map<String, Map<String, Object>> statiOggi() throws Exception {
@@ -365,10 +422,22 @@ public class SaloneController {
         for (Map<String, Object> r : m.values()) {
             Instant dal = inst(r.get("dal"));
             if (r.get("stato") == null || dal == null) continue;
-            LocalDate g = dal.atZone(ITALY).toLocalDate();
-            Instant chiusura = g.atTime(CHIUSURA).atZone(ITALY).toInstant();
-            if (g.isBefore(oggi) || (now.isAfter(chiusura) && dal.isBefore(chiusura))) {
-                spegni(r, dal.isAfter(chiusura) ? dal : chiusura, "sistema", "Fine giornata: chiuso in automatico alle " + CHIUSURA);
+            ZonedDateTime zd = dal.atZone(ITALY);
+            LocalDate g = zd.toLocalDate();
+            LocalTime[] f = fascia(zd);
+            Instant chiudiA = null; String perche = null;
+            if (f != null) {
+                // stato acceso in orario e rimasto acceso oltre la chiusura della fascia: si chiude a quell'ora
+                Instant ff = g.atTime(f[1]).atZone(ITALY).toInstant();
+                if (!now.isBefore(ff)) { chiudiA = ff; perche = "Chiusura del salone alle " + f[1] + ": chiuso in automatico"; }
+            } else {
+                // stato scelto fuori orario (es. nella pausa del sabato): vale fino all'ultima chiusura del giorno
+                Instant fg = fineGiorno(g);
+                if (fg != null && dal.isBefore(fg) && !now.isBefore(fg)) { chiudiA = fg; perche = "Chiusura del salone alle " + fg.atZone(ITALY).toLocalTime() + ": chiuso in automatico"; }
+                else if (g.isBefore(oggi)) { chiudiA = dal; perche = "Fine giornata (stato scelto a salone chiuso)"; }
+            }
+            if (chiudiA != null) {
+                spegni(r, chiudiA, "sistema", perche);
                 cambiato = true;
             } else if (!online(str(r.get("nome")), now)) {
                 // REGOLA: senza un accesso al CRM in corso il consulente risulta "non in salone" (bollino vuoto),
@@ -405,7 +474,6 @@ public class SaloneController {
     private static final long PRESENZA_TIMEOUT_MS = 150_000;   // 2 min e 30: tiene conto delle schede in secondo piano
     private static final long USCITA_RITARDO_MS = 20_000;      // chiusura/ricarica della finestra: 20 s per capire se e' solo un F5
     private static final long AVVIO_MS = System.currentTimeMillis();
-    private static final LocalTime APERTURA = LocalTime.of(8, 0);
     private static final Map<String, Map<String, Long>> FINESTRE = new java.util.concurrent.ConcurrentHashMap<>();
     /** ultimo segnale vero di ogni consulente (per segnare l'uscita all'ora giusta) */
     private static final Map<String, Long> ULTIMO = new java.util.concurrent.ConcurrentHashMap<>();
@@ -446,8 +514,7 @@ public class SaloneController {
             try {
                 Map<String, Map<String, Object>> m = statiOggi();
                 Map<String, Object> r = m.get(nome);
-                LocalTime t = LocalTime.now(ITALY);
-                boolean orario = !t.isBefore(APERTURA) && t.isBefore(CHIUSURA);
+                boolean orario = fascia(ZonedDateTime.now(ITALY)) != null;
                 boolean salva = false;
                 if (r.get("stato") == null && orario) {
                     cambiaStato(m, nome, "DISPONIBILE", c.nome(), "Accesso al CRM: disponibile in automatico", null, null, Instant.now());
@@ -549,7 +616,7 @@ public class SaloneController {
             out.put("stati", new ArrayList<>(m.values()));
             out.put("ora", Instant.now().toString());
             out.put("mio", consulenteDi(c.nome()));
-            out.put("cambiaTutti", gestisce(c));
+            out.put("cambiaTutti", cambiaAltri(c));
             out.put("online", connessi());
             return ResponseEntity.ok(out);
         } catch (Exception e) { return ResponseEntity.status(500).body(Map.of("error", e.getMessage())); }
@@ -563,7 +630,7 @@ public class SaloneController {
         String mio = consulenteDi(c.nome());
         String nome = str(b.get("nome")).isEmpty() ? mio : consulenteDi(str(b.get("nome")));
         if (nome == null) return ResponseEntity.badRequest().body(Map.of("error", "Non risulti tra i consulenti del salone"));
-        if (!nome.equals(mio) && !gestisce(c)) return ResponseEntity.status(403).body(Map.of("error", "Puoi cambiare solo il tuo stato"));
+        if (!nome.equals(mio) && !cambiaAltri(c)) return ResponseEntity.status(403).body(Map.of("error", "Puoi cambiare solo il tuo stato"));
         if (nome.equals(mio)) {           // e' lui: e' connesso adesso
             FINESTRE.computeIfAbsent(nome, k -> new java.util.concurrent.ConcurrentHashMap<>()).put("stato", System.currentTimeMillis());
             ULTIMO.put(nome, System.currentTimeMillis());
@@ -614,8 +681,7 @@ public class SaloneController {
         if (inizio.isBefore(fine.minusDays(370))) inizio = fine.minusDays(370);
         List<Map<String, Object>> ingressi = new ArrayList<>();
         for (LocalDate g = inizio; !g.isAfter(fine); g = g.plusDays(1)) {
-            Optional<ConsegneDataset> ds = repository.findById("SALONE_" + g);
-            if (ds.isPresent() && ds.get().getRighe() != null && ds.get().getRighe() > 0) ingressi.addAll(leggi("SALONE_" + g));
+            if (pieno(voce("SALONE_" + g))) ingressi.addAll(leggi("SALONE_" + g));
         }
         List<Map<String, Object>> cambi = new ArrayList<>();
         String gi = inizio.toString(), gf = fine.toString();
@@ -767,6 +833,38 @@ public class SaloneController {
         return t;
     }
 
+    /** esito della finestra di controllo: ok = allineato, modificato = data/ora cambiate a mano, forzato = inserito comunque */
+    private static final List<String> CONTROLLI = List.of("ok", "modificato", "forzato");
+    /** data e ora scelte nella pagina (appData aaaa-mm-gg, appOra hh:mm): null se non ci sono o non sono valide */
+    private static Object[] sceltaPagina(Map<?, ?> raw) {
+        String d = str(raw.get("appData")), o = str(raw.get("appOra"));
+        if (d.isEmpty()) return null;
+        try {
+            LocalDate g = LocalDate.parse(d);
+            LocalTime t = o.isEmpty() ? null : LocalTime.parse(o.length() == 4 ? "0" + o : o);
+            String fonte = str(raw.get("fonteData"));
+            return new Object[]{ g, t, fonte.isEmpty() ? "Import" : fonte };
+        } catch (Exception e) { return null; }
+    }
+
+    /** prima dell'import: quali lead del file sono gia' in archivio e come erano stati salvati */
+    @PostMapping("/appuntamenti/anteprima")
+    public ResponseEntity<?> anteprimaImport(@RequestBody Map<String, Object> b, HttpSession s) {
+        Chi c = chi(s); if (!vede(c)) return no(c);
+        if (!gestisce(c)) return soloLivello(2);
+        Set<String> ids = new HashSet<>();
+        if (b.get("ids") instanceof List<?> l) for (Object o : l) ids.add(str(o));
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (Map<String, Object> r : leggi("SALONE_APP")) {
+            String id = str(r.get("id"));
+            if (!ids.contains(id)) continue;
+            out.put(id, mappa("appData", r.get("appData"), "appOra", r.get("appOra"), "controllo", r.get("controllo"),
+                "esitoAlert", str(r.get("esitoAlert")), "esitoAttivita", str(r.get("esitoAttivita")), "dataRicontatto", str(r.get("dataRicontatto")),
+                "consulente", r.get("consulente")));
+        }
+        return ResponseEntity.ok(Map.of("esistenti", out));
+    }
+
     @PostMapping("/appuntamenti/import")
     public ResponseEntity<?> importa(@RequestBody Map<String, Object> b, HttpSession s) {
         Chi c = chi(s); if (!vede(c)) return no(c);
@@ -778,8 +876,9 @@ public class SaloneController {
             List<Map<String, Object>> tutti = leggi("SALONE_APP");
             Map<String, Map<String, Object>> perId = new LinkedHashMap<>();
             for (Map<String, Object> r : tutti) perId.put(str(r.get("id")), r);
-            int nuovi = 0, aggiornati = 0, invariati = 0, senzaData = 0, autoAssegnati = 0, daAssegnare = 0;
-            List<Map<String, Object>> esclusi = new ArrayList<>(), nuoviElenco = new ArrayList<>(), cambi = new ArrayList<>();
+            int nuovi = 0, aggiornati = 0, invariati = 0, senzaData = 0, autoAssegnati = 0, daAssegnare = 0, allineati = 0, modificati = 0, forzati = 0;
+            List<Map<String, Object>> esclusi = new ArrayList<>(), nuoviElenco = new ArrayList<>(), cambi = new ArrayList<>(),
+                modificatiElenco = new ArrayList<>(), forzatiElenco = new ArrayList<>();
             Map<String, Integer> esclusiPerMotivo = new TreeMap<>();
             Set<String> visti = new HashSet<>();
             for (Object o : righe) {
@@ -794,7 +893,9 @@ public class SaloneController {
                     if (esclusi.size() < 300) esclusi.add(Map.of("id", id, "cliente", cliente(row), "motivo", motivo));
                     continue;
                 }
-                Object[] app = dataAppuntamento(row);
+                Object[] app = sceltaPagina(raw);          // data e ora decise nella finestra di controllo
+                String controllo = CONTROLLI.contains(str(raw.get("controllo"))) ? str(raw.get("controllo")) : null;
+                if (app == null && controllo == null) app = dataAppuntamento(row);   // pagina vecchia: come prima
                 Map<String, Object> r = new LinkedHashMap<>();
                 r.put("id", id);
                 r.putAll(row);
@@ -802,6 +903,17 @@ public class SaloneController {
                 r.put("appOra", app == null || app[1] == null ? null : app[1].toString());
                 r.put("fonteData", app == null ? null : app[2]);
                 r.put("consulente", consulenteDi(str(row.get("venditore"))));
+                if (controllo != null) {
+                    r.put("controllo", controllo);
+                    r.put("avviso", "ok".equals(controllo) ? null : taglia(str(raw.get("avviso"))));
+                    if ("ok".equals(controllo)) allineati++;
+                    else {
+                        Map<String, Object> e = mappa("id", id, "cliente", cliente(r), "appuntamento", (str(r.get("appData")) + " " + str(r.get("appOra"))).trim(),
+                            "avviso", r.get("avviso"));
+                        if ("modificato".equals(controllo)) { modificati++; if (modificatiElenco.size() < 300) modificatiElenco.add(e); }
+                        else { forzati++; if (forzatiElenco.size() < 300) forzatiElenco.add(e); }
+                    }
+                }
                 if (app == null) senzaData++;
                 if (r.get("consulente") == null) daAssegnare++;
                 Map<String, Object> prima = perId.get(id);
@@ -836,8 +948,21 @@ public class SaloneController {
             Map<String, Object> imp = new LinkedHashMap<>();
             imp.put("id", impId); imp.put("at", now.toString()); imp.put("atIt", oraIt(now)); imp.put("chi", c.nome());
             imp.put("file", str(b.get("file")));
-            imp.put("righeFile", righe.size()); imp.put("considerati", considerati);
+            imp.put("righeFile", b.get("righeFile") instanceof Number n ? n.intValue() : righe.size()); imp.put("considerati", considerati);
             imp.put("nuovi", nuovi); imp.put("aggiornati", aggiornati); imp.put("invariati", invariati);
+            // finestra di controllo: giorni scelti e righe non allineate (saltate / modificate / inserite comunque)
+            List<Map<String, Object>> saltati = new ArrayList<>();
+            if (b.get("saltati") instanceof List<?> ls) for (Object o : ls) {
+                if (!(o instanceof Map<?, ?> m) || saltati.size() >= 300) continue;
+                saltati.add(mappa("id", str(m.get("id")), "cliente", str(m.get("cliente")), "avviso", taglia(str(m.get("avviso")))));
+            }
+            if (b.containsKey("periodo")) {
+                imp.put("periodo", taglia(str(b.get("periodo"))));
+                imp.put("fuoriPeriodo", b.get("fuoriPeriodo") instanceof Number n ? n.intValue() : 0);
+                imp.put("allineati", allineati); imp.put("modificati", modificati); imp.put("forzati", forzati);
+                imp.put("saltati", b.get("nSaltati") instanceof Number n ? n.intValue() : saltati.size());
+                imp.put("saltatiElenco", saltati); imp.put("modificatiElenco", modificatiElenco); imp.put("forzatiElenco", forzatiElenco);
+            }
             imp.put("esclusi", esclusiPerMotivo.values().stream().mapToInt(Integer::intValue).sum());
             imp.put("esclusiPerMotivo", esclusiPerMotivo); imp.put("esclusiElenco", esclusi);
             imp.put("senzaData", senzaData); imp.put("daAssegnare", daAssegnare); imp.put("assegnatiDaImport", autoAssegnati);
@@ -889,9 +1014,9 @@ public class SaloneController {
                 if (walkin) {
                     LocalDate fineW = a.isAfter(oggi) ? oggi : a;
                     for (LocalDate g = da.isBefore(PRIMO_GIORNO) ? PRIMO_GIORNO : da; !g.isAfter(fineW); g = g.plusDays(1)) {
-                        Optional<ConsegneDataset> ds = repository.findById("SALONE_" + g);
-                        if (ds.isEmpty() || ds.get().getRighe() == null || ds.get().getRighe() == 0) continue;
-                        nWalkin += ds.get().getRighe(); nGiorni++;
+                        Optional<Voce> ds = voce("SALONE_" + g);
+                        if (!pieno(ds)) continue;
+                        nWalkin += ds.get().righe(); nGiorni++;
                         scrivi("SALONE_" + g, new ArrayList<>(), 0, c.nome());
                     }
                 }
@@ -981,15 +1106,15 @@ public class SaloneController {
         return conv;
     }
     private Map<String, Map<String, Object>> letti() {
-        return repository.findById("SALONE_CHAT_LETTI").map(d -> {
-            try { return objectMapper.readValue(d.getContenuto(), new TypeReference<Map<String, Map<String, Object>>>() {}); }
+        return voce("SALONE_CHAT_LETTI").map(d -> {
+            try { return objectMapper.readValue(d.json(), new TypeReference<Map<String, Map<String, Object>>>() {}); }
             catch (Exception e) { return new HashMap<String, Map<String, Object>>(); }
         }).orElseGet(HashMap::new);
     }
     /** elenco delle chat private create (SALONE_CHAT_INDICE) */
     private List<String> indice() {
-        return repository.findById("SALONE_CHAT_INDICE").map(d -> {
-            try { return objectMapper.readValue(d.getContenuto(), new TypeReference<List<String>>() {}); }
+        return voce("SALONE_CHAT_INDICE").map(d -> {
+            try { return objectMapper.readValue(d.json(), new TypeReference<List<String>>() {}); }
             catch (Exception e) { return new ArrayList<String>(); }
         }).orElseGet(ArrayList::new);
     }

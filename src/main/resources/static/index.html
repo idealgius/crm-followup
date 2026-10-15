@@ -12,8 +12,8 @@
     <link rel="stylesheet" href="/css/stock-home.css?v=20261014a">
     <link rel="stylesheet" href="/css/commerciale.css?v=20261014a">
     <link rel="stylesheet" href="/css/bi-tools.css?v=20261014h">
-    <link rel="stylesheet" href="/css/salone.css?v=20261015a">
-    <link rel="stylesheet" href="/css/permessi.css?v=20261014a">
+    <link rel="stylesheet" href="/css/salone.css?v=20261015d">
+    <link rel="stylesheet" href="/css/permessi.css?v=20261015b">
     <!-- NUOVO: grafici nascosti dai permessi (vedi applyChartPermissions in app.js) -->
     <style>.chart-perm-hidden { display: none !important; }</style>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -1762,6 +1762,7 @@
             <button type="button" class="btn-sede btn-sede-active" id="adminTabUtentiBtn" onclick="switchAdminTab('utenti')">👤 Utenti</button>
             <button type="button" class="btn-sede" id="adminTabPermessiBtn" onclick="switchAdminTab('permessi')">🔐 Permessi per Ruolo</button>
             <button type="button" class="btn-sede" id="adminTabOperatoriBtn" onclick="switchAdminTab('operatori')">🛡️ Permessi per Operatore</button>
+            <button type="button" class="btn-sede" id="adminTabInfoBtn" onclick="switchAdminTab('info')">ℹ️ Info ruoli</button>
         </div>
 
         <div id="adminTabUtenti">
@@ -1809,6 +1810,11 @@
             </div>
             <input type="text" id="operatorSearchInput" placeholder="Cerca operatore per nome o email..." class="input-field" style="max-width:400px;margin-bottom:16px" oninput="filterOperatorPermissions(this.value)">
             <div id="operatorPermissionsContainer" style="overflow-x:auto"></div>
+        </div>
+
+        <!-- NUOVO: INFO RUOLI — per ogni ruolo cosa fa, cosa vede e chi ne fa parte (admin.js, renderInfoRuoli) -->
+        <div id="adminTabInfo" style="display:none">
+            <div id="infoRuoliContainer"></div>
         </div>
     </div>
 
@@ -2628,7 +2634,7 @@
 <script src="/js/dashboard-fu.js"></script>
 <script src="/js/contact.js?v=20261014a"></script>
 <script src="/js/promo.js"></script>
-<script src="/js/admin.js?v=20261014f"></script>
+<script src="/js/admin.js?v=20261015c"></script>
 <script src="/js/rent.js?v=20261014a"></script>
 <script src="/js/service.js"></script>
 <script src="/js/veicoli.js"></script>
@@ -2642,7 +2648,7 @@
 <script src="/js/consegne-analisi.js?v=20261014a"></script>
 <script src="/js/stock-home.js?v=20261014d"></script>
 <script src="/js/commerciale.js?v=20261014c"></script>
-<script src="/js/salone.js?v=20261015a"></script>
+<script src="/js/salone.js?v=20261015d"></script>
 <script src="/js/graphmenu.js"></script>
 <script src="/js/multiselect.js"></script>
 </body>

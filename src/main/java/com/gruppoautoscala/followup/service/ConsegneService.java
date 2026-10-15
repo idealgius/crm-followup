@@ -85,8 +85,18 @@ public class ConsegneService {
     public LocalDateTime getUltimoControllo() { return ultimoControllo; }
     public String getUltimoErrore() { return ultimoErrore; }
 
+    /* NUOVO: trattative, foglio DATABASE e verifiche stanno anche IN MEMORIA. Li scrive solo questo
+     * service (salva), quindi il database si legge una volta sola e poi solo dopo ogni salvataggio.
+     * Prima ogni minuto (lettura del foglio) e a ogni apertura della pagina si rileggeva tutto
+     * dal database: e' il traffico che ha riempito il limite di Supabase. */
+    private static final java.util.Set<String> IN_MEMORIA = java.util.Set.of(TRATTATIVE, DATABASE, VERIFICHE);
+    private final Map<String, Optional<ConsegneDataset>> memoria = new java.util.concurrent.ConcurrentHashMap<>();
+
     public Optional<ConsegneDataset> get(String tipo) {
-        return repository.findById(tipo);
+        if (!IN_MEMORIA.contains(tipo)) return repository.findById(tipo);
+        Optional<ConsegneDataset> v = memoria.get(tipo);
+        if (v == null) { v = repository.findById(tipo); memoria.put(tipo, v); }
+        return v;
     }
 
     public ConsegneDataset salvaTrattative(String json, int righe, String chi) {
@@ -126,7 +136,7 @@ public class ConsegneService {
             }
 
             int righe = (int) Math.max(0, body.lines().count() - 1);
-            ConsegneDataset attuale = repository.findById(DATABASE).orElse(null);
+            ConsegneDataset attuale = get(DATABASE).orElse(null);
             ConsegneDataset risultato;
             if (attuale != null && Objects.equals(attuale.getContenuto(), body)) {
                 risultato = attuale; // nessuna modifica nel foglio
@@ -151,7 +161,7 @@ public class ConsegneService {
 
     /** Tutte le verifiche manuali: chiave pratica -> {da: operatore, at: data/ora ISO}. */
     public Map<String, Map<String, String>> getVerifiche() {
-        return repository.findById(VERIFICHE)
+        return get(VERIFICHE)
                 .map(ConsegneDataset::getContenuto)
                 .filter(c -> c != null && !c.isBlank())
                 .map(c -> {
@@ -209,14 +219,14 @@ public class ConsegneService {
             throw new IOException("Il file non sembra la scheda DATABASE (mancano le colonne CLIENTE / STATO)");
         }
         int righe = (int) Math.max(0, body.lines().filter(l -> !l.isBlank()).count() - 1);
-        String vecchio = repository.findById(DATABASE).map(ConsegneDataset::getContenuto).orElse(null);
+        String vecchio = get(DATABASE).map(ConsegneDataset::getContenuto).orElse(null);
         ConsegneDataset d = salva(DATABASE, body, righe, "Import CSV · " + chi);
         officinaService.registra(officinaService.inizializzato() ? vecchio : null, body, "Import CSV · " + chi);
         return d;
     }
 
     private boolean databaseDaImportCsv() {
-        return repository.findById(DATABASE)
+        return get(DATABASE)
                 .map(d -> d.getAggiornatoDa() != null && d.getAggiornatoDa().startsWith("Import CSV"))
                 .orElse(false);
     }
@@ -234,7 +244,7 @@ public class ConsegneService {
     }
 
     private ConsegneDataset salva(String tipo, String contenuto, int righe, String chi) {
-        ConsegneDataset d = repository.findById(tipo).orElseGet(() -> {
+        ConsegneDataset d = get(tipo).orElseGet(() -> {
             ConsegneDataset nuovo = new ConsegneDataset();
             nuovo.setTipo(tipo);
             return nuovo;
@@ -244,6 +254,7 @@ public class ConsegneService {
         d.setAggiornatoAt(LocalDateTime.now());
         d.setAggiornatoDa(chi);
         ConsegneDataset salvato = repository.save(d);
+        if (IN_MEMORIA.contains(tipo)) memoria.put(tipo, Optional.of(salvato));
         versione = System.currentTimeMillis();
         return salvato;
     }

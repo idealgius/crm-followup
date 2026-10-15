@@ -219,13 +219,13 @@ const PERMISSION_SECTIONS = [
     // BI: la selezione area e la pagina BI le vede chi ha almeno una delle tre sezioni BI;
     // chi non ne ha nessuna entra direttamente in In bound.
     { key: 'CONSEGNE', icon: '🔑', label: 'Consegne', group: 'BI' },
-    { key: 'STOCK', icon: '🚘', label: 'Stock · Completo = importa il file', group: 'BI' },
-    { key: 'COMMERCIALE', icon: '💼', label: 'Commerciale · Completo = importa le trattative', group: 'BI' },
+    { key: 'STOCK', icon: '🚘', label: 'Stock', group: 'BI' },
+    { key: 'COMMERCIALE', icon: '💼', label: 'Commerciale', group: 'BI' },
     // Salone: Appuntamenti e ingressi (Front Office e Consulenza entrano direttamente qui)
-    // Livelli: 1 vede tutto (Consulenza: solo i propri) · 2 registra walk-in e importa · 3 anche Report · 4 anche chat
+    // Profili con un nome (Consulenza, Solo visione, Front office, Visione + report, Completo)
     { key: 'SALONE', icon: '🚶', label: 'Appuntamenti e ingressi', group: 'Salone' },
     { key: 'ADMIN', icon: '⚙️', label: 'Utenti/Permessi', group: 'Gestione' },
-    { key: 'ALLERT', icon: '🔔', label: 'Allert (Completo = gestisce · Admin = anche riapre i gestiti)', group: 'Gestione' }
+    { key: 'ALLERT', icon: '🔔', label: 'Allert', group: 'Gestione' }
 ];
 
 
@@ -236,15 +236,122 @@ const ACCESS_LEVEL_META = {
     ADMIN_FULL: { icon: '🛡️', label: 'Accesso Admin' }
 };
 
-// NUOVO: per "Appuntamenti e ingressi" i 4 pulsanti si leggono come livelli (stessi valori salvati)
+// NUOVO: "Appuntamenti e ingressi" non usa i livelli ma PROFILI con un nome (uguali in SaloneController.profilo)
 const SALONE_LEVEL_META = {
-    NONE: { icon: '🚫', label: 'Nessuno: non vede la sezione' },
-    READ_ONLY: { icon: '1', label: 'Livello 1: vede tutto come il Front Office, ma non registra walk-in e non importa (Consulenza: solo i propri clienti)' },
-    FULL: { icon: '2', label: 'Livello 2: registra e assegna i walk-in, importa gli appuntamenti' },
-    ADMIN_FULL: { icon: '3', label: 'Livello 3: come il 2 + scheda Report (senza chat)' },
-    LIVELLO_4: { icon: '4', label: 'Livello 4: come il 3 + chat del salone' }
+    NONE: { icon: '🚫', label: 'Nessuno' },
+    S_CONS: { icon: '🤝', label: 'Consulenza' },
+    S_VIS: { icon: '👁', label: 'Solo visione' },
+    S_FO: { icon: '🛎️', label: 'Front office' },
+    S_REP: { icon: '📊', label: 'Visione + report' },
+    S_ALL: { icon: '🛡️', label: 'Completo' }
 };
 const levelMetaFor = key => key === 'SALONE' ? SALONE_LEVEL_META : ACCESS_LEVEL_META;
+// valori vecchi gia' salvati per SALONE (livelli 1-4) -> profilo (come fa il server)
+function valoreVisto(section, v, role) {
+    if (section !== 'SALONE' || !v) return v || 'NONE';
+    return ({ READ_ONLY: role === 'CONSULENZA' ? 'S_CONS' : 'S_VIS', FULL: 'S_FO', ADMIN_FULL: 'S_REP', LIVELLO_4: 'S_ALL', S_BO: 'S_FO' })[v] || v;
+}
+
+/* ===== NUOVO: SPIEGAZIONI dei permessi =====
+   - passando sopra un pulsante compare cosa permette (riquadro scuro che segue il mouse)
+   - cliccando il nome di una sezione si apre la scheda "cosa si puo' fare" con tutti i livelli a confronto */
+const LIVELLI_GENERICI = {
+    NONE: 'Non vede la sezione: la voce non compare nel menu e le sue pagine non si aprono.',
+    READ_ONLY: 'Vede la sezione e i suoi dati, ma non può creare, modificare né eliminare niente.',
+    FULL: 'Vede, crea, modifica ed elimina, tranne i contenuti creati da un utente Admin.',
+    ADMIN_FULL: 'Come Completo, e in più può modificare ed eliminare anche i contenuti creati da un utente Admin.'
+};
+const SECTION_INFO = {
+    DASHBOARD: { intro: 'La pagina iniziale dell\'In bound con i numeri della giornata.' },
+    FOLLOWUPS: { intro: 'I follow-up da fare sui clienti.', FULL: 'Vede, crea, completa, modifica ed elimina i follow-up (non quelli creati da un Admin).' },
+    WAITING: { intro: 'I recall: clienti da richiamare.', FULL: 'Vede, crea, modifica ed elimina i recall (non quelli creati da un Admin).' },
+    CONTACTS: { intro: 'Il registro dei contatti (chiamate, info vendita, fonti).', READ_ONLY: 'Vede il registro e i grafici dei contatti, senza inserire o modificare.', FULL: 'Registra nuovi contatti, li modifica ed elimina (non quelli di un Admin).' },
+    PREVENTIVI: { intro: 'I preventivi telefonici. Servono anche alla BI Commerciale per contare i preventivi.' },
+    PROMO: { intro: 'Le promozioni attive.' },
+    RENT: { intro: 'Il noleggio: trattative e richieste del Rent.' },
+    SERVICE: { intro: 'L\'assistenza: richieste e chiamate del Service.' },
+    VEICOLI: { intro: 'Le vetture in consegna.' },
+    GRAFICI: { intro: 'Il menu ☰ "Mostra Grafici" in alto a sinistra.', READ_ONLY: 'Vede il menu ☰ e può aprire i grafici che i permessi dei grafici gli lasciano vedere.', FULL: 'Come Solo lettura (per il menu non c\'è differenza).', ADMIN_FULL: 'Come Solo lettura (per il menu non c\'è differenza).' },
+    CONSEGNE: { intro: 'BI · Consegne: Tempistiche, Analisi avanzamento, lavorazione officina, ricerca clienti.', READ_ONLY: 'Vede Tempistiche e Analisi, cerca i clienti, apre gli elenchi, scarica gli Excel e può premere "Aggiorna dal foglio Google". Non importa le trattative e non segna verifiche.', FULL: 'Come Solo lettura, in più importa il CSV delle trattative, segna e toglie le verifiche, abbina, conta o elimina le pratiche dubbie.', ADMIN_FULL: 'Come Completo.' },
+    STOCK: { intro: 'BI · Stock: giacenza, marchi, motorizzazioni, vetture in stock.', READ_ONLY: 'Vede tutti i grafici e gli elenchi dello stock e scarica gli Excel. Non importa il file.', FULL: 'Come Solo lettura, in più importa il file dello stock.', ADMIN_FULL: 'Come Completo.' },
+    COMMERCIALE: { intro: 'BI · Commerciale: contratti, origini, preventivi, consulenti.', READ_ONLY: 'Vede tutte le viste e i grafici del Commerciale e scarica gli Excel. Non importa le trattative.', FULL: 'Come Solo lettura, in più importa il CSV delle trattative del Commerciale.', ADMIN_FULL: 'Come Completo.' },
+    ADMIN: { intro: 'Gestione utenti e permessi (questa pagina).', READ_ONLY: 'Vede gli utenti e i permessi, senza cambiare niente.', FULL: 'Crea utenti, cambia ruoli e permessi (non degli utenti Admin).', ADMIN_FULL: 'Come Completo, anche sugli utenti Admin.' },
+    ALLERT: { intro: 'Gli allert (avvisi da gestire).', READ_ONLY: 'Vede gli allert, senza gestirli.', FULL: 'Gestisce gli allert (li prende e li chiude).', ADMIN_FULL: 'Come Completo, in più riapre gli allert già gestiti.' }
+};
+// Appuntamenti e ingressi: cosa fa ogni profilo (✓ / ✗ / testo)
+const SALONE_CAPS = [
+    ['Vede i walk-in e gli appuntamenti', { S_CONS: 'solo i propri', S_VIS: 1, S_FO: 1, S_REP: 1, S_ALL: 1 }],
+    ['Vede lo stato dei consulenti in tempo reale', { S_CONS: 1, S_VIS: 1, S_FO: 1, S_REP: 1, S_ALL: 1 }],
+    ['Cambia il proprio stato e prende in carico i propri clienti', { S_CONS: 'se è uno dei consulenti', S_VIS: 'se è uno dei consulenti', S_FO: 'se è uno dei consulenti', S_REP: 'se è uno dei consulenti', S_ALL: 'se è uno dei consulenti' }],
+    ['Registra e assegna i walk-in', { S_FO: 1, S_ALL: 1 }],
+    ['Cambia lo stato degli altri consulenti (anche "Segna preso in carico" al posto loro)', { S_ALL: 1 }],
+    ['Importa gli appuntamenti e vede lo storico degli import', { S_FO: 1, S_ALL: 1 }],
+    ['Scheda Report (grafici, tempi, storico degli stati)', { S_REP: 1, S_ALL: 1 }],
+    ['Chat del salone (gruppo e private)', { S_CONS: 1, S_FO: 1, S_ALL: 1 }]
+];
+const SALONE_NOTE = 'Sempre, a prescindere dal profilo: la domanda "sei nuovamente disponibile?" dopo 15 minuti compare solo al ruolo Consulenza; "Elimina storico" (menu ☰) solo al ruolo Admin, con password.';
+function descrizioneLivello(section, level) {
+    if (section === 'SALONE') {
+        if (level === 'NONE') return 'Non vede Appuntamenti e ingressi e non riceve messaggi in chat.';
+        const si = SALONE_CAPS.filter(c => c[1][level]).map(c => '✓ ' + c[0] + (typeof c[1][level] === 'string' ? ' (' + c[1][level] + ')' : ''));
+        const no = SALONE_CAPS.filter(c => !c[1][level]).map(c => '✗ ' + c[0]);
+        return si.concat(no).join('\n');
+    }
+    if (section === 'INHERIT') return 'Eredita: segue il permesso del suo ruolo.';
+    const info = SECTION_INFO[section] || {};
+    return info[level] || LIVELLI_GENERICI[level] || '';
+}
+function tipDi(section, level) {
+    const m = levelMetaFor(section)[level] || {};
+    const sec = PERMISSION_SECTIONS.find(s => s.key === section);
+    return (m.label || level) + (sec ? ' · ' + sec.label.split(' · ')[0] : '') + '\n' + descrizioneLivello(section, level);
+}
+const escAttr = t => String(t).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+function apriInfoSezione(key) {
+    const sec = PERMISSION_SECTIONS.find(s => s.key === key); if (!sec) return;
+    const info = SECTION_INFO[key] || {};
+    const metas = levelMetaFor(key);
+    let corpo;
+    if (key === 'SALONE') {
+        const P = Object.keys(metas).filter(k => k !== 'NONE');
+        corpo = `<p class="perm-info-intro">Appuntamenti e ingressi: walk-in, appuntamenti, stato dei consulenti, chat e report del salone. Ogni ruolo ha un <b>profilo</b>; ecco cosa può fare ciascuno.</p>
+          <div class="perm-info-scroll"><table class="perm-info-tab"><thead><tr><th></th>${P.map(k => `<th>${metas[k].icon}<br>${metas[k].label}</th>`).join('')}</tr></thead><tbody>
+          ${SALONE_CAPS.map(([t, v]) => `<tr><td>${t}</td>${P.map(k => `<td class="${v[k] ? 'si' : 'no'}">${v[k] ? (typeof v[k] === 'string' ? '✓<small>' + v[k] + '</small>' : '✓') : '✗'}</td>`).join('')}</tr>`).join('')}
+          </tbody></table></div><p class="perm-info-note">🚫 Nessuno: non vede la sezione e non riceve messaggi. ${SALONE_NOTE}</p>`;
+    } else {
+        corpo = `${info.intro ? `<p class="perm-info-intro">${info.intro}</p>` : ''}<div class="perm-info-liv">${Object.keys(metas).map(k => `<div class="perm-info-l level-${k}"><span class="permission-cell-btn active level-${k}">${metas[k].icon}</span><div><b>${metas[k].label}</b><p>${descrizioneLivello(key, k)}</p></div></div>`).join('')}</div>`;
+    }
+    let ov = document.getElementById('permInfoOv');
+    if (ov) ov.remove();
+    ov = document.createElement('div');
+    ov.id = 'permInfoOv'; ov.className = 'perm-info-ov';
+    ov.innerHTML = `<div class="perm-info" role="dialog" aria-modal="true" aria-label="${escAttr(sec.label)}">
+        <header><div><small>COSA SI PUÒ FARE</small><h3>${sec.icon} ${sec.label.split(' · ')[0]}</h3></div><button type="button" data-chiudi aria-label="Chiudi">✕</button></header>
+        <div class="perm-info-b">${corpo}</div></div>`;
+    document.body.appendChild(ov);
+    const chiudi = () => { ov.remove(); document.removeEventListener('keydown', esc); };
+    const esc = e => { if (e.key === 'Escape') chiudi(); };
+    document.addEventListener('keydown', esc);
+    ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-chiudi]')) chiudi(); });
+}
+// riquadro che segue il mouse con la spiegazione (data-tip)
+(function () {
+    let tip = null;
+    document.addEventListener('mouseover', e => {
+        const t = e.target.closest && e.target.closest('[data-tip]');
+        if (!t) { if (tip) tip.style.display = 'none'; return; }
+        if (!tip) { tip = document.createElement('div'); tip.className = 'perm-tip'; document.body.appendChild(tip); }
+        const righe = t.dataset.tip.split('\n');
+        tip.innerHTML = '<b>' + righe[0].replace(/</g, '&lt;') + '</b>' + righe.slice(1).map(x => `<div class="${x.startsWith('✗') ? 'no' : x.startsWith('✓') ? 'si' : ''}">${x.replace(/</g, '&lt;')}</div>`).join('');
+        tip.style.display = 'block';
+    });
+    document.addEventListener('mousemove', e => {
+        if (!tip || tip.style.display === 'none') return;
+        const w = tip.offsetWidth, h = tip.offsetHeight;
+        tip.style.left = Math.min(e.clientX + 14, window.innerWidth - w - 10) + 'px';
+        tip.style.top = (e.clientY + 18 + h > window.innerHeight ? e.clientY - h - 12 : e.clientY + 18) + 'px';
+    });
+})();
 
 let permissionMatrixCache = null;
 let permissionRolesCache = [];
@@ -256,6 +363,9 @@ function switchAdminTab(tab) {
     const utentiBtn = document.getElementById('adminTabUtentiBtn');
     const permessiBtn = document.getElementById('adminTabPermessiBtn');
     const operatoriBtn = document.getElementById('adminTabOperatoriBtn');
+    const infoTab = document.getElementById('adminTabInfo'), infoBtn = document.getElementById('adminTabInfoBtn');
+    if (infoTab) infoTab.style.display = tab === 'info' ? 'block' : 'none';
+    infoBtn?.classList.toggle('btn-sede-active', tab === 'info');
     const newUserBtn = document.getElementById('adminNewUserBtn');
     if (!utentiTab || !permessiTab) return;
 
@@ -269,6 +379,60 @@ function switchAdminTab(tab) {
 
     if (tab === 'permessi') loadPermissionMatrixUI();
     if (tab === 'operatori') loadOperatorPermissionsUI();
+    if (tab === 'info') loadInfoRuoli();
+}
+
+/* ===== NUOVO: INFO RUOLI =====
+   Per ogni ruolo (menu a tendina): a cosa serve, cosa vede e cosa puo' fare sezione per sezione
+   (letto dai permessi veri della pagina "Permessi per Ruolo") e quali operatori ne fanno parte,
+   con le loro eccezioni personali. */
+const ROLE_INFO = {
+    UTENTE: 'Operatore BDC (call center): lavora i contatti, i follow-up e i recall dell\'In bound.',
+    BACK_OFFICE: 'Back office: lavora registro contatti e allert.',
+    MODERATORE: 'Moderatore: ruolo di coordinamento. Cosa vede e cosa fa lo decidono i permessi qui sotto.',
+    GESTORE: 'Gestore: ruolo di responsabilità. Cosa vede e cosa fa lo decidono i permessi qui sotto.',
+    ADMIN: 'Admin: accesso a tutto, gestisce utenti e permessi; unico che può eliminare lo storico del salone.',
+    NOLEGGIO: 'Noleggio: lavora le richieste del Rent.',
+    SERVICE: 'Service: lavora le richieste dell\'assistenza.',
+    FRONT_OFFICE: 'Front office del salone: accoglie i clienti, registra i walk-in e li assegna ai consulenti. Entra direttamente in Appuntamenti e ingressi.',
+    CONSULENZA: 'Consulenti di vendita del salone: ricevono i clienti assegnati, cambiano il proprio stato e usano la chat. Entrano direttamente in Appuntamenti e ingressi.'
+};
+async function loadInfoRuoli() {
+    const box = document.getElementById('infoRuoliContainer'); if (!box) return;
+    box.innerHTML = '<div class="empty-state"><p>Caricamento…</p></div>';
+    try {
+        const [pm, op] = await Promise.all([fetch('/api/permissions'), fetch('/api/permissions/operators')]);
+        if (!pm.ok) { box.innerHTML = '<div class="empty-state"><p>Permessi non disponibili</p></div>'; return; }
+        const dm = await pm.json(), dop = op.ok ? await op.json() : { users: [] };
+        renderInfoRuoli(box, dm.matrix || {}, dm.roles || [], dop.users || []);
+    } catch (e) { box.innerHTML = '<div class="empty-state"><p>Errore nel caricamento</p></div>'; }
+}
+function renderInfoRuoli(box, matrix, roles, users) {
+    const aperti = new Set([...box.querySelectorAll('details[open]')].map(d => d.dataset.r));
+    box.innerHTML = `<p class="perm-info-intro" style="margin:0 0 12px">Ogni ruolo: a cosa serve, cosa vede e cosa può fare sezione per sezione (dai permessi impostati in "Permessi per Ruolo"), e chi ne fa parte. Le eccezioni personali di un operatore sono indicate accanto al suo nome. Passa sopra un livello per la spiegazione completa.</p>` +
+        roles.map(role => {
+            const persone = users.filter(u => u.role === role);
+            const righe = PERMISSION_SECTIONS.map(sec => {
+                const v = valoreVisto(sec.key, (matrix[role] || {})[sec.key] || 'NONE', role);
+                const m = levelMetaFor(sec.key)[v] || { icon: '?', label: v };
+                return { sec, v, m };
+            });
+            const vede = righe.filter(x => x.v !== 'NONE'), nonVede = righe.filter(x => x.v === 'NONE');
+            return `<details class="perm-ruolo" data-r="${role}" ${aperti.has(role) ? 'open' : ''}>
+                <summary><span class="perm-arrow">▸</span><b>${formatRole(role)}</b><em>${vede.length} sezion${vede.length === 1 ? 'e' : 'i'} · ${persone.length} operator${persone.length === 1 ? 'e' : 'i'}</em></summary>
+                <div class="perm-ruolo-b">
+                  <p>${ROLE_INFO[role] || ''}</p>
+                  <h4>Cosa vede e cosa può fare</h4>
+                  ${vede.length ? `<table class="perm-ruolo-t"><tbody>${vede.map(x => `<tr><td><button type="button" class="perm-sec" onclick="apriInfoSezione('${x.sec.key}')">${x.sec.icon} ${x.sec.label.split(' · ')[0]} <span class="perm-i">ⓘ</span></button></td>
+                      <td><span class="permission-cell-btn active level-${x.v}" data-tip="${escAttr(tipDi(x.sec.key, x.v))}">${x.m.icon}</span> <b>${x.m.label}</b></td>
+                      <td class="perm-ruolo-d">${descrizioneLivello(x.sec.key, x.v).split('\n').filter(t => !t.startsWith('✗')).join(' · ')}</td></tr>`).join('')}</tbody></table>` : '<p class="perm-info-note">Nessuna sezione visibile.</p>'}
+                  ${nonVede.length ? `<p class="perm-info-note"><b>Non vede:</b> ${nonVede.map(x => x.sec.label.split(' · ')[0]).join(', ')}</p>` : ''}
+                  <h4>Operatori con questo ruolo (${persone.length})</h4>
+                  ${persone.length ? `<ul class="perm-ruolo-op">${persone.map(u => { const n = Object.keys(u.overrides || {}).length; return `<li><b>${u.fullName}</b> <span>${u.email || ''}</span>${n ? ` <em>🛡️ ${n} eccezion${n === 1 ? 'e' : 'i'} personal${n === 1 ? 'e' : 'i'}</em>` : ''}</li>`; }).join('')}</ul>` : '<p class="perm-info-note">Nessun operatore.</p>'}
+                </div></details>`;
+        }).join('');
+    box.querySelectorAll('details.perm-ruolo').forEach(d => d.addEventListener('toggle', () => { d.querySelector('.perm-arrow').textContent = d.open ? '▾' : '▸'; }));
+    box.querySelectorAll('details.perm-ruolo[open] .perm-arrow').forEach(a => { a.textContent = '▾'; });
 }
 
 async function loadPermissionMatrixUI() {
@@ -321,18 +485,18 @@ function renderPermissionMatrix() {
     PERMISSION_SECTIONS.forEach(section => {
         if (section.group !== gruppo) {
             gruppo = section.group;
-            html += `<tr><td colspan="${permissionRolesCache.length + 1}" style="text-align:left;font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--text-secondary);padding-top:14px">${gruppo}${gruppo === 'BI' ? ' · 👁 Solo lettura = vede · ✏️ Completo = importa e modifica · la pagina BI la vede chi ha almeno una delle tre' : ''}${gruppo === 'Salone' ? ' · livelli: 1 = vede tutto (Consulenza: solo i propri) · 2 = registra walk-in e importa · 3 = anche Report · 4 = anche chat · la chat la hanno sempre Front Office, Consulenza e Back Office' : ''}</td></tr>`;
+            html += `<tr><td colspan="${permissionRolesCache.length + 1}" style="text-align:left;font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--text-secondary);padding-top:14px">${gruppo}${gruppo === 'BI' ? ' · la pagina BI la vede chi ha almeno una delle tre' : ''}${gruppo === 'Salone' ? ' · profili con un nome: clicca la sezione per il confronto' : ''}</td></tr>`;
         }
         html += `<tr>
-            <td style="text-align:left;font-weight:700;white-space:nowrap">${section.icon} ${section.label}</td>
+            <td style="text-align:left;font-weight:700;white-space:nowrap"><button type="button" class="perm-sec" onclick="apriInfoSezione('${section.key}')" title="Clicca per vedere cosa si può fare con ogni livello">${section.icon} ${section.label.split(' · ')[0]} <span class="perm-i">ⓘ</span></button></td>
             ${permissionRolesCache.map(role => {
-                const current = permissionMatrixCache[role]?.[section.key] || 'NONE';
+                const current = valoreVisto(section.key, permissionMatrixCache[role]?.[section.key] || 'NONE', role);
                 return `<td>
                     <div class="permission-cell-group" data-role="${role}" data-section="${section.key}">
                         ${Object.entries(levelMetaFor(section.key)).map(([level, meta]) => `
                             <button type="button"
                                 class="permission-cell-btn ${current === level ? 'active' : ''} level-${level}"
-                                title="${meta.label}"
+                                data-tip="${escAttr(tipDi(section.key, level))}" aria-label="${escAttr(meta.label)}"
                                 onclick="setPermission('${role}','${section.key}','${level}', this)">${meta.icon}</button>
                         `).join('')}
                     </div>
@@ -533,16 +697,17 @@ function renderOperatorPermissions() {
             <div style="display:flex;flex-direction:column;gap:8px">
                 ${operatorSectionsCache.map(sectionKey => {
                     const meta = sectionMeta(sectionKey);
-                    const currentOverride = (u.overrides || {})[sectionKey] || 'INHERIT';
+                    const ov0 = (u.overrides || {})[sectionKey];
+                    const currentOverride = ov0 ? valoreVisto(sectionKey, ov0, u.role) : 'INHERIT';
                     return `
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--border)">
-                        <span style="font-size:13px;font-weight:600;white-space:nowrap">${meta.icon} ${meta.label}</span>
+                        <button type="button" class="perm-sec" style="font-size:13px;font-weight:600" onclick="apriInfoSezione('${sectionKey}')">${meta.icon} ${meta.label.split(' · ')[0]} <span class="perm-i">ⓘ</span></button>
                         <div class="permission-cell-group" data-user="${u.id}" data-section="${sectionKey}">
                             <button type="button" class="permission-cell-btn ${currentOverride === 'INHERIT' ? 'active' : ''}"
-                                title="Eredita da ruolo" onclick="setOperatorPermission(${u.id},'${sectionKey}','INHERIT', this)">↩️</button>
+                                data-tip="Eredita dal ruolo\nSegue il permesso del suo ruolo (${escAttr(formatRole(u.role))})." onclick="setOperatorPermission(${u.id},'${sectionKey}','INHERIT', this)">↩️</button>
                             ${Object.entries(levelMetaFor(sectionKey)).map(([level, lm]) => `
                                 <button type="button" class="permission-cell-btn ${currentOverride === level ? 'active' : ''} level-${level}"
-                                    title="${lm.label}" onclick="setOperatorPermission(${u.id},'${sectionKey}','${level}', this)">${lm.icon}</button>
+                                    data-tip="${escAttr(tipDi(sectionKey, level))}" aria-label="${escAttr(lm.label)}" onclick="setOperatorPermission(${u.id},'${sectionKey}','${level}', this)">${lm.icon}</button>
                             `).join('')}
                         </div>
                     </div>`;

@@ -101,6 +101,16 @@ public class RolePermissionService {
     // Sta in fondo alla lista, quindi per hasAtLeast() vale "piu' di ADMIN_FULL".
     public static final List<String> ACCESS_LEVELS = List.of("NONE", "READ_ONLY", "FULL", "ADMIN_FULL", "LIVELLO_4");
 
+    // NUOVO: "Appuntamenti e ingressi" (SALONE) non usa i livelli ma dei PROFILI con un nome
+    // (spiegati nella pagina Permessi, vedi SaloneController.profilo):
+    //   S_CONS Consulenza (i propri clienti + chat) · S_VIS Solo visione (senza chat)
+    //   S_FO Front office (vede tutto, registra e assegna, importa, chat; non cambia lo stato degli altri) · S_REP Visione + report (senza chat) · S_ALL Completo
+    // I vecchi valori (READ_ONLY, FULL, ADMIN_FULL, LIVELLO_4) restano validi e vengono tradotti.
+    public static final List<String> SALONE_PROFILI = List.of("S_CONS", "S_VIS", "S_FO", "S_REP", "S_ALL");
+    private static boolean accessoValido(String section, String access) {
+        return ACCESS_LEVELS.contains(access) || ("SALONE".equals(section) && SALONE_PROFILI.contains(access));
+    }
+
     // ===== DEFAULT STORICI =====
     // Riproducono ESATTAMENTE il comportamento hardcoded che c'era in app.js
     // prima di questa funzionalità (RENT_ROLES, SERVICE_ROLES, canSeeAll,
@@ -156,11 +166,11 @@ public class RolePermissionService {
         adminDefaults.put("CONSEGNE", "ADMIN_FULL");
         adminDefaults.put("STOCK", "ADMIN_FULL");
         adminDefaults.put("ALLERT", "ADMIN_FULL");
-        adminDefaults.put("SALONE", "LIVELLO_4");      // Appuntamenti e ingressi: livello 4 = tutto + chat
+        adminDefaults.put("SALONE", "S_ALL");          // Appuntamenti e ingressi: Completo (tutto + chat)
         DEFAULTS.put("ADMIN", adminDefaults);
         // NUOVO: Front Office registra e assegna i clienti; Consulenza riceve le notifiche e usa la chat
-        DEFAULTS.put("FRONT_OFFICE", Map.of("SALONE", "FULL"));
-        DEFAULTS.put("CONSULENZA", Map.of("SALONE", "READ_ONLY"));
+        DEFAULTS.put("FRONT_OFFICE", Map.of("SALONE", "S_FO"));
+        DEFAULTS.put("CONSULENZA", Map.of("SALONE", "S_CONS"));
         DEFAULTS.put("NOLEGGIO", Map.of("RENT", "FULL"));
         DEFAULTS.put("SERVICE", Map.of("SERVICE", "FULL"));
     }
@@ -234,7 +244,7 @@ public class RolePermissionService {
     public void setAccess(String role, String section, String access) {
         if (!ROLES.contains(role)) throw new IllegalArgumentException("Ruolo non valido");
         if (!isValidKey(section)) throw new IllegalArgumentException("Sezione non valida");
-        if (!ACCESS_LEVELS.contains(access)) throw new IllegalArgumentException("Livello di accesso non valido");
+        if (!accessoValido(section, access)) throw new IllegalArgumentException("Livello di accesso non valido");
 
         RolePermission rp = rolePermissionRepository.findByRoleAndSection(role, section)
             .orElseGet(RolePermission::new);
@@ -321,7 +331,7 @@ public class RolePermissionService {
     // permesso del suo ruolo).
     public void setUserAccess(Long userId, String section, String access) {
         if (!isValidKey(section)) throw new IllegalArgumentException("Sezione non valida");
-        if (access != null && !ACCESS_LEVELS.contains(access)) throw new IllegalArgumentException("Livello di accesso non valido");
+        if (access != null && !accessoValido(section, access)) throw new IllegalArgumentException("Livello di accesso non valido");
 
         if (access == null) {
             userPermissionRepository.findByUserIdAndSection(userId, section)

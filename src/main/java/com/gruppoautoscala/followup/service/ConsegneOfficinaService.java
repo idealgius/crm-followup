@@ -59,11 +59,19 @@ public class ConsegneOfficinaService {
     private static String norm(String s) { return s == null ? "" : s.toUpperCase(Locale.ROOT).replaceAll("\\s+", " ").trim(); }
     private static String pl(String s) { return s == null ? "" : s.toUpperCase(Locale.ROOT).replaceAll("[^A-Z0-9]", ""); }
 
-    public boolean inizializzato() { return repository.findById(OFFICINA).isPresent(); }
+    /** NUOVO: il registro sta anche in memoria (si legge dal database una volta sola) */
+    private volatile Optional<ConsegneDataset> memoria = null;
+    private Optional<ConsegneDataset> dato() {
+        Optional<ConsegneDataset> m = memoria;
+        if (m == null) { m = repository.findById(OFFICINA); memoria = m; }
+        return m;
+    }
+
+    public boolean inizializzato() { return dato().isPresent(); }
 
     /** tutto il registro (per GET /api/consegne/data) */
     public Map<String, Object> leggi() {
-        return repository.findById(OFFICINA).map(ConsegneDataset::getContenuto).filter(c -> c != null && !c.isBlank()).map(c -> {
+        return dato().map(ConsegneDataset::getContenuto).filter(c -> c != null && !c.isBlank()).map(c -> {
             try { return objectMapper.readValue(c, new TypeReference<LinkedHashMap<String, Object>>() {}); }
             catch (Exception e) { log.warn("[Officina] registro non leggibile: {}", e.getMessage()); return new LinkedHashMap<String, Object>(); }
         }).orElseGet(LinkedHashMap::new);
@@ -206,12 +214,12 @@ public class ConsegneOfficinaService {
             if (!cambiato) return;
             reg.put("vetture", vetture);
             reg.put("aggiornatoIt", IT.format(now.atZone(ITALY)));
-            ConsegneDataset d = repository.findById(OFFICINA).orElseGet(() -> { ConsegneDataset n = new ConsegneDataset(); n.setTipo(OFFICINA); return n; });
+            ConsegneDataset d = dato().orElseGet(() -> { ConsegneDataset n = new ConsegneDataset(); n.setTipo(OFFICINA); return n; });
             d.setContenuto(objectMapper.writeValueAsString(reg));
             d.setRighe(vetture.size());
             d.setAggiornatoAt(LocalDateTime.now(ITALY));
             d.setAggiornatoDa(fonte);
-            repository.save(d);
+            memoria = Optional.of(repository.save(d));
             versione = System.currentTimeMillis();
         } catch (Exception e) {
             // il registro non deve mai bloccare la lettura del foglio

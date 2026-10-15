@@ -1,1302 +1,398 @@
 /* =====================================================================
-   APPUNTAMENTI E INGRESSI (salone) — Gruppo Autoscala CRM
-   ---------------------------------------------------------------------
-   Pagina #salonePage (contenuto costruito qui, stili in /css/salone.css, prefisso sa-).
-   Schede, come Tempistiche / Analisi delle Consegne:
-     🚶 WALK-IN       barra in tempo reale dello stato dei consulenti (bollini verde / giallo / rosso),
-                      calendario del mese + elenco degli ingressi del giorno (ordinabile),
-                      "＋ Registra ingresso" (nome, cognome, cellulare, vetture, consulente).
-                      Il consulente riceve la notifica e "Prende in carico": diventa Occupato.
-     📅 APPUNTAMENTI  da import CSV (solo sede Gruppo Auto Scala srl = Agnano), calendario,
-                      elenco del giorno, "Da assegnare" se il venditore non e' di Agnano.
-                      Import e storico degli import: dal livello 2.
-     📊 REPORT        (livello 3) walk-in per consulente, marchi richiesti, tempo negli stati,
-                      tempo dalla presa in carico al ritorno disponibile, storico dei cambi di stato.
-   💬 CHAT in basso a sinistra (su tutte le schede): solo livello 4 e ruoli Front Office / Consulenza / Back Office.
-   Grafici del Report: 3 formati (ciambella / barre / linee nel tempo), scelta ricordata nel browser.
-
-   Chi vede cosa (voce "Appuntamenti e ingressi" della pagina Permessi, a livelli):
-     Livello 1 vede tutto ma non registra e non importa (Consulenza a livello 1: solo i propri)
-     Livello 2 registra walk-in e importa · Livello 3 anche la scheda Report.
-   Tutti gli orari sono mostrati in ora italiana (Europe/Rome), qualunque sia il PC.
-   API: /api/salone/... (SaloneController.java)
+   APPUNTAMENTI E INGRESSI (salone) — /js/salone.js — prefisso sa-
    ===================================================================== */
-(function () {
-    const API = '/api/salone';
-    const TZ = 'Europe/Rome';
-    const PAGE_IDS = ['dashboardPage', 'followupsPage', 'waitingPage', 'contactsPage', 'promoPage',
-        'adminPage', 'rentPage', 'servicePage', 'veicoliPage', 'preventiviPage', 'allChartsPage', 'consegnePage', 'stockPage', 'commercialePage'];
-    const MESI = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
-    const GG = ['lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom'];
-    const MARCHE_RISERVA = ['Alfa Romeo', 'Audi', 'BMW', 'BYD', 'Citroën', 'Cupra', 'Dacia', 'DR', 'DS', 'Fiat', 'Ford', 'Hyundai', 'ICH-X', 'Jeep', 'Kia', 'Lancia', 'Mazda',
-        'Mercedes-Benz', 'MG', 'Mini', 'Nissan', 'Opel', 'Peugeot', 'Renault', 'Seat', 'Skoda', 'Sportequipe', 'Suzuki', 'Tesla', 'Toyota', 'Volkswagen', 'Volvo'];
-    const marche = () => (typeof MARCHE_LIST !== 'undefined' && Array.isArray(MARCHE_LIST) && MARCHE_LIST.length ? MARCHE_LIST : MARCHE_RISERVA);
-    /* bollini */
-    const STATI = {
-        DISPONIBILE: { t: 'Disponibile', c: 'verde' },
-        OCCUPATO: { t: 'Occupato', c: 'giallo' },
-        NON_DISPONIBILE: { t: 'Non disponibile', c: 'rosso' },
-        TEST_DRIVE: { t: 'Test drive', c: 'grigio' },
-        IN_PIAZZALE: { t: 'In piazzale', c: 'azzurro' }
-    };
-    const COL = { DISPONIBILE: '#22c55e', OCCUPATO: '#f5b301', NON_DISPONIBILE: '#ef4444', TEST_DRIVE: '#8b95a5', IN_PIAZZALE: '#38bdf8' };
-    const EMO = { DISPONIBILE: '🟢', OCCUPATO: '🟡', NON_DISPONIBILE: '🔴', TEST_DRIVE: '⚪', IN_PIAZZALE: '🔵' };
-    const zeri = () => Object.fromEntries(Object.keys(STATI).map(k => [k, 0]));   // { DISPONIBILE: 0, ... } per tutti i bollini
+#salonePage, .sa-ov, .sa-notif-box, .sa-chat, .sa-toast { --sa-acc:#22c3a6; --sa-acc2:#1a9e86; --sa-warn:#f4a83a; --sa-bg:var(--bg-primary, #0f1117); --sa-card:var(--bg-card, #171a23);
+  --sa-line:var(--border, #2a2e3b); --sa-ink:var(--text-primary, #eef1f6); --sa-ink2:var(--text-secondary, #9aa3b2); }
+#salonePage { min-height:calc(100vh - 70px); }
+#salonePage *, .sa-ov *, .sa-chat *, .sa-notif-box * { box-sizing:border-box; }
+.sa-band { background:linear-gradient(135deg, #0f3d3a, #12304a); color:#fff; padding:26px 32px 0; border-bottom:1px solid rgba(255,255,255,.08); }
+.sa-band-in { max-width:1500px; margin:0 auto; display:flex; justify-content:space-between; align-items:flex-end; gap:20px; flex-wrap:wrap; }
+.sa-band small { font-size:11px; font-weight:800; letter-spacing:1.6px; color:#8fe3d2; }
+.sa-band h1 { margin:4px 0 4px; font-size:28px; font-weight:800; letter-spacing:-.4px; }
+.sa-band p { margin:0; font-size:13px; color:rgba(255,255,255,.75); }
+.sa-clock { text-align:right; }
+.sa-clock b { display:block; font-size:30px; font-weight:800; font-variant-numeric:tabular-nums; }
+.sa-clock span { font-size:12px; color:rgba(255,255,255,.75); text-transform:capitalize; }
+.sa-tabs { max-width:1500px; margin:18px auto 0; display:flex; gap:6px; }
+.sa-tab { border:0; background:rgba(255,255,255,.08); color:#d7f3ee; font:inherit; font-size:14px; font-weight:800; padding:11px 20px; border-radius:12px 12px 0 0; cursor:pointer; }
+.sa-tab.on { background:var(--sa-bg); color:var(--sa-ink); }
+.sa-wrap { max-width:1500px; margin:0 auto; padding:22px 32px 120px; }
+.sa-card { background:var(--sa-card); border:1px solid var(--sa-line); border-radius:18px; padding:18px 20px; color:var(--sa-ink); }
+.sa-grid { display:grid; grid-template-columns:330px minmax(0, 1fr); gap:18px; align-items:start; }
+.sa-side { display:flex; flex-direction:column; gap:18px; position:sticky; top:84px; }
+.sa-msg { padding:10px 14px; border-radius:12px; margin-bottom:14px; font-size:13px; background:rgba(34,195,166,.12); color:var(--sa-ink); }
+.sa-msg.err { background:rgba(233,30,99,.14); color:#ff8fb1; }
+.sa-hint { font-size:12px; color:var(--sa-ink2); }
+/* calendario */
+.sa-cal-h { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.sa-cal-h b { font-size:15px; }
+.sa-nav { width:32px; height:32px; border-radius:10px; border:1px solid var(--sa-line); background:transparent; color:var(--sa-ink); font-size:18px; cursor:pointer; }
+.sa-nav:disabled { opacity:.3; cursor:default; }
+.sa-cal { display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; }
+.sa-cal em { font-style:normal; font-size:10.5px; font-weight:800; color:var(--sa-ink2); text-align:center; text-transform:uppercase; padding-bottom:4px; }
+.sa-day { position:relative; aspect-ratio:1; border:1px solid transparent; background:rgba(255,255,255,.03); border-radius:10px; color:var(--sa-ink); font:inherit; font-size:13px; font-weight:700; cursor:pointer; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; }
+.sa-day:hover:not(:disabled) { border-color:var(--sa-acc); }
+.sa-day.oggi { border-color:rgba(34,195,166,.5); }
+.sa-day.sel { background:var(--sa-acc); color:#062a24; }
+.sa-day.fut { opacity:.35; cursor:default; }
+.sa-day i { font-style:normal; font-size:9.5px; font-weight:800; padding:0 5px; border-radius:6px; background:rgba(34,195,166,.2); color:#8fe3d2; }
+.sa-day.sel i { background:rgba(0,0,0,.18); color:#062a24; }
+/* riepilogo */
+.sa-sum h3 { margin:0 0 10px; font-size:14px; }
+.sa-kpis { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; margin-bottom:12px; }
+.sa-kpis div { background:rgba(255,255,255,.04); border-radius:12px; padding:9px 8px; text-align:center; }
+.sa-kpis b { display:block; font-size:20px; }
+.sa-kpis span { font-size:10.5px; color:var(--sa-ink2); }
+.sa-cons-row { display:flex; justify-content:space-between; font-size:13px; padding:6px 2px; border-top:1px solid var(--sa-line); }
+.sa-cons-row b { color:var(--sa-acc); }
+/* elenco del giorno */
+.sa-list-h { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+.sa-list-h h2 { margin:0; font-size:19px; }
+.sa-list-h p { margin:3px 0 0; font-size:12.5px; color:var(--sa-ink2); }
+.sa-list-a { display:flex; gap:8px; flex-wrap:wrap; }
+.sa-btn { border:0; background:var(--sa-acc); color:#062a24; font:inherit; font-size:13.5px; font-weight:800; padding:10px 16px; border-radius:12px; cursor:pointer; white-space:nowrap; }
+.sa-btn:hover { background:#3bd9bc; }
+.sa-btn:disabled { opacity:.6; cursor:wait; }
+.sa-btn2 { border:1px solid var(--sa-line); background:transparent; color:var(--sa-ink); font:inherit; font-size:13px; font-weight:700; padding:9px 14px; border-radius:12px; cursor:pointer; white-space:nowrap; }
+.sa-btn2:hover { border-color:var(--sa-acc); }
+.sa-list { display:flex; flex-direction:column; gap:10px; }
+.sa-none { padding:26px; text-align:center; color:var(--sa-ink2); font-size:13.5px; border:1px dashed var(--sa-line); border-radius:14px; }
+.sa-in { display:grid; grid-template-columns:64px minmax(0, 1fr) auto; gap:14px; align-items:start; padding:14px 16px; border-radius:14px; background:rgba(255,255,255,.03); border:1px solid var(--sa-line); border-left:4px solid var(--sa-ink2); }
+.sa-in.att { border-left-color:var(--sa-warn); }
+.sa-in.preso { border-left-color:var(--sa-acc); }
+.sa-in-t b { font-size:18px; font-variant-numeric:tabular-nums; }
+.sa-in-n { font-size:15.5px; font-weight:800; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.sa-tel { font-size:12.5px; font-weight:700; color:var(--sa-acc); text-decoration:none; }
+.sa-in-v { display:flex; gap:6px; flex-wrap:wrap; margin-top:7px; }
+.sa-car { font-size:12px; font-weight:700; padding:4px 10px; border-radius:999px; background:rgba(74,144,217,.15); color:#a9cdf5; }
+.sa-in-note { margin-top:7px; font-size:12.5px; color:var(--sa-ink2); }
+.sa-in-f { margin-top:6px; font-size:11px; color:var(--sa-ink2); }
+.sa-in-a { display:flex; flex-direction:column; align-items:flex-end; gap:7px; min-width:210px; }
+.sa-sel { width:100%; padding:8px 10px; border-radius:10px; border:1px solid var(--sa-line); background:var(--sa-bg); color:var(--sa-ink); font:inherit; font-size:13px; font-weight:700; }
+.sa-cons { font-size:14px; }
+.sa-st { font-size:11.5px; font-weight:800; padding:4px 10px; border-radius:999px; }
+.sa-st.da { background:rgba(154,163,178,.15); color:var(--sa-ink2); }
+.sa-st.wait { background:rgba(244,168,58,.15); color:#ffc979; }
+.sa-st.ok { background:rgba(34,195,166,.15); color:#8fe3d2; }
+.sa-x { border:1px solid var(--sa-line); background:transparent; color:var(--sa-ink2); border-radius:9px; width:32px; height:32px; cursor:pointer; font-size:14px; flex:none; }
+.sa-x:hover { color:#ff8fb1; border-color:#ff8fb1; }
+.sa-empty { text-align:center; padding:50px 30px; }
+.sa-empty-i { font-size:44px; }
+.sa-empty h2 { margin:8px 0; }
+.sa-empty p { color:var(--sa-ink2); font-size:14px; line-height:1.6; }
+/* finestra "Registra ingresso" */
+.sa-ov { position:fixed; inset:0; background:rgba(5,8,14,.6); display:flex; align-items:flex-start; justify-content:center; padding:60px 16px; z-index:10040; overflow:auto; }
+.sa-modal { width:min(760px, 100%); background:var(--bg-card, #171a23); color:var(--text-primary, #eef1f6); border:1px solid var(--border, #2a2e3b); border-radius:20px; box-shadow:0 30px 80px -20px rgba(0,0,0,.6); }
+.sa-modal header { display:flex; justify-content:space-between; align-items:flex-start; padding:18px 22px 12px; border-bottom:1px solid var(--border, #2a2e3b); }
+.sa-modal header small { font-size:11px; font-weight:800; letter-spacing:1.4px; color:#22c3a6; }
+.sa-modal header h3 { margin:3px 0 0; font-size:20px; }
+.sa-mbody { padding:16px 22px; }
+.sa-modal footer { display:flex; justify-content:flex-end; gap:10px; padding:14px 22px 18px; border-top:1px solid var(--border, #2a2e3b); }
+.sa-row3 { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; }
+.sa-modal label { display:flex; flex-direction:column; gap:6px; font-size:11px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; color:var(--text-secondary, #9aa3b2); }
+.sa-modal input, .sa-modal textarea { width:100%; padding:11px 12px; border-radius:11px; border:1.5px solid var(--border, #2a2e3b); background:var(--bg-primary, #0f1117); color:var(--text-primary, #eef1f6); font:inherit; font-size:14px; text-transform:none; letter-spacing:0; font-weight:500; }
+.sa-modal input:focus, .sa-modal textarea:focus { outline:none; border-color:#22c3a6; }
+.sa-full { margin-top:14px; }
+.sa-lbl { margin:16px 0 8px; font-size:11px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; color:var(--text-secondary, #9aa3b2); }
+.sa-vrow { display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1.3fr) 32px; gap:8px; margin-bottom:8px; align-items:center; }
+.sa-dd { position:relative; }
+.sa-dd-l { display:none; position:absolute; left:0; right:0; top:calc(100% + 4px); max-height:240px; overflow:auto; z-index:5; background:var(--bg-card, #171a23); border:1px solid var(--border, #2a2e3b); border-radius:12px; box-shadow:0 16px 30px -10px rgba(0,0,0,.6); }
+.sa-dd.open .sa-dd-l { display:block; }
+.sa-dd-l button { display:block; width:100%; text-align:left; border:0; background:transparent; color:var(--text-primary, #eef1f6); font:inherit; font-size:13.5px; padding:8px 12px; cursor:pointer; }
+.sa-dd-l button:hover { background:rgba(34,195,166,.12); }
+.sa-chips { display:flex; flex-wrap:wrap; gap:8px; }
+.sa-chip { border:1.5px solid var(--border, #2a2e3b); background:transparent; color:var(--text-primary, #eef1f6); font:inherit; font-size:13px; font-weight:700; padding:9px 14px; border-radius:12px; cursor:pointer; }
+.sa-chip:hover { border-color:#22c3a6; }
+.sa-chip.on { background:#22c3a6; border-color:#22c3a6; color:#062a24; }
+.sa-err { color:#ff8fb1; font-size:13px; margin-top:10px; min-height:1em; }
+/* notifica al consulente */
+.sa-notif-box { position:fixed; top:78px; right:18px; z-index:10070; display:flex; flex-direction:column; gap:12px; width:min(380px, calc(100vw - 36px)); }
+.sa-notif { background:#0f2f2b; color:#fff; border:2px solid #22c3a6; border-radius:18px; padding:16px 18px; box-shadow:0 24px 60px -16px rgba(0,0,0,.7), 0 0 0 6px rgba(34,195,166,.15); animation:sa-in .35s cubic-bezier(.2, .8, .2, 1); transition:opacity .3s, transform .3s; }
+.sa-notif.via { opacity:0; transform:translateX(30px); }
+@keyframes sa-in { from { opacity:0; transform:translateY(-14px) scale(.97); } to { opacity:1; transform:none; } }
+.sa-notif-h { display:flex; align-items:center; gap:8px; }
+.sa-notif-h small { font-size:10.5px; font-weight:800; letter-spacing:1.2px; color:#8fe3d2; }
+.sa-pulse { width:10px; height:10px; border-radius:50%; background:#22c3a6; box-shadow:0 0 0 0 rgba(34,195,166,.7); animation:sa-pulse 1.4s infinite; }
+@keyframes sa-pulse { 70% { box-shadow:0 0 0 12px rgba(34,195,166,0); } 100% { box-shadow:0 0 0 0 rgba(34,195,166,0); } }
+.sa-notif-n { display:block; font-size:22px; margin:8px 0 2px; }
+.sa-notif-t { font-size:13.5px; color:#cfeee8; }
+.sa-notif-v { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 6px; }
+.sa-notif-v span { font-size:12.5px; font-weight:700; padding:5px 10px; border-radius:999px; background:rgba(255,255,255,.1); }
+.sa-notif-note { font-size:12.5px; color:#cfeee8; }
+.sa-notif-f { font-size:11px; color:#8fb8b0; margin:6px 0 12px; }
+.sa-notif .sa-btn { width:100%; }
+/* chat */
+.sa-chat { position:fixed; left:18px; bottom:18px; z-index:10030; color:var(--text-primary, #eef1f6); font-size:13.5px; }
+.sa-chat-fab { position:relative; display:flex; align-items:center; gap:8px; border:0; border-radius:999px; padding:12px 18px; background:#22c3a6; color:#062a24; font:inherit; font-size:14px; font-weight:800; cursor:pointer; box-shadow:0 14px 30px -10px rgba(34,195,166,.7); }
+.sa-chat-fab[hidden], .sa-chat-p[hidden], .sa-chat-list[hidden], .sa-chat-conv[hidden], .sa-chat-reply[hidden], .sa-emo[hidden], .sa-chat-back[hidden], .sa-badge[hidden] { display:none !important; }
+.sa-badge { font-style:normal; min-width:20px; height:20px; padding:0 6px; border-radius:999px; background:#e91e63; color:#fff; font-size:11px; font-weight:800; display:inline-flex; align-items:center; justify-content:center; }
+.sa-chat-fab .sa-badge { position:absolute; top:-6px; right:-6px; }
+.sa-chat-p { width:min(390px, calc(100vw - 36px)); height:min(560px, calc(100vh - 110px)); background:var(--bg-card, #171a23); border:1px solid var(--border, #2a2e3b); border-radius:20px; box-shadow:0 30px 70px -20px rgba(0,0,0,.7); display:flex; flex-direction:column; overflow:hidden; }
+.sa-chat-p header { display:flex; align-items:center; gap:8px; padding:12px 14px; background:linear-gradient(135deg, #0f3d3a, #12304a); color:#fff; }
+.sa-chat-tit { flex:1; font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sa-chat-back, .sa-chat-min { border:0; background:rgba(255,255,255,.12); color:#fff; width:30px; height:30px; border-radius:9px; cursor:pointer; font-size:16px; font-weight:800; }
+.sa-chat-list { flex:1; overflow:auto; padding:6px; }
+.sa-cl { display:flex; align-items:center; gap:10px; width:100%; text-align:left; border:0; background:transparent; color:inherit; font:inherit; padding:9px 10px; border-radius:12px; cursor:pointer; }
+.sa-cl:hover { background:rgba(255,255,255,.05); }
+.sa-cl.nl b { color:#22c3a6; }
+.sa-av { flex:none; width:38px; height:38px; border-radius:50%; display:grid; place-items:center; font-size:13px; font-weight:800; background:rgba(34,195,166,.18); color:#8fe3d2; }
+.sa-cl-t { flex:1; min-width:0; display:flex; flex-direction:column; }
+.sa-cl-t b { font-size:13.5px; }
+.sa-cl-t em { font-style:normal; font-size:12px; color:var(--text-secondary, #9aa3b2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sa-cl small { font-size:10.5px; color:var(--text-secondary, #9aa3b2); }
+.sa-chat-conv { flex:1; display:flex; flex-direction:column; min-height:0; position:relative; }
+.sa-chat-msgs { flex:1; overflow:auto; padding:10px 12px; display:flex; flex-direction:column; gap:6px; background:rgba(0,0,0,.12); }
+.sa-sep { text-align:center; margin:6px 0; }
+.sa-sep span { font-size:10.5px; font-weight:800; color:var(--text-secondary, #9aa3b2); background:rgba(255,255,255,.06); padding:3px 10px; border-radius:999px; text-transform:capitalize; }
+.sa-m { display:flex; flex-direction:column; align-items:flex-start; max-width:84%; }
+.sa-m.mio { align-self:flex-end; align-items:flex-end; }
+.sa-m.lampo .sa-bub { box-shadow:0 0 0 2px #22c3a6; }
+.sa-bub { position:relative; padding:8px 11px 6px; border-radius:14px 14px 14px 4px; background:rgba(255,255,255,.07); line-height:1.4; }
+.sa-m.mio .sa-bub { border-radius:14px 14px 4px 14px; background:#1d5c52; }
+.sa-m-n { display:block; font-size:11.5px; color:#8fe3d2; margin-bottom:2px; }
+.sa-m-t { word-break:break-word; }
+.sa-bub small { display:block; text-align:right; font-size:10px; color:var(--text-secondary, #9aa3b2); margin-top:2px; }
+.sa-quote { display:block; width:100%; text-align:left; border:0; border-left:3px solid #22c3a6; background:rgba(0,0,0,.2); color:inherit; font:inherit; padding:5px 8px; border-radius:6px; margin-bottom:5px; cursor:pointer; }
+.sa-quote b { display:block; font-size:11px; color:#8fe3d2; }
+.sa-quote span { font-size:11.5px; color:var(--text-secondary, #9aa3b2); }
+.sa-m-a { position:absolute; top:-12px; right:6px; display:none; gap:3px; }
+.sa-m.mio .sa-m-a { right:auto; left:6px; }
+.sa-bub:hover .sa-m-a { display:flex; }
+.sa-m-a button { border:1px solid var(--border, #2a2e3b); background:var(--bg-card, #171a23); color:inherit; border-radius:8px; width:26px; height:24px; cursor:pointer; font-size:12px; padding:0; }
+.sa-rapide { position:absolute; top:-40px; right:0; display:flex; gap:2px; padding:4px; border-radius:999px; background:var(--bg-card, #171a23); border:1px solid var(--border, #2a2e3b); box-shadow:0 10px 24px -8px rgba(0,0,0,.6); z-index:3; }
+.sa-m.mio .sa-rapide { right:auto; left:0; }
+.sa-rapide button { border:0; background:transparent; font-size:19px; cursor:pointer; padding:2px 4px; border-radius:50%; }
+.sa-rapide button:hover { background:rgba(255,255,255,.1); transform:scale(1.15); }
+.sa-rz { display:flex; gap:4px; flex-wrap:wrap; margin-top:3px; }
+.sa-rz button { border:1px solid var(--border, #2a2e3b); background:var(--bg-card, #171a23); color:inherit; font:inherit; font-size:12px; padding:2px 7px; border-radius:999px; cursor:pointer; }
+.sa-rz button.mia { border-color:#22c3a6; background:rgba(34,195,166,.15); }
+.sa-chat-reply { display:flex; align-items:center; gap:8px; padding:8px 12px; border-top:1px solid var(--border, #2a2e3b); background:rgba(34,195,166,.08); }
+.sa-chat-reply div { flex:1; min-width:0; border-left:3px solid #22c3a6; padding-left:8px; }
+.sa-chat-reply b { display:block; font-size:11.5px; color:#8fe3d2; }
+.sa-chat-reply span { display:block; font-size:12px; color:var(--text-secondary, #9aa3b2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sa-chat-reply button { border:0; background:transparent; color:inherit; cursor:pointer; font-size:14px; }
+.sa-chat-in { display:flex; align-items:flex-end; gap:6px; padding:10px; border-top:1px solid var(--border, #2a2e3b); }
+.sa-chat-in textarea { flex:1; resize:none; max-height:110px; padding:9px 12px; border-radius:16px; border:1.5px solid var(--border, #2a2e3b); background:var(--bg-primary, #0f1117); color:inherit; font:inherit; font-size:13.5px; }
+.sa-chat-in textarea:focus { outline:none; border-color:#22c3a6; }
+.sa-emo-b, .sa-send { flex:none; width:38px; height:38px; border-radius:50%; border:0; cursor:pointer; font-size:17px; }
+.sa-emo-b { background:rgba(255,255,255,.07); }
+.sa-send { background:#22c3a6; color:#062a24; font-weight:800; }
+.sa-emo { position:absolute; left:10px; right:10px; bottom:60px; max-height:200px; overflow:auto; display:grid; grid-template-columns:repeat(9, 1fr); gap:2px; padding:8px; border-radius:14px; background:var(--bg-card, #171a23); border:1px solid var(--border, #2a2e3b); box-shadow:0 16px 30px -10px rgba(0,0,0,.6); }
+.sa-emo button { border:0; background:transparent; font-size:20px; cursor:pointer; padding:3px; border-radius:8px; }
+.sa-emo button:hover { background:rgba(255,255,255,.1); }
+[data-theme="light"] .sa-day { background:rgba(0,0,0,.03); }
+[data-theme="light"] .sa-bub { background:rgba(0,0,0,.05); }
+[data-theme="light"] .sa-m.mio .sa-bub { background:#c9f1e8; }
+[data-theme="light"] .sa-chat-msgs { background:rgba(0,0,0,.03); }
+@media (max-width:980px) { .sa-grid { grid-template-columns:1fr; } .sa-side { position:static; } .sa-in { grid-template-columns:1fr; } .sa-in-a { align-items:stretch; min-width:0; } .sa-row3 { grid-template-columns:1fr; } .sa-wrap, .sa-band { padding-left:16px; padding-right:16px; } }
 
-    const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    const pad = n => String(n).padStart(2, '0');
-    const up1 = s => String(s || '').replace(/^./, c => c.toUpperCase());
-    /* ---- tempo: sempre ora italiana ---- */
-    const F_DATA = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
-    const F_ORA = new Intl.DateTimeFormat('it-IT', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hour12: false });
-    const F_DO = new Intl.DateTimeFormat('it-IT', { timeZone: TZ, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
-    const isoRoma = d => F_DATA.format(d);                   // aaaa-mm-gg in Italia
-    const oggi = () => isoRoma(new Date());
-    const ora = s => s ? F_ORA.format(new Date(s)) : '';
-    const dataOra = s => s ? F_DO.format(new Date(s)).replace(',', ' alle') : '';
-    const giornoLungo = g => new Date(g + 'T12:00:00Z').toLocaleDateString('it-IT', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-    const giornoCorto = g => new Date(g + 'T12:00:00Z').toLocaleDateString('it-IT', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' });
-    const durata = min => {
-        if (min == null || isNaN(min)) return '—';
-        const m = Math.round(min);
-        if (m < 60) return m + ' min';
-        return Math.floor(m / 60) + ' h ' + pad(m % 60) + ' min';
-    };
-    const minDa = s => s ? (Date.now() - new Date(s).getTime()) / 60000 : 0;
-    const nomeCliente = r => [r.nome, r.cognome].filter(Boolean).join(' ') || 'Cliente';
-    const vettTxt = r => (r.vetture || []).map(v => [v.marca, v.modello].filter(Boolean).join(' ')).filter(Boolean);
-    async function api(path, opt) {
-        const res = await fetch(API + path, Object.assign({ credentials: 'same-origin' }, opt || {}));
-        let d = null; try { d = await res.json(); } catch (e) { /* */ }
-        if (!res.ok) throw new Error((d && d.error) || ('Errore ' + res.status));
-        return d;
-    }
-    const post = (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
-    // senza stato (CRM chiuso / non ancora in salone): bollino VUOTO; il grigio pieno e' il Test drive
-    const bollino = (s, grande) => `<i class="sa-dot ${s && STATI[s] ? STATI[s].c : 'vuoto'}${grande ? ' g' : ''}" aria-hidden="true"></i>`;
-    function toast(t) {
-        const n = document.createElement('div'); n.className = 'sa-toast'; n.textContent = t;
-        document.body.appendChild(n); setTimeout(() => n.classList.add('via'), 2600); setTimeout(() => n.remove(), 3000);
-    }
-
-    /* ================= permessi e navigazione ================= */
-    const can = () => typeof hasAccess === 'function' && typeof currentUser !== 'undefined' && !!currentUser && hasAccess('SALONE');
-    const canFull = () => typeof canWrite === 'function' && canWrite('SALONE');
-    const entraDiretto = role => ['FRONT_OFFICE', 'CONSULENZA'].includes(role || (typeof currentUser !== 'undefined' && currentUser && currentUser.role)) && can();
-
-    let root = null, aperta = false;
-    const st = {
-        tab: 'walkin', giorno: oggi(), mese: oggi().slice(0, 7), giorni: {}, ingressi: [], consulenti: [], puoGestire: false, vedeTutti: false, vedeReport: false, puoImportare: false,
-        verso: 'desc', io: null, stati: [], mio: null, cambiaTutti: false,
-        app: { giorno: oggi(), mese: oggi().slice(0, 7), giorni: {}, daAss: {}, lista: [], verso: 'asc', filtro: '', info: null, caricato: false },
-        rep: { da: null, a: null, preset: '30', dati: null }
-    };
-
-    function refreshNav() {
-        const b = document.getElementById('navSalone');
-        if (b) b.style.display = can() ? 'flex' : 'none';
-        if (can()) { avviaNotifiche(); Presenza.avvia(); }
-        if (aperta) setTimeout(Menu.entra, 0);   // app.js rimette il menu ☰ dopo refreshNav: lo risistemo
-    }
-
-    /* ---------- MENU ☰ in alto a sinistra ----------
-       In Appuntamenti e ingressi "Mostra Grafici" non c'entra: si nasconde. Per chi non e' Admin
-       il ☰ sparisce; per l'Admin resta con una sola voce: "Elimina storico ingressi e appuntamenti". */
-    const Menu = (function () {
-        let voce = null, attivo = false;
-        const W = () => document.getElementById('hamburgerMenuWrapper'), D = () => document.getElementById('hamburgerMenuDropdown');
-        const admin = () => typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'ADMIN';
-        function entra() {
-            const w = W(), d = D(); if (!w || !d) return;
-            attivo = true;
-            [...d.children].forEach(c => { if (c !== voce && !c.dataset.saNascosto) { c.dataset.saNascosto = c.style.display || '-'; c.style.display = 'none'; } });
-            d.style.display = 'none';
-            if (!admin()) { w.style.display = 'none'; return; }
-            if (!voce) {
-                voce = document.createElement('button');
-                voce.type = 'button';
-                voce.setAttribute('style', 'width:100%;text-align:left;padding:12px 16px;background:none;border:none;color:#ff8a8d;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px');
-                voce.innerHTML = '🗑 Elimina storico ingressi e appuntamenti';
-                voce.addEventListener('click', () => { d.style.display = 'none'; apriElimina(); });
-            }
-            if (voce.parentElement !== d) d.appendChild(voce);
-            voce.style.display = 'flex';
-            w.style.display = 'block';
-        }
-        function esci() {
-            if (!attivo) return;
-            attivo = false;
-            const w = W(), d = D(); if (!w || !d) return;
-            [...d.children].forEach(c => { if (c.dataset.saNascosto) { c.style.display = c.dataset.saNascosto === '-' ? '' : c.dataset.saNascosto; delete c.dataset.saNascosto; } });
-            if (voce) voce.remove();
-            d.style.display = 'none';
-            w.style.display = typeof hasAccess === 'function' && hasAccess('GRAFICI') ? 'block' : 'none';
-        }
-        return { entra, esci };
-    })();
-
-    /* ---------- ELIMINA STORICO (solo Admin, con password) ----------
-       1) si sceglie cosa (walk-in, appuntamenti importati, storico degli import) e il periodo, o tutto
-       2) finestra di conferma al centro con la password; il server la ricontrolla (SaloneController). */
-    function apriElimina() {
-        const ov = document.createElement('div');
-        ov.className = 'sa-ov sa-ov-c';
-        ov.innerHTML = `<div class="sa-modal sa-del" role="dialog" aria-modal="true" aria-label="Elimina storico">
-          <header><div><small>SOLO ADMIN · APPUNTAMENTI E INGRESSI</small><h3>Elimina storico</h3></div><button type="button" class="sa-x" data-chiudi aria-label="Chiudi">✕</button></header>
-          <div class="sa-mbody">
-            <div class="sa-lbl" style="margin-top:0">Cosa eliminare</div>
-            <label class="sa-chk"><input type="checkbox" data-w checked> <span><b>Walk-in</b> · i clienti registrati in salone (ingressi)</span></label>
-            <label class="sa-chk"><input type="checkbox" data-ap checked> <span><b>Appuntamenti</b> · quelli arrivati dagli import (per data dell'appuntamento)</span></label>
-            <label class="sa-chk"><input type="checkbox" data-im> <span><b>Storico degli import</b> · l'elenco degli import fatti e cosa era cambiato</span></label>
-            <label class="sa-chk"><input type="checkbox" data-st> <span><b>Stati dei consulenti</b> · lo storico dei cambi di stato (verde / giallo / rosso); con "Tutto" anche lo stato attuale</span></label>
-            <label class="sa-chk"><input type="checkbox" data-ch> <span><b>Chat</b> · i messaggi del gruppo e delle chat private</span></label>
-            <button type="button" class="sa-btn2 sa-tutti" data-tutti>☑ Seleziona tutto</button>
-            <div class="sa-lbl">Periodo</div>
-            <label class="sa-chk"><input type="radio" name="saDelP" value="p" checked> <span>Solo un periodo</span></label>
-            <div class="sa-row2" data-per><label>Dal<input type="date" data-da></label><label>Al<input type="date" data-a></label></div>
-            <label class="sa-chk"><input type="radio" name="saDelP" value="t"> <span><b>Tutto</b> · azzera completamente i dati scelti sopra</span></label>
-            <p class="sa-hint" style="margin-top:12px">Report e grafici si calcolano da walk-in e stati dei consulenti: eliminandoli si azzerano anche loro. Permessi e utenti non si toccano mai.</p>
-            <div class="sa-err" data-err></div>
-          </div>
-          <footer><button type="button" class="sa-btn2" data-chiudi>Annulla</button><button type="button" class="sa-btn sa-btn-red" data-avanti>Continua</button></footer>
-        </div>`;
-        document.body.appendChild(ov);
-        const q = x => ov.querySelector(x);
-        q('[data-da]').value = oggi().slice(0, 8) + '01'; q('[data-a]').value = oggi();
-        const chiudi = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
-        const onKey = e => { if (e.key === 'Escape') chiudi(); };
-        document.addEventListener('keydown', onKey);
-        ov.addEventListener('change', () => { q('[data-per]').style.opacity = ov.querySelector('[name="saDelP"]:checked').value === 'p' ? '' : '.4'; });
-        ov.addEventListener('click', e => {
-            if (e.target === ov || e.target.closest('[data-chiudi]')) { chiudi(); return; }
-            if (e.target.closest('[data-tutti]')) {
-                const box = ['[data-w]', '[data-ap]', '[data-im]', '[data-st]', '[data-ch]'].map(q), tutti = box.every(x => x.checked);
-                box.forEach(x => { x.checked = !tutti; });
-                e.target.closest('[data-tutti]').textContent = tutti ? '☑ Seleziona tutto' : '☐ Togli tutto';
-                return;
-            }
-            if (!e.target.closest('[data-avanti]')) return;
-            const scelta = { walkin: q('[data-w]').checked, appuntamenti: q('[data-ap]').checked, storicoImport: q('[data-im]').checked,
-                stati: q('[data-st]').checked, chat: q('[data-ch]').checked,
-                tutto: ov.querySelector('[name="saDelP"]:checked').value === 't', da: q('[data-da]').value, a: q('[data-a]').value };
-            const err = q('[data-err]');
-            if (!scelta.walkin && !scelta.appuntamenti && !scelta.storicoImport && !scelta.stati && !scelta.chat) { err.textContent = 'Scegli almeno una cosa da eliminare.'; return; }
-            if (!scelta.tutto && (!scelta.da || !scelta.a)) { err.textContent = 'Scegli il periodo: dal / al.'; return; }
-            chiudi(); confermaElimina(scelta);
-        });
-    }
-    function confermaElimina(sc) {
-        const cosa = [sc.walkin && 'walk-in', sc.appuntamenti && 'appuntamenti importati', sc.storicoImport && 'storico degli import',
-            sc.stati && 'stati dei consulenti', sc.chat && 'messaggi della chat'].filter(Boolean).join(', ');
-        const quando = sc.tutto ? '<b>TUTTO</b> (nessun limite di date)' : `dal <b>${esc(sc.da.split('-').reverse().join('/'))}</b> al <b>${esc(sc.a.split('-').reverse().join('/'))}</b>`;
-        const ov = document.createElement('div');
-        ov.className = 'sa-ov sa-ov-c';
-        ov.innerHTML = `<div class="sa-modal sa-conf" role="alertdialog" aria-modal="true" aria-label="Conferma eliminazione">
-          <div class="sa-conf-i">⚠️</div>
-          <h3>Confermi l'eliminazione?</h3>
-          <p>Stai per eliminare <b>${esc(cosa)}</b> ${quando}.<br>L'operazione <b>non si può annullare</b>.</p>
-          <label class="sa-conf-pw">Scrivi la password per procedere<input type="password" data-pw autocomplete="off"></label>
-          <div class="sa-err" data-err></div>
-          <div class="sa-conf-b"><button type="button" class="sa-btn2" data-chiudi>Annulla</button><button type="button" class="sa-btn sa-btn-red" data-ok>Elimina definitivamente</button></div>
-        </div>`;
-        document.body.appendChild(ov);
-        const pw = ov.querySelector('[data-pw]'), err = ov.querySelector('[data-err]'), ok = ov.querySelector('[data-ok]');
-        pw.focus();
-        const chiudi = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
-        const onKey = e => { if (e.key === 'Escape') chiudi(); if (e.key === 'Enter' && document.activeElement === pw) vai(); };
-        document.addEventListener('keydown', onKey);
-        async function vai() {
-            if (!pw.value) { err.textContent = 'Scrivi la password.'; return; }
-            ok.disabled = true; ok.textContent = 'Eliminazione…';
-            try {
-                const d = await post('/storico/elimina', Object.assign({}, sc, { password: pw.value }));
-                chiudi();
-                toast(`Eliminati: ${d.walkin} walk-in, ${d.appuntamenti} appuntamenti, ${d.import} import, ${d.cambi} cambi di stato, ${d.messaggi} messaggi`);
-                caricaStati();
-                st.app.caricato = false; st.rep.dati = null;
-                if (st.tab === 'walkin') caricaGiorno(st.giorno); else if (st.tab === 'app') caricaApp(st.app.giorno); else caricaReport();
-            } catch (e) { err.textContent = e.message; ok.disabled = false; ok.textContent = 'Elimina definitivamente'; pw.select(); }
-        }
-        ov.addEventListener('click', e => {
-            if (e.target === ov || e.target.closest('[data-chiudi]')) { chiudi(); return; }
-            if (e.target.closest('[data-ok]')) vai();
-        });
-    }
-
-    /* ---------- PRESENZA: il consulente risulta Disponibile in automatico finche' il CRM resta aperto ----------
-       Ogni 25 s questa finestra dice al server "ci sono". Se il consulente chiude la finestra, preme Esci,
-       la sessione scade o il CRM viene ridistribuito (deploy), i segnali si fermano e dopo poco risulta
-       "non in salone". Un semplice F5 non conta come uscita. Se ha scelto lui Occupato o Non disponibile
-       il segnale non lo cambia. Il server lo fa solo dalle 8:00 alle 21:00. */
-    const Presenza = (function () {
-        let t = null, agganciato = false;
-        const tabId = (() => { try { let x = sessionStorage.getItem('saTab'); if (!x) { x = Math.random().toString(36).slice(2, 10); sessionStorage.setItem('saTab', x); } return x; } catch (e) { return 'x'; } })();
-        async function segnale() {
-            if (!can()) return;
-            try {
-                const d = await post('/stati/presenza', { tab: tabId });
-                if (!d.consulente) { ferma(); return; }        // non e' un consulente del salone
-                aggancia();
-                const prima = st.mio ? statoDi(st.mio).stato : undefined;
-                if (aperta && (prima === undefined || prima !== d.stato)) caricaStati();
-            } catch (e) { /* rete o sessione scaduta: si riprova */ }
-        }
-        function aggancia() {
-            if (agganciato) return;
-            agganciato = true;
-            window.addEventListener('pagehide', () => {
-                if (!t) return;
-                try { navigator.sendBeacon(API + '/stati/uscita', new Blob([JSON.stringify({ tab: tabId })], { type: 'application/json' })); } catch (e) { /* */ }
-            });
-            document.addEventListener('visibilitychange', () => { if (t && document.visibilityState === 'visible') segnale(); });
-            // "Esci" dal menu: esce subito (non aspetta)
-            if (typeof window.logout === 'function' && !window.logout.__sa) {
-                const orig = window.logout;
-                const w = function () {
-                    const self = this, args = arguments, era = !!t;
-                    ferma();
-                    if (!era) return orig.apply(self, args);
-                    fetch(API + '/stati/uscita', { method: 'POST', credentials: 'same-origin', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tab: tabId, esci: true }) })
-                        .catch(() => { /* */ }).finally(() => orig.apply(self, args));
-                };
-                w.__sa = true; window.logout = w;
-            }
-        }
-        function avvia() { if (t) return; t = setInterval(segnale, 25000); segnale(); }
-        function ferma() { clearInterval(t); t = null; }
-        return { avvia, ferma };
-    })();
-
-    function open() {
-        if (!can()) return;
-        if (window.MacroHome) { try { MacroHome.hide(); } catch (e) { /* */ } }
-        if (window.BIHome) { try { BIHome.hide(); } catch (e) { /* */ } }
-        PAGE_IDS.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
-        if (typeof stopContactPolling === 'function') stopContactPolling();
-        if (typeof disconnectContactWebSocket === 'function') disconnectContactWebSocket();
-        const links = document.querySelector('.nav-links'); if (links) links.style.visibility = 'hidden';
-        document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-        document.body.removeAttribute('data-role-theme');
-        const badge = document.getElementById('navBrandBadge'); if (badge) badge.textContent = 'SALONE';
-        const page = document.getElementById('salonePage'); if (!page) return;
-        page.style.display = 'block';
-        aperta = true;
-        build();
-        history.replaceState(null, '', window.location.pathname + '#salone');
-        sessionStorage.setItem('currentPage', 'salone');
-        window.scrollTo(0, 0);
-        caricaGiorno(st.giorno);
-        caricaStati();
-        Menu.entra();
-    }
-    function hide() {
-        const page = document.getElementById('salonePage'); if (page) page.style.display = 'none';
-        if (aperta) { const links = document.querySelector('.nav-links'); if (links) links.style.visibility = ''; }
-        aperta = false;
-        Menu.esci();
-        Chat.mostra(false);
-    }
-
-    /* ================= pagina ================= */
-    function build() {
-        if (root) return;
-        root = document.getElementById('saloneRoot');
-        root.innerHTML = `
-          <div class="sa-band">
-            <div class="sa-band-in">
-              <div><small>SALONE · AGNANO</small><h1>Appuntamenti e ingressi</h1><p>Clienti in salone, consulenti e appuntamenti della giornata</p></div>
-              <div class="sa-clock" id="saClock"></div>
-            </div>
-            <div class="sa-tabs" role="tablist"></div>
-          </div>
-          <div class="sa-wrap" id="saBody"></div>`;
-        disegnaSchede();
-        root.querySelector('.sa-tabs').addEventListener('click', e => {
-            const b = e.target.closest('[data-tab]'); if (!b) return;
-            st.tab = b.dataset.tab;
-            disegnaSchede();
-            if (st.tab === 'app' && !st.app.caricato) caricaApp(st.app.giorno);
-            else if (st.tab === 'report' && !st.rep.dati) caricaReport();
-            else render();
-        });
-        root.addEventListener('click', onClick);
-        root.addEventListener('change', onChange);
-        const tick = () => { const c = document.getElementById('saClock'); if (c) { const d = new Date(); c.innerHTML = `<b>${F_ORA.format(d)}</b><span>${d.toLocaleDateString('it-IT', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long' })}</span>`; } };
-        tick(); setInterval(tick, 20000);
-        // aggiornamento automatico (altri front office, prese in carico, stati)
-        setInterval(() => { if (aperta && st.tab === 'walkin' && !document.querySelector('.sa-ov')) caricaGiorno(st.giorno, true); }, 15000);
-        setInterval(() => { if (aperta) caricaStati(); }, 5000);
-        setInterval(() => { if (aperta) disegnaStati(); }, 30000);   // "da 12 min" sempre aggiornato
-    }
-    function disegnaSchede() {
-        const t = root.querySelector('.sa-tabs');
-        const L = [['walkin', '🚶 Walk-in'], ['app', '📅 Appuntamenti']].concat(st.vedeReport ? [['report', '📊 Report']] : []);
-        if (!L.some(x => x[0] === st.tab)) st.tab = 'walkin';
-        t.innerHTML = L.map(([k, n]) => `<button type="button" class="sa-tab ${st.tab === k ? 'on' : ''}" data-tab="${k}" role="tab" aria-selected="${st.tab === k}">${n}</button>`).join('');
-    }
-
-    async function caricaGiorno(g, silenzioso) {
-        st.giorno = g;
-        try {
-            const [d, m] = await Promise.all([api('/ingressi?data=' + g), api('/giorni?mese=' + st.mese)]);
-            const eraRep = st.vedeReport;
-            st.ingressi = d.ingressi || []; st.consulenti = d.consulenti || []; st.puoGestire = !!d.puoGestire; st.io = d.io || null;
-            st.vedeTutti = !!d.vedeTutti; st.vedeReport = !!d.vedeReport; st.puoImportare = !!d.puoImportare;
-            st.chat = !!d.chat;
-            if (aperta) Chat.mostra(st.chat);      // chat: solo livello 4 e ruoli del salone
-            st.giorni = m.giorni || {};
-            st.err = '';
-            if (eraRep !== st.vedeReport && root) disegnaSchede();
-        } catch (e) { st.err = e.message; }
-        if (st.tab !== 'walkin') return;
-        if (!silenzioso || !document.activeElement || !root.contains(document.activeElement) || document.activeElement.tagName === 'BUTTON') render();
-    }
-
-    /* ---------- stato dei consulenti (bollini) ---------- */
-    async function caricaStati() {
-        try {
-            const d = await api('/stati');
-            st.stati = d.stati || []; st.mio = d.mio || null; st.cambiaTutti = !!d.cambiaTutti; st.online = d.online || [];
-            disegnaStati();
-            Controllo.verifica();
-        } catch (e) { /* rete: si riprova */ }
-    }
-    const statoDi = nome => st.stati.find(x => x.nome === nome) || { nome, stato: null };
-    function barraStati() {
-        if (!st.stati.length) return '<div class="sa-card sa-stati" id="saStati"><span class="sa-hint">Caricamento stato dei consulenti…</span></div>';
-        return `<div class="sa-card sa-stati" id="saStati">${barraStatiIn()}</div>`;
-    }
-    function barraStatiIn() {
-        const conta = zeri();
-        st.stati.forEach(s => { if (s.stato && s.stato in conta) conta[s.stato]++; });
-        const mio = st.mio ? statoDi(st.mio) : null;
-        return `<div class="sa-stati-h">
-            <div><h3>Consulenti in salone <span class="sa-live">● in tempo reale</span></h3>
-              <p>${Object.entries(conta).map(([k, n]) => `${bollino(k)} ${n} ${STATI[k].t.toLowerCase()}`).join(' · ')}</p>
-              ${mio ? '<p class="sa-hint">Con il CRM aperto risulti disponibile in automatico; quando lo chiudi o premi Esci risulti fuori dal salone.</p>' : ''}</div>
-            ${mio ? `<div class="sa-mio" role="group" aria-label="Il tuo stato"><span>Il tuo stato</span>
-              ${Object.keys(STATI).map(k => `<button type="button" class="sa-mio-b ${STATI[k].c} ${mio.stato === k ? 'on' : ''}" data-stato="${k}">${bollino(k)} ${STATI[k].t}</button>`).join('')}</div>` : ''}
-          </div>
-          <div class="sa-stati-l">${st.stati.map(s => {
-              // senza il CRM aperto il consulente resta "non in salone": il suo stato non si puo' cambiare da fuori
-              const io = st.mio === s.nome, conn = io || (st.online || []).includes(s.nome), puo = io || (st.cambiaTutti && conn);
-              return `<div class="sa-cs ${s.stato && STATI[s.stato] ? STATI[s.stato].c : 'vuoto'} ${io ? 'io' : ''}">
-                <button type="button" class="sa-cs-b" ${puo ? `data-menu="${esc(s.nome)}"` : 'disabled'} title="${puo ? 'Cambia stato' : st.cambiaTutti && !conn ? 'Non ha il CRM aperto: lo stato torna disponibile quando accede' : ''}">
-                  ${bollino(s.stato, true)}
-                  <span class="sa-cs-t"><b>${esc(s.nome)}${io ? ' (tu)' : ''}</b>
-                  <em>${s.stato ? STATI[s.stato].t + ' · da ' + durata(minDa(s.dal)) : conn ? 'CRM aperto · fuori orario del salone' : s.uscitoAt && isoRoma(new Date(s.uscitoAt)) === oggi() && !/^Non connesso|riavvio/.test(s.motivo || '') ? 'Uscito dal CRM alle ' + ora(s.uscitoAt) : 'Non ancora in salone oggi'}</em>
-                  ${s.stato && s.stato !== 'DISPONIBILE' && s.stato !== 'NON_DISPONIBILE' && s.cliente ? `<em class="sa-cs-cl">con ${esc(s.cliente)}</em>` : ''}</span>
-                </button></div>`;
-          }).join('')}</div>`;
-    }
-    function disegnaStati() {
-        const el = document.getElementById('saStati');
-        if (el && !el.querySelector('.sa-menu')) el.innerHTML = barraStatiIn();
-        const chips = document.querySelectorAll('.sa-ov [data-c]');
-        chips.forEach(b => { const s = statoDi(b.dataset.c).stato; const d = b.querySelector('.sa-dot'); if (d) d.className = 'sa-dot ' + (s && STATI[s] ? STATI[s].c : 'vuoto'); });
-    }
-    async function cambiaStato(stato, nome) {
-        try {
-            const d = await post('/stati', nome && nome !== st.mio ? { stato, nome } : { stato });
-            st.stati = d.stati || st.stati; if (d.online) st.online = d.online; disegnaStati();
-            toast((nome && nome !== st.mio ? nome + ': ' : 'Ora sei ') + STATI[stato].t.toLowerCase());
-        } catch (e) { alert(e.message); }
-    }
-    function menuStato(btn, nome) {
-        document.querySelectorAll('.sa-menu').forEach(x => x.remove());
-        const m = document.createElement('div'); m.className = 'sa-menu';
-        m.innerHTML = `<small>${esc(nome)}</small>` + Object.keys(STATI).map(k => `<button type="button" data-set="${k}">${bollino(k)} ${STATI[k].t}</button>`).join('');
-        btn.parentElement.appendChild(m);
-        m.addEventListener('click', ev => { const b = ev.target.closest('[data-set]'); if (!b) return; ev.stopPropagation(); m.remove(); cambiaStato(b.dataset.set, nome); });
-        setTimeout(() => document.addEventListener('click', function via(ev) { if (!m.contains(ev.target)) { m.remove(); document.removeEventListener('click', via); } }), 0);
-    }
-
-    /* ================= render ================= */
-    function render() {
-        const body = root && root.querySelector('#saBody'); if (!body) return;
-        if (st.tab === 'app') { renderApp(body); return; }
-        if (st.tab === 'report') { renderReport(body); return; }
-        const L = st.ingressi.slice().sort((a, b) => (a.ora < b.ora ? -1 : a.ora > b.ora ? 1 : 0) * (st.verso === 'desc' ? -1 : 1));
-        const isOggi = st.giorno === oggi();
-        const assegnati = st.ingressi.filter(r => r.consulente).length, presi = st.ingressi.filter(r => r.presoAt).length;
-        const perCons = {}; st.ingressi.forEach(r => { if (r.consulente) perCons[r.consulente] = (perCons[r.consulente] || 0) + 1; });
-        body.innerHTML = `
-          ${st.err ? `<div class="sa-msg err">${esc(st.err)}</div>` : ''}
-          ${barraStati()}
-          <div class="sa-grid">
-            <aside class="sa-side">
-              <div class="sa-card">${calendario(st.mese, st.giorno, st.giorni, null, false)}</div>
-              <div class="sa-card sa-sum">
-                <h3>${st.vedeTutti ? 'Riepilogo del giorno' : 'I tuoi clienti del giorno'}</h3>
-                <div class="sa-kpis"><div><b>${st.ingressi.length}</b><span>ingressi</span></div><div><b>${assegnati}</b><span>assegnati</span></div><div><b>${presi}</b><span>presi in carico</span></div></div>
-                ${st.vedeTutti ? st.consulenti.map(c => `<div class="sa-cons-row"><span>${bollino(statoDi(c).stato)} ${esc(c)}</span><b>${perCons[c] || 0}</b></div>`).join('') : ''}
-              </div>
-            </aside>
-            <section class="sa-main">
-              <div class="sa-card">
-                <div class="sa-list-h">
-                  <div><h2>${esc(up1(giornoLungo(st.giorno)))}</h2><p>${L.length} ingress${L.length === 1 ? 'o' : 'i'}${isOggi ? ' · oggi' : ''}${st.vedeTutti ? '' : ' · solo i clienti assegnati a te'}</p></div>
-                  <div class="sa-list-a">
-                    <button type="button" class="sa-btn2" data-act="verso">${st.verso === 'desc' ? '⬇️ Più recenti prima' : '⬆️ Meno recenti prima'}</button>
-                    ${!isOggi ? '<button type="button" class="sa-btn2" data-act="oggi">Oggi</button>' : ''}
-                    ${st.puoGestire && isOggi ? '<button type="button" class="sa-btn" data-act="nuovo">＋ Registra ingresso</button>' : ''}
-                  </div>
-                </div>
-                <div class="sa-list">${L.length ? L.map(card).join('') : `<div class="sa-none">${isOggi ? (st.vedeTutti ? 'Nessun cliente registrato oggi.' + (st.puoGestire ? ' Usa “＋ Registra ingresso” quando entra un cliente.' : '') : 'Nessun cliente assegnato a te oggi.') : 'Nessun ingresso in questo giorno.'}</div>`}</div>
-              </div>
-            </section>
-          </div>`;
-    }
-
-    /* calendario riusato da walk-in (solo passato) e appuntamenti (anche futuro) */
-    function calendario(mese, sel, giorni, rossi, futuro) {
-        const [y, m] = mese.split('-').map(Number);
-        const primo = new Date(Date.UTC(y, m - 1, 1)), giorniMese = new Date(Date.UTC(y, m, 0)).getUTCDate();
-        const vuoti = (primo.getUTCDay() + 6) % 7;      // lunedi' = 0
-        const og = oggi();
-        let celle = '';
-        for (let i = 0; i < vuoti; i++) celle += '<span></span>';
-        for (let d = 1; d <= giorniMese; d++) {
-            const g = `${y}-${pad(m)}-${pad(d)}`, n = giorni[g] || 0, r = rossi ? rossi[g] || 0 : 0;
-            const off = !futuro && g > og;
-            celle += `<button type="button" class="sa-day ${g === sel ? 'sel' : ''} ${g === og ? 'oggi' : ''} ${off ? 'fut' : ''}" data-giorno="${g}" ${off ? 'disabled' : ''} ${r ? `title="${r} da assegnare"` : ''}>
-              <span>${d}</span>${n ? `<i>${n}</i>` : ''}${r ? '<b class="sa-day-r"></b>' : ''}</button>`;
-        }
-        return `<div class="sa-cal-h"><button type="button" class="sa-nav" data-mese="-1" aria-label="Mese prima">‹</button>
-            <b>${up1(MESI[m - 1])} ${y}</b>
-            <button type="button" class="sa-nav" data-mese="1" aria-label="Mese dopo" ${!futuro && mese >= og.slice(0, 7) ? 'disabled' : ''}>›</button></div>
-          <div class="sa-cal">${GG.map(g => `<em>${g}</em>`).join('')}${celle}</div>`;
-    }
-
-    function card(r) {
-        const v = vettTxt(r);
-        const stato = !r.consulente ? '<span class="sa-st da">Da assegnare</span>'
-            : r.liberoAt ? `<span class="sa-st ok">✓ Seguito per ${durata(r.minutiCliente)} · libero alle ${ora(r.liberoAt)}</span>`
-            : r.presoAt ? `<span class="sa-st ok">✓ Preso in carico alle ${ora(r.presoAt)}</span>`
-            : `<span class="sa-st wait">⏳ Notificato alle ${ora(r.assegnatoAt)} · da prendere in carico</span>`;
-        const sc = r.consulente ? statoDi(r.consulente).stato : null;
-        const sel = st.puoGestire && r.data === oggi()
-            ? `<select class="sa-sel" data-assegna="${esc(r.id)}"><option value="">— Assegna a —</option>${st.consulenti.map(c => { const s = statoDi(c).stato; return `<option value="${esc(c)}" ${c === r.consulente ? 'selected' : ''}>${EMO[s] || '○'} ${esc(c)}</option>`; }).join('')}</select>`
-            : `<b class="sa-cons">${r.consulente ? bollino(sc) + ' ' + esc(r.consulente) : '—'}</b>`;
-        const mioCliente = st.io && r.consulente && st.mio === r.consulente;
-        return `<article class="sa-in ${r.presoAt ? 'preso' : r.consulente ? 'att' : 'nuovo'}">
-            <div class="sa-in-t"><b>${ora(r.ora)}</b></div>
-            <div class="sa-in-c">
-              <div class="sa-in-n">${esc(nomeCliente(r))}${r.cellulare ? ` <a href="tel:${esc(r.cellulare)}" class="sa-tel">📞 ${esc(r.cellulare)}</a>` : ''}</div>
-              <div class="sa-in-v">${v.length ? v.map(x => `<span class="sa-car">🚗 ${esc(x)}</span>`).join('') : '<span class="sa-hint">Nessuna vettura indicata</span>'}</div>
-              ${r.note ? `<div class="sa-in-note">📝 ${esc(r.note)}</div>` : ''}
-              <div class="sa-in-f">Inserito il ${esc(dataOra(r.ora))} da ${esc(r.registratoDa || '')}${r.assegnatoAt ? ` · assegnato alle ${ora(r.assegnatoAt)}` : ''}</div>
-            </div>
-            <div class="sa-in-a">${sel}${stato}
-              ${st.puoGestire && r.data === oggi() ? `<button type="button" class="sa-x" data-elimina="${esc(r.id)}" title="Elimina l'ingresso">🗑</button>` : ''}
-              ${(mioCliente || st.puoGestire) && r.consulente && !r.presoAt && r.data === oggi() ? `<button type="button" class="sa-btn" data-presa="${esc(r.id)}">${mioCliente ? 'Prendo in carico ✓' : 'Segna preso in carico'}</button>` : ''}
-            </div>
-          </article>`;
-    }
-
-    async function onClick(e) {
-        const mn = e.target.closest('[data-menu]'); if (mn) { menuStato(mn, mn.dataset.menu); return; }
-        const so = e.target.closest('[data-stato]'); if (so) { cambiaStato(so.dataset.stato); return; }
-        if (st.tab === 'app' && await onClickApp(e)) return;
-        if (st.tab === 'report' && onClickReport(e)) return;
-        const g = e.target.closest('[data-giorno]'); if (g) { caricaGiorno(g.dataset.giorno); return; }
-        const m = e.target.closest('[data-mese]');
-        if (m) { st.mese = spostaMese(st.mese, Number(m.dataset.mese)); caricaGiorno(st.giorno); return; }
-        const a = e.target.closest('[data-act]');
-        if (a) {
-            if (a.dataset.act === 'verso') { st.verso = st.verso === 'desc' ? 'asc' : 'desc'; render(); }
-            if (a.dataset.act === 'oggi') { st.mese = oggi().slice(0, 7); caricaGiorno(oggi()); }
-            if (a.dataset.act === 'nuovo') apriForm();
-            return;
-        }
-        const el = e.target.closest('[data-elimina]');
-        if (el) {
-            if (!confirm('Eliminare questo ingresso?')) return;
-            try { await post('/ingressi/' + encodeURIComponent(el.dataset.elimina), { elimina: true }); caricaGiorno(st.giorno); } catch (x) { alert(x.message); }
-            return;
-        }
-        const p = e.target.closest('[data-presa]');
-        if (p) { try { await post('/ingressi/' + encodeURIComponent(p.dataset.presa) + '/presa'); caricaGiorno(st.giorno); caricaStati(); } catch (x) { alert(x.message); } }
-    }
-    const spostaMese = (mese, d) => { const [y, mm] = mese.split('-').map(Number); const n = new Date(Date.UTC(y, mm - 1 + d, 1)); return n.getUTCFullYear() + '-' + pad(n.getUTCMonth() + 1); };
-    async function onChange(e) {
-        if (st.tab === 'app') { onChangeApp(e); return; }
-        if (st.tab === 'report') { onChangeReport(e); return; }
-        const s = e.target.closest('[data-assegna]'); if (!s) return;
-        const ss = statoDi(s.value).stato;
-        if (s.value && ss !== 'DISPONIBILE' && !confirm(`${s.value} risulta ${ss ? STATI[ss].t.toLowerCase() : 'non ancora in salone'}. Assegnare comunque?`)) { caricaGiorno(st.giorno); return; }
-        try { await post('/ingressi/' + encodeURIComponent(s.dataset.assegna), { consulente: s.value }); caricaGiorno(st.giorno); }
-        catch (x) { alert(x.message); caricaGiorno(st.giorno); }
-    }
-
-    /* ================= registra ingresso ================= */
-    function apriForm() {
-        const ov = document.createElement('div');
-        ov.className = 'sa-ov';
-        const ordinati = st.consulenti.slice().sort((a, b) => ordStato(statoDi(a).stato) - ordStato(statoDi(b).stato));
-        ov.innerHTML = `<div class="sa-modal" role="dialog" aria-modal="true" aria-label="Registra ingresso">
-          <header><div><small>WALK-IN · ${dataOra(new Date().toISOString())}</small><h3>Registra ingresso</h3></div><button type="button" class="sa-x" data-chiudi aria-label="Chiudi">✕</button></header>
-          <div class="sa-mbody">
-            <div class="sa-row3">
-              <label>Nome<input type="text" id="saNome" autocomplete="off"></label>
-              <label>Cognome<input type="text" id="saCognome" autocomplete="off"></label>
-              <label>Cellulare<input type="tel" id="saCell" autocomplete="off" inputmode="tel"></label>
-            </div>
-            <div class="sa-lbl">Vetture di cui chiede informazioni</div>
-            <div id="saVett"></div>
-            <button type="button" class="sa-btn2" data-addv>＋ Aggiungi vettura</button>
-            <div class="sa-lbl">Assegna a un consulente (salone di Agnano) · prima i disponibili</div>
-            <div class="sa-chips" id="saCons">${ordinati.map(c => `<button type="button" class="sa-chip" data-c="${esc(c)}">${bollino(statoDi(c).stato)} ${esc(c)}</button>`).join('')}</div>
-            <label class="sa-full">Note (facoltative)<textarea id="saNote" rows="2"></textarea></label>
-            <div class="sa-err" id="saErr"></div>
-          </div>
-          <footer><button type="button" class="sa-btn2" data-chiudi>Annulla</button><button type="button" class="sa-btn" data-salva>Registra e notifica</button></footer>
-        </div>`;
-        document.body.appendChild(ov);
-        let cons = '';
-        const vett = ov.querySelector('#saVett');
-        const addV = () => { vett.appendChild(rigaVettura()); };
-        addV();
-        ov.querySelector('#saNome').focus();
-        const chiudi = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
-        const onKey = e => { if (e.key === 'Escape' && !ov.querySelector('.sa-dd.open')) chiudi(); };
-        document.addEventListener('keydown', onKey);
-        ov.addEventListener('click', async e => {
-            if (e.target === ov || e.target.closest('[data-chiudi]')) { chiudi(); return; }
-            if (e.target.closest('[data-addv]')) { addV(); return; }
-            const c = e.target.closest('[data-c]');
-            if (c) { cons = cons === c.dataset.c ? '' : c.dataset.c; ov.querySelectorAll('[data-c]').forEach(x => x.classList.toggle('on', x.dataset.c === cons)); return; }
-            if (e.target.closest('[data-salva]')) {
-                const body = {
-                    nome: ov.querySelector('#saNome').value, cognome: ov.querySelector('#saCognome').value, cellulare: ov.querySelector('#saCell').value,
-                    note: ov.querySelector('#saNote').value, consulente: cons,
-                    vetture: [...vett.querySelectorAll('.sa-vrow')].map(r => ({ marca: r.querySelector('.sa-marca').value, modello: r.querySelector('.sa-modello').value }))
-                };
-                const err = ov.querySelector('#saErr');
-                if (!body.nome.trim() && !body.cognome.trim()) { err.textContent = 'Scrivi almeno il nome o il cognome del cliente.'; return; }
-                if (!cons && !confirm('Non hai scelto il consulente: registrare comunque? Potrai assegnarlo dopo dall\'elenco.')) return;
-                const sc = cons ? statoDi(cons).stato : 'DISPONIBILE';
-                if (sc !== 'DISPONIBILE' && !confirm(`${cons} risulta ${sc ? STATI[sc].t.toLowerCase() : 'non ancora in salone'}. Assegnare comunque?`)) return;
-                const b = e.target.closest('[data-salva]'); b.disabled = true; b.textContent = 'Salvataggio…';
-                try { await post('/ingressi', body); chiudi(); st.giorno = oggi(); st.mese = oggi().slice(0, 7); caricaGiorno(oggi()); toast(cons ? 'Registrato: notifica inviata a ' + cons : 'Ingresso registrato'); }
-                catch (x) { err.textContent = x.message; b.disabled = false; b.textContent = 'Registra e notifica'; }
-            }
-        });
-    }
-    const ordStato = s => ({ DISPONIBILE: 0, IN_PIAZZALE: 1, OCCUPATO: 2, TEST_DRIVE: 3, NON_DISPONIBILE: 4 }[s] ?? 5);
-    // marchio: il solito menu a tendina con ricerca (elenco marchi del CRM)
-    function rigaVettura() {
-        const r = document.createElement('div');
-        r.className = 'sa-vrow';
-        r.innerHTML = `<div class="sa-dd"><input type="text" class="sa-marca" placeholder="Clicca o cerca marchio..." autocomplete="off"><div class="sa-dd-l"></div></div>
-          <input type="text" class="sa-modello" placeholder="Modello (es. 208 1.2 PureTech)" autocomplete="off">
-          <button type="button" class="sa-x" title="Togli questa vettura">✕</button>`;
-        const inp = r.querySelector('.sa-marca'), dd = r.querySelector('.sa-dd'), list = r.querySelector('.sa-dd-l');
-        const draw = () => {
-            const q = inp.value.trim().toLowerCase();
-            const L = marche().filter(m => !q || m.toLowerCase().includes(q));
-            list.innerHTML = L.map(m => `<button type="button" data-m="${esc(m)}">${esc(m)}</button>`).join('') || '<div class="sa-hint" style="padding:8px 10px">Nessun marchio</div>';
-        };
-        inp.addEventListener('focus', () => { dd.classList.add('open'); draw(); });
-        inp.addEventListener('input', () => { dd.classList.add('open'); draw(); });
-        inp.addEventListener('keydown', e => {
-            if (e.key === 'Enter') { e.preventDefault(); const f = list.querySelector('[data-m]'); if (f) { inp.value = f.dataset.m; dd.classList.remove('open'); r.querySelector('.sa-modello').focus(); } }
-            if (e.key === 'Escape') dd.classList.remove('open');
-        });
-        list.addEventListener('mousedown', e => { const b = e.target.closest('[data-m]'); if (!b) return; e.preventDefault(); inp.value = b.dataset.m; dd.classList.remove('open'); r.querySelector('.sa-modello').focus(); });
-        inp.addEventListener('blur', () => setTimeout(() => dd.classList.remove('open'), 120));
-        r.querySelector('.sa-x').addEventListener('click', () => { const c = r.parentElement; if (c.children.length > 1) r.remove(); else { inp.value = ''; r.querySelector('.sa-modello').value = ''; } });
-        return r;
-    }
-
-    /* ================= CONTROLLO DEI 15 MINUTI (solo ruolo Consulenza) =================
-       15 minuti dopo la presa in carico di un walk-in, se il consulente e' ancora Occupato e nel frattempo
-       non ha cambiato stato (nessun movimento: test drive, piazzale...), compare al centro:
-       "Sono passati 15 minuti dall'inizio della consulenza, sei nuovamente disponibile?"
-         No (rosso)        -> resta Occupato, la domanda torna tra 10 minuti
-         Si' + 60 secondi  -> Disponibile; se non risponde nessuno, allo scadere diventa Disponibile da solo
-       L'ora del controllo la tiene il server (controlloAt), quindi vale anche dopo un F5. */
-    const Controllo = (function () {
-        let aperto = null, visto = null;
-        const consulenza = () => typeof currentUser !== 'undefined' && currentUser && currentUser.role === 'CONSULENZA';
-        function verifica() {
-            const m = st.mio ? statoDi(st.mio) : null;
-            const dovuto = consulenza() && m && m.stato === 'OCCUPATO' && m.controlloAt && Date.now() >= new Date(m.controlloAt).getTime();
-            if (!dovuto) { if (aperto) chiudi(); return; }
-            if (aperto || visto === m.controlloAt) return;
-            visto = m.controlloAt;
-            mostra(m);
-        }
-        function chiudi() { if (aperto) { clearInterval(aperto.t); aperto.ov.remove(); aperto = null; } }
-        function mostra(m) {
-            const ov = document.createElement('div');
-            ov.className = 'sa-ov sa-ov-c sa-ctl-ov';
-            const giaRinviato = m.rinvii > 0;
-            ov.innerHTML = `<div class="sa-modal sa-ctl" role="alertdialog" aria-modal="true" aria-label="Sei nuovamente disponibile?">
-                <div class="sa-ctl-i">⏱️</div>
-                <h3>Sono passati ${giaRinviato ? 'altri 10 minuti' : '15 minuti dall\'inizio della consulenza'}</h3>
-                <p>${m.cliente ? `Cliente: <b>${esc(m.cliente)}</b><br>` : ''}Sei nuovamente disponibile?</p>
-                <div class="sa-ctl-b">
-                  <button type="button" class="sa-ctl-no" data-no>No, ancora occupato</button>
-                  <button type="button" class="sa-ctl-si" data-si>Sì, sono disponibile <span class="sa-ctl-t">60</span></button>
-                </div>
-                <small>Se non rispondi entro 60 secondi risulterai disponibile.</small>
-              </div>`;
-            document.body.appendChild(ov);
-            beep();
-            let resta = 60;
-            const t = setInterval(() => {
-                resta--;
-                const el = ov.querySelector('.sa-ctl-t'); if (el) el.textContent = resta;
-                ov.querySelector('.sa-ctl').style.setProperty('--p', (resta / 60 * 100) + '%');
-                if (resta <= 0) rispondi('auto');
-            }, 1000);
-            aperto = { ov, t };
-            ov.querySelector('[data-no]').addEventListener('click', () => rispondi('no'));
-            ov.querySelector('[data-si]').addEventListener('click', () => rispondi('si'));
-        }
-        async function rispondi(c) {
-            if (!aperto) return;
-            chiudi();
-            try {
-                if (c === 'no') { const d = await post('/stati/rinvio'); st.stati = d.stati || st.stati; toast('Resti occupato: te lo richiedo tra 10 minuti'); }
-                else { const d = await post('/stati', { stato: 'DISPONIBILE', controllo: c }); st.stati = d.stati || st.stati; toast(c === 'auto' ? 'Nessuna risposta: ora risulti disponibile' : 'Ora risulti disponibile'); }
-                disegnaStati();
-            } catch (e) { alert(e.message); }
-        }
-        return { verifica };
-    })();
-
-    /* ================= notifica al consulente ================= */
-    let notifT = null;
-    const visti = new Set();
-    function avviaNotifiche() {
-        if (notifT) return;
-        const giro = async () => {
-            if (!can()) return;
-            try {
-                const d = await api('/notifiche');
-                (d.notifiche || []).forEach(r => { const k = r.id + '|' + r.assegnatoAt; if (!visti.has(k)) { visti.add(k); mostraNotifica(r); } });
-            } catch (e) { /* rete: si riprova */ }
-        };
-        giro(); notifT = setInterval(giro, 6000);
-    }
-    function beep() {
-        try {
-            const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
-            const c = new C(), o = c.createOscillator(), g = c.createGain();
-            o.type = 'sine'; o.frequency.value = 880; o.connect(g); g.connect(c.destination);
-            g.gain.setValueAtTime(.0001, c.currentTime); g.gain.exponentialRampToValueAtTime(.25, c.currentTime + .02); g.gain.exponentialRampToValueAtTime(.0001, c.currentTime + .6);
-            o.start(); o.stop(c.currentTime + .62);
-        } catch (e) { /* */ }
-    }
-    function mostraNotifica(r) {
-        let box = document.getElementById('saNotif');
-        if (!box) { box = document.createElement('div'); box.id = 'saNotif'; box.className = 'sa-notif-box'; document.body.appendChild(box); }
-        const v = vettTxt(r);
-        const n = document.createElement('div');
-        n.className = 'sa-notif';
-        n.innerHTML = `<div class="sa-notif-h"><span class="sa-pulse"></span><small>CLIENTE IN ARRIVO PER TE · ${ora(r.assegnatoAt)}</small></div>
-          <b class="sa-notif-n">${esc(nomeCliente(r))}</b>
-          ${r.cellulare ? `<div class="sa-notif-t">📞 ${esc(r.cellulare)}</div>` : ''}
-          <div class="sa-notif-v">${v.length ? v.map(x => `<span>🚗 ${esc(x)}</span>`).join('') : '<span>Nessuna vettura indicata</span>'}</div>
-          ${r.note ? `<div class="sa-notif-note">📝 ${esc(r.note)}</div>` : ''}
-          <div class="sa-notif-f">Ti è stato assegnato da ${esc(r.assegnatoDa || '')} · prendendolo in carico risulterai <b>Occupato</b></div>
-          <button type="button" class="sa-btn">Prendo in carico ✓</button>`;
-        n.querySelector('button').addEventListener('click', async ev => {
-            const b = ev.currentTarget; b.disabled = true;
-            try { await post('/ingressi/' + encodeURIComponent(r.id) + '/presa'); }
-            catch (e) { b.disabled = false; alert(e.message); return; }
-            n.classList.add('via'); setTimeout(() => n.remove(), 300);
-            toast('Cliente preso in carico: ora risulti occupato');
-            if (aperta) { caricaGiorno(st.giorno, true); caricaStati(); }
-        });
-        box.prepend(n);
-        beep();
-        try { if (window.Notification && Notification.permission === 'granted') new Notification('Cliente in arrivo: ' + nomeCliente(r), { body: v.join(', ') }); } catch (e) { /* */ }
-    }
-
-    /* =====================================================================
-       APPUNTAMENTI
-       ===================================================================== */
-    async function caricaApp(g) {
-        const A = st.app;
-        A.giorno = g;
-        try {
-            const [d, m] = await Promise.all([api('/appuntamenti?data=' + g), api('/appuntamenti/giorni?mese=' + A.mese)]);
-            A.lista = d.appuntamenti || []; A.info = d; A.giorni = m.giorni || {}; A.daAss = m.daAssegnare || {};
-            st.vedeTutti = !!d.vedeTutti; st.vedeReport = !!d.vedeReport; st.puoImportare = !!d.puoImportare; A.err = ''; A.caricato = true;
-        } catch (e) { A.err = e.message; }
-        if (st.tab === 'app') render();
-    }
-    const cliApp = r => [String(r.nome || '').replace(/^\.+$/, ''), r.cognome].filter(Boolean).join(' ') || r.ragioneSociale || 'Cliente';
-    const vettApp = r => [r.marca && !/^marca generica$/i.test(r.marca) ? r.marca : '', r.modello && r.modello !== 'X' ? r.modello : ''].filter(Boolean).join(' ');
-    function renderApp(body) {
-        const A = st.app;
-        let L = A.lista.slice();
-        if (A.filtro === '__da') L = L.filter(r => !r.consulente);
-        else if (A.filtro) L = L.filter(r => r.consulente === A.filtro);
-        L.sort((a, b) => String(a.appOra || '99').localeCompare(String(b.appOra || '99')) * (A.verso === 'desc' ? -1 : 1));
-        const perCons = {}; let da = 0;
-        A.lista.forEach(r => { if (r.consulente) perCons[r.consulente] = (perCons[r.consulente] || 0) + 1; else da++; });
-        const info = A.info || {};
-        body.innerHTML = `
-          ${A.err ? `<div class="sa-msg err">${esc(A.err)}</div>` : ''}
-          ${st.vedeTutti && info.daAssegnareProssimi ? `<div class="sa-msg warn">⚠️ ${info.daAssegnareProssimi} appuntament${info.daAssegnareProssimi === 1 ? 'o' : 'i'} da oggi in poi ${info.daAssegnareProssimi === 1 ? 'è' : 'sono'} ancora <b>da assegnare</b> (il venditore nel CSV non è un consulente di Agnano). Al prossimo import si aggiornano da soli.</div>` : ''}
-          <div class="sa-grid">
-            <aside class="sa-side">
-              <div class="sa-card">${calendario(A.mese, A.giorno, A.giorni, st.vedeTutti ? A.daAss : null, true)}
-                ${st.vedeTutti ? '<p class="sa-hint" style="margin:10px 0 0"><b class="sa-day-r sa-inl"></b> giorno con appuntamenti da assegnare</p>' : ''}</div>
-              <div class="sa-card sa-sum">
-                <h3>${st.vedeTutti ? 'Appuntamenti del giorno' : 'I tuoi appuntamenti del giorno'}</h3>
-                <div class="sa-kpis"><div><b>${A.lista.length}</b><span>appuntamenti</span></div><div><b>${A.lista.length - da}</b><span>assegnati</span></div><div><b class="${da ? 'sa-red' : ''}">${da}</b><span>da assegnare</span></div></div>
-                ${st.vedeTutti ? st.consulenti.map(c => `<div class="sa-cons-row"><span>${esc(c)}</span><b>${perCons[c] || 0}</b></div>`).join('') : ''}
-              </div>
-              ${info.ultimoImport ? `<div class="sa-card sa-hint">Ultimo import: <b>${esc(info.ultimoImport.atIt)}</b> da ${esc(info.ultimoImport.chi)}${info.ultimoImport.file ? '<br>' + esc(info.ultimoImport.file) : ''}</div>` : ''}
-            </aside>
-            <section class="sa-main">
-              <div class="sa-card">
-                <div class="sa-list-h">
-                  <div><h2>${esc(up1(giornoLungo(A.giorno)))}</h2><p>${L.length} appuntament${L.length === 1 ? 'o' : 'i'}${A.giorno === oggi() ? ' · oggi' : ''}${st.vedeTutti ? '' : ' · solo i tuoi'}</p></div>
-                  <div class="sa-list-a">
-                    ${st.vedeTutti ? `<select class="sa-sel sa-sel-a" data-filtro><option value="">Tutti i consulenti</option><option value="__da" ${A.filtro === '__da' ? 'selected' : ''}>Solo da assegnare</option>${st.consulenti.map(c => `<option ${A.filtro === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>` : ''}
-                    <button type="button" class="sa-btn2" data-aact="verso">${A.verso === 'asc' ? '⬆️ Dal primo orario' : '⬇️ Dall\'ultimo orario'}</button>
-                    ${A.giorno !== oggi() ? '<button type="button" class="sa-btn2" data-aact="oggi">Oggi</button>' : ''}
-                    ${st.puoImportare ? `<button type="button" class="sa-btn2" data-aact="storico">🕘 Storico import</button>
-                      <label class="sa-btn sa-file">⬆ Importa CSV<input type="file" accept=".csv,text/csv" data-import hidden></label>` : ''}
-                  </div>
-                </div>
-                <div class="sa-list">${L.length ? L.map(cardApp).join('') : `<div class="sa-none">${A.caricato ? 'Nessun appuntamento in questo giorno.' + (st.puoImportare && !info.ultimoImport ? ' Importa il CSV dei lead con “⬆ Importa CSV”.' : '') : 'Caricamento…'}</div>`}</div>
-              </div>
-            </section>
-          </div>`;
-    }
-    function cardApp(r) {
-        const v = vettApp(r);
-        const dett = [r.origine, r.canale !== r.origine ? r.canale : '', r.tipoVeicolo, r.tipoRichiesta, Number(r.importo) > 0 ? '€ ' + Number(r.importo).toLocaleString('it-IT') : ''].filter(Boolean);
-        const posseduta = [r.marcaPosseduta, r.modelloPosseduto, r.annoPosseduto, Number(r.kmPosseduto) > 0 ? Number(r.kmPosseduto).toLocaleString('it-IT') + ' km' : ''].filter(Boolean).join(' ');
-        return `<article class="sa-in sa-app ${r.consulente ? 'preso' : 'nuovo da'}">
-            <div class="sa-in-t"><b>${esc(r.appOra || '—')}</b>${r.fonteData === 'Note' ? '<small title="Orario letto dalle note del lead">dalle note</small>' : ''}</div>
-            <div class="sa-in-c">
-              <div class="sa-in-n">${esc(cliApp(r))}${r.telefono ? ` <a href="tel:${esc(r.telefono.replace(/\s/g, ''))}" class="sa-tel">📞 ${esc(r.telefono)}</a>` : ''}</div>
-              <div class="sa-in-v">${v ? `<span class="sa-car">🚗 ${esc(v)}</span>` : ''}${posseduta ? `<span class="sa-car perm">🔁 Permuta: ${esc(posseduta)}</span>` : ''}${dett.map(x => `<span class="sa-tag">${esc(x)}</span>`).join('')}</div>
-              ${r.note ? `<details class="sa-in-note"><summary>📝 Note del lead</summary><div>${esc(r.note)}</div></details>` : ''}
-              <div class="sa-in-f">Lead ${esc(r.id)} · inserito ${esc(r.dataInserimento || '')}${r.inseritoDa ? ' da ' + esc(r.inseritoDa) : ''}${r.caller ? ' · caller ' + esc(r.caller.replace(/\s*\(ID \d+\)/, '')) : ''}</div>
-            </div>
-            <div class="sa-in-a">
-              ${r.consulente ? `<b class="sa-cons">${bollino(statoDi(r.consulente).stato)} ${esc(r.consulente)}</b>` : `<span class="sa-st no">Da assegnare</span>${r.venditore ? `<span class="sa-hint">Nel CSV: ${esc(r.venditore)}</span>` : ''}`}
-              ${r.status ? `<span class="sa-st ${/fall|chius|perso/i.test(r.status) ? 'no' : 'wait'}">${esc(r.status)}</span>` : ''}
-            </div>
-          </article>`;
-    }
-    async function onClickApp(e) {
-        const A = st.app;
-        const g = e.target.closest('[data-giorno]'); if (g) { caricaApp(g.dataset.giorno); return true; }
-        const m = e.target.closest('[data-mese]'); if (m) { A.mese = spostaMese(A.mese, Number(m.dataset.mese)); caricaApp(A.giorno); return true; }
-        const a = e.target.closest('[data-aact]');
-        if (a) {
-            if (a.dataset.aact === 'verso') { A.verso = A.verso === 'asc' ? 'desc' : 'asc'; render(); }
-            if (a.dataset.aact === 'oggi') { A.mese = oggi().slice(0, 7); caricaApp(oggi()); }
-            if (a.dataset.aact === 'storico') apriStorico();
-            return true;
-        }
-        return false;
-    }
-    function onChangeApp(e) {
-        const f = e.target.closest('[data-filtro]'); if (f) { st.app.filtro = f.value; render(); return; }
-        const i = e.target.closest('[data-import]'); if (i && i.files && i.files[0]) importaCsv(i.files[0]);
-    }
-
-    /* ---------- import CSV (solo admin) ---------- */
-    // intestazioni del CSV dei lead -> nomi dei campi che manda al server
-    const COLONNE = {
-        'ID': 'id', 'Tipo': 'tipo', 'Origine': 'origine', 'Canale': 'canale', 'Cognome': 'cognome', 'Nome': 'nome', 'Ragione sociale': 'ragioneSociale',
-        'E-mail 1': 'email', 'Telefono 1': 'telefono', 'Telefono 2': 'telefono2', 'Venditore': 'venditore', 'Caller': 'caller', 'Marca': 'marca', 'Modello': 'modello',
-        'Importo': 'importo', 'Tipo richiesta': 'tipoRichiesta', 'Tipo veicolo richiesto': 'tipoVeicolo', 'Data inserimento': 'dataInserimento', 'Inserito da': 'inseritoDa',
-        'Data lead': 'dataLead', 'Esito alert': 'esitoAlert', 'Esito ultima attività': 'esitoAttivita', 'Data ricontatto': 'dataRicontatto', 'Status': 'status', 'Note': 'note',
-        'Città': 'citta', 'Provincia': 'provincia', 'Sede': 'sede', 'Team': 'team', 'Etichette Lead': 'etichetteLead', 'Marca Posseduta': 'marcaPosseduta',
-        'Modello Posseduto': 'modelloPosseduto', 'Km': 'kmPosseduto', 'Anno Immatricolazione': 'annoPosseduto', 'Formula di Acquisto': 'formulaAcquisto'
-    };
-    function leggiTesto(buf) {
-        try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); }
-        catch (e) { return new TextDecoder('windows-1252').decode(buf); }
-    }
-    /* CSV con ; (o ,) e virgolette, anche con a capo dentro le note */
-    function parseCsv(txt) {
-        txt = txt.replace(/^﻿/, '');
-        const primaRiga = (txt.split(/\r?\n/).find(l => /\bID\b/.test(l) && /Venditore/i.test(l)) || '');
-        const sep = (primaRiga.match(/;/g) || []).length >= (primaRiga.match(/,/g) || []).length ? ';' : ',';
-        const rows = []; let row = [], f = '', q = false;
-        for (let i = 0; i < txt.length; i++) {
-            const ch = txt[i];
-            if (q) {
-                if (ch === '"') { if (txt[i + 1] === '"') { f += '"'; i++; } else q = false; }
-                else f += ch;
-            } else if (ch === '"') q = true;
-            else if (ch === sep) { row.push(f); f = ''; }
-            else if (ch === '\n' || ch === '\r') { if (ch === '\r' && txt[i + 1] === '\n') i++; row.push(f); rows.push(row); row = []; f = ''; }
-            else f += ch;
-        }
-        if (f || row.length) { row.push(f); rows.push(row); }
-        const h = rows.findIndex(r => r.some(c => c.trim().replace(/^﻿/, '') === 'ID') && r.some(c => c.trim() === 'Venditore'));
-        if (h < 0) throw new Error('Non trovo le colonne "ID" e "Venditore": è il CSV dei lead?');
-        const head = rows[h].map(c => c.trim().replace(/^﻿/, ''));
-        const out = [];
-        for (const r of rows.slice(h + 1)) {
-            if (r.length < 3 || !r.some(c => c.trim())) continue;
-            const o = {};
-            head.forEach((k, i) => { if (COLONNE[k]) o[COLONNE[k]] = (r[i] || '').trim(); });
-            if (o.id) out.push(o);
-        }
-        return out;
-    }
-    async function importaCsv(file) {
-        let righe;
-        try { righe = parseCsv(leggiTesto(await file.arrayBuffer())); }
-        catch (e) { alert('File non letto: ' + e.message); return; }
-        if (!righe.length) { alert('Il file non contiene lead.'); return; }
-        if (!confirm(`Importare ${righe.length} lead da “${file.name}”?\nVerranno presi solo quelli con sede Gruppo Auto Scala srl (Agnano): Nola e Salerno vengono scartati.`)) return;
-        const lab = root.querySelector('.sa-file'); if (lab) lab.classList.add('busy');
-        try {
-            const d = await post('/appuntamenti/import', { file: file.name, righe });
-            mostraEsito(d.import);
-            st.app.caricato = false; caricaApp(st.app.giorno);
-        } catch (e) { alert('Import non riuscito: ' + e.message); if (lab) lab.classList.remove('busy'); }
-    }
-    function riepilogoImport(x) {
-        return `<div class="sa-kpis sa-kpis5">
-            <div><b>${x.righeFile}</b><span>righe nel file</span></div>
-            <div><b>${x.nuovi}</b><span>nuovi</span></div>
-            <div><b>${x.aggiornati}</b><span>aggiornati</span></div>
-            <div><b>${x.invariati}</b><span>invariati</span></div>
-            <div><b>${x.esclusi}</b><span>scartati (non Agnano)</span></div></div>
-          <p class="sa-hint">${x.daAssegnare ? `<b class="sa-red">${x.daAssegnare} da assegnare</b> (venditore non di Agnano) · ` : ''}${x.assegnatiDaImport ? `${x.assegnatiDaImport} assegnati in automatico da questo import · ` : ''}${x.senzaData ? `${x.senzaData} senza data di appuntamento leggibile · ` : ''}import di ${esc(x.chi)} il ${esc(x.atIt)}</p>`;
-    }
-    function dettaglioImport(x) {
-        const motivi = Object.entries(x.esclusiPerMotivo || {});
-        return `${(x.nuoviElenco || []).length ? `<h4>Nuovi (${x.nuovi})</h4><table class="sa-tbl"><thead><tr><th>Lead</th><th>Cliente</th><th>Appuntamento</th><th>Consulente</th></tr></thead><tbody>
-              ${x.nuoviElenco.map(n => `<tr><td>${esc(n.id)}</td><td>${esc(n.cliente)}</td><td>${esc(fmtApp(n.appuntamento))}</td><td class="${n.consulente === 'Da assegnare' ? 'sa-red' : ''}">${esc(n.consulente)}</td></tr>`).join('')}</tbody></table>` : ''}
-          ${(x.cambi || []).length ? `<h4>Cosa è cambiato (${x.aggiornati} lead)</h4><table class="sa-tbl"><thead><tr><th>Lead</th><th>Cliente</th><th>Campo</th><th>Prima</th><th>Dopo</th></tr></thead><tbody>
-              ${x.cambi.map(c => `<tr><td>${esc(c.id)}</td><td>${esc(c.cliente)}</td><td><b>${esc(c.campo)}</b></td><td class="sa-old">${esc(c.campo === 'Appuntamento' ? fmtApp(c.prima) : c.prima || '—')}</td><td>${esc(c.campo === 'Appuntamento' ? fmtApp(c.dopo) : c.dopo || '—')}</td></tr>`).join('')}</tbody></table>` : ''}
-          ${motivi.length ? `<h4>Scartati (${x.esclusi})</h4><p class="sa-hint">${motivi.map(([m, n]) => `${esc(m)}: <b>${n}</b>`).join(' · ')}</p>
-              ${(x.esclusiElenco || []).length ? `<table class="sa-tbl"><thead><tr><th>Lead</th><th>Cliente</th><th>Motivo</th></tr></thead><tbody>${x.esclusiElenco.map(c => `<tr><td>${esc(c.id)}</td><td>${esc(c.cliente)}</td><td>${esc(c.motivo)}</td></tr>`).join('')}</tbody></table>` : ''}` : ''}
-          ${!(x.nuoviElenco || []).length && !(x.cambi || []).length && !motivi.length ? '<p class="sa-hint">Nessuna novità: tutti i lead erano già aggiornati.</p>' : ''}`;
-    }
-    const fmtApp = s => { if (!s) return '—'; const [g, o] = String(s).split(' '); return g ? giornoCorto(g) + (o ? ' ' + o : '') : s; };
-    function modale(titolo, sotto, html) {
-        const ov = document.createElement('div'); ov.className = 'sa-ov';
-        ov.innerHTML = `<div class="sa-modal sa-wide" role="dialog" aria-modal="true" aria-label="${esc(titolo)}">
-            <header><div><small>${esc(sotto)}</small><h3>${esc(titolo)}</h3></div><button type="button" class="sa-x" data-chiudi aria-label="Chiudi">✕</button></header>
-            <div class="sa-mbody">${html}</div></div>`;
-        document.body.appendChild(ov);
-        const chiudi = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
-        const onKey = e => { if (e.key === 'Escape') chiudi(); };
-        document.addEventListener('keydown', onKey);
-        ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-chiudi]')) chiudi(); });
-        return ov;
-    }
-    function mostraEsito(x) { modale('Import completato', 'APPUNTAMENTI · ' + (x.file || ''), riepilogoImport(x) + dettaglioImport(x)); }
-    async function apriStorico() {
-        let L;
-        try { L = (await api('/appuntamenti/storico')).storico || []; } catch (e) { alert(e.message); return; }
-        modale('Storico import', 'APPUNTAMENTI · ' + L.length + ' import', L.length ? L.map((x, i) => `<details class="sa-imp" ${i === 0 ? 'open' : ''}>
-            <summary><b>${esc(x.atIt)}</b><span>${esc(x.file || 'file')}</span><em>+${x.nuovi} nuovi · ${x.aggiornati} aggiornati · ${x.esclusi} scartati</em></summary>
-            ${riepilogoImport(x)}${dettaglioImport(x)}</details>`).join('') : '<p class="sa-hint">Nessun import ancora.</p>');
-    }
-
-    /* =====================================================================
-       REPORT (solo admin)
-       ===================================================================== */
-    const grafici = [];
-    function periodo(preset) {
-        const a = oggi(), d = new Date(a + 'T12:00:00Z');
-        const meno = n => { const x = new Date(d); x.setUTCDate(x.getUTCDate() - n); return x.toISOString().slice(0, 10); };
-        if (preset === 'oggi') return [a, a];
-        if (preset === '7') return [meno(6), a];
-        if (preset === 'mese') return [a.slice(0, 8) + '01', a];
-        return [meno(29), a];
-    }
-    async function caricaReport() {
-        const R = st.rep;
-        if (!R.da) [R.da, R.a] = periodo(R.preset);
-        R.err = ''; R.carica = true; if (st.tab === 'report') render();
-        try { R.dati = await api(`/report?da=${R.da}&a=${R.a}`); } catch (e) { R.err = e.message; }
-        R.carica = false;
-        if (st.tab === 'report') render();
-    }
-    function calcola(D) {
-        const cons = D.consulenti || [];
-        const I = D.ingressi || [];
-        const tot = I.length, ass = I.filter(r => r.consulente), presi = I.filter(r => r.presoAt);
-        const media = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
-        const risp = r => (new Date(r.presoAt) - new Date(r.assegnatoAt)) / 60000;
-        const per = {};
-        cons.forEach(c => { per[c] = { n: 0, presi: 0, risp: [], cliente: [] }; });
-        ass.forEach(r => {
-            const p = per[r.consulente] || (per[r.consulente] = { n: 0, presi: 0, risp: [], cliente: [] });
-            p.n++;
-            if (r.presoAt) { p.presi++; if (r.assegnatoAt) p.risp.push(risp(r)); }
-            if (r.minutiCliente != null && r.liberoAt) p.cliente.push(Number(r.minutiCliente));
-        });
-        // marchi: quanti walk-in chiedono quel marchio (un cliente con due Peugeot conta 1)
-        const marchi = {};
-        I.forEach(r => {
-            const visti = new Set();
-            (r.vetture || []).forEach(v => {
-                const m = (v.marca || 'Non indicato').trim() || 'Non indicato';
-                const k = marchi[m] || (marchi[m] = { walkin: 0, vetture: 0, modelli: {}, presi: 0 });
-                k.vetture++;
-                if (v.modello) k.modelli[v.modello] = (k.modelli[v.modello] || 0) + 1;
-                if (!visti.has(m)) { visti.add(m); k.walkin++; if (r.presoAt) k.presi++; }
-            });
-        });
-        // tempo negli stati: cambi chiusi + stati ancora aperti oggi
-        const T = {};
-        cons.forEach(c => { T[c] = Object.assign(zeri(), { giorni: new Set(), periodi: zeri(), cambi: 0 }); });
-        const add = (nome, s, min, giorno) => {
-            if (!s || !T[nome] || !(s in STATI)) return;
-            T[nome][s] += min; T[nome].periodi[s]++; T[nome].giorni.add(giorno);
-        };
-        (D.cambi || []).forEach(e => {
-            if (T[e.nome]) T[e.nome].cambi++;
-            if (e.da && e.inizio) add(e.nome, e.da, Number(e.minuti) || 0, isoRoma(new Date(e.inizio)));
-        });
-        const oggiIn = oggi() >= D.da && oggi() <= D.a;
-        if (oggiIn) (D.stati || []).forEach(s => { if (s.stato && s.dal) add(s.nome, s.stato, minDa(s.dal), oggi()); });
-        // serie nel tempo (per i grafici a linee): giorno per giorno, o mese per mese se il periodo e' lungo
-        const B = periodiAsse(D.da, D.a), bk = g => B.mensile ? String(g).slice(0, 7) : String(g).slice(0, 10);
-        const vuota = () => Object.fromEntries(B.chiavi.map(k => [k, 0]));
-        const tCons = {}, tMarchi = {}, tStati = Object.fromEntries(Object.keys(STATI).map(k => [k, vuota()])), tPres = {};
-        ass.forEach(r => { const k = bk(r.data); (tCons[r.consulente] = tCons[r.consulente] || vuota())[k] = (tCons[r.consulente][k] || 0) + 1; });
-        I.forEach(r => [...new Set((r.vetture || []).map(v => (v.marca || 'Non indicato').trim() || 'Non indicato'))].forEach(m => {
-            const k = bk(r.data); (tMarchi[m] = tMarchi[m] || vuota())[k] = (tMarchi[m][k] || 0) + 1; }));
-        const addT = (nome, s, min, giorno) => { if (!s || !tStati[s]) return; const k = bk(giorno); tStati[s][k] = (tStati[s][k] || 0) + min; (tPres[k] = tPres[k] || new Set()).add(nome + '|' + giorno); };
-        (D.cambi || []).forEach(e => { if (e.da && e.inizio) addT(e.nome, e.da, Number(e.minuti) || 0, isoRoma(new Date(e.inizio))); });
-        if (oggiIn) (D.stati || []).forEach(s => { if (s.stato && s.dal) addT(s.nome, s.stato, minDa(s.dal), oggi()); });
-        return { B, tCons, tMarchi, tStati, tPres, tot, ass: ass.length, presi: presi.length, rispMedia: media(ass.filter(r => r.presoAt && r.assegnatoAt).map(risp)),
-            clienteMedia: media(I.filter(r => r.liberoAt && r.minutiCliente != null).map(r => Number(r.minutiCliente))), per, marchi, T, media };
-    }
-    const pct = (n, t) => t ? Math.round(n / t * 1000) / 10 + '%' : '—';
-    /* asse del tempo: giorno per giorno fino a 62 giorni, poi mese per mese */
-    function periodiAsse(da, a) {
-        const g0 = new Date(da + 'T12:00:00Z'), g1 = new Date(a + 'T12:00:00Z');
-        const giorni = Math.round((g1 - g0) / 864e5) + 1, mensile = giorni > 62;
-        const chiavi = [], etichette = [];
-        if (mensile) {
-            for (let d = new Date(Date.UTC(g0.getUTCFullYear(), g0.getUTCMonth(), 1)); d <= g1; d.setUTCMonth(d.getUTCMonth() + 1)) {
-                chiavi.push(d.toISOString().slice(0, 7)); etichette.push(d.toLocaleDateString('it-IT', { timeZone: 'UTC', month: 'short', year: '2-digit' }));
-            }
-        } else for (let d = new Date(g0); d <= g1; d.setUTCDate(d.getUTCDate() + 1)) {
-            chiavi.push(d.toISOString().slice(0, 10)); etichette.push(d.toLocaleDateString('it-IT', { timeZone: 'UTC', day: 'numeric', month: 'short' }));
-        }
-        return { chiavi, etichette, mensile };
-    }
-    /* tre formati per ogni grafico, come nelle altre sezioni: ciambella / colonne / linee nel tempo (scelta ricordata) */
-    const ICO_T = {
-        doughnut: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/><path d="M12 4v4.5"/></svg>',
-        bar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 6h10M4 12h16M4 18h7"/></svg>',
-        line: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-6 4 3 5-7 4 4"/></svg>'
-    };
-    const NOMI_T = { doughnut: 'Ciambella', bar: 'Barre', line: 'Linee nel tempo' };
-    const LS_T = 'saloneTipiGrafico';
-    let tipiG = {}; try { tipiG = JSON.parse(localStorage.getItem(LS_T) || '{}') || {}; } catch (e) { tipiG = {}; }
-    const tipoG = (id, def) => (NOMI_T[tipiG[id]] ? tipiG[id] : def);
-    const bottoniTipo = (id, def) => `<div class="sa-types" role="group" aria-label="Formato del grafico">${Object.keys(NOMI_T).map(t => `<button type="button" title="${NOMI_T[t]}" aria-label="${NOMI_T[t]}" class="${tipoG(id, def) === t ? 'on' : ''}" data-ct="${id}|${t}">${ICO_T[t]}</button>`).join('')}</div>`;
-    /* colori per serie (consulenti, marchi): sempre nello stesso ordine, il colore segue il nome */
-    const SERIE = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'];
-    const ALTRI = '#7b8494';
-    function renderReport(body) {
-        grafici.splice(0).forEach(g => { try { g.destroy(); } catch (e) { /* */ } });
-        const R = st.rep, D = R.dati;
-        const barraPeriodo = `<div class="sa-card sa-rep-h">
-            <div><h2>Report walk-in e consulenti</h2><p>${D ? `Dal ${esc(giornoCorto(D.da))} al ${esc(giornoCorto(D.a))} · ora italiana` : ''}</p></div>
-            <div class="sa-list-a">
-              ${[['oggi', 'Oggi'], ['7', '7 giorni'], ['30', '30 giorni'], ['mese', 'Questo mese']].map(([k, n]) => `<button type="button" class="sa-btn2 ${R.preset === k ? 'on' : ''}" data-preset="${k}">${n}</button>`).join('')}
-              <label class="sa-dt">Dal <input type="date" data-rda value="${esc(R.da || '')}"></label>
-              <label class="sa-dt">al <input type="date" data-ra value="${esc(R.a || '')}"></label>
-            </div></div>`;
-        if (R.err) { body.innerHTML = barraPeriodo + `<div class="sa-msg err">${esc(R.err)}</div>`; return; }
-        if (!D) { body.innerHTML = barraPeriodo + '<div class="sa-card sa-none">Caricamento del report…</div>'; return; }
-        const C = calcola(D), cons = D.consulenti || [];
-        const righeCons = Object.keys(C.per).filter(c => cons.includes(c) || C.per[c].n);
-        const marchi = Object.entries(C.marchi).sort((a, b) => b[1].walkin - a[1].walkin);
-        const conVetture = (D.ingressi || []).filter(r => (r.vetture || []).length).length;
-        const filtro = R.filtroCons || '';
-        const cambi = (D.cambi || []).filter(e => !filtro || e.nome === filtro).slice().sort((a, b) => String(b.at).localeCompare(String(a.at)));
-        const lab = s => s ? `${bollino(s)} ${STATI[s].t}` : '<span class="sa-hint">non in salone</span>';
-        body.innerHTML = barraPeriodo + `
-          ${R.carica ? '<div class="sa-msg">Aggiornamento…</div>' : ''}
-          <div class="sa-tiles">
-            <div class="sa-card sa-tile"><span>Walk-in</span><b>${C.tot}</b><em>${(D.ingressi || []).length ? 'nel periodo' : 'nessuno nel periodo'}</em></div>
-            <div class="sa-card sa-tile"><span>Assegnati</span><b>${C.ass}</b><em>${pct(C.ass, C.tot)} dei walk-in</em></div>
-            <div class="sa-card sa-tile"><span>Presi in carico</span><b>${C.presi}</b><em>${pct(C.presi, C.ass)} degli assegnati</em></div>
-            <div class="sa-card sa-tile"><span>Tempo medio di risposta</span><b>${durata(C.rispMedia)}</b><em>da assegnato a preso in carico</em></div>
-            <div class="sa-card sa-tile"><span>Tempo medio con il cliente</span><b>${durata(C.clienteMedia)}</b><em>da preso in carico a di nuovo disponibile</em></div>
-          </div>
-
-          <div class="sa-rep-2">
-            <div class="sa-card"><div class="sa-card-h"><div><h3>Walk-in assegnati per consulente</h3><p class="sa-hint">Quanti clienti ha ricevuto ciascuno e che percentuale del totale assegnato.</p></div>${bottoniTipo('cons', 'bar')}</div>
-              <div class="sa-chart" style="height:${altezza(tipoG('cons', 'bar'), righeCons.length)}px"><canvas id="saChCons" role="img" aria-label="Walk-in assegnati per consulente"></canvas></div>
-              <table class="sa-tbl"><thead><tr><th>Consulente</th><th>Assegnati</th><th>% sul totale</th><th>Presi in carico</th><th>Risposta media</th><th>Con il cliente (media)</th></tr></thead><tbody>
-                ${righeCons.map(c => { const p = C.per[c]; return `<tr><td>${esc(c)}</td><td><b>${p.n}</b></td><td>${pct(p.n, C.ass)}</td><td>${p.presi}</td><td>${durata(C.media(p.risp))}</td><td>${durata(C.media(p.cliente))}</td></tr>`; }).join('')}
-              </tbody></table></div>
-            <div class="sa-card"><div class="sa-card-h"><div><h3>Marchi richiesti nei walk-in</h3><p class="sa-hint">Su ${conVetture} walk-in con almeno una vettura indicata. Un cliente che chiede due modelli dello stesso marchio conta una volta.</p></div>${bottoniTipo('marchi', 'bar')}</div>
-              <div class="sa-chart" style="height:${altezza(tipoG('marchi', 'bar'), Math.min(marchi.length, 12))}px"><canvas id="saChMarchi" role="img" aria-label="Marchi richiesti nei walk-in"></canvas></div>
-              <table class="sa-tbl"><thead><tr><th>Marchio</th><th>Walk-in</th><th>% walk-in</th><th>Vetture chieste</th><th>Presi in carico</th><th>Modelli più chiesti</th></tr></thead><tbody>
-                ${marchi.map(([m, k]) => `<tr><td>${esc(m)}</td><td><b>${k.walkin}</b></td><td>${pct(k.walkin, conVetture)}</td><td>${k.vetture}</td><td>${pct(k.presi, k.walkin)}</td><td class="sa-hint">${esc(Object.entries(k.modelli).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([n, q]) => n + (q > 1 ? ' ×' + q : '')).join(', '))}</td></tr>`).join('') || '<tr><td colspan="6" class="sa-hint">Nessuna vettura indicata nel periodo.</td></tr>'}
-              </tbody></table></div>
-          </div>
-
-          <div class="sa-card"><div class="sa-card-h"><div><h3>Minuti medi al giorno in ogni stato</h3><p class="sa-hint">${{ bar: 'Media sui giorni in cui il consulente è stato in salone.', doughnut: 'Come si divide il tempo di tutto il salone nel periodo.', line: 'Minuti medi per consulente presente, ' + (C.B.mensile ? 'mese per mese.' : 'giorno per giorno.') }[tipoG('stati', 'bar')]} Uno stato lasciato aperto la sera viene chiuso in automatico alle 21:00.</p></div>${bottoniTipo('stati', 'bar')}</div>
-            ${tipoG('stati', 'bar') === 'bar' ? `<div class="sa-legend">${Object.keys(STATI).map(k => `<span>${bollino(k)} ${STATI[k].t}</span>`).join('')}</div>` : ''}
-            <div class="sa-chart" style="height:${tipoG('stati', 'bar') === 'bar' ? cons.length * 34 + 60 : 280}px"><canvas id="saChStati" role="img" aria-label="Minuti in ogni stato"></canvas></div>
-            <table class="sa-tbl"><thead><tr><th>Consulente</th><th>Giorni</th>${Object.keys(STATI).map(k => `<th>${bollino(k)} ${STATI[k].t} / giorno</th>`).join('')}<th>Durata media di uno stato</th><th>Cambi di stato</th></tr></thead><tbody>
-              ${cons.map(c => { const t = C.T[c], g = t.giorni.size || 0, tot = Object.keys(STATI).reduce((a, k) => a + t[k], 0), np = Object.keys(STATI).reduce((a, k) => a + t.periodi[k], 0);
-                  return `<tr><td>${esc(c)}</td><td>${g}</td>${Object.keys(STATI).map(k => `<td>${g ? durata(t[k] / g) : '—'}<small class="sa-hint"> ${tot ? pct(t[k], tot) : ''}</small></td>`).join('')}<td>${np ? durata(tot / np) : '—'}</td><td>${t.cambi}</td></tr>`; }).join('')}
-            </tbody></table></div>
-
-          <div class="sa-card"><div class="sa-list-h"><div><h3>Storico dei cambi di stato</h3><p class="sa-hint">Ogni cambio con la durata dello stato precedente. ${cambi.length > 400 ? 'Mostro gli ultimi 400.' : ''}</p></div>
-              <select class="sa-sel sa-sel-a" data-fcons><option value="">Tutti i consulenti</option>${cons.map(c => `<option ${filtro === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
-            <div class="sa-scroll"><table class="sa-tbl"><thead><tr><th>Quando</th><th>Consulente</th><th>Da</th><th>A</th><th>Durata stato precedente</th><th>Motivo</th><th>Cliente</th></tr></thead><tbody>
-              ${cambi.slice(0, 400).map(e => `<tr><td>${esc(e.atIt || dataOra(e.at))}</td><td>${esc(e.nome)}</td><td>${lab(e.da)}</td><td>${lab(e.a)}</td><td>${e.da ? durata(e.minuti) : '—'}</td><td class="sa-hint">${esc(e.motivo || '')}${e.chi && !/consulente|sistema/i.test(e.motivo || '') && !String(e.motivo || '').includes(e.chi) ? ' · ' + esc(e.chi) : ''}</td><td>${esc(e.clientePrec || '')}</td></tr>`).join('') || '<tr><td colspan="7" class="sa-hint">Nessun cambio di stato nel periodo.</td></tr>'}
-            </tbody></table></div></div>`;
-        disegnaGrafici(C, righeCons, marchi, cons);
-    }
-    const altezza = (tipo, n) => tipo === 'bar' ? Math.max(160, n * 32 + 40) : 280;
-    function disegnaGrafici(C, righeCons, marchi, cons) {
-        if (typeof Chart === 'undefined') return;
-        const css = getComputedStyle(document.getElementById('salonePage'));
-        const ink = css.getPropertyValue('--sa-ink').trim() || '#eef1f6', ink2 = css.getPropertyValue('--sa-ink2').trim() || '#9aa3b2';
-        const line = css.getPropertyValue('--sa-line').trim() || '#2a2e3b', card = css.getPropertyValue('--sa-card').trim() || '#171a23';
-        const nuovo = (id, cfg) => { const el = document.getElementById(id); if (el) grafici.push(new Chart(el, cfg)); };
-        const tip = { backgroundColor: '#0b0e14', borderColor: line, borderWidth: 1, titleColor: ink, bodyColor: ink, padding: 10 };
-        const legenda = { display: true, position: 'bottom', labels: { color: ink2, boxWidth: 10, boxHeight: 10, usePointStyle: true, pointStyle: 'circle', padding: 14 } };
-        // barre ORIZZONTALI: i nomi si leggono dritti a sinistra, mai storti
-        const barre = (labels, data, colori, fmt) => ({ type: 'bar', data: { labels, datasets: [{ data, backgroundColor: colori, borderRadius: 4, maxBarThickness: 22 }] },
-            options: { responsive: true, maintainAspectRatio: false, animation: false, indexAxis: 'y',
-                plugins: { legend: { display: false }, tooltip: Object.assign({ callbacks: { label: x => ' ' + fmt(x.raw) } }, tip) },
-                scales: { x: { beginAtZero: true, ticks: { color: ink2, precision: 0 }, grid: { color: line }, border: { display: false } },
-                          y: { grid: { display: false }, ticks: { color: ink, autoSkip: false, font: { size: 12.5 } }, border: { display: false } } } } });
-        const ciambella = (labels, data, colori, fmt) => ({ type: 'doughnut', data: { labels, datasets: [{ data, backgroundColor: colori, borderColor: card, borderWidth: 2 }] },
-            options: { responsive: true, maintainAspectRatio: false, animation: false, cutout: '62%',
-                plugins: { legend: Object.assign({}, legenda, { position: 'right' }), tooltip: Object.assign({ callbacks: { label: x => ` ${x.label}: ${fmt(x.raw)}` } }, tip) } } });
-        const linee = (series, fmt, asseY) => ({ type: 'line', data: { labels: C.B.etichette, datasets: series.map(s => ({ label: s.nome, data: s.dati, borderColor: s.col, backgroundColor: s.col,
-                borderWidth: 2, pointRadius: C.B.chiavi.length > 40 ? 0 : 3, pointHoverRadius: 5, tension: .25, spanGaps: true })) },
-            options: { responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: 'index', intersect: false },
-                plugins: { legend: legenda, tooltip: Object.assign({ callbacks: { label: x => ` ${x.dataset.label}: ${fmt(x.raw)}` } }, tip) },
-                scales: { x: { grid: { display: false }, ticks: { color: ink2, maxRotation: 0, autoSkip: true, autoSkipPadding: 14 }, border: { display: false } },
-                          y: { beginAtZero: true, ticks: { color: ink2, precision: 0 }, grid: { color: line }, border: { display: false }, title: asseY ? { display: true, text: asseY, color: ink2 } : undefined } } } });
-        const fWalk = v => `${v} walk-in`;
-        // 1) walk-in per consulente: ogni consulente ha sempre il suo colore
-        const colCons = n => SERIE[cons.indexOf(n) % SERIE.length] || ALTRI;
-        const t1 = tipoG('cons', 'bar');
-        if (t1 === 'bar') nuovo('saChCons', barre(righeCons, righeCons.map(c => C.per[c].n), '#22c3a6', v => `${v} walk-in · ${pct(v, C.ass)} del totale`));
-        else if (t1 === 'doughnut') { const L = righeCons.filter(c => C.per[c].n); nuovo('saChCons', ciambella(L, L.map(c => C.per[c].n), L.map(colCons), v => `${v} walk-in · ${pct(v, C.ass)}`)); }
-        else nuovo('saChCons', linee(righeCons.map(c => ({ nome: c, col: colCons(c), dati: C.B.chiavi.map(k => (C.tCons[c] || {})[k] || 0) })), fWalk, 'walk-in'));
-        // 2) marchi: i primi 7 col loro colore, il resto in "Altri marchi"
-        const t2 = tipoG('marchi', 'bar');
-        const top7 = marchi.slice(0, 7), resto = marchi.slice(7);
-        if (t2 === 'bar') { const top = marchi.slice(0, 12); nuovo('saChMarchi', barre(top.map(x => x[0]), top.map(x => x[1].walkin), '#3987e5', fWalk)); }
-        else if (t2 === 'doughnut') {
-            const L = top7.map(x => x[0]).concat(resto.length ? ['Altri marchi'] : []), V = top7.map(x => x[1].walkin).concat(resto.length ? [resto.reduce((a, x) => a + x[1].walkin, 0)] : []);
-            nuovo('saChMarchi', ciambella(L, V, L.map((n, i) => n === 'Altri marchi' ? ALTRI : SERIE[i]), fWalk));
-        } else {
-            const S = top7.map((x, i) => ({ nome: x[0], col: SERIE[i], dati: C.B.chiavi.map(k => (C.tMarchi[x[0]] || {})[k] || 0) }));
-            if (resto.length) S.push({ nome: 'Altri marchi', col: ALTRI, dati: C.B.chiavi.map(k => resto.reduce((a, x) => a + ((C.tMarchi[x[0]] || {})[k] || 0), 0)) });
-            nuovo('saChMarchi', linee(S, fWalk, 'walk-in'));
-        }
-        // 3) tempo negli stati: verde / giallo / rosso fissi (sono stati, non serie)
-        const t3 = tipoG('stati', 'bar');
-        if (t3 === 'bar') nuovo('saChStati', { type: 'bar', data: { labels: cons, datasets: Object.keys(STATI).map(k => ({
-                label: STATI[k].t, data: cons.map(c => { const t = C.T[c], g = t.giorni.size; return g ? Math.round(t[k] / g) : 0; }),
-                backgroundColor: COL[k], borderColor: card, borderWidth: { right: 2 }, borderSkipped: false, maxBarThickness: 22 })) },
-            options: { responsive: true, maintainAspectRatio: false, animation: false, indexAxis: 'y',
-                plugins: { legend: { display: false }, tooltip: Object.assign({ mode: 'index', intersect: false, callbacks: { label: x => ` ${x.dataset.label}: ${durata(x.raw)} al giorno` } }, tip) },
-                scales: { x: { stacked: true, beginAtZero: true, title: { display: true, text: 'minuti medi al giorno', color: ink2 }, ticks: { color: ink2 }, grid: { color: line }, border: { display: false } },
-                          y: { stacked: true, grid: { display: false }, ticks: { color: ink, autoSkip: false, font: { size: 12.5 } }, border: { display: false } } } } });
-        else if (t3 === 'doughnut') {
-            const K = Object.keys(STATI), V = K.map(k => Math.round(cons.reduce((a, c) => a + C.T[c][k], 0))), tot = V.reduce((a, b) => a + b, 0);
-            nuovo('saChStati', ciambella(K.map(k => STATI[k].t), V, K.map(k => COL[k]), v => `${durata(v)} · ${pct(v, tot)}`));
-        } else nuovo('saChStati', linee(Object.keys(STATI).map(k => ({ nome: STATI[k].t, col: COL[k],
-                dati: C.B.chiavi.map(b => { const n = C.tPres[b] ? C.tPres[b].size : 0; return n ? Math.round(C.tStati[k][b] / n) : null; }) })), v => durata(v), 'minuti per consulente'));
-    }
-    function onClickReport(e) {
-        const ct = e.target.closest('[data-ct]');
-        if (ct) { const [id, t] = ct.dataset.ct.split('|'); tipiG[id] = t; try { localStorage.setItem(LS_T, JSON.stringify(tipiG)); } catch (x) { /* */ } render(); return true; }
-        const p = e.target.closest('[data-preset]');
-        if (p) { st.rep.preset = p.dataset.preset; [st.rep.da, st.rep.a] = periodo(p.dataset.preset); caricaReport(); return true; }
-        return false;
-    }
-    function onChangeReport(e) {
-        const R = st.rep;
-        if (e.target.matches('[data-rda],[data-ra]')) {
-            const da = root.querySelector('[data-rda]').value, a = root.querySelector('[data-ra]').value;
-            if (da && a) { R.da = da <= a ? da : a; R.a = da <= a ? a : da; R.preset = ''; caricaReport(); }
-            return;
-        }
-        if (e.target.matches('[data-fcons]')) { R.filtroCons = e.target.value; render(); }
-    }
-
-    /* ================= CHAT ================= */
-    const EMOJI = ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '🙂', '😉', '😍', '😘', '😎', '🤩', '🥳', '😏', '🤔', '🤨', '😐', '🙄', '😬', '😴', '😮', '😯', '😲', '😳', '🥺', '😢', '😭', '😤', '😡', '🤯', '😱', '🤗', '🤫', '🤐', '😇',
-        '👍', '👎', '👌', '✌️', '🤞', '👏', '🙌', '🙏', '💪', '👋', '🤝', '👀', '❤️', '🧡', '💛', '💚', '💙', '💜', '🔥', '⭐', '✨', '🎉', '✅', '❌', '⚠️', '❗', '❓', '💯', '⏰', '📞', '📅', '📝', '💶', '🚗', '🚙', '🔑', '🏁', '☕', '🍕'];
-    const RAPIDE = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
-    const Chat = (function () {
-        let el = null, aperto = false, conv = null, dopo = 0, timer = null, io = null, utenti = [], risposta = null;
-        const msgs = {}, nonLetti = {};
-        const nomeConv = k => k === 'GRUPPO' ? '👥 Gruppo salone' : (() => { const [, a, b] = k.split('_').map(Number); const altro = io && a === io.id ? b : a; const u = utenti.find(x => x.id === altro); return u ? u.nome : 'Chat privata'; })();
-        const convCon = id => 'P_' + Math.min(io.id, id) + '_' + Math.max(io.id, id);
-        function crea() {
-            if (el) return;
-            el = document.createElement('div');
-            el.className = 'sa-chat';
-            el.innerHTML = `<button type="button" class="sa-chat-fab" aria-label="Apri la chat">💬 <span>Chat</span><i class="sa-badge" hidden></i></button>
-              <div class="sa-chat-p" hidden>
-                <header><button type="button" class="sa-chat-back" hidden aria-label="Torna alle chat">‹</button><b class="sa-chat-tit">Chat</b><button type="button" class="sa-chat-min" aria-label="Riduci">—</button></header>
-                <div class="sa-chat-list"></div>
-                <div class="sa-chat-conv" hidden><div class="sa-chat-msgs"></div>
-                  <div class="sa-chat-reply" hidden></div>
-                  <div class="sa-chat-in"><button type="button" class="sa-emo-b" title="Emoji">😊</button><textarea rows="1" placeholder="Scrivi un messaggio…"></textarea><button type="button" class="sa-send" title="Invia">➤</button></div>
-                  <div class="sa-emo" hidden>${EMOJI.map(x => `<button type="button" data-emo="${x}">${x}</button>`).join('')}</div>
-                </div>
-              </div>`;
-            document.body.appendChild(el);
-            el.querySelector('.sa-chat-fab').addEventListener('click', () => apri(true));
-            el.querySelector('.sa-chat-min').addEventListener('click', () => apri(false));
-            el.querySelector('.sa-chat-back').addEventListener('click', () => { conv = null; vista(); });
-            el.querySelector('.sa-chat-list').addEventListener('click', e => { const b = e.target.closest('[data-conv]'); if (b) entra(b.dataset.conv); });
-            const ta = el.querySelector('textarea');
-            ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); invia(); } });
-            ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(110, ta.scrollHeight) + 'px'; });
-            el.querySelector('.sa-send').addEventListener('click', invia);
-            el.querySelector('.sa-emo-b').addEventListener('click', () => { const p = el.querySelector('.sa-emo'); p.hidden = !p.hidden; });
-            el.querySelector('.sa-emo').addEventListener('click', e => { const b = e.target.closest('[data-emo]'); if (!b) return; ta.value += b.dataset.emo; ta.focus(); });
-            el.querySelector('.sa-chat-reply').addEventListener('click', e => { if (e.target.closest('[data-annulla]')) { risposta = null; barraRisposta(); } });
-            el.querySelector('.sa-chat-msgs').addEventListener('click', onMsgClick);
-        }
-        function mostra(on) {
-            if (on && !can()) return;
-            crea(); el.style.display = on ? '' : 'none';
-            if (on) avvia(); else { clearInterval(timer); timer = null; }
-        }
-        function apri(on) {
-            aperto = on;
-            el.querySelector('.sa-chat-fab').hidden = on;
-            el.querySelector('.sa-chat-p').hidden = !on;
-            if (on) { vista(); if (conv) segnaLetto(conv); }
-        }
-        async function avvia() {
-            if (timer) return;
-            try { const d = await api('/chat/utenti'); utenti = d.utenti || []; io = d.io; }
-            catch (e) { if (/chat/i.test(e.message)) { el.style.display = 'none'; return; } }
-            await giro();
-            timer = setInterval(giro, 3000);
-        }
-        let azzerata = null;
-        async function giro() {
-            try {
-                let d = await api('/chat/aggiornamenti?dopo=' + dopo);
-                // un Admin ha eliminato le chat: si svuota tutto e si ricarica da capo
-                if (azzerata !== null && d.azzerata && d.azzerata !== azzerata) {
-                    Object.keys(msgs).forEach(k => delete msgs[k]); dopo = 0;
-                    d = await api('/chat/aggiornamenti?dopo=0');
-                    if (aperto && conv) disegnaMsgs();
-                }
-                azzerata = d.azzerata || 0;
-                let cambiato = false;
-                Object.entries(d.conv || {}).forEach(([k, v]) => {
-                    const L = msgs[k] = msgs[k] || [];
-                    (v.messaggi || []).forEach(m => { const i = L.findIndex(x => x.id === m.id); if (i >= 0) L[i] = m; else L.push(m); cambiato = true; });
-                    L.sort((a, b) => a.ts - b.ts);
-                    nonLetti[k] = (aperto && conv === k) ? 0 : v.nonLetti || 0;
-                });
-                dopo = Math.max(dopo, d.ora || 0);
-                badge();
-                if (aperto) { if (conv) { if (cambiato) disegnaMsgs(); if (nonLetti[conv] === 0 && cambiato) segnaLetto(conv); } else vista(); }
-            } catch (e) { /* rete: si riprova */ }
-        }
-        function badge() {
-            const n = Object.values(nonLetti).reduce((a, b) => a + b, 0), b = el.querySelector('.sa-badge');
-            b.hidden = !n; b.textContent = n > 99 ? '99+' : n;
-        }
-        function vista() {
-            const lista = el.querySelector('.sa-chat-list'), cv = el.querySelector('.sa-chat-conv');
-            el.querySelector('.sa-chat-back').hidden = !conv;
-            el.querySelector('.sa-chat-tit').textContent = conv ? nomeConv(conv) : 'Chat del salone';
-            lista.hidden = !!conv; cv.hidden = !conv;
-            if (conv) { disegnaMsgs(); return; }
-            const ultimo = k => { const L = msgs[k] || []; return L[L.length - 1]; };
-            const righe = [{ k: 'GRUPPO', nome: '👥 Gruppo salone', sub: 'Tutti' }].concat(utenti.map(u => ({ k: convCon(u.id), nome: u.nome, sub: ruolo(u.role) })));
-            righe.sort((a, b) => ((ultimo(b.k) || {}).ts || (b.k === 'GRUPPO' ? 1 : 0)) - ((ultimo(a.k) || {}).ts || (a.k === 'GRUPPO' ? 1 : 0)));
-            lista.innerHTML = righe.map(r => { const u = ultimo(r.k), n = nonLetti[r.k] || 0; return `<button type="button" class="sa-cl ${n ? 'nl' : ''}" data-conv="${r.k}">
-                <span class="sa-av">${r.k === 'GRUPPO' ? '👥' : esc(iniziali(r.nome))}</span>
-                <span class="sa-cl-t"><b>${esc(r.nome.replace('👥 ', ''))}</b><em>${u ? esc((u.da === io.id ? 'Tu: ' : r.k === 'GRUPPO' ? u.nome.split(' ')[0] + ': ' : '') + u.testo.slice(0, 60)) : esc(r.sub)}</em></span>
-                ${u ? `<small>${ora(u.ts)}</small>` : ''}${n ? `<i class="sa-badge">${n}</i>` : ''}</button>`; }).join('')
-                + (utenti.length ? '' : '<p class="sa-hint" style="padding:10px 14px">Nessun altro utente con accesso al salone, per ora.</p>');
-        }
-        const ruolo = r => ({ FRONT_OFFICE: 'Front Office', CONSULENZA: 'Consulenza', ADMIN: 'Admin' }[r] || r || '');
-        const iniziali = n => String(n || '').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
-        function entra(k) { conv = k; risposta = null; barraRisposta(); vista(); segnaLetto(k); el.querySelector('textarea').focus(); }
-        async function segnaLetto(k) { nonLetti[k] = 0; badge(); try { await post('/chat/letto', { conv: k }); } catch (e) { /* */ } }
-        function disegnaMsgs() {
-            const box = el.querySelector('.sa-chat-msgs'), L = msgs[conv] || [];
-            const inFondo = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
-            let giornoPrec = '';
-            box.innerHTML = L.length ? L.map(m => {
-                const mio = io && m.da === io.id, g = isoRoma(new Date(m.ts));
-                const sep = g !== giornoPrec ? `<div class="sa-sep"><span>${g === oggi() ? 'Oggi' : giornoLungo(g)}</span></div>` : ''; giornoPrec = g;
-                const rif = m.rispostaA ? L.find(x => x.id === m.rispostaA) : null;
-                const rz = Object.entries(m.reazioni || {});
-                return sep + `<div class="sa-m ${mio ? 'mio' : ''}" data-id="${m.id}">
-                  <div class="sa-bub">
-                    ${!mio && conv === 'GRUPPO' ? `<b class="sa-m-n">${esc(m.nome)}</b>` : ''}
-                    ${rif ? `<button type="button" class="sa-quote" data-vai="${rif.id}"><b>${esc(rif.da === (io && io.id) ? 'Tu' : rif.nome)}</b><span>${esc(rif.testo.slice(0, 90))}</span></button>` : ''}
-                    <div class="sa-m-t">${esc(m.testo).replace(/\n/g, '<br>')}</div>
-                    <small>${ora(m.ts)}</small>
-                    <div class="sa-m-a"><button type="button" data-rispondi="${m.id}" title="Rispondi">↩</button><button type="button" data-reagisci="${m.id}" title="Reagisci">😊</button></div>
-                  </div>
-                  ${rz.length ? `<div class="sa-rz">${rz.map(([e, chi]) => `<button type="button" class="${io && chi.includes(io.nome) ? 'mia' : ''}" data-rz="${m.id}" data-e="${e}" title="${esc(chi.join(', '))}">${e} ${chi.length}</button>`).join('')}</div>` : ''}
-                </div>`;
-            }).join('') : '<p class="sa-hint" style="text-align:center;padding:24px">Nessun messaggio: scrivi il primo.</p>';
-            if (inFondo || !box.dataset.v) box.scrollTop = box.scrollHeight;
-            box.dataset.v = '1';
-        }
-        async function onMsgClick(e) {
-            const r = e.target.closest('[data-rispondi]');
-            if (r) { risposta = (msgs[conv] || []).find(x => x.id === r.dataset.rispondi) || null; barraRisposta(); el.querySelector('textarea').focus(); return; }
-            const re = e.target.closest('[data-reagisci]');
-            if (re) {
-                document.querySelectorAll('.sa-rapide').forEach(x => x.remove());
-                const p = document.createElement('div'); p.className = 'sa-rapide';
-                p.innerHTML = RAPIDE.map(x => `<button type="button" data-e="${x}">${x}</button>`).join('');
-                re.closest('.sa-bub').appendChild(p);
-                p.addEventListener('click', ev => { const b = ev.target.closest('[data-e]'); if (!b) return; ev.stopPropagation(); p.remove(); reagisci(re.dataset.reagisci, b.dataset.e); });
-                setTimeout(() => document.addEventListener('click', function via(ev) { if (!p.contains(ev.target)) { p.remove(); document.removeEventListener('click', via); } }), 0);
-                return;
-            }
-            const z = e.target.closest('[data-rz]'); if (z) { reagisci(z.dataset.rz, z.dataset.e); return; }
-            const v = e.target.closest('[data-vai]');
-            if (v) { const t = el.querySelector(`.sa-m[data-id="${v.dataset.vai}"]`); if (t) { t.scrollIntoView({ block: 'center', behavior: 'smooth' }); t.classList.add('lampo'); setTimeout(() => t.classList.remove('lampo'), 1200); } }
-        }
-        async function reagisci(id, emoji) {
-            try { const d = await post('/chat/reazione', { conv, id, emoji }); const L = msgs[conv] || [], i = L.findIndex(x => x.id === id); if (i >= 0 && d.messaggio) L[i] = d.messaggio; disegnaMsgs(); }
-            catch (e) { alert(e.message); }
-        }
-        function barraRisposta() {
-            const b = el.querySelector('.sa-chat-reply');
-            b.hidden = !risposta;
-            if (risposta) b.innerHTML = `<div><b>Rispondi a ${esc(risposta.da === (io && io.id) ? 'te stesso' : risposta.nome)}</b><span>${esc(risposta.testo.slice(0, 100))}</span></div><button type="button" data-annulla aria-label="Annulla risposta">✕</button>`;
-        }
-        async function invia() {
-            const ta = el.querySelector('textarea'), testo = ta.value.trim();
-            if (!testo || !conv) return;
-            ta.value = ''; ta.style.height = 'auto'; el.querySelector('.sa-emo').hidden = true;
-            const rid = risposta && risposta.id; risposta = null; barraRisposta();
-            try { const d = await post('/chat/messaggi', { conv, testo, rispostaA: rid }); (msgs[conv] = msgs[conv] || []).push(d.messaggio); disegnaMsgs(); el.querySelector('.sa-chat-msgs').scrollTop = 1e9; }
-            catch (e) { ta.value = testo; alert('Messaggio non inviato: ' + e.message); }
-        }
-        return { mostra };
-    })();
-
-    window.Salone = { can, canFull, entraDiretto, refreshNav, open, hide };
-})();
+/* ===== bollini di stato dei consulenti ===== */
+.sa-dot { display:inline-block; width:10px; height:10px; border-radius:50%; vertical-align:middle; flex:none; background:#6b7280; box-shadow:0 0 0 2px rgba(255,255,255,.06); }
+.sa-dot.g { width:14px; height:14px; }
+.sa-dot.verde { background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,.22); }
+.sa-dot.giallo { background:#f5b301; box-shadow:0 0 0 3px rgba(245,179,1,.22); }
+.sa-dot.rosso { background:#ef4444; box-shadow:0 0 0 3px rgba(239,68,68,.22); }
+.sa-dot.grigio { background:#6b7280; }
+.sa-stati { margin-bottom:18px; padding:16px 18px; }
+.sa-stati-h { display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:12px; }
+.sa-stati-h h3 { margin:0; font-size:15px; }
+.sa-stati-h p { margin:4px 0 0; font-size:12.5px; color:var(--sa-ink2); display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+.sa-live { font-size:11px; font-weight:800; color:#22c55e; margin-left:6px; animation:sa-blink 2s infinite; }
+@keyframes sa-blink { 50% { opacity:.45; } }
+.sa-mio { display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding:6px; border-radius:14px; background:rgba(255,255,255,.04); border:1px solid var(--sa-line); }
+.sa-mio > span { font-size:11px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; color:var(--sa-ink2); padding:0 6px; }
+.sa-mio-b { display:flex; align-items:center; gap:7px; border:1.5px solid transparent; background:transparent; color:var(--sa-ink); font:inherit; font-size:13px; font-weight:800; padding:8px 12px; border-radius:10px; cursor:pointer; }
+.sa-mio-b:hover { background:rgba(255,255,255,.05); }
+.sa-mio-b.on.verde { background:rgba(34,197,94,.16); border-color:#22c55e; }
+.sa-mio-b.on.giallo { background:rgba(245,179,1,.16); border-color:#f5b301; }
+.sa-mio-b.on.rosso { background:rgba(239,68,68,.16); border-color:#ef4444; }
+.sa-stati-l { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:8px; }
+.sa-cs { position:relative; }
+.sa-cs-b { display:flex; align-items:flex-start; gap:10px; width:100%; text-align:left; border:1px solid var(--sa-line); border-left:4px solid #6b7280; background:rgba(255,255,255,.03); color:var(--sa-ink); font:inherit; padding:10px 12px; border-radius:12px; cursor:pointer; }
+.sa-cs-b:disabled { cursor:default; }
+.sa-cs-b:not(:disabled):hover { border-color:var(--sa-acc); }
+.sa-cs-b .sa-dot { margin-top:3px; }
+.sa-cs.verde .sa-cs-b { border-left-color:#22c55e; }
+.sa-cs.giallo .sa-cs-b { border-left-color:#f5b301; background:rgba(245,179,1,.06); }
+.sa-cs.rosso .sa-cs-b { border-left-color:#ef4444; }
+.sa-cs.grigio .sa-cs-b { opacity:.7; }
+.sa-cs.io .sa-cs-b { box-shadow:0 0 0 1px var(--sa-acc) inset; }
+.sa-cs-t { display:flex; flex-direction:column; min-width:0; }
+.sa-cs-t b { font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sa-cs-t em { font-style:normal; font-size:11.5px; color:var(--sa-ink2); }
+.sa-cs-t em.sa-cs-cl { color:#ffd56b; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.sa-menu { position:absolute; z-index:20; top:calc(100% + 4px); left:0; min-width:200px; padding:6px; border-radius:12px; background:var(--sa-card); border:1px solid var(--sa-line); box-shadow:0 16px 30px -10px rgba(0,0,0,.6); }
+.sa-menu small { display:block; font-size:11px; font-weight:800; color:var(--sa-ink2); padding:4px 8px 6px; }
+.sa-menu button { display:flex; align-items:center; gap:8px; width:100%; border:0; background:transparent; color:var(--sa-ink); font:inherit; font-size:13px; font-weight:700; padding:8px; border-radius:8px; cursor:pointer; text-align:left; }
+.sa-menu button:hover { background:rgba(255,255,255,.06); }
+.sa-toast { position:fixed; left:50%; bottom:26px; transform:translateX(-50%); z-index:10080; background:#0f2f2b; color:#fff; border:1px solid #22c3a6; padding:11px 18px; border-radius:12px; font-size:13.5px; font-weight:700; box-shadow:0 16px 40px -12px rgba(0,0,0,.6); transition:opacity .35s; }
+.sa-toast.via { opacity:0; }
+.sa-msg.warn { background:rgba(245,179,1,.12); color:var(--sa-ink); border:1px solid rgba(245,179,1,.35); }
+.sa-red { color:#ff6b6b !important; }
+.sa-st.no { background:rgba(239,68,68,.14); color:#ff8a8a; }
+.sa-day-r { position:absolute; top:4px; right:4px; width:7px; height:7px; border-radius:50%; background:#ef4444; }
+.sa-day-r.sa-inl { position:static; display:inline-block; vertical-align:middle; margin-right:4px; }
+.sa-day.fut:not(:disabled) { opacity:1; }
+/* appuntamenti */
+.sa-app.da { border-left-color:#ef4444; }
+.sa-in-t small { display:block; font-size:10px; color:var(--sa-ink2); margin-top:2px; }
+.sa-tag { font-size:11.5px; font-weight:700; padding:4px 9px; border-radius:999px; background:rgba(255,255,255,.06); color:var(--sa-ink2); }
+.sa-car.perm { background:rgba(168,85,247,.14); color:#d6b4fb; }
+details.sa-in-note summary { cursor:pointer; font-weight:700; }
+details.sa-in-note div { margin-top:6px; white-space:pre-wrap; line-height:1.5; padding:10px 12px; border-radius:10px; background:rgba(0,0,0,.14); color:var(--sa-ink); }
+.sa-file { display:inline-flex; align-items:center; cursor:pointer; }
+.sa-file.busy { opacity:.6; pointer-events:none; }
+.sa-sel-a { width:auto; min-width:190px; }
+.sa-kpis5 { grid-template-columns:repeat(5, 1fr); }
+.sa-tbl { width:100%; border-collapse:collapse; font-size:12.5px; margin-top:10px; }
+.sa-tbl th { text-align:left; font-size:10.5px; font-weight:800; letter-spacing:.6px; text-transform:uppercase; color:var(--text-secondary, #9aa3b2); padding:8px 8px; border-bottom:1px solid var(--border, #2a2e3b); white-space:nowrap; }
+.sa-tbl td { padding:8px; border-bottom:1px solid var(--border, #2a2e3b); vertical-align:top; }
+.sa-tbl td .sa-dot { margin-right:4px; }
+.sa-tbl tbody tr:hover td { background:rgba(255,255,255,.025); }
+.sa-old { color:var(--text-secondary, #9aa3b2); text-decoration:line-through; text-decoration-color:rgba(239,68,68,.6); }
+.sa-modal.sa-wide { width:min(1060px, 100%); }
+.sa-modal h4 { margin:18px 0 2px; font-size:14px; }
+.sa-imp { border:1px solid var(--border, #2a2e3b); border-radius:14px; padding:12px 14px; margin-bottom:10px; }
+.sa-imp summary { cursor:pointer; display:flex; gap:12px; align-items:baseline; flex-wrap:wrap; }
+.sa-imp summary span { color:var(--text-secondary, #9aa3b2); font-size:12.5px; }
+.sa-imp summary em { font-style:normal; font-size:12.5px; margin-left:auto; }
+.sa-imp[open] summary { margin-bottom:10px; }
+/* report */
+.sa-rep-h { display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:18px; }
+.sa-rep-h h2 { margin:0; font-size:19px; }
+.sa-rep-h p { margin:3px 0 0; font-size:12.5px; color:var(--sa-ink2); }
+.sa-btn2.on { background:var(--sa-acc); border-color:var(--sa-acc); color:#062a24; }
+.sa-dt { display:flex; align-items:center; gap:6px; font-size:12.5px; color:var(--sa-ink2); font-weight:700; }
+.sa-dt input { padding:8px 10px; border-radius:10px; border:1px solid var(--sa-line); background:var(--sa-bg); color:var(--sa-ink); font:inherit; font-size:13px; color-scheme:dark; }
+.sa-tiles { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:14px; margin-bottom:18px; }
+.sa-tile span { display:block; font-size:11px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; color:var(--sa-ink2); }
+.sa-tile b { display:block; font-size:28px; margin:6px 0 2px; font-variant-numeric:tabular-nums; }
+.sa-tile em { font-style:normal; font-size:12px; color:var(--sa-ink2); }
+.sa-rep-2 { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:18px; margin-bottom:18px; }
+#saBody > .sa-card + .sa-card { margin-top:18px; }
+.sa-card h3 { margin:0; font-size:15px; }
+.sa-card > .sa-hint { margin:4px 0 0; }
+.sa-chart { position:relative; height:240px; margin-top:12px; }
+.sa-legend { display:flex; gap:16px; margin-top:10px; font-size:12.5px; color:var(--sa-ink2); }
+.sa-legend span { display:flex; align-items:center; gap:6px; }
+.sa-scroll { max-height:520px; overflow:auto; }
+.sa-scroll .sa-tbl th { position:sticky; top:0; background:var(--sa-card); }
+[data-theme="light"] .sa-dt input { color-scheme:light; }
+@media (max-width:1200px) { .sa-tiles { grid-template-columns:repeat(3, minmax(0, 1fr)); } .sa-rep-2 { grid-template-columns:1fr; } }
+@media (max-width:700px) { .sa-tiles, .sa-kpis5 { grid-template-columns:repeat(2, minmax(0, 1fr)); } .sa-stati-l { grid-template-columns:1fr 1fr; } }
+.sa-tbl td:first-child { white-space:nowrap; }
+.sa-rep-2 .sa-tbl th { white-space:normal; }
+/* formato del grafico (ciambella / barre / linee), come nelle altre sezioni */
+.sa-card-h { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+.sa-types { display:flex; gap:4px; background:rgba(255,255,255,.06); border-radius:10px; padding:3px; flex-shrink:0; }
+.sa-types button { width:30px; height:28px; border:0; border-radius:8px; background:transparent; display:grid; place-items:center; cursor:pointer; color:var(--sa-ink2); }
+.sa-types button svg { width:16px; height:16px; }
+.sa-types button:hover { color:var(--sa-ink); }
+.sa-types button.on { background:var(--sa-card); color:var(--sa-ink); box-shadow:0 1px 3px rgba(0,0,0,.3); }
+[data-theme="light"] .sa-types { background:rgba(0,0,0,.05); }
+/* elimina storico (solo Admin): finestre al centro */
+.sa-ov.sa-ov-c { align-items:center; }
+.sa-del { width:min(560px, 100%); }
+.sa-chk { display:flex !important; flex-direction:row !important; align-items:flex-start; gap:10px !important; text-transform:none !important; letter-spacing:0 !important; font-size:13.5px !important; font-weight:500 !important; color:var(--text-primary, #eef1f6) !important; padding:7px 0; cursor:pointer; }
+.sa-chk input { width:auto !important; margin-top:3px; accent-color:#e5484d; }
+.sa-row2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:4px 0 8px 28px; transition:opacity .15s; }
+.sa-modal input[type="date"] { color-scheme:dark; }
+[data-theme="light"] .sa-modal input[type="date"] { color-scheme:light; }
+.sa-btn-red { background:#e5484d !important; color:#fff !important; }
+.sa-btn-red:hover { background:#f0595e !important; }
+.sa-conf { width:min(440px, 100%); text-align:center; padding:26px 26px 22px; }
+.sa-conf-i { font-size:42px; line-height:1; }
+.sa-conf h3 { margin:10px 0 6px; font-size:20px; }
+.sa-conf p { margin:0 0 16px; font-size:13.5px; line-height:1.55; color:var(--text-secondary, #9aa3b2); }
+.sa-conf p b { color:var(--text-primary, #eef1f6); }
+.sa-conf-pw { text-align:left; }
+.sa-conf-pw input { margin-top:6px; text-align:center; font-size:16px !important; letter-spacing:3px; }
+.sa-conf-b { display:flex; gap:10px; justify-content:center; margin-top:16px; }
+.sa-tutti { margin-top:6px; }
+/* nuovi bollini: grigio = test drive, azzurro = in piazzale, vuoto = non in salone / CRM chiuso */
+.sa-dot.grigio { background:#8b95a5 !important; box-shadow:0 0 0 3px rgba(139,149,165,.25) !important; }
+.sa-dot.azzurro { background:#38bdf8; box-shadow:0 0 0 3px rgba(56,189,248,.25); }
+.sa-dot.vuoto { background:transparent; border:2px solid #6b7280; box-shadow:none; }
+.sa-dot.g.vuoto { width:14px; height:14px; }
+.sa-mio-b.on.grigio { background:rgba(139,149,165,.18); border-color:#8b95a5; }
+.sa-mio-b.on.azzurro { background:rgba(56,189,248,.16); border-color:#38bdf8; }
+.sa-cs.grigio .sa-cs-b { border-left-color:#8b95a5; opacity:1; background:rgba(139,149,165,.07); }
+.sa-cs.azzurro .sa-cs-b { border-left-color:#38bdf8; background:rgba(56,189,248,.06); }
+.sa-cs.vuoto .sa-cs-b { opacity:.7; border-left-color:#3a4150; }
+/* controllo dei 15 minuti */
+.sa-ctl-ov { z-index:10090; background:rgba(5,8,14,.72); }
+.sa-ctl { --p:100%; width:min(460px, 100%); text-align:center; padding:28px 26px 20px; border:2px solid #f5b301; }
+.sa-ctl-i { font-size:44px; line-height:1; }
+.sa-ctl h3 { margin:10px 0 6px; font-size:20px; line-height:1.3; }
+.sa-ctl p { margin:0 0 18px; font-size:15px; line-height:1.5; color:var(--text-secondary, #9aa3b2); }
+.sa-ctl p b { color:var(--text-primary, #eef1f6); }
+.sa-ctl-b { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.sa-ctl-b button { border:0; border-radius:14px; padding:14px 12px; font:inherit; font-size:15px; font-weight:800; cursor:pointer; }
+.sa-ctl-no { background:#e5484d; color:#fff; }
+.sa-ctl-no:hover { background:#f0595e; }
+.sa-ctl-si { position:relative; overflow:hidden; background:linear-gradient(90deg, #1fae5b var(--p), #17824a var(--p)); color:#fff; display:flex; align-items:center; justify-content:center; gap:10px; transition:background .9s linear; }
+.sa-ctl-t { min-width:34px; padding:3px 8px; border-radius:999px; background:rgba(0,0,0,.25); font-variant-numeric:tabular-nums; }
+.sa-ctl small { display:block; margin-top:12px; font-size:12px; color:var(--text-secondary, #9aa3b2); }
+/* ---- controllo prima dell'import appuntamenti ---- */
+.sa-ck-g { color:#3ddc97 !important; }
+.sa-ck-w { color:var(--sa-warn) !important; }
+.sa-ck-sec { border:1px solid var(--sa-line); border-radius:14px; padding:14px 16px; margin-top:14px; }
+.sa-ck-sec h4 { margin:0 0 6px; font-size:15px; display:flex; align-items:center; gap:8px; }
+.sa-ck-sec h4 > span { width:24px; height:24px; border-radius:50%; background:var(--sa-acc); color:#062a24; font-size:13px; display:inline-flex; align-items:center; justify-content:center; }
+.sa-ck-sec .sa-hint { margin:0 0 10px; line-height:1.5; }
+.sa-ck-det { padding:12px 16px; }
+.sa-ck-det summary { cursor:pointer; font-weight:800; font-size:14px; }
+.sa-ck-quick { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px; }
+.sa-ck-quick .sa-btn2 { padding:7px 12px; font-size:12.5px; }
+.sa-ck-range { display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:12.5px; color:var(--sa-ink2); margin-left:auto; }
+.sa-modal .sa-ck-range input, .sa-modal .sa-ck-edit input { width:auto; padding:7px 9px; font-size:13px; border-radius:9px; color-scheme:dark; }
+.sa-ck-days { display:flex; flex-wrap:wrap; gap:8px; }
+.sa-ck-day { display:flex; align-items:center; gap:8px; border:1.5px solid var(--sa-line); background:transparent; color:var(--sa-ink2); font:inherit; font-size:13px; font-weight:700; padding:8px 12px; border-radius:12px; cursor:pointer; opacity:.75; }
+.sa-ck-day b { background:rgba(255,255,255,.08); color:var(--sa-ink); border-radius:8px; padding:1px 7px; font-size:12px; }
+.sa-ck-day i { font-style:normal; font-size:11.5px; color:var(--sa-warn); }
+.sa-ck-day.past span::after { content:' · passato'; font-weight:500; font-size:11px; color:var(--sa-ink2); }
+.sa-ck-day:hover { border-color:var(--sa-acc); opacity:1; }
+.sa-ck-day.on { border-color:var(--sa-acc); background:rgba(34,195,166,.16); color:var(--sa-ink); opacity:1; }
+.sa-ck-day.on b { background:var(--sa-acc); color:#062a24; }
+.sa-ck-bulk { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+.sa-ck-bulk .sa-hint { margin:0; }
+.sa-ck-bulk .sa-btn2 { padding:6px 11px; font-size:12.5px; }
+.sa-ck-list { display:flex; flex-direction:column; gap:10px; }
+.sa-ck-row { border:1px solid var(--sa-line); border-left:4px solid var(--sa-warn); border-radius:12px; padding:12px 14px; background:rgba(255,255,255,.02); transition:box-shadow .3s; }
+.sa-ck-row.az-salta { border-left-color:var(--sa-ink2); }
+.sa-ck-row.az-salta .sa-ck-campi, .sa-ck-row.az-salta .sa-ck-pb { opacity:.6; }
+.sa-ck-row.az-modifica { border-left-color:#60a5fa; }
+.sa-ck-row.az-forza { border-left-color:var(--sa-acc); }
+.sa-ck-row.flash { box-shadow:0 0 0 3px var(--sa-warn); }
+.sa-ck-top { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }
+.sa-ck-top b { font-size:14.5px; }
+.sa-ck-top .sa-tag { margin-left:auto; }
+.sa-ck-campi { display:grid; grid-template-columns:minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr); gap:8px; margin-top:10px; }
+.sa-ck-campi > div { background:rgba(255,255,255,.03); border:1px solid var(--sa-line); border-radius:10px; padding:7px 10px; min-width:0; }
+.sa-ck-campi small { display:block; font-size:10px; font-weight:800; letter-spacing:.6px; text-transform:uppercase; color:var(--sa-ink2); margin-bottom:2px; }
+.sa-ck-campi span { font-size:13px; font-weight:600; overflow-wrap:anywhere; }
+.sa-ck-campi span i { color:var(--sa-ink2); font-weight:500; }
+.sa-ck-campi > div.bad { border-color:rgba(244,168,58,.6); background:rgba(244,168,58,.08); }
+.sa-ck-campi > div.bad small { color:var(--sa-warn); }
+.sa-ck-pb { margin:8px 0 0; padding-left:18px; font-size:12.5px; color:#ffc979; }
+.sa-ck-pb li { margin:2px 0; }
+.sa-ck-az { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-top:10px; }
+.sa-ck-seg { display:inline-flex; border:1px solid var(--sa-line); border-radius:11px; overflow:hidden; }
+.sa-ck-seg button { border:0; border-right:1px solid var(--sa-line); background:transparent; color:var(--sa-ink2); font:inherit; font-size:12.5px; font-weight:700; padding:7px 12px; cursor:pointer; white-space:nowrap; }
+.sa-ck-seg button:last-child { border-right:0; }
+.sa-ck-seg button:hover { color:var(--sa-ink); background:rgba(255,255,255,.04); }
+.sa-ck-seg button.on[data-az="salta"] { background:rgba(154,163,178,.22); color:var(--sa-ink); }
+.sa-ck-seg button.on[data-az="modifica"] { background:#60a5fa; color:#08203f; }
+.sa-ck-seg button.on[data-az="forza"] { background:var(--sa-acc); color:#062a24; }
+.sa-ck-edit { display:inline-flex; gap:6px; }
+.sa-ck-es { font-size:12.5px; font-weight:700; }
+.sa-ck-es small { font-weight:500; color:var(--sa-ink2); }
+.sa-ck-es.no { color:var(--sa-ink2); font-weight:600; }
+.sa-ck-es.warn { color:var(--sa-warn); }
+.sa-ck-ric { margin:8px 0 0 !important; }
+.sa-ck-foot { position:sticky; bottom:-60px; /* -60px: annulla il padding dello sfondo che scorre */ margin:16px -22px -16px; padding:14px 22px; background:var(--sa-card); border-top:1px solid var(--sa-line); display:flex; gap:10px; align-items:center; justify-content:flex-end; flex-wrap:wrap; border-radius:0 0 20px 20px; }
+.sa-ck-foot > .sa-hint { margin-right:auto; }
+.sa-ck-foot .sa-btn:disabled { opacity:.45; cursor:default; }
+.sa-ck-riep { margin-top:-4px; }
+.sa-tag.sa-tag-w { background:rgba(244,168,58,.15); color:#ffc979; cursor:help; }
+@media (max-width:700px) { .sa-ck-campi { grid-template-columns:1fr; } .sa-ck-range { margin-left:0; } .sa-ck-top .sa-tag { margin-left:0; } }
