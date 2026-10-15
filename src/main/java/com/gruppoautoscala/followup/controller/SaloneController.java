@@ -740,7 +740,8 @@ public class SaloneController {
      * risulta Occupato. Sull'appuntamento restano: arrivato alle, da chi, accolto da (consulente).
      *   { consulente }          segna l'arrivo / lo affida a un altro consulente (se non e' ancora preso in carico)
      *   { annulla: true }       toglie l'arrivo segnato per sbaglio (solo se non e' ancora preso in carico) */
-    private static final List<String> CAMPI_ARRIVO = List.of("arrivatoAt", "arrivatoIt", "arrivatoDa", "ingressoId", "accoltoDa");
+    private static final List<String> CAMPI_ARRIVO = List.of("arrivatoAt", "arrivatoIt", "arrivatoDa", "ingressoId", "accoltoDa", "passato", "segnatoIt");
+    private static final List<String> CAMPI_MANO = List.of("consulenteMano", "assegnatoManoDa", "assegnatoManoIt");
     /** aggiunge all'appuntamento lo stato dell'ingresso collegato (notificato / preso in carico / libero) */
     private void arricchisci(Map<String, Object> r, Map<String, List<Map<String, Object>>> giorni) {
         String iid = str(r.get("ingressoId"));
@@ -754,7 +755,7 @@ public class SaloneController {
     public ResponseEntity<?> arrivato(@PathVariable String id, @RequestBody Map<String, Object> b, HttpSession s) {
         Chi c = chi(s); if (!vede(c)) return no(c);
         if (!gestisce(c)) return soloLivello(2);
-        boolean annulla = Boolean.TRUE.equals(b.get("annulla"));
+        boolean annulla = Boolean.TRUE.equals(b.get("annulla")), passato = Boolean.TRUE.equals(b.get("passato"));
         String cons = str(b.get("consulente"));
         if (!annulla && !CONSULENTI_AGNANO.contains(cons)) return ResponseEntity.badRequest().body(Map.of("error", "Scegli il consulente che accoglie il cliente"));
         Instant now = Instant.now();
@@ -769,6 +770,24 @@ public class SaloneController {
             Map<String, Object> ing = iid.isEmpty() ? null : l.stream().filter(x -> iid.equals(x.get("id"))).findFirst().orElse(null);
             if (ing != null && ing.get("presoAt") != null)
                 return ResponseEntity.status(409).body(Map.of("error", "Il cliente e' gia' stato preso in carico da " + str(ing.get("consulente"))));
+            if (passato) {
+                // CLIENTE PASSATO: l'appuntamento c'e' stato ma nessuno l'ha segnato sul momento. Niente notifica e niente ingresso.
+                if (a.get("arrivatoAt") != null) return ResponseEntity.status(409).body(Map.of("error", "Il cliente risulta gia' arrivato"));
+                Instant quando = now;
+                try {
+                    LocalDate d = LocalDate.parse(str(a.get("appData")));
+                    String o = str(a.get("appOra"));
+                    quando = (o.isEmpty() ? d.atTime(12, 0) : d.atTime(LocalTime.parse(o.length() == 4 ? "0" + o : o))).atZone(ITALY).toInstant();
+                    if (quando.isAfter(now)) return ResponseEntity.badRequest().body(Map.of("error", "L'appuntamento non e' ancora passato: usa \"Cliente in sede\""));
+                } catch (Exception e) { quando = now; }
+                a.put("arrivatoAt", quando.toString()); a.put("arrivatoIt", oraIt(quando)); a.put("arrivatoDa", c.nome());
+                a.put("accoltoDa", cons); a.put("passato", true); a.put("segnatoIt", oraIt(now));
+                try { scrivi("SALONE_APP", apps, apps.size(), c.nome()); }
+                catch (Exception e) { return ResponseEntity.status(500).body(Map.of("error", "Non salvato: " + e.getMessage())); }
+                return ResponseEntity.ok(mappa("appuntamento", a));
+            }
+            if (!annulla && Boolean.TRUE.equals(a.get("passato")))
+                return ResponseEntity.status(409).body(Map.of("error", "Questo appuntamento e' segnato come passato: annullalo prima"));
             try {
                 if (annulla) {
                     if (ing != null) { l.remove(ing); scrivi("SALONE_" + gi, l, l.size(), c.nome()); }
@@ -802,6 +821,34 @@ public class SaloneController {
             } catch (Exception e) { return ResponseEntity.status(500).body(Map.of("error", "Non salvato: " + e.getMessage())); }
             arricchisci(a, new HashMap<>());
             return ResponseEntity.ok(mappa("appuntamento", a, "ingresso", ing));
+        }
+    }
+
+    /* CONSULENTE SCELTO A MANO (anche in anticipo, per gli appuntamenti "Da assegnare" o per cambiarlo).
+     * { consulente }  -> assegna;  { consulente: "" } -> torna a quello del CSV.
+     * Resta anche dopo gli import, finche' il file non indica un altro consulente di Agnano. */
+    @PostMapping("/appuntamenti/{id}/consulente")
+    public ResponseEntity<?> consulenteApp(@PathVariable String id, @RequestBody Map<String, Object> b, HttpSession s) {
+        Chi c = chi(s); if (!vede(c)) return no(c);
+        if (!gestisce(c)) return soloLivello(2);
+        String cons = str(b.get("consulente"));
+        if (!cons.isEmpty() && !CONSULENTI_AGNANO.contains(cons)) return ResponseEntity.badRequest().body(Map.of("error", "Consulente non valido"));
+        Instant now = Instant.now();
+        synchronized (LOCK) {
+            List<Map<String, Object>> apps = leggi("SALONE_APP");
+            Map<String, Object> a = apps.stream().filter(x -> id.equals(str(x.get("id")))).findFirst().orElse(null);
+            if (a == null) return ResponseEntity.status(404).body(Map.of("error", "Appuntamento non trovato"));
+            if (a.get("arrivatoAt") != null) return ResponseEntity.status(409).body(Map.of("error", "Il cliente e' gia' arrivato: usa \"Affida a un altro\""));
+            if (cons.isEmpty()) {
+                for (String k : CAMPI_MANO) a.remove(k);
+                a.put("consulente", consulenteDi(str(a.get("venditore"))));
+            } else {
+                a.put("consulente", cons); a.put("consulenteMano", cons);
+                a.put("assegnatoManoDa", c.nome()); a.put("assegnatoManoIt", oraIt(now));
+            }
+            try { scrivi("SALONE_APP", apps, apps.size(), c.nome()); }
+            catch (Exception e) { return ResponseEntity.status(500).body(Map.of("error", "Non salvato: " + e.getMessage())); }
+            return ResponseEntity.ok(mappa("appuntamento", a));
         }
     }
 
@@ -938,7 +985,7 @@ public class SaloneController {
                 Map<String, String> t = tracciati(r);
                 out.put(id, mappa("appData", r.get("appData"), "appOra", r.get("appOra"), "controllo", r.get("controllo"),
                     "esitoAlert", str(r.get("esitoAlert")), "esitoAttivita", str(r.get("esitoAttivita")), "dataRicontatto", str(r.get("dataRicontatto")),
-                    "consulente", r.get("consulente"), "venditore", str(r.get("venditore")), "status", str(r.get("status")),
+                    "consulente", r.get("consulente"), "consulenteMano", r.get("consulenteMano"), "venditore", str(r.get("venditore")), "status", str(r.get("status")),
                     "telefono", str(r.get("telefono")), "vettura", t.get("Vettura"), "note", str(r.get("note")), "cliente", cliente(r)));
             } else if (!da.isEmpty() && !a.isEmpty() && !g.isEmpty() && g.compareTo(da) >= 0 && g.compareTo(a) <= 0) {
                 // in archivio in quei giorni ma non piu' nel file: "spariti"
@@ -1002,8 +1049,14 @@ public class SaloneController {
                     }
                 }
                 if (app == null) senzaData++;
-                if (r.get("consulente") == null) daAssegnare++;
                 Map<String, Object> prima = perId.get(id);
+                // consulente scelto a mano nel CRM: resta, a meno che il file non indichi un ALTRO consulente di Agnano
+                // (in quel caso il lead compare tra i "Cambiati" e, se lo aggiorni, vale il file)
+                if (prima != null && prima.get("consulenteMano") != null) {
+                    Object mano = prima.get("consulenteMano"), file = r.get("consulente");
+                    if (file == null || file.equals(mano)) { r.put("consulente", mano); for (String k : CAMPI_MANO) r.put(k, prima.get(k)); }
+                }
+                if (r.get("consulente") == null) daAssegnare++;
                 if (prima == null) {
                     r.put("primoImportIt", oraIt(now)); r.put("ultimoImportIt", oraIt(now)); r.put("ultimoImport", impId);
                     perId.put(id, r); nuovi++;
@@ -1021,7 +1074,7 @@ public class SaloneController {
                         "prima", "Note".equals(campo) ? taglia(tp.get(campo)) : tp.get(campo),
                         "dopo", "Note".equals(campo) ? taglia(tn.get(campo)) : tn.get(campo)));
                 }
-                for (String k : CAMPI_ARRIVO) if (prima.containsKey(k)) r.put(k, prima.get(k));   // l'arrivo in sede non si perde
+                for (String k : CAMPI_ARRIVO) if (prima.containsKey(k)) r.put(k, prima.get(k));   // l'arrivo in sede (o "passato") non si perde
                 r.put("primoImportIt", prima.get("primoImportIt"));
                 r.put("ultimoImport", impId); r.put("ultimoImportIt", oraIt(now));
                 r.put("aggiornatoIt", cambiato ? oraIt(now) : prima.get("aggiornatoIt"));

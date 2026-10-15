@@ -750,7 +750,7 @@
         if (st.tab === 'app') render();
     }
     const cliApp = r => [String(r.nome || '').replace(/^\.+$/, ''), r.cognome].filter(Boolean).join(' ') || r.ragioneSociale || 'Cliente';
-    const vettApp = r => [r.marca && !/^marca generica$/i.test(r.marca) ? r.marca : '', r.modello && !/^x$/i.test(r.modello) ? r.modello : ''].filter(Boolean).join(' ');
+    const vettApp = r => [r.marca && !/^marca generica$/i.test(r.marca) ? r.marca : '', r.modello && !/^[\s\/x.\-]*$/i.test(r.modello) ? r.modello : ''].filter(Boolean).join(' ');
     function renderApp(body) {
         const A = st.app;
         let L = A.lista.slice();
@@ -762,7 +762,7 @@
         const info = A.info || {};
         body.innerHTML = `
           ${A.err ? `<div class="sa-msg err">${esc(A.err)}</div>` : ''}
-          ${st.vedeTutti && info.daAssegnareProssimi ? `<div class="sa-msg warn">⚠️ ${info.daAssegnareProssimi} appuntament${info.daAssegnareProssimi === 1 ? 'o' : 'i'} da oggi in poi ${info.daAssegnareProssimi === 1 ? 'è' : 'sono'} ancora <b>da assegnare</b> (il venditore nel CSV non è un consulente di Agnano). Al prossimo import si aggiornano da soli.</div>` : ''}
+          ${st.vedeTutti && info.daAssegnareProssimi ? `<div class="sa-msg warn">⚠️ ${info.daAssegnareProssimi} appuntament${info.daAssegnareProssimi === 1 ? 'o' : 'i'} da oggi in poi ${info.daAssegnareProssimi === 1 ? 'è' : 'sono'} ancora <b>da assegnare</b> (il venditore nel CSV non è un consulente di Agnano). Puoi assegnarli tu con <b>👤 Assegna consulente</b> (anche nei giorni prima), oppure si aggiornano al prossimo import se il CSV indica un consulente di Agnano.</div>` : ''}
           <div class="sa-grid">
             <aside class="sa-side">
               <div class="sa-card">${calendario(A.mese, A.giorno, A.giorni, st.vedeTutti ? A.daAss : null, true)}
@@ -797,19 +797,30 @@
         const posseduta = [r.marcaPosseduta, r.modelloPosseduto, r.annoPosseduto, Number(r.kmPosseduto) > 0 ? Number(r.kmPosseduto).toLocaleString('it-IT') + ' km' : ''].filter(Boolean).join(' ');
         const arr = r.arrivo || null, preso = arr && arr.presoAt, accolto = r.accoltoDa || (arr && arr.consulente) || null;
         const oggiApp = r.appData === oggi(), gest = st.app.puoGestire;
+        // orario gia' passato (giorni prima, o oggi a un'ora gia' passata): si puo' segnare "Cliente passato"
+        const oraOra = F_ORA.format(new Date());
+        const giaPassato = r.appData < oggi() || (oggiApp && !!r.appOra && r.appOra < oraOra);
         const mioArr = r.arrivatoAt && !preso && st.mio && accolto === st.mio && r.ingressoId;
-        const blocco = r.arrivatoAt ? `<div class="sa-arr ${preso ? 'ok' : 'wait'}">
+        const blocco = r.passato ? `<div class="sa-arr ok">
+              <span>✓ <b>Cliente passato</b>${r.appOra ? ' all’appuntamento delle ' + esc(r.appOra) : ''} · seguito da <b>${esc(accolto || '—')}</b></span>
+              <small>Segnato dopo da ${esc(r.arrivatoDa || '')}${r.segnatoIt ? ' il ' + esc(r.segnatoIt.slice(0, 16)) : ''}</small></div>`
+            : r.arrivatoAt ? `<div class="sa-arr ${preso ? 'ok' : 'wait'}">
               <span>${preso ? `✓ In sede dalle ${esc(ora(r.arrivatoAt))} · <b>preso in carico da ${esc(accolto)}</b> alle ${esc(ora(arr.presoAt))}${arr.liberoAt ? ` · seguito per ${esc(durata(arr.minutiCliente))}` : ''}`
                 : `🏁 <b>Cliente in sede</b> dalle ${esc(ora(r.arrivatoAt))} · avvisato <b>${esc(accolto || '')}</b>: sta andando alla sua scrivania`}</span>
               ${accolto && r.consulente && accolto !== r.consulente ? `<small>Accolto da ${esc(accolto)} al posto di ${esc(r.consulente)}</small>` : ''}
               <small>Segnato da ${esc(r.arrivatoDa || '')}</small></div>` : '';
         const azioni = [
             gest && oggiApp && !r.arrivatoAt ? `<button type="button" class="sa-btn sa-arr-b" data-arr="${esc(r.id)}">🏁 Cliente in sede</button>` : '',
-            gest && r.arrivatoAt && !preso ? `<button type="button" class="sa-btn2" data-arr="${esc(r.id)}">↪ Affida a un altro</button><button type="button" class="sa-btn2 sa-x2" data-arr-annulla="${esc(r.id)}" title="Segnato per sbaglio: togli l'arrivo">Annulla arrivo</button>` : '',
+            gest && giaPassato && !r.arrivatoAt ? `<button type="button" class="sa-btn sa-pass-b" data-pass="${esc(r.id)}" title="Il cliente è venuto ma non era stato segnato">✓ Cliente passato</button>` : '',
+            gest && !r.arrivatoAt ? (r.consulente ? `<button type="button" class="sa-link" data-assegna-app="${esc(r.id)}">✎ Cambia consulente</button>`
+                : `<button type="button" class="sa-btn sa-ass-b" data-assegna-app="${esc(r.id)}">👤 Assegna consulente</button>`) : '',
+            gest && r.passato ? `<button type="button" class="sa-btn2 sa-x2" data-arr-annulla="${esc(r.id)}" title="Segnato per sbaglio">Annulla “passato”</button>` : '',
+            gest && r.arrivatoAt && !r.passato && !preso ? `<button type="button" class="sa-btn2" data-arr="${esc(r.id)}">↪ Affida a un altro</button><button type="button" class="sa-btn2 sa-x2" data-arr-annulla="${esc(r.id)}" title="Segnato per sbaglio: togli l'arrivo">Annulla arrivo</button>` : '',
             mioArr ? `<button type="button" class="sa-btn" data-presa-app="${esc(r.ingressoId)}">Prendo in carico ✓</button>` : ''
         ].join('');
-        return `<article class="sa-in sa-app ${preso ? 'preso' : r.arrivatoAt ? 'att' : r.consulente ? 'preso' : 'nuovo da'} ${r.arrivatoAt ? 'arrivato' : ''}">
-            <div class="sa-in-t"><b>${esc(r.appOra || '—')}</b>${r.fonteData === 'Note' ? '<small title="Orario letto dalle note del lead">dalle note</small>' : ''}</div>
+        const evid = r.passato ? 'passato' : preso ? 'arrivato preso' : r.arrivatoAt ? 'arrivato' : '';
+        return `<article class="sa-in sa-app ${preso || r.passato ? 'preso' : r.arrivatoAt ? 'att' : r.consulente ? 'preso' : 'nuovo da'} ${evid}">
+            <div class="sa-in-t"><b>${esc(r.appOra || '—')}</b>${r.passato ? '<i class="sa-badge pas">PASSATO</i>' : r.arrivatoAt ? `<i class="sa-badge ${preso ? 'pre' : 'sed'}">${preso ? 'SEGUITO' : 'IN SEDE'}</i>` : ''}${r.fonteData === 'Note' ? '<small title="Orario letto dalle note del lead">dalle note</small>' : ''}</div>
             <div class="sa-in-c">
               <div class="sa-in-n">${esc(cliApp(r))}${r.telefono ? ` <a href="tel:${esc(r.telefono.replace(/\s/g, ''))}" class="sa-tel">📞 ${esc(r.telefono)}</a>` : ''}</div>
               <div class="sa-in-v">${v ? `<span class="sa-car">🚗 ${esc(v)}</span>` : ''}${posseduta ? `<span class="sa-car perm">🔁 Permuta: ${esc(posseduta)}</span>` : ''}${dett.map(x => `<span class="sa-tag">${esc(x)}</span>`).join('')}${st.puoImportare && (r.controllo === 'modificato' || r.controllo === 'forzato') ? `<span class="sa-tag sa-tag-w" title="${esc(r.avviso || '')}">${r.controllo === 'modificato' ? '✎ data modificata all’import' : '⚠ inserito senza i campi allineati'}</span>` : ''}</div>
@@ -818,7 +829,7 @@
               ${blocco}
             </div>
             <div class="sa-in-a">
-              ${r.consulente ? `<b class="sa-cons">${bollinoVivo(r.consulente)} ${esc(r.consulente)}</b>${oggiApp && !r.arrivatoAt ? `<span class="sa-hint" data-sd="${esc(r.consulente)}"><small class="sa-sd-t">${esc(testoStato(statoDi(r.consulente)))}</small></span>` : ''}` : `<span class="sa-st no">Da assegnare</span>${r.venditore ? `<span class="sa-hint">Nel CSV: ${esc(r.venditore)}</span>` : ''}`}
+              ${r.consulente ? `<b class="sa-cons">${bollinoVivo(r.consulente)} ${esc(r.consulente)}</b>${r.consulenteMano ? `<span class="sa-hint" title="Assegnato da ${esc(r.assegnatoManoDa || '')} il ${esc(r.assegnatoManoIt || '')}">✎ scelto a mano${r.venditore ? ' · nel CSV: ' + esc(r.venditore) : ''}</span>` : ''}${oggiApp && !r.arrivatoAt ? `<span class="sa-hint" data-sd="${esc(r.consulente)}"><small class="sa-sd-t">${esc(testoStato(statoDi(r.consulente)))}</small></span>` : ''}` : `<span class="sa-st no">Da assegnare</span>${r.venditore ? `<span class="sa-hint">Nel CSV: ${esc(r.venditore)}</span>` : ''}`}
               ${r.status ? `<span class="sa-st ${/fall|chius|perso/i.test(r.status) ? 'no' : 'wait'}">${esc(r.status)}</span>` : ''}
               ${azioni}
             </div>
@@ -829,11 +840,15 @@
         const g = e.target.closest('[data-giorno]'); if (g) { caricaApp(g.dataset.giorno); return true; }
         const m = e.target.closest('[data-mese]'); if (m) { A.mese = spostaMese(A.mese, Number(m.dataset.mese)); caricaApp(A.giorno); return true; }
         const ar = e.target.closest('[data-arr]');
-        if (ar) { const r = A.lista.find(x => String(x.id) === ar.dataset.arr); if (r) apriArrivo(r); return true; }
+        if (ar) { const r = A.lista.find(x => String(x.id) === ar.dataset.arr); if (r) apriArrivo(r, 'sede'); return true; }
+        const ps = e.target.closest('[data-pass]');
+        if (ps) { const r = A.lista.find(x => String(x.id) === ps.dataset.pass); if (r) apriArrivo(r, 'passato'); return true; }
+        const as = e.target.closest('[data-assegna-app]');
+        if (as) { const r = A.lista.find(x => String(x.id) === as.dataset.assegnaApp); if (r) apriArrivo(r, 'assegna'); return true; }
         const an = e.target.closest('[data-arr-annulla]');
         if (an) {
             const r = A.lista.find(x => String(x.id) === an.dataset.arrAnnulla);
-            if (!r || !confirm(`Togliere l'arrivo di ${cliApp(r)}?\n${r.accoltoDa ? r.accoltoDa + ' non vedrà più la notifica.' : ''}`)) return true;
+            if (!r || !confirm(r.passato ? `Togliere “cliente passato” da ${cliApp(r)}?` : `Togliere l'arrivo di ${cliApp(r)}?\n${r.accoltoDa ? r.accoltoDa + ' non vedrà più la notifica.' : ''}`)) return true;
             try { await post('/appuntamenti/' + encodeURIComponent(r.id) + '/arrivato', { annulla: true }); toast('Arrivo tolto'); caricaApp(A.giorno); } catch (x) { alert(x.message); }
             return true;
         }
@@ -865,17 +880,27 @@
        dell'appuntamento in tempo reale: se e' disponibile basta avvisarlo; se e' occupato / non disponibile /
        non in salone la finestra lo dice e propone chi e' disponibile in questo momento.
        Il consulente scelto riceve la notifica "sta venendo alla tua scrivania" (come i walk-in). */
-    async function apriArrivo(r) {
+    /* modo:  'sede'     cliente arrivato adesso -> notifica al consulente scelto
+              'passato'  appuntamento gia' passato, nessuno l'aveva segnato -> solo registrato, nessuna notifica
+              'assegna'  scegliere (anche in anticipo) il consulente di un appuntamento */
+    async function apriArrivo(r, modo) {
+        modo = modo || 'sede';
         await caricaStati();
+        const live = modo === 'sede' || (modo === 'assegna' && r.appData === oggi());   // gli stati contano solo oggi
         const previsto = r.accoltoDa || r.consulente || null;
-        const giaArrivato = !!r.arrivatoAt;
+        const giaArrivato = modo === 'sede' && !!r.arrivatoAt;
         const disp = c => statoDi(c).stato === 'DISPONIBILE';
-        const elenco = st.consulenti.slice().sort((a, b) => ordStato(statoDi(a).stato) - ordStato(statoDi(b).stato) || a.localeCompare(b));
-        const liberi = elenco.filter(c => disp(c) && c !== previsto);
-        let scelto = !giaArrivato && previsto && disp(previsto) ? previsto : (liberi[0] || (giaArrivato ? '' : previsto) || '');
+        const elenco = st.consulenti.slice().sort((a, b) => live
+            ? ordStato(statoDi(a).stato) - ordStato(statoDi(b).stato) || a.localeCompare(b)
+            : (b === r.consulente) - (a === r.consulente) || a.localeCompare(b));
+        let scelto;
+        if (modo === 'sede') { const liberi = elenco.filter(c => disp(c) && c !== previsto); scelto = !giaArrivato && previsto && disp(previsto) ? previsto : (liberi[0] || (giaArrivato ? '' : previsto) || ''); }
+        else if (modo === 'passato') scelto = r.consulente || '';
+        else scelto = '';
+        const titolo = { sede: giaArrivato ? 'AFFIDA A UN ALTRO CONSULENTE' : 'CLIENTE IN SEDE', passato: 'CLIENTE PASSATO', assegna: r.consulente ? 'CAMBIA CONSULENTE' : 'ASSEGNA IL CONSULENTE' }[modo];
         const ov = document.createElement('div'); ov.className = 'sa-ov';
-        ov.innerHTML = `<div class="sa-modal sa-arr-m" role="dialog" aria-modal="true" aria-label="Cliente in sede">
-            <header><div><small>APPUNTAMENTO${r.appOra ? ' DELLE ' + esc(r.appOra) : ''} · ${giaArrivato ? 'AFFIDA A UN ALTRO CONSULENTE' : 'CLIENTE IN SEDE'}</small><h3>${esc(cliApp(r))}</h3></div>
+        ov.innerHTML = `<div class="sa-modal sa-arr-m" role="dialog" aria-modal="true" aria-label="${esc(titolo)}">
+            <header><div><small>APPUNTAMENTO ${r.appData !== oggi() ? 'DEL ' + esc(gm({ data: r.appData }).toUpperCase()) + ' ' : ''}${r.appOra ? 'DELLE ' + esc(r.appOra) : ''} · ${titolo}</small><h3>${esc(cliApp(r))}</h3></div>
               <button type="button" class="sa-x" data-chiudi aria-label="Chiudi">✕</button></header>
             <div class="sa-mbody" data-z="corpo"></div>
             <footer data-z="piede"></footer></div>`;
@@ -883,36 +908,52 @@
         const chiudi = () => { ov.remove(); document.removeEventListener('keydown', onKey); clearInterval(t); };
         const onKey = e => { if (e.key === 'Escape') chiudi(); };
         document.addEventListener('keydown', onKey);
-        function disegna() {
+        function avvisoSede() {
             const sp = previsto ? statoDi(previsto) : null, ok = previsto && disp(previsto);
             const libNow = elenco.filter(c => disp(c) && c !== previsto);
-            const avviso = !previsto
+            return !previsto
                 ? `<div class="sa-msg warn">Questo appuntamento non ha ancora un consulente: scegli chi accoglie il cliente.</div>`
                 : giaArrivato ? `<div class="sa-msg">Ora è affidato a <b>${esc(previsto)}</b> (${esc(min1(testoStato(sp)))}). Scegli a chi passarlo: riceverà subito la notifica.</div>`
                 : ok ? `<div class="sa-msg ok">✓ <b>${esc(previsto)}</b> è disponibile: riceverà la notifica che il cliente sta andando alla sua scrivania.</div>`
                 : `<div class="sa-msg warn">⚠ <b>${esc(previsto)}</b> risulta <b>${esc(min1(testoStato(sp)))}</b>. Vuoi farlo accomodare da un altro consulente?
                     ${libNow.length ? `<br>Disponibil${libNow.length === 1 ? 'e' : 'i'} in questo momento: <b>${libNow.map(esc).join(', ')}</b>` : '<br>In questo momento nessun consulente risulta disponibile.'}</div>`;
+        }
+        function disegna() {
+            const sp = previsto ? statoDi(previsto) : null;
+            const avviso = modo === 'sede' ? avvisoSede()
+                : modo === 'passato' ? `<div class="sa-msg">Segna che il cliente <b>è venuto all’appuntamento</b> anche se non era stato segnato sul momento. Non parte nessuna notifica: scegli solo chi l’ha seguito.</div>`
+                : `<div class="sa-msg">Scegli chi seguirà questo appuntamento${r.consulente ? ` (ora: <b>${esc(r.consulente)}</b>${r.consulenteMano ? ', scelto a mano' : ', dal CSV'})` : ''}. La scelta resta anche dopo i prossimi import, a meno che il file non indichi un altro consulente di Agnano.</div>`;
+            const testo = c => live ? testoStato(statoDi(c)) : (c === r.consulente ? (r.consulenteMano ? 'scelto a mano' : 'dal CSV') : '');
             ov.querySelector('[data-z="corpo"]').innerHTML = `${avviso}
-              ${previsto ? `<div class="sa-arr-prev ${sp.stato && STATI[sp.stato] ? STATI[sp.stato].c : 'vuoto'}">${bollino(sp.stato, true)}<div><small>${giaArrivato ? 'ORA AFFIDATO A' : 'CONSULENTE DELL’APPUNTAMENTO'}</small><b>${esc(previsto)}</b><span>${esc(testoStato(sp))}</span></div></div>` : ''}
-              <div class="sa-lbl">Chi accoglie il cliente · prima i disponibili</div>
-              <div class="sa-arr-l">${elenco.map(c => { const s2 = statoDi(c); return `<button type="button" class="sa-arr-c ${c === scelto ? 'on' : ''} ${disp(c) ? 'libero' : ''}" data-scegli="${esc(c)}" aria-pressed="${c === scelto}">
-                  ${bollino(s2.stato)}<span><b>${esc(c)}${c === r.consulente ? ' <em>· appuntamento</em>' : ''}</b><small>${esc(testoStato(s2))}</small></span></button>`; }).join('')}</div>`;
-            const sc = scelto ? statoDi(scelto) : null;
-            ov.querySelector('[data-z="piede"]').innerHTML = `<button type="button" class="sa-btn2" data-chiudi>Annulla</button>
-              <button type="button" class="sa-btn" data-invia ${scelto && scelto !== (giaArrivato ? previsto : '') ? '' : 'disabled'}>${!scelto ? 'Scegli il consulente'
-                : (scelto === r.consulente && !giaArrivato ? (disp(scelto) ? 'Avvisa ' : 'Avvisa comunque ') : (disp(scelto) ? 'Affida a ' : 'Affida comunque a ')) + esc(scelto)}${scelto && !disp(scelto) ? ` <small>(${esc(STATI[sc.stato] ? STATI[sc.stato].t.toLowerCase() : 'non in salone')})</small>` : ''}</button>`;
+              ${modo === 'sede' && previsto ? `<div class="sa-arr-prev ${sp.stato && STATI[sp.stato] ? STATI[sp.stato].c : 'vuoto'}">${bollino(sp.stato, true)}<div><small>${giaArrivato ? 'ORA AFFIDATO A' : 'CONSULENTE DELL’APPUNTAMENTO'}</small><b>${esc(previsto)}</b><span>${esc(testoStato(sp))}</span></div></div>` : ''}
+              <div class="sa-lbl">${modo === 'passato' ? 'Chi ha seguito il cliente' : modo === 'assegna' ? 'Consulente' + (live ? ' · prima i disponibili' : '') : 'Chi accoglie il cliente · prima i disponibili'}</div>
+              <div class="sa-arr-l">${elenco.map(c => { const s2 = statoDi(c); return `<button type="button" class="sa-arr-c ${c === scelto ? 'on' : ''} ${!live || disp(c) ? 'libero' : ''}" data-scegli="${esc(c)}" aria-pressed="${c === scelto}">
+                  ${live ? bollino(s2.stato) : '<span class="sa-arr-i">👤</span>'}<span><b>${esc(c)}${c === r.consulente ? ' <em>· appuntamento</em>' : ''}</b>${testo(c) ? `<small>${esc(testo(c))}</small>` : ''}</span></button>`; }).join('')}</div>`;
+            let lab;
+            if (!scelto) lab = 'Scegli il consulente';
+            else if (modo === 'passato') lab = 'Segna passato · seguito da ' + esc(scelto);
+            else if (modo === 'assegna') lab = (live && !disp(scelto) ? 'Assegna comunque a ' : 'Assegna a ') + esc(scelto);
+            else lab = (scelto === r.consulente && !giaArrivato ? (disp(scelto) ? 'Avvisa ' : 'Avvisa comunque ') : (disp(scelto) ? 'Affida a ' : 'Affida comunque a ')) + esc(scelto)
+                + (!disp(scelto) ? ` <small>(${esc(STATI[statoDi(scelto).stato] ? STATI[statoDi(scelto).stato].t.toLowerCase() : 'non in salone')})</small>` : '');
+            const stesso = scelto && ((modo === 'sede' && giaArrivato && scelto === previsto) || (modo === 'assegna' && scelto === r.consulente));
+            ov.querySelector('[data-z="piede"]').innerHTML = `${modo === 'assegna' && r.consulenteMano ? '<button type="button" class="sa-btn2 sa-arr-csv" data-csv>↺ Torna a quello del CSV</button>' : ''}
+              <button type="button" class="sa-btn2" data-chiudi>Annulla</button>
+              <button type="button" class="sa-btn" data-invia ${scelto && !stesso ? '' : 'disabled'}>${lab}</button>`;
         }
         disegna();
-        const t = setInterval(() => { if (document.body.contains(ov)) disegna(); }, 5000);   // stati sempre aggiornati (caricaStati gira ogni 5 s)
+        const t = setInterval(() => { if (document.body.contains(ov) && live) disegna(); }, 5000);   // stati sempre aggiornati
         ov.addEventListener('click', async e => {
             if (e.target === ov || e.target.closest('[data-chiudi]')) { chiudi(); return; }
             const c = e.target.closest('[data-scegli]'); if (c) { scelto = c.dataset.scegli; disegna(); return; }
-            const b = e.target.closest('[data-invia]'); if (!b || !scelto) return;
-            b.disabled = true; b.textContent = 'Invio…';
+            const csv = e.target.closest('[data-csv]');
+            const b = csv || e.target.closest('[data-invia]'); if (!b || (!scelto && !csv)) return;
+            b.disabled = true; b.textContent = 'Salvataggio…';
             try {
-                await post('/appuntamenti/' + encodeURIComponent(r.id) + '/arrivato', { consulente: scelto });
+                const base = '/appuntamenti/' + encodeURIComponent(r.id);
+                if (modo === 'assegna') await post(base + '/consulente', { consulente: csv ? '' : scelto });
+                else await post(base + '/arrivato', modo === 'passato' ? { consulente: scelto, passato: true } : { consulente: scelto });
                 chiudi();
-                toast(`${cliApp(r)}: notifica inviata a ${scelto}`);
+                toast(modo === 'sede' ? `${cliApp(r)}: notifica inviata a ${scelto}` : modo === 'passato' ? `${cliApp(r)}: segnato come passato` : csv ? 'Tornato al consulente del CSV' : `${cliApp(r)}: assegnato a ${scelto}`);
                 caricaApp(st.app.giorno);
             } catch (x) { alert(x.message); disegna(); }
         });
@@ -1099,7 +1140,9 @@
             const out = [], add = (campo, prima, dopo) => { if (String(prima || '') !== String(dopo || '')) out.push({ campo, prima: prima || '', dopo: dopo || '' }); };
             const a = nuovoApp(v);
             add('Appuntamento', dueOra(p.appData, p.appOra), a ? dueOra(a.data, a.ora) : '');
-            const cons = Object.prototype.hasOwnProperty.call(consulenti, r.venditore || '') ? consulenti[r.venditore || ''] : p.consulente;
+            const dalFile = Object.prototype.hasOwnProperty.call(consulenti, r.venditore || '') ? consulenti[r.venditore || ''] : p.consulente;
+            // scelto a mano nel CRM: resta, a meno che il file non indichi un ALTRO consulente di Agnano (come fa il server)
+            const cons = p.consulenteMano && (!dalFile || dalFile === p.consulenteMano) ? p.consulenteMano : dalFile;
             add('Consulente', p.consulente || 'Da assegnare', cons || 'Da assegnare');
             add('Venditore nel CSV', p.venditore, r.venditore);
             add('Status', p.status, r.status);

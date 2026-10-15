@@ -417,8 +417,10 @@ details.sa-in-note div { margin-top:6px; white-space:pre-wrap; line-height:1.5; 
 .sa-msg.ok { background:rgba(34,197,94,.12); border:1px solid rgba(34,197,94,.35); color:var(--sa-ink); }
 .sa-sd { display:inline-flex; align-items:center; gap:6px; }
 .sa-sd-t { font-size:11.5px; color:var(--sa-ink2); font-weight:600; }
-.sa-in.arrivato { border-left-color:#38bdf8; }
-.sa-in.arrivato.preso { border-left-color:var(--sa-acc); }
+.sa-in.arrivato { border-left-color:#38bdf8; background:linear-gradient(90deg, rgba(56,189,248,.10), rgba(255,255,255,.02) 55%); border-color:rgba(56,189,248,.45); }
+.sa-in.arrivato.preso { border-left-color:var(--sa-acc); background:linear-gradient(90deg, rgba(34,195,166,.10), rgba(255,255,255,.02) 55%); border-color:rgba(34,195,166,.4); }
+.sa-in.passato { border-left-color:#a78bfa; background:linear-gradient(90deg, rgba(167,139,250,.10), rgba(255,255,255,.02) 55%); border-color:rgba(167,139,250,.4); }
+.sa-in.passato .sa-arr.ok { background:rgba(167,139,250,.12); border-color:rgba(167,139,250,.45); }
 .sa-arr { margin-top:10px; padding:9px 12px; border-radius:11px; font-size:13px; line-height:1.45; display:flex; flex-direction:column; gap:2px; }
 .sa-arr.wait { background:rgba(56,189,248,.12); border:1px solid rgba(56,189,248,.4); }
 .sa-arr.ok { background:rgba(34,195,166,.12); border:1px solid rgba(34,195,166,.4); }
@@ -447,3 +449,17 @@ details.sa-in-note div { margin-top:6px; white-space:pre-wrap; line-height:1.5; 
 .sa-arr-c.on { border-color:var(--sa-acc); background:rgba(34,195,166,.14); opacity:1; box-shadow:0 0 0 2px rgba(34,195,166,.25); }
 .sa-arr-m footer .sa-btn small { font-weight:600; opacity:.8; }
 .sa-arr-m footer .sa-btn:disabled { opacity:.45; cursor:default; }
+/* evidenza: IN SEDE / SEGUITO / PASSATO sotto l'orario */
+.sa-in-t { display:flex; flex-direction:column; gap:5px; align-items:flex-start; }
+.sa-badge { font-style:normal; font-size:9.5px; font-weight:900; letter-spacing:.8px; padding:3px 6px; border-radius:6px; white-space:nowrap; }
+.sa-badge.sed { background:#38bdf8; color:#04263a; animation:saBadge 1.6s ease-in-out infinite; }
+.sa-badge.pre { background:var(--sa-acc); color:#062a24; }
+.sa-badge.pas { background:#a78bfa; color:#1e1240; }
+@keyframes saBadge { 50% { box-shadow:0 0 0 4px rgba(56,189,248,.25); } }
+@media (prefers-reduced-motion: reduce) { .sa-badge.sed { animation:none; } }
+.sa-in-a .sa-pass-b { background:#a78bfa; color:#1e1240; }
+.sa-in-a .sa-ass-b { background:var(--sa-warn); color:#2a1700; }
+.sa-link { border:0; background:none; color:var(--sa-ink2); font:inherit; font-size:12px; font-weight:700; cursor:pointer; padding:2px 0; text-decoration:underline dotted; text-underline-offset:3px; }
+.sa-link:hover { color:var(--sa-acc); }
+.sa-arr-i { width:22px; text-align:center; }
+.sa-arr-m footer .sa-arr-csv { margin-right:auto; }
