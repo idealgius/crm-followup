@@ -102,7 +102,7 @@
     function refreshNav() {
         const b = document.getElementById('navSalone');
         if (b) b.style.display = can() && moderatoreSu() ? 'flex' : 'none';
-        if (can()) { avviaNotifiche(); Presenza.avvia(); }
+        if (can()) { avviaNotifiche(); Presenza.avvia(); Chat.mostra(true); }   // chat in TUTTO il CRM (se il profilo ce l'ha)
         scheda = usaScheda();
         Scheda.mostra(scheda);
         if (aperta) setTimeout(Menu.entra, 0);   // app.js rimette il menu ☰ dopo refreshNav: lo risistemo
@@ -329,7 +329,6 @@
         Scheda.attiva(false);
         aperta = false;
         Menu.esci();
-        Chat.mostra(false);
     }
 
     /* ================= pagina ================= */
@@ -380,7 +379,7 @@
             st.ingressi = d.ingressi || []; st.consulenti = d.consulenti || []; if (d.reparti) st.reparti = d.reparti; st.puoGestire = !!d.puoGestire; st.io = d.io || null;
             st.vedeTutti = !!d.vedeTutti; st.vedeReport = !!d.vedeReport; st.puoImportare = !!d.puoImportare;
             st.chat = !!d.chat;
-            if (aperta) Chat.mostra(st.chat);      // chat: solo livello 4 e ruoli del salone
+            if (!st.chat) Chat.mostra(false);      // profilo senza chat (Solo visione, Visione + report)
             st.giorni = m.giorni || {};
             st.err = '';
             if (eraRep !== st.vedeReport && root) disegnaSchede();
@@ -869,7 +868,8 @@
             mioArr ? `<button type="button" class="sa-btn" data-presa-app="${esc(r.ingressoId)}">Prendo in carico ✓</button>` : ''
         ].join('');
         const evid = r.passato ? 'passato' : preso ? 'arrivato preso' : r.arrivatoAt ? 'arrivato' : '';
-        return `<article class="sa-in sa-app ${preso || r.passato ? 'preso' : r.arrivatoAt ? 'att' : r.consulente ? 'preso' : 'nuovo da'} ${evid}">
+        // evidenziati (colore) solo quando il cliente e' in sede, seguito o passato; gli altri restano neutri
+        return `<article class="sa-in sa-app ${preso || r.passato ? 'preso' : r.arrivatoAt ? 'att' : r.consulente ? 'neutro' : 'nuovo da'} ${evid}">
             <div class="sa-in-t"><b>${esc(r.appOra || '—')}</b>${r.passato ? '<i class="sa-badge pas">PASSATO</i>' : r.arrivatoAt ? `<i class="sa-badge ${preso ? 'pre' : 'sed'}">${preso ? 'SEGUITO' : 'IN SEDE'}</i>` : ''}${r.fonteData === 'Note' ? '<small title="Orario letto dalle note del lead">dalle note</small>' : ''}</div>
             <div class="sa-in-c">
               <div class="sa-in-n">${esc(cliApp(r))}${r.telefono ? ` <a href="tel:${esc(r.telefono.replace(/\s/g, ''))}" class="sa-tel">📞 ${esc(r.telefono)}</a>` : ''}</div>
@@ -880,7 +880,6 @@
             </div>
             <div class="sa-in-a">
               ${r.consulente ? `<b class="sa-cons">${bollinoVivo(r.consulente)} ${esc(r.consulente)}</b>${r.consulenteMano ? `<span class="sa-hint" title="${r.prenotato ? 'Prenotato' : 'Assegnato'} da ${esc(r.assegnatoManoDa || '')} il ${esc(r.assegnatoManoIt || '')}">${r.prenotato ? '📌 prenotato alle ' + esc(String(r.assegnatoManoIt || '').slice(11, 16)) : '✎ scelto a mano'}${r.venditore ? ' · nel CSV: ' + esc(r.venditore) : ''}</span>` : ''}${oggiApp && !r.arrivatoAt ? `<span class="sa-hint" data-sd="${esc(r.consulente)}"><small class="sa-sd-t">${esc(testoStato(statoDi(r.consulente)))}</small></span>` : ''}` : `<span class="sa-st no">Da assegnare</span>${r.venditore ? `<span class="sa-hint">Nel CSV: ${esc(r.venditore)}</span>` : ''}`}
-              ${r.status ? `<span class="sa-st ${/fall|chius|perso/i.test(r.status) ? 'no' : 'wait'}">${esc(r.status)}</span>` : ''}
               ${azioni}
             </div>
           </article>`;
@@ -1735,11 +1734,52 @@
     }
 
     /* ================= CHAT ================= */
+    /* ---------- AVVISI DEI MESSAGGI DELLA CHAT ----------
+       suono (diverso da quello dei clienti), notifica del browser (se permessa, clic = apre la chat),
+       numero dei non letti nel titolo della scheda e sul bollino della chat. */
+    const Avviso = (function () {
+        let base = null, chiesto = false;
+        // il permesso per le notifiche del browser si chiede al primo clic sulla pagina (i browser lo vogliono cosi')
+        document.addEventListener('click', () => {
+            if (chiesto || !window.Notification || Notification.permission !== 'default' || !can()) return;
+            chiesto = true; try { Notification.requestPermission(); } catch (e) { /* */ }
+        }, true);
+        function suono() {
+            try {
+                const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
+                const c = new C();
+                [[660, 0], [990, .14]].forEach(([f, d]) => {
+                    const o = c.createOscillator(), g = c.createGain();
+                    o.type = 'sine'; o.frequency.value = f; o.connect(g); g.connect(c.destination);
+                    g.gain.setValueAtTime(.0001, c.currentTime + d); g.gain.exponentialRampToValueAtTime(.2, c.currentTime + d + .02); g.gain.exponentialRampToValueAtTime(.0001, c.currentTime + d + .28);
+                    o.start(c.currentTime + d); o.stop(c.currentTime + d + .3);
+                });
+            } catch (e) { /* */ }
+        }
+        // niente banner in alto (basta il bollino della chat): suono + notifica del browser
+        function messaggio(lista, apri) {
+            const [k, m] = lista[lista.length - 1];
+            const chi = m.nome || 'Un collega';
+            suono();
+            try {
+                if (window.Notification && Notification.permission === 'granted') {
+                    const n = new Notification('💬 ' + chi + (k === 'GRUPPO' ? ' · Gruppo salone' : ''), { body: String(m.testo || ''), tag: 'sa-chat-' + k, renotify: true });
+                    n.onclick = () => { window.focus(); apri(k); n.close(); };
+                }
+            } catch (e) { /* */ }
+        }
+        function titolo(n) {
+            if (base === null) base = document.title.replace(/^\(\d+\+?\) 💬 /, '');
+            document.title = n ? `(${n > 99 ? '99+' : n}) 💬 ${base}` : base;
+        }
+        return { messaggio, titolo };
+    })();
+
     const EMOJI = ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '🙂', '😉', '😍', '😘', '😎', '🤩', '🥳', '😏', '🤔', '🤨', '😐', '🙄', '😬', '😴', '😮', '😯', '😲', '😳', '🥺', '😢', '😭', '😤', '😡', '🤯', '😱', '🤗', '🤫', '🤐', '😇',
         '👍', '👎', '👌', '✌️', '🤞', '👏', '🙌', '🙏', '💪', '👋', '🤝', '👀', '❤️', '🧡', '💛', '💚', '💙', '💜', '🔥', '⭐', '✨', '🎉', '✅', '❌', '⚠️', '❗', '❓', '💯', '⏰', '📞', '📅', '📝', '💶', '🚗', '🚙', '🔑', '🏁', '☕', '🍕'];
     const RAPIDE = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
     const Chat = (function () {
-        let el = null, aperto = false, conv = null, dopo = 0, timer = null, io = null, utenti = [], risposta = null;
+        let el = null, aperto = false, conv = null, dopo = 0, timer = null, io = null, utenti = [], risposta = null, caricata = false;
         const msgs = {}, nonLetti = {};
         const nomeConv = k => k === 'GRUPPO' ? '👥 Gruppo salone' : (() => { const [, a, b] = k.split('_').map(Number); const altro = io && a === io.id ? b : a; const u = utenti.find(x => x.id === altro); return u ? u.nome : 'Chat privata'; })();
         const convCon = id => 'P_' + Math.min(io.id, id) + '_' + Math.max(io.id, id);
@@ -1801,13 +1841,23 @@
                 }
                 azzerata = d.azzerata || 0;
                 let cambiato = false;
+                const nuovi = [];
                 Object.entries(d.conv || {}).forEach(([k, v]) => {
                     const L = msgs[k] = msgs[k] || [];
-                    (v.messaggi || []).forEach(m => { const i = L.findIndex(x => x.id === m.id); if (i >= 0) L[i] = m; else L.push(m); cambiato = true; });
+                    (v.messaggi || []).forEach(m => {
+                        const i = L.findIndex(x => x.id === m.id);
+                        if (i >= 0) L[i] = m; else { L.push(m); if (caricata && io && m.da !== io.id) nuovi.push([k, m]); }
+                        cambiato = true;
+                    });
                     L.sort((a, b) => a.ts - b.ts);
                     nonLetti[k] = (aperto && conv === k) ? 0 : v.nonLetti || 0;
                 });
                 dopo = Math.max(dopo, d.ora || 0);
+                // messaggio nuovo di un altro: suono, avviso in alto, notifica del browser (non se sto gia' leggendo quella chat)
+                const leggo = k => aperto && conv === k && document.visibilityState === 'visible';
+                const daAvvisare = nuovi.filter(([k]) => !leggo(k));
+                if (daAvvisare.length) Avviso.messaggio(daAvvisare, k => { apri(true); entra(k); });
+                caricata = true;
                 badge();
                 if (aperto) { if (conv) { if (cambiato) disegnaMsgs(); if (nonLetti[conv] === 0 && cambiato) segnaLetto(conv); } else vista(); }
             } catch (e) { /* rete: si riprova */ }
@@ -1815,6 +1865,7 @@
         function badge() {
             const n = Object.values(nonLetti).reduce((a, b) => a + b, 0), b = el.querySelector('.sa-badge');
             b.hidden = !n; b.textContent = n > 99 ? '99+' : n;
+            Avviso.titolo(n);                    // "(2) 💬 ..." nel titolo della scheda del browser
         }
         function vista() {
             const lista = el.querySelector('.sa-chat-list'), cv = el.querySelector('.sa-chat-conv');
