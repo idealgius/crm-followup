@@ -40,6 +40,7 @@ function renderUsers(users) {
                 <div class="waiting-name" id="userNameDisplay-${u.id}">
                     ${u.fullName}
                     ${canManage ? `<span onclick="startEditUserName(${u.id})" style="cursor:pointer;margin-left:8px;font-size:12px" title="Modifica nome">✏️</span>` : ''}
+                    ${isAdmin ? `<span class="pres" data-pres="${u.id}" title="Online / disconnesso"><i class="pres-dot"></i><small></small></span>` : ''}
                 </div>
                 <div id="userNameEdit-${u.id}" style="display:none;margin-top:6px">
                     <input type="text" id="userNameInput-${u.id}" class="input-dark" style="font-size:13px;padding:4px 10px;margin-right:6px" value="${u.fullName}">
@@ -74,7 +75,38 @@ function renderUsers(users) {
         </div>
         `;
     }).join('');
+    if (isAdmin) Presenze.avvia();
 }
+
+/* ===== NUOVO: CHI E' ONLINE (solo Admin, pagina Utenti) =====
+   verde = CRM aperto adesso (da che ora) · rosso = oggi e' entrato ma ora e' disconnesso (da che ora)
+   vuoto = oggi non e' ancora entrato (ultimo accesso). Dati da /api/presenza/utenti (PresenzaController). */
+const Presenze = (function () {
+    let t = null;
+    const F_O = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
+    const F_G = new Intl.DateTimeFormat('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit', year: 'numeric' });
+    const oraDi = s => F_O.format(new Date(s));
+    const giornoOra = s => { const d = new Date(s), oggi = F_G.format(new Date()), ieri = F_G.format(new Date(Date.now() - 864e5)), g = F_G.format(d);
+        return (g === oggi ? 'oggi' : g === ieri ? 'ieri' : g.slice(0, 5) + (g.slice(6) !== oggi.slice(6) ? '/' + g.slice(8) : '')) + ' alle ' + F_O.format(d); };
+    const durata = s => { const m = Math.max(0, Math.round((Date.now() - new Date(s)) / 60000)); return m < 1 ? 'adesso' : m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0') + ' min'; };
+    async function aggiorna() {
+        const box = document.getElementById('usersList');
+        if (!box || !box.querySelector('[data-pres]') || box.offsetParent === null) return;
+        let d; try { const r = await fetch('/api/presenza/utenti', { cache: 'no-store' }); if (!r.ok) return; d = await r.json(); } catch (e) { return; }
+        const U = d.utenti || {};
+        box.querySelectorAll('[data-pres]').forEach(el => {
+            const x = U[el.dataset.pres] || { stato: 'MAI_OGGI' }, txt = el.querySelector('small');
+            el.className = 'pres ' + ({ ONLINE: 'on', OFFLINE: 'off' }[x.stato] || 'mai');
+            let t1, tip;
+            if (x.stato === 'ONLINE') { t1 = 'online dalle ' + oraDi(x.da); tip = 'CRM aperto adesso · online da ' + durata(x.da); }
+            else if (x.stato === 'OFFLINE') { t1 = 'disconnesso dalle ' + oraDi(x.da); tip = 'Oggi è entrato alle ' + oraDi(x.primoOggi) + ' · disconnesso da ' + durata(x.da); }
+            else { t1 = x.ultimoVisto ? 'ultimo accesso ' + giornoOra(x.ultimoVisto) : 'nessun accesso registrato'; tip = 'Oggi non è ancora entrato'; }
+            txt.textContent = t1; el.title = tip;
+        });
+    }
+    function avvia() { aggiorna(); setTimeout(aggiorna, 3000); if (!t) t = setInterval(aggiorna, 30000); }
+    return { avvia, aggiorna };
+})();
 
 function formatRole(role) {
     const map = {
