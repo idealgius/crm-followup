@@ -1081,7 +1081,18 @@
         'Importo': 'importo', 'Tipo richiesta': 'tipoRichiesta', 'Tipo veicolo richiesto': 'tipoVeicolo', 'Data inserimento': 'dataInserimento', 'Inserito da': 'inseritoDa',
         'Data lead': 'dataLead', 'Esito alert': 'esitoAlert', 'Esito ultima attività': 'esitoAttivita', 'Data ricontatto': 'dataRicontatto', 'Status': 'status', 'Note': 'note',
         'Città': 'citta', 'Provincia': 'provincia', 'Sede': 'sede', 'Team': 'team', 'Etichette Lead': 'etichetteLead', 'Marca Posseduta': 'marcaPosseduta',
-        'Modello Posseduto': 'modelloPosseduto', 'Km': 'kmPosseduto', 'Anno Immatricolazione': 'annoPosseduto', 'Formula di Acquisto': 'formulaAcquisto'
+        'Modello Posseduto': 'modelloPosseduto', 'Km': 'kmPosseduto', 'Anno Immatricolazione': 'annoPosseduto', 'Formula di Acquisto': 'formulaAcquisto',
+        'ID Trattativa Generata': 'idTrattativa'
+    };
+    // NUOVO: in alternativa al CSV dei lead si puo' caricare il CSV delle TRATTATIVE (colonne diverse):
+    // le sue colonne si riportano sugli stessi campi, poi il controllo usa le regole delle trattative
+    const COLONNE_TR = {
+        'ID Trattativa': 'idTrattativa', 'ID Lead Origine': 'idLeadOrigine', 'Data trattativa': 'dataInserimento', 'Stato trattativa': 'status',
+        'Sede': 'sede', 'Stato Ricontatto': 'esitoAttivita', 'Data ricontatto': 'dataRicontatto', 'Origine Trattativa': 'origine', 'Venditore': 'venditore',
+        'Nome cliente': 'nome', 'Cognome Cliente': 'cognome', 'Rag. Sociale Cliente': 'ragioneSociale', 'Tipo cliente': 'tipo', 'Tel.1 Cliente': 'telefono',
+        'Tel.2 Cliente': 'telefono2', 'Email1 Cliente': 'email', 'Tipo Trattativa': 'tipoVeicolo', 'Marca': 'marca', 'Modello': 'modello', 'Importo': 'importo',
+        'Note Cliente': 'noteCliente', 'Note Trattativa': 'noteTrattativa', 'Città': 'citta', 'Provincia': 'provincia', 'Team': 'team', 'Etichetta': 'etichetteLead',
+        'Marca Permuta': 'marcaPosseduta', 'Modello Permuta': 'modelloPosseduto', 'Ultimo rilevamento Km Permuta': 'kmPosseduto', 'Data fallimento': 'dataFallimento'
     };
     function leggiTesto(buf) {
         try { return new TextDecoder('utf-8', { fatal: true }).decode(buf); }
@@ -1104,29 +1115,46 @@
             else f += ch;
         }
         if (f || row.length) { row.push(f); rows.push(row); }
-        const h = rows.findIndex(r => r.some(c => c.trim().replace(/^﻿/, '') === 'ID') && r.some(c => c.trim() === 'Venditore'));
-        if (h < 0) throw new Error('Non trovo le colonne "ID" e "Venditore": è il CSV dei lead?');
-        const head = rows[h].map(c => c.trim().replace(/^﻿/, ''));
+        const pulita = c => c.trim().replace(/^\ufeff/, '');
+        const hTr = rows.findIndex(r => r.some(c => pulita(c) === 'ID Trattativa') && r.some(c => pulita(c) === 'Venditore'));
+        const hLd = rows.findIndex(r => r.some(c => pulita(c) === 'ID') && r.some(c => pulita(c) === 'Venditore'));
+        if (hTr < 0 && hLd < 0) throw new Error('Non trovo le colonne "ID" (lead) o "ID Trattativa" (trattative) e "Venditore": è il CSV giusto?');
+        const tr = hTr >= 0 && (hLd < 0 || hTr <= hLd), h = tr ? hTr : hLd, MAP = tr ? COLONNE_TR : COLONNE;
+        const head = rows[h].map(pulita);
         const out = [];
         for (const r of rows.slice(h + 1)) {
             if (r.length < 3 || !r.some(c => c.trim())) continue;
             const o = {};
-            head.forEach((k, i) => { if (COLONNE[k]) o[COLONNE[k]] = (r[i] || '').trim(); });
+            head.forEach((k, i) => { if (MAP[k]) o[MAP[k]] = (r[i] || '').trim(); });
+            if (tr) {
+                if (!o.idTrattativa) continue;
+                // stesso appuntamento del CSV dei lead: se la trattativa viene da un lead si usa l'ID del lead
+                const lead = (o.idLeadOrigine || '').replace(/\D/g, '');
+                o.id = lead && lead !== '0' ? lead : 'T' + o.idTrattativa;
+                // note in ordine di tempo: prima quelle della trattativa (piu' vecchie), poi quelle del cliente
+                o.note = [o.noteTrattativa, o.noteCliente].filter(Boolean).join('  ');
+                delete o.noteTrattativa; delete o.noteCliente; delete o.idLeadOrigine;
+                o.formato = 'trattative';
+            }
             if (o.id) out.push(o);
         }
+        out.formato = tr ? 'trattative' : 'lead';
         return out;
     }
     async function importaCsv(file) {
         let righe;
         try { righe = parseCsv(leggiTesto(await file.arrayBuffer())); }
         catch (e) { alert('File non letto: ' + e.message); return; }
-        if (!righe.length) { alert('Il file non contiene lead.'); return; }
+        if (!righe.length) { alert(righe.formato === 'trattative' ? 'Il file non contiene trattative.' : 'Il file non contiene lead.'); return; }
+        // collegamento lead <-> trattativa: lo stesso appuntamento non deve comparire due volte
+        const trattative = {}; righe.forEach(r => { if (r.idTrattativa) trattative[r.id] = r.idTrattativa; });
+        righe.trattative = trattative;
         const lab = root.querySelector('.sa-file'); if (lab) lab.classList.add('busy');
         // periodo del file (dal primo all'ultimo appuntamento): serve per trovare quelli SPARITI dal file
         const date = righe.filter(r => !fuoriSede(r)).map(r => { const c = controlla(r); return c.prop && c.prop.data; }).filter(Boolean).sort();
         let ant = {};
         try {
-            ant = await post('/appuntamenti/anteprima', { ids: righe.map(r => r.id), venditori: [...new Set(righe.map(r => r.venditore || ''))],
+            ant = await post('/appuntamenti/anteprima', { ids: righe.map(r => r.id), trattative, venditori: [...new Set(righe.map(r => r.venditore || ''))],
                 da: date[0] || '', a: date[date.length - 1] || '' });
         } catch (e) { ant = { errore: e.message }; }
         if (lab) lab.classList.remove('busy');
@@ -1166,7 +1194,48 @@
         const m = String(r.note || '').match(RE_NOTE_SEDE);
         return m ? 'Appuntamento a ' + (/^n/i.test(m[1]) ? 'Nola' : 'Salerno') + ' (scritto nelle note)' : null;
     }
+    /* NUOVO: regole per il CSV delle TRATTATIVE. Un appuntamento e' ALLINEATO quando:
+         Stato ricontatto = Appuntamento
+         Data ricontatto  = "gg/mm/aaaa hh:mm APP"
+         nelle note l'ultimo "FISS. APP." (se c'e' con l'ora) e' lo stesso giorno e la stessa ora
+       La trattativa deve essere "In corso". */
+    const RE_NOTE_TD = /\btest\s*drive\.?\s*(?:il\s+)?(?:del\s+)?(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?(?:\s*(?:alle\s+)?(?:ore\s+)?(?:h\s*)?\(?\s*(\d{1,2})[:.](\d{2}))?/gi;
+    function ultimaNelleNote(r, base, ins) {
+        let best = null;
+        [[RE_NOTE, 'appuntamento'], [RE_NOTE_TD, 'test drive']].forEach(([R, tipo]) => {
+            const re = new RegExp(R.source, 'gi'); let n;
+            while ((n = re.exec(String(r.note || '')))) {
+                let d = isoDi(n[1], n[2], n[3], base); if (!d) continue;
+                if (!n[3] && ins) { const lim = new Date(ins.data + 'T12:00:00Z'); lim.setUTCDate(lim.getUTCDate() - 60); if (d < lim.toISOString().slice(0, 10)) d = (Number(d.slice(0, 4)) + 1) + d.slice(4); }
+                if (!best || n.index >= best.pos) best = { data: d, ora: oraDi(n[4], n[5]), fonte: 'Note', tipo, pos: n.index };
+            }
+        });
+        return best;
+    }
+    function controllaTr(r) {
+        const ins = dataDelCsv(r.dataInserimento);
+        const base = Number((ins ? ins.data : oggi()).slice(0, 4));
+        const stato = String(r.esitoAttivita || '').trim(), ric = dataDelCsv(r.dataRicontatto);
+        const coda = String(r.dataRicontatto || '').replace(/^\s*\d{1,2}\/\d{1,2}\/\d{2,4}(?:\s+\d{1,2}:\d{2})?/, '').trim().toUpperCase();
+        const nota = ultimaNelleNote(r, base, ins);
+        const pb = [], bad = {};
+        const st = String(r.status || '').trim();
+        if (st && !/in corso/i.test(st)) { pb.push(`Trattativa ${st.toLowerCase()} (non in corso)`); bad.att = 1; }
+        if (!/^appuntamento$/i.test(stato)) { pb.push(stato ? `Stato ricontatto: ${stato} (non Appuntamento)` : 'Stato ricontatto vuoto'); bad.att = 1; }
+        if (!ric) { pb.push('Data ricontatto vuota'); bad.ric = 1; }
+        else {
+            if (!ric.ora || ric.ora === '00:00') { pb.push('Nella Data ricontatto manca l’orario'); bad.ric = 1; }
+            if (/TEST\s*DRIVE/.test(coda)) { pb.push('Nella Data ricontatto è un TEST DRIVE (non APP)'); bad.ric = 1; }
+            else if (coda !== 'APP') { pb.push(coda ? `Data ricontatto con “${coda}” (non APP)` : 'Nella Data ricontatto manca “APP”'); bad.ric = 1; }
+            if (nota && nota.ora && (nota.data !== ric.data || nota.ora !== ric.ora)) { pb.push(`Nelle note l’ultimo ${nota.tipo} fissato è ${gm(nota)}, nella Data ricontatto ${gm(ric)}`); bad.alert = 1; }
+        }
+        let prop = null;
+        if (ric) prop = { data: ric.data, ora: ric.ora === '00:00' ? null : ric.ora, fonte: 'Data ricontatto' };
+        else if (nota) prop = { data: nota.data, ora: nota.ora, fonte: 'Note' };
+        return { ok: !pb.length, problemi: pb, bad, prop, al: nota, ric };
+    }
     function controlla(r) {
+        if (r.formato === 'trattative') return controllaTr(r);
         const ins = dataDelCsv(r.dataInserimento);
         const base = Number((ins ? ins.data : oggi()).slice(0, 4));
         const alertTxt = String(r.esitoAlert || '').trim(), att = String(r.esitoAttivita || '').trim().toUpperCase();
@@ -1260,8 +1329,8 @@
             add('Consulente', p.consulente || 'Da assegnare', cons || 'Da assegnare');
             add('Venditore nel CSV', p.venditore, r.venditore);
             add('Status', p.status, r.status);
-            add('Esito alert', p.esitoAlert, r.esitoAlert);
-            add('Esito ultima attività', p.esitoAttivita, r.esitoAttivita);
+            if (r.formato !== 'trattative') add('Esito alert', p.esitoAlert, r.esitoAlert);
+            add(r.formato === 'trattative' ? 'Stato ricontatto' : 'Esito ultima attività', p.esitoAttivita, r.esitoAttivita);
             add('Data ricontatto', p.dataRicontatto, r.dataRicontatto);
             add('Telefono', p.telefono, r.telefono);
             add('Vettura', p.vettura, [r.marca, r.modello].filter(Boolean).join(' ').trim());
@@ -1276,7 +1345,7 @@
         const ov = modale('Controlla l’import', 'APPUNTAMENTI · ' + nomeFile, `<div class="sa-ck">
             ${ant.errore ? `<div class="sa-msg err">Non riesco a confrontare il file con l’archivio (${esc(ant.errore)}): cambi e appuntamenti spariti non vengono mostrati.</div>` : ''}
             <div class="sa-kpis sa-kpis5">
-              <div><b>${V.length}</b><span>lead nel file</span></div>
+              <div><b>${V.length}</b><span>${righe.formato === 'trattative' ? 'trattative' : 'lead'} nel file</span></div>
               <div><b>${agn.length}</b><span>di Agnano</span></div>
               <div><b class="sa-ck-g">${nOk}</b><span>✓ allineati</span></div>
               <div><b class="${agn.length - nOk ? 'sa-ck-w' : ''}">${agn.length - nOk}</b><span>⚠ da controllare</span></div>
@@ -1309,8 +1378,8 @@
 
         function esito(v) {
             if (v.azione === 'togli') return '<span class="sa-ck-es red">Verrà tolto dal calendario</span>';
-            if (v.azione === 'salta') return v.pr ? '<span class="sa-ck-es no">Resta com’era in archivio (il file non viene salvato per questo lead)</span>'
-                : `<span class="sa-ck-es no">Non verrà importato${v.c.prop ? ` <small>· data trovata: ${esc(gm(v.c.prop))} (${esc(v.c.prop.fonte)})</small>` : ' <small>· nessuna data trovata nel lead</small>'}</span>`;
+            if (v.azione === 'salta') return v.pr ? `<span class="sa-ck-es no">Resta com’era in archivio (il file non viene salvato per questo ${righe.formato === 'trattative' ? 'appuntamento' : 'lead'})</span>`
+                : `<span class="sa-ck-es no">Non verrà importato${v.c.prop ? ` <small>· data trovata: ${esc(gm(v.c.prop))} (${esc(v.c.prop.fonte)})</small>` : ` <small>· nessuna data trovata nel${righe.formato === 'trattative' ? 'la trattativa' : ' lead'}</small>`}</span>`;
             const d = v.azione === 'modifica' ? (v.data ? { data: v.data, ora: v.ora } : null) : v.c.prop;
             if (!d) return `<span class="sa-ck-es warn">${v.azione === 'modifica' ? 'Scegli la data' : '⚠ Senza data: non comparirà in nessun giorno del calendario'}</span>`;
             return `<span class="sa-ck-es">→ ${esc(up1(giornoLungo(d.data)))}${d.ora ? ' alle ' + esc(d.ora) : ' (senza orario)'}${v.azione === 'forza' && v.c.prop ? ` <small>da ${esc(v.c.prop.fonte)}</small>` : ''}</span>`;
@@ -1321,8 +1390,10 @@
             const opz = v.pr ? AZ_CTRL.map(([k, t]) => k === 'salta' ? [k, '↺ Lascia com’era'] : [k, t]) : AZ_CTRL.filter(([k]) => k !== 'togli');
             const ch = cambi(v);
             return `<div class="sa-ck-row az-${v.azione}" data-ck-i="${i}">
-              <div class="sa-ck-top"><b>${esc(cliApp(r))}</b><span class="sa-hint">Lead ${esc(r.id)}${r.venditore ? ' · ' + esc(r.venditore) : ''}</span>${archivio(v.pr)}</div>
-              <div class="sa-ck-campi">${campo('alert', 'Esito alert', r.esitoAlert)}${campo('att', 'Esito ultima attività', r.esitoAttivita)}${campo('ric', 'Data ricontatto', r.dataRicontatto)}</div>
+              <div class="sa-ck-top"><b>${esc(cliApp(r))}</b><span class="sa-hint">${r.formato === 'trattative' ? 'Trattativa ' + esc(r.idTrattativa) + (/^\d/.test(r.id) ? ' · lead ' + esc(r.id) : '') : 'Lead ' + esc(r.id)}${r.venditore ? ' · ' + esc(r.venditore) : ''}</span>${archivio(v.pr)}</div>
+              <div class="sa-ck-campi">${r.formato === 'trattative'
+                ? campo('att', 'Stato ricontatto' + (r.status && !/in corso/i.test(r.status) ? ' · trattativa ' + r.status.toLowerCase() : ''), r.esitoAttivita) + campo('ric', 'Data ricontatto', r.dataRicontatto) + campo('alert', 'Ultimo fissato nelle note', c.al ? gm(c.al) + (c.al.tipo === 'test drive' ? ' (test drive)' : '') : '')
+                : campo('alert', 'Esito alert', r.esitoAlert) + campo('att', 'Esito ultima attività', r.esitoAttivita) + campo('ric', 'Data ricontatto', r.dataRicontatto)}</div>
               <ul class="sa-ck-pb">${c.problemi.map(p => `<li>${esc(p)}</li>`).join('')}${haDati && !consDopo(v) ? `<li>Venditore nel CSV: <b>${esc(r.venditore || 'vuoto')}</b> · non è un consulente del salone: se lo importi, scegli il consulente o resterà da assegnare</li>` : ''}</ul>
               ${ch.length ? `<p class="sa-ck-lab">Rispetto all’archivio cambierebbe:</p>${tabCambi(ch)}` : ''}
               <div class="sa-ck-az">${seg(opz, v.azione, 'data-az')}
@@ -1354,7 +1425,7 @@
         function disegnaGiorni() {
             zona('giorni').innerHTML = chiavi.map(g => { const x = giorni[g], pass = g && g < oggi(); return `<button type="button" class="sa-ck-day ${sel.has(g) ? 'on' : ''} ${pass ? 'past' : ''}" data-ck-g="${g}" aria-pressed="${sel.has(g)}"
                 title="${pass ? 'Giorno già passato · ' : ''}${x.n} nel file${x.w ? ', ' + x.w + ' da controllare' : ''}${x.s ? ', ' + x.s + ' spariti' : ''}">
-                <span>${esc(nomeG(g))}</span><b>${x.n}</b>${x.w ? `<i>⚠ ${x.w}</i>` : ''}${x.s ? `<i class="r">✕ ${x.s}</i>` : ''}</button>`; }).join('') || '<p class="sa-hint">Nessun lead di Agnano nel file.</p>';
+                <span>${esc(nomeG(g))}</span><b>${x.n}</b>${x.w ? `<i>⚠ ${x.w}</i>` : ''}${x.s ? `<i class="r">✕ ${x.s}</i>` : ''}</button>`; }).join('') || `<p class="sa-hint">Nessun${righe.formato === 'trattative' ? 'a trattativa' : ' lead'} di Agnano nel file.</p>`;
         }
         const daControllare = () => agn.filter(v => inSel(v) && !v.c.ok);
         /* SENZA CONSULENTE: il venditore del CSV non e' un consulente del salone (e nessuno l'ha scelto a mano):
@@ -1393,7 +1464,7 @@
         function disegnaLista() {
             const L = daControllare();
             zona('lista').innerHTML = `<h4><span>2</span> Da controllare <b class="${L.length ? 'sa-ck-w' : 'sa-ck-g'}">${L.length}</b></h4>
-              ${L.length ? `<p class="sa-hint">In questi lead Esito alert, Esito ultima attività e Data ricontatto non sono allineati. Scegli per ognuno: <b>Salta</b> (non si importa), <b>Modifica</b> (scegli tu data e ora), <b>Inserisci comunque</b> (con la data proposta). Per quelli già in archivio puoi anche <b>lasciarli com’erano</b> o <b>toglierli dal calendario</b>.</p>
+              ${L.length ? `<p class="sa-hint">${righe.formato === 'trattative' ? 'In queste trattative Stato ricontatto, Data ricontatto e note non sono allineati.' : 'In questi lead Esito alert, Esito ultima attività e Data ricontatto non sono allineati.'} Scegli per ognuno: <b>Salta</b> (non si importa), <b>Modifica</b> (scegli tu data e ora), <b>Inserisci comunque</b> (con la data proposta). Per quelli già in archivio puoi anche <b>lasciarli com’erano</b> o <b>toglierli dal calendario</b>.</p>
                 <div class="sa-ck-bulk"><span class="sa-hint">Per tutti quelli qui sotto:</span><button type="button" class="sa-btn2" data-ck-tutti="salta">⏭ Salta tutti</button><button type="button" class="sa-btn2" data-ck-tutti="forza">➕ Inserisci tutti</button></div>
                 <div class="sa-ck-list">${L.map(riga).join('')}</div>`
                 : '<p class="sa-hint">Nei giorni scelti tutti gli appuntamenti sono allineati. 👍</p>'}`;
@@ -1485,7 +1556,7 @@
             const righeOut = k.out.concat(scart.map(v => v.r));     // gli scartati: il server li riconosce e li conta, come prima
             btn.disabled = true; btn.textContent = 'Importo…';
             try {
-                const d = await post('/appuntamenti/import', { file: nomeFile, righe: righeOut, righeFile: V.length, periodo: descriviPeriodo(),
+                const d = await post('/appuntamenti/import', { file: nomeFile, righe: righeOut, righeFile: V.length, periodo: descriviPeriodo(), trattative: righe.trattative || {}, formato: righe.formato || 'lead',
                     fuoriPeriodo: k.fuori, nSaltati: k.saltati.length, saltati: k.saltati.slice(0, 300),
                     rimuovi: k.rimuovi, tenuti: k.tenuti.slice(0, 300), tenutiSpariti: k.tenutiSp });
                 ov.remove();

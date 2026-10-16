@@ -1032,7 +1032,20 @@ public class SaloneController {
     private static final List<String> CAMPI_CSV = List.of("tipo", "origine", "canale", "cognome", "nome", "ragioneSociale", "email", "telefono", "telefono2",
         "venditore", "caller", "marca", "modello", "importo", "tipoRichiesta", "tipoVeicolo", "dataInserimento", "inseritoDa", "dataLead", "esitoAlert",
         "esitoAttivita", "dataRicontatto", "status", "note", "citta", "provincia", "sede", "team", "etichetteLead", "marcaPosseduta", "modelloPosseduto",
-        "kmPosseduto", "annoPosseduto", "formulaAcquisto");
+        "kmPosseduto", "annoPosseduto", "formulaAcquisto", "idTrattativa", "formato");
+    /** NUOVO: lo stesso appuntamento puo' arrivare dal CSV dei lead o da quello delle trattative (ID diversi):
+     *  se l'ID non e' in archivio ma la trattativa si', si usa l'appuntamento gia' in archivio */
+    private static String idInArchivio(String id, Object trattative, Map<String, ?> perId, Map<String, String> perTrattativa) {
+        if (perId.containsKey(id) || !(trattative instanceof Map<?, ?> t)) return id;
+        String tr = str(t.get(id));
+        String gia = tr.isEmpty() ? null : perTrattativa.get(tr);
+        return gia != null && !perId.containsKey(gia) ? id : gia != null ? gia : id;
+    }
+    private static Map<String, String> indiceTrattative(Collection<Map<String, Object>> archivio) {
+        Map<String, String> m = new HashMap<>();
+        for (Map<String, Object> r : archivio) { String tr = str(r.get("idTrattativa")); if (!tr.isEmpty()) m.putIfAbsent(tr, str(r.get("id"))); }
+        return m;
+    }
     /** i campi di cui teniamo traccia nello storico: etichetta -> valore */
     private static Map<String, String> tracciati(Map<String, Object> r) {
         Map<String, String> t = new LinkedHashMap<>();
@@ -1071,8 +1084,15 @@ public class SaloneController {
         String da = str(b.get("da")), a = str(b.get("a"));
         Map<String, Object> out = new LinkedHashMap<>();
         List<Map<String, Object>> nelPeriodo = new ArrayList<>();
-        for (Map<String, Object> r : leggi("SALONE_APP")) {
+        List<Map<String, Object>> archivio = leggi("SALONE_APP");
+        // ID del file che corrispondono (via trattativa) a un appuntamento in archivio con un altro ID
+        Map<String, Object> perIdA = new HashMap<>();
+        for (Map<String, Object> r : archivio) perIdA.put(str(r.get("id")), r);
+        Map<String, String> perTr = indiceTrattative(archivio), alias = new HashMap<>();
+        for (String id : ids) { String x = idInArchivio(id, b.get("trattative"), perIdA, perTr); if (!x.equals(id)) alias.put(x, id); }
+        for (Map<String, Object> r : archivio) {
             String id = str(r.get("id")), g = str(r.get("appData"));
+            if (alias.containsKey(id)) id = alias.get(id);       // si risponde con l'ID del file
             if (ids.contains(id)) {
                 Map<String, String> t = tracciati(r);
                 out.put(id, mappa("appData", r.get("appData"), "appOra", r.get("appOra"), "controllo", r.get("controllo"),
@@ -1105,6 +1125,7 @@ public class SaloneController {
             List<Map<String, Object>> tutti = leggi("SALONE_APP");
             Map<String, Map<String, Object>> perId = new LinkedHashMap<>();
             for (Map<String, Object> r : tutti) perId.put(str(r.get("id")), r);
+            Map<String, String> perTr = indiceTrattative(tutti);
             int nuovi = 0, aggiornati = 0, invariati = 0, senzaData = 0, autoAssegnati = 0, daAssegnare = 0, allineati = 0, modificati = 0, forzati = 0;
             List<Map<String, Object>> esclusi = new ArrayList<>(), nuoviElenco = new ArrayList<>(), cambi = new ArrayList<>(),
                 modificatiElenco = new ArrayList<>(), forzatiElenco = new ArrayList<>();
@@ -1115,6 +1136,7 @@ public class SaloneController {
                 Map<String, Object> row = new LinkedHashMap<>();
                 for (String k : CAMPI_CSV) row.put(k, str(raw.get(k)));
                 String id = str(raw.get("id"));
+                if (!id.isEmpty()) id = idInArchivio(id, b.get("trattative"), perId, perTr);
                 if (id.isEmpty() || !visti.add(id)) continue;
                 String motivo = esclusa(row);
                 if (motivo != null) {
@@ -1145,6 +1167,7 @@ public class SaloneController {
                 }
                 if (app == null) senzaData++;
                 Map<String, Object> prima = perId.get(id);
+                if (prima != null && str(r.get("idTrattativa")).isEmpty() && prima.get("idTrattativa") != null) r.put("idTrattativa", prima.get("idTrattativa"));   // il collegamento alla trattativa resta
                 // consulente scelto a mano nel CRM: resta, a meno che il file non indichi un ALTRO consulente di Agnano
                 // (in quel caso il lead compare tra i "Cambiati" e, se lo aggiorni, vale il file)
                 if (prima != null && prima.get("consulenteMano") != null) {
@@ -1186,7 +1209,7 @@ public class SaloneController {
             List<Map<String, Object>> rimossiElenco = new ArrayList<>();
             if (b.get("rimuovi") instanceof List<?> lr) for (Object o : lr) {
                 if (!(o instanceof Map<?, ?> m)) continue;
-                String id = str(m.get("id"));
+                String id = idInArchivio(str(m.get("id")), b.get("trattative"), perId, perTr);
                 Map<String, Object> prima = perId.remove(id);
                 if (prima == null) continue;
                 if (rimossiElenco.size() < 300) rimossiElenco.add(mappa("id", id, "cliente", cliente(prima),
@@ -1201,6 +1224,7 @@ public class SaloneController {
             Map<String, Object> imp = new LinkedHashMap<>();
             imp.put("id", impId); imp.put("at", now.toString()); imp.put("atIt", oraIt(now)); imp.put("chi", c.nome());
             imp.put("file", str(b.get("file")));
+            imp.put("formato", "trattative".equals(str(b.get("formato"))) ? "trattative" : "lead");
             imp.put("righeFile", b.get("righeFile") instanceof Number n ? n.intValue() : righe.size()); imp.put("considerati", considerati);
             imp.put("nuovi", nuovi); imp.put("aggiornati", aggiornati); imp.put("invariati", invariati);
             // finestra di controllo: giorni scelti e righe non allineate (saltate / modificate / inserite comunque)
