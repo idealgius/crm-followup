@@ -23,7 +23,7 @@ import java.util.*;
  * che si vedono a schermo) e li manda gia' pronti in tabelle; qui si costruisce
  * il file con una grafica professionale:
  *  - in cima a ogni foglio: titolo, periodo/filtri scelti, "generato da ... il ..."
- *  - intestazioni bordeaux, righe alternate, numeri e percentuali formattati,
+ *  - intestazioni ottanio, righe alternate, numeri e percentuali formattati,
  *    riga Totale in evidenza, filtri automatici e riquadri bloccati sull'intestazione,
  *    stampa orizzontale adattata alla larghezza della pagina.
  *
@@ -36,7 +36,7 @@ import java.util.*;
  *                               "totale": [ "Totale", 95, 0.1359 ] } ] } ] }
  *
  * Opzioni (usate dagli elenchi delle altre sezioni BI, /api/bi/export/excel):
- *   "colore": "bordeaux" (predefinito, Commerciale) | "blu" (Consegne, Stock)
+ *   "colore": "ottanio" (predefinito, Commerciale; accetta anche il vecchio "bordeaux") | "blu" (Consegne, Stock)
  *   "aCapo": true  -> il testo lungo va a capo nella cella (colonne strette, niente celle lunghissime)
  *   tipo "data": valore "gg/mm/aaaa" scritto come data vera (si ordina e si filtra in Excel)
  */
@@ -49,8 +49,8 @@ public class CommercialeExcelService {
 
     /** colori del file: principale (intestazioni, titolo), totale, righe alterne, testo grigio, linee, testo */
     private record Palette(byte[] main, byte[] tot, byte[] zebra, byte[] grigio, byte[] linea, byte[] testo) { }
-    private static final Palette BORDEAUX = new Palette(rgb(0x6B, 0x1D, 0x2E), rgb(0xF6, 0xE6, 0xEA), rgb(0xFB, 0xF6, 0xF7),
-            rgb(0x7A, 0x6A, 0x70), rgb(0xE6, 0xDA, 0xDE), rgb(0x2A, 0x1D, 0x21));
+    private static final Palette OTTANIO = new Palette(rgb(0x0E, 0x4A, 0x55), rgb(0xDF, 0xEE, 0xF0), rgb(0xF4, 0xF9, 0xFA),
+            rgb(0x5F, 0x74, 0x79), rgb(0xD5, 0xE2, 0xE5), rgb(0x16, 0x26, 0x2A));
     private static final Palette BLU = new Palette(rgb(0x1F, 0x3A, 0x5F), rgb(0xE3, 0xEB, 0xF5), rgb(0xF5, 0xF8, 0xFC),
             rgb(0x5F, 0x6B, 0x7A), rgb(0xD8, 0xE1, 0xEC), rgb(0x1C, 0x24, 0x30));
 
@@ -58,7 +58,7 @@ public class CommercialeExcelService {
 
     public byte[] export(Map<String, Object> dati, String generatoDa) throws Exception {
         try (XSSFWorkbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            Palette p = "blu".equalsIgnoreCase(str(dati.get("colore"), "")) ? BLU : BORDEAUX;
+            Palette p = "blu".equalsIgnoreCase(str(dati.get("colore"), "")) ? BLU : OTTANIO;
             // elenco = export degli elenchi/riquadri della BI: caratteri piu' grandi, righe ariose,
             // testo a capo e stampa che non rimpicciolisce troppo
             final boolean elenco = Boolean.TRUE.equals(dati.get("aCapo"));

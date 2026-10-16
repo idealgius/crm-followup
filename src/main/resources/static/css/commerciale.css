@@ -1,19 +1,19 @@
 /* =====================================================================
    AREA COMMERCIALE (BI, capitolo 03) — stili con prefisso cm-
    Stessa impaginazione di Stock (fascia in alto, menu a sinistra, card)
-   con colore bordeaux. Tema chiaro/scuro come il resto del CRM.
+   con colore ottanio. Tema chiaro/scuro come il resto del CRM.
    ===================================================================== */
 #commercialeRoot {
-  --cm-bg:#f4f1f2; --cm-band:#6b1d2e; --cm-card:#fff; --cm-ink:#2a1d21; --cm-ink-2:#7a6a70; --cm-line:#ebe2e5;
-  --cm-acc:#8e2a40; --cm-acc-soft:#f6e6ea; --cm-acc-ink:#7a1f33; --cm-grey-soft:#f1edee; --cm-gold:#d8a650;
-  --cm-c1:#7a1f33; --cm-c2:#dcaab5; --cm-bar:#8e2a40; --cm-tel-soft:#e3f0f7; --cm-tel-ink:#1f5f80;
-  --cm-shadow:0 6px 24px -10px rgba(107,29,46,.28);
+  --cm-bg:#eff4f5; --cm-band:#0e4a55; --cm-card:#fff; --cm-ink:#16262a; --cm-ink-2:#5f7479; --cm-line:#dbe6e8;
+  --cm-acc:#136a78; --cm-acc-soft:#dfeef0; --cm-acc-ink:#0f5662; --cm-grey-soft:#ecf2f3; --cm-gold:#d8a650;
+  --cm-c1:#0f5662; --cm-c2:#9fcbd2; --cm-bar:#136a78; --cm-tel-soft:#ecebfb; --cm-tel-ink:#4b44a8;
+  --cm-shadow:0 6px 24px -10px rgba(14,74,85,.28);
   font-family:'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 [data-theme="dark"] #commercialeRoot {
-  --cm-bg:#151013; --cm-band:#3e1420; --cm-card:#1f171a; --cm-ink:#f1e8ea; --cm-ink-2:#b39fa5; --cm-line:#33262b;
-  --cm-acc:#e48a9d; --cm-acc-soft:#3a1d25; --cm-acc-ink:#f2b3c0; --cm-grey-soft:#2a2024;
-  --cm-c1:#ef9aac; --cm-c2:#6d3d48; --cm-bar:#e48a9d; --cm-tel-soft:#16303d; --cm-tel-ink:#9fd3ee;
+  --cm-bg:#0e1416; --cm-band:#0b3a44; --cm-card:#162024; --cm-ink:#e6eff1; --cm-ink-2:#9bb1b6; --cm-line:#25353a;
+  --cm-acc:#5cc3d1; --cm-acc-soft:#15343a; --cm-acc-ink:#8fdbe5; --cm-grey-soft:#1e2b2f;
+  --cm-c1:#6fd0dc; --cm-c2:#2f5d65; --cm-bar:#5cc3d1; --cm-tel-soft:#25204a; --cm-tel-ink:#bab3f5;
   --cm-shadow:0 6px 24px -10px rgba(0,0,0,.65);
 }
 #commercialePage { max-width:none !important; padding:0 !important; }
@@ -147,7 +147,7 @@ table.cm-t { width:100%; border-collapse:separate; border-spacing:0; font-size:1
 #commercialeRoot .cm-chip.on { background:var(--cm-band); border-color:var(--cm-band); color:#fff; }
 
 /* finestra elenco */
-.cm-ov { position:fixed; inset:0; background:rgba(20,8,12,.55); display:flex; align-items:center; justify-content:center; padding:16px; z-index:3000; }
+.cm-ov { position:fixed; inset:0; background:rgba(5,18,22,.55); display:flex; align-items:center; justify-content:center; padding:16px; z-index:3000; }
 .cm-modal { background:var(--cm-card); color:var(--cm-ink); border-radius:18px; width:min(1000px,100%); max-height:86vh; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,.35); }
 .cm-modal header { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:16px 18px; border-bottom:1px solid var(--cm-line); }
 .cm-modal header h3 { margin:0; font-size:16px; color:var(--cm-ink); }
@@ -250,15 +250,15 @@ table.cm-t { width:100%; border-collapse:separate; border-spacing:0; font-size:1
 .cm-prima { background:var(--cm-grey-soft); color:var(--cm-ink-2); }
 [data-theme="dark"] .cm-rec { background:#3a2c16; color:#f3c27a; }
 
-/* barra in alto del CRM bordeaux mentre e' aperto il Commerciale (data-bi messo da commerciale.js) */
-html[data-bi="commerciale"] { --navbar-bg:#5a1726; }
-html[data-theme="dark"][data-bi="commerciale"] { --navbar-bg:#3e1420; }
+/* barra in alto del CRM ottanio mentre e' aperto il Commerciale (data-bi messo da commerciale.js) */
+html[data-bi="commerciale"] { --navbar-bg:#0b3f49; }
+html[data-theme="dark"][data-bi="commerciale"] { --navbar-bg:#0b3a44; }
 html[data-bi="commerciale"] .navbar { background:var(--navbar-bg); }
 html[data-bi="commerciale"] .cm-band { border-top:0; }
 
 /* 📌 scelta fissata (origine / tipo / marca valgono per tutto il Commerciale) */
-.cm-pin { border:1.5px solid var(--cm-acc-ink, #8a2a3f); background:transparent; color:var(--cm-acc-ink, #8a2a3f); border-radius:10px; padding:6px 12px; font-weight:700; font-size:12.5px; cursor:pointer; white-space:nowrap; }
-.cm-pin:hover { background:var(--cm-acc-soft, rgba(138,42,63,.12)); }
+.cm-pin { border:1.5px solid var(--cm-acc-ink, #0f5662); background:transparent; color:var(--cm-acc-ink, #0f5662); border-radius:10px; padding:6px 12px; font-weight:700; font-size:12.5px; cursor:pointer; white-space:nowrap; }
+.cm-pin:hover { background:var(--cm-acc-soft, rgba(15,86,98,.12)); }
 .cm-pinbox:empty { display:none; }
 .cm-msg.cm-fissa { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .cm-msg.cm-fissa .cm-link { margin-left:auto; font-weight:700; }

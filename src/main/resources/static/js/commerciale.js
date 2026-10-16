@@ -75,7 +75,7 @@
     const ST = ['GENERATO', 'NON_INTERESSATO', 'TRATTATIVA_GENERATA', 'CHIUSA', 'FALLITA'];
     const STL = { GENERATO: 'Generato (in sospeso)', NON_INTERESSATO: 'Non interessato', TRATTATIVA_GENERATA: 'Trattativa generata', CHIUSA: 'Trattativa chiusa', FALLITA: 'Trattativa fallita' };
     const STC = { GENERATO: '#8e9aab', NON_INTERESSATO: '#c4a27c', TRATTATIVA_GENERATA: '#e0a23a', CHIUSA: '#2f9e6e', FALLITA: '#c0392b' };
-    const PALETTE = ['#8e2a40', '#3d7fc1', '#d98a3a', '#2f9e6e', '#9b6fd1', '#c94f7c', '#3fb0b0', '#b8a03a', '#6b7a8c', '#e06666', '#5c8a3a', '#a05a2c', '#7a8fd6'];
+    const PALETTE = ['#136a78', '#3d7fc1', '#d98a3a', '#2f9e6e', '#9b6fd1', '#c94f7c', '#b0563f', '#b8a03a', '#6b7a8c', '#e06666', '#5c8a3a', '#a05a2c', '#7a8fd6'];
     const LS_B2B = 'commerciale_b2b_v1', LS_T = 'commerciale_grafici_v1', LS_REC = 'commerciale_recuperate_v1';
     // Come si abbina una trattativa del CSV a una riga del foglio AVANZAMENTO (motore in consegne.js)
     const REGOLE_ABB = [
@@ -754,7 +754,7 @@
     function origCard(V, isB) {
         const M = origMatrix(V);
         if (!M.rows.length) return '';
-        const cell = (n, of) => n ? `<td style="background:rgba(142,42,64,${(0.06 + 0.5 * n / Math.max(1, of)).toFixed(2)})">${n}<small class="cm-pc">${pct(n, of).replace(',00', '')}</small></td>` : '<td>–</td>';
+        const cell = (n, of) => n ? `<td style="background:rgba(19,106,120,${(0.06 + 0.5 * n / Math.max(1, of)).toFixed(2)})">${n}<small class="cm-pc">${pct(n, of).replace(',00', '')}</small></td>` : '<td>–</td>';
         return `<div class="cm-card" style="margin-top:16px"><h2>Origini per consulente</h2><p class="cm-hint">Contratti per origine trattativa · più scuro = quota più alta per quel consulente · clicca un nome per il suo report</p>
           <div class="cm-scroll"><table class="cm-t cm-heat cm-sort"><tr><th>Consulente</th>${M.cols.map(c => `<th>${esc(c)}</th>`).join('')}<th>Totale</th></tr>
           ${M.rows.map(r => `<tr data-vw='${esc(JSON.stringify(isB ? { k: 'b2b', v: r.v } : { k: 'v', v: r.v }))}'><td>${esc(r.v)}</td>${M.cols.map(c => cell(r.m[c] || 0, r.n)).join('')}<td><b>${r.n}</b></td></tr>`).join('')}
@@ -808,7 +808,7 @@
         ${rank}
         <div class="cm-sec">Andamento</div>
         <div class="cm-grid">${ccCard({ id: id('and'), title: 'Andamento mensile', hint: C.length ? `Picco di contratti a ${MESIL[ms[iMax]]} (${cvm[iMax]}) · clicca una barra per l'elenco` : 'Nessun contratto nel periodo', wide: 1, h: 300, def: 'bar', types: ['bar', 'line', 'doughnut'],
-            series: [{ k: 'Preventivi', recs: R, c: '#dcaab5', t: 1 }, { k: 'Contratti', recs: C, c: '#7a1f33' }, { k: 'Annullati', recs: ANN, c: '#c0392b' }, { k: 'Fallite', recs: F, c: '#8e9aab', t: 1 }] })}</div>
+            series: [{ k: 'Preventivi', recs: R, c: '#9fcbd2', t: 1 }, { k: 'Contratti', recs: C, c: '#0f5662' }, { k: 'Annullati', recs: ANN, c: '#c0392b' }, { k: 'Fallite', recs: F, c: '#8e9aab', t: 1 }] })}</div>
         <div class="cm-sec">Esito e origini</div>
         <div class="cm-grid">
           ${ccCard({ id: id('esi'), title: 'Esito delle trattative', hint: 'Trattative create nel periodo: contratto, annullato, in corso o fallita', recs: R, key: esito, order: ESITI, colors: ESC, def: 'doughnut', t: 1 })}
@@ -821,7 +821,7 @@
         <div class="cm-grid">
           ${ccCard({ id: id('tip'), title: 'Tipologia dei contratti', hint: tip[0] ? 'Preventivi e conversione nella tabella accanto' : '', recs: C, key: r => r.tipo, order: ['Usato', 'Km0', 'Nuovo', 'Non indicata'], def: 'doughnut' })}
           <div class="cm-card"><h2>Tipologia veicolo</h2><p class="cm-hint">${tip[0] ? `${[...tip].sort((x, y) => y.p - x.p)[0].k} vale il ${pct([...tip].sort((x, y) => y.p - x.p)[0].p, P)} dei preventivi` : ''}</p>${convTable({ head: 'Tipologia', list: tip }, P, C.length)}</div>
-          ${ccCard({ id: id('pag'), title: 'Pagamento', hint: 'Contratti per modalità (colonna PAGAMENTO del foglio)', recs: C, key: r => r.pag, order: ['Finanziamento', 'PC (contanti)', 'Non indicato'], colors: { 'Finanziamento': '#7a1f33', 'PC (contanti)': '#dcaab5', 'Non indicato': '#b7aeb1' }, def: 'doughnut' })}
+          ${ccCard({ id: id('pag'), title: 'Pagamento', hint: 'Contratti per modalità (colonna PAGAMENTO del foglio)', recs: C, key: r => r.pag, order: ['Finanziamento', 'PC (contanti)', 'Non indicato'], colors: { 'Finanziamento': '#0f5662', 'PC (contanti)': '#9fcbd2', 'Non indicato': '#aab6b9' }, def: 'doughnut' })}
           ${ccCard({ id: id('mar'), title: 'Marche dei contratti', hint: '<button type="button" class="cm-link" data-vw=\'{"k":"marche"}\'>Performance marchi completa →</button>', recs: C, key: r => r.marca, def: 'bar', horiz: true })}
         </div>
         <div class="cm-sec">Trattative fallite</div>
@@ -833,7 +833,7 @@
         <div class="cm-grid">
           ${ccCard({ id: id('pte'), title: 'Esito dei preventivi telefonici', hint: X.length + ' preventivi · ' + X.filter(p => p.contr).length + ' diventati contratto (' + pct(X.filter(p => p.contr).length, X.length) + ')', recs: X, key: p => STL[p.st], order: ST.map(s => STL[s]), colors: Object.fromEntries(ST.map(s => [STL[s], STC[s]])), def: 'doughnut', kind: 'pt' })}
           ${ccCard({ id: id('ptm'), title: 'Preventivi telefonici per mese', hint: 'Caricati e diventati contratto', wide: 0, def: 'bar', types: ['bar', 'line', 'doughnut'], kind: 'pt',
-              series: [{ k: 'Preventivi telefonici', recs: X, c: '#dcaab5' }, { k: 'Diventati contratto', recs: X.filter(p => p.contr), c: '#2f9e6e' }] })}
+              series: [{ k: 'Preventivi telefonici', recs: X, c: '#9fcbd2' }, { k: 'Diventati contratto', recs: X.filter(p => p.contr), c: '#2f9e6e' }] })}
         </div>`}
         <div class="cm-sec">Servizi sui contratti</div>
         <div class="cm-grid">
@@ -899,7 +899,7 @@
         </div>
         <div class="cm-sec">Andamento</div>
         <div class="cm-grid">${ccCard({ id: 'annM', title: 'Annullati per mese', hint: 'Mese del contratto (data chiusura) · confronto con i contratti', wide: 1, h: 280, def: 'bar', types: ['bar', 'line', 'doughnut'],
-            series: [{ k: 'Contratti', recs: ALL, c: '#dcaab5' }, { k: 'Annullati', recs: AN, c: '#c0392b' }] })}</div>
+            series: [{ k: 'Contratti', recs: ALL, c: '#9fcbd2' }, { k: 'Annullati', recs: AN, c: '#c0392b' }] })}</div>
         <div class="cm-sec">Chi e da dove</div>
         <div class="cm-grid">
           <div class="cm-card"><h2>Per consulente</h2><p class="cm-hint">Clicca un'intestazione per ordinare · un nome per il suo report</p>
@@ -937,7 +937,7 @@
         </div>
         <div class="cm-sec">Andamento ed esito</div>
         <div class="cm-grid">
-          ${ccCard({ id: 'ptM', title: 'Andamento mensile', hint: 'Caricati e diventati contratto', def: 'bar', types: ['bar', 'line', 'doughnut'], kind: 'pt', series: [{ k: 'Preventivi telefonici', recs: X, c: '#dcaab5' }, { k: 'Diventati contratto', recs: X.filter(p => p.contr), c: '#2f9e6e' }] })}
+          ${ccCard({ id: 'ptM', title: 'Andamento mensile', hint: 'Caricati e diventati contratto', def: 'bar', types: ['bar', 'line', 'doughnut'], kind: 'pt', series: [{ k: 'Preventivi telefonici', recs: X, c: '#9fcbd2' }, { k: 'Diventati contratto', recs: X.filter(p => p.contr), c: '#2f9e6e' }] })}
           ${ccCard({ id: 'ptE', title: 'Esito dei preventivi', hint: 'Stato attuale di ogni preventivo', recs: X, key: p => STL[p.st], order: ST.map(s => STL[s]), colors: stc, def: 'doughnut', kind: 'pt' })}
           ${ccCard({ id: 'ptC', title: 'Per consulente', hint: 'Preventivi assegnati', recs: X, key: p => p.vend, def: 'bar', horiz: true, kind: 'pt', h: 320 })}
           ${ccCard({ id: 'ptO', title: 'Per operatore In bound', hint: 'Chi ha creato il preventivo', recs: X, key: p => p.op, def: 'bar', horiz: true, kind: 'pt', h: 320 })}
@@ -1224,7 +1224,7 @@
     }
 
     /* ================= PDF: report impaginato e stampa ================= */
-    const PAL = { c1: '#7a1f33', c2: '#dcaab5', ink: '#2a1d21', ink2: '#7a6a70', line: '#ebe2e5', soft: '#f6e6ea' };
+    const PAL = { c1: '#0f5662', c2: '#9fcbd2', ink: '#16262a', ink2: '#5f7479', line: '#dbe6e8', soft: '#dfeef0' };
     function svgBars(labels, sets, W, H) {
         W = W || 520; H = H || 210;
         const pad = { l: 30, r: 8, t: 18, b: 22 }, max = Math.max(1, ...sets.flatMap(s => s.data)), step = Math.pow(10, Math.floor(Math.log10(max))) * (max / Math.pow(10, Math.floor(Math.log10(max))) > 5 ? 2 : 1);
@@ -1271,8 +1271,8 @@
               <div class="leg"><i style="background:${PAL.c2}"></i>Preventivi <i style="background:${PAL.c1}"></i>Contratti</div>${svgBars(d.ms.map(m => MESI[m]), [{ data: d.pv, color: PAL.c2 }, { data: d.cv, color: PAL.c1 }])}</div>
             <div class="card"><h3>Tipologia veicolo</h3><p class="h">${tipP && d.P ? `${tipP.k === 'Usato' ? "L'usato" : tipP.k === 'Km0' ? 'Il Km0' : tipP.k === 'Nuovo' ? 'Il nuovo' : tipP.k} vale il ${pct(tipP.p, d.P)} dei preventivi` : ''}</p>
               ${ct('Tipologia', d.tip)}
-              <h3 style="margin-top:12px">Pagamento</h3><p class="h">Contratti per modalità</p><div class="don">${svgDonut([{ n: d.FIN, c: PAL.c1 }, { n: d.PC, c: PAL.c2 }, { n: d.NI, c: '#d9d2d4' }], 'contratti')}
-              <ul><li><i style="background:${PAL.c1}"></i><b>Finanziamento</b> ${d.FIN} · ${pct(d.FIN, d.Cn)}</li><li><i style="background:${PAL.c2}"></i><b>PC</b> ${d.PC} · ${pct(d.PC, d.Cn)}</li>${d.NI ? `<li><i style="background:#d9d2d4"></i><b>Non indicato</b> ${d.NI} · ${pct(d.NI, d.Cn)}</li>` : ''}</ul></div></div></div>
+              <h3 style="margin-top:12px">Pagamento</h3><p class="h">Contratti per modalità</p><div class="don">${svgDonut([{ n: d.FIN, c: PAL.c1 }, { n: d.PC, c: PAL.c2 }, { n: d.NI, c: '#cfdadc' }], 'contratti')}
+              <ul><li><i style="background:${PAL.c1}"></i><b>Finanziamento</b> ${d.FIN} · ${pct(d.FIN, d.Cn)}</li><li><i style="background:${PAL.c2}"></i><b>PC</b> ${d.PC} · ${pct(d.PC, d.Cn)}</li>${d.NI ? `<li><i style="background:#cfdadc"></i><b>Non indicato</b> ${d.NI} · ${pct(d.NI, d.Cn)}</li>` : ''}</ul></div></div></div>
           <h2>Canali</h2>
           <div class="g2"><div class="card"><h3>Contratti per origine</h3><p class="h">${d.ori[0] ? `${esc(d.ori[0].k)} porta il ${pct(d.ori[0].c, d.Cn)} dei contratti` : ''}</p>${pHb(d.ori.filter(o => o.c).map(o => ({ k: o.k, n: o.c })))}</div>
             <div class="card"><h3>Preventivi e contratti per fonte</h3><p class="h">${oriP[0] ? `${esc(oriP[0].k)} genera il ${pct(oriP[0].p, d.P)} dei preventivi` : ''}${convBest.length ? `; ${convBest.map(x => esc(x.k)).join(' e ')} convertono meglio` : ''}</p>
@@ -1312,7 +1312,7 @@
           .card{border:1px solid ${PAL.line};border-radius:9px;padding:10px;break-inside:avoid;margin-bottom:9px}.blk{break-inside:avoid;page-break-inside:avoid}
           table{width:100%;border-collapse:collapse;font-size:9.5px}th{background:${PAL.c1};color:#fff;text-align:right;padding:5px 6px;font-size:8.5px;text-transform:uppercase}th.l,td.l{text-align:left}
           td{padding:4.5px 6px;text-align:right;border-bottom:1px solid ${PAL.line}}td.l{font-weight:700}tr.tot td{background:${PAL.soft};font-weight:800;border-bottom:0}
-          .hb{display:grid;grid-template-columns:120px 1fr 30px;gap:6px;align-items:center;margin:4px 0;font-size:9.5px}.hb span{font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.hb i{height:8px;background:#f1edee;border-radius:4px;overflow:hidden}.hb b{display:block;height:100%;background:${PAL.c1}}.hb em{font-style:normal;font-weight:800;text-align:right}
+          .hb{display:grid;grid-template-columns:120px 1fr 30px;gap:6px;align-items:center;margin:4px 0;font-size:9.5px}.hb span{font-weight:700;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.hb i{height:8px;background:#ecf2f3;border-radius:4px;overflow:hidden}.hb b{display:block;height:100%;background:${PAL.c1}}.hb em{font-style:normal;font-weight:800;text-align:right}
           .leg{font-size:9px;color:${PAL.ink2};margin-bottom:2px}.leg i{display:inline-block;width:8px;height:8px;border-radius:2px;margin:0 4px 0 8px}
           .don{display:flex;align-items:center;gap:12px}.don ul{list-style:none;margin:0;padding:0}.don li{margin:4px 0}.don li i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px}
           footer{margin-top:8px;color:${PAL.ink2};font-size:8px;border-top:1px solid ${PAL.line};padding-top:5px}`;
@@ -1327,7 +1327,7 @@
 
 
     /* ================= avvio ================= */
-    // Barra in alto del CRM color bordeaux mentre e' aperto il Commerciale:
+    // Barra in alto del CRM color ottanio mentre e' aperto il Commerciale:
     // <html data-bi="commerciale"> finche' la pagina e' visibile (stili in commerciale.css)
     let barObs = null;
     function seguiBarra() {
