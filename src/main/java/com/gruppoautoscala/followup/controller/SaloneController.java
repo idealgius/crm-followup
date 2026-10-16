@@ -1081,7 +1081,10 @@ public class SaloneController {
     public ResponseEntity<?> importa(@RequestBody Map<String, Object> b, HttpSession s) {
         Chi c = chi(s); if (!vede(c)) return no(c);
         if (!gestisce(c)) return soloLivello(2);
-        if (!(b.get("righe") instanceof List<?> righe) || righe.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "Il file non contiene righe"));
+        // righe vuote vanno bene se si tolgono appuntamenti dal calendario (es. file con un solo lead da togliere)
+        List<?> righe = b.get("righe") instanceof List<?> l0 ? l0 : List.of();
+        boolean daTogliere = b.get("rimuovi") instanceof List<?> lr0 && !lr0.isEmpty();
+        if (righe.isEmpty() && !daTogliere) return ResponseEntity.badRequest().body(Map.of("error", "Niente da importare: con le scelte fatte nessun appuntamento entra o viene tolto"));
         Instant now = Instant.now();
         String impId = Long.toString(now.toEpochMilli(), 36);
         synchronized (LOCK) {
