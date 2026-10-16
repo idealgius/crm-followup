@@ -1335,6 +1335,7 @@ public class SaloneController {
         List<Map<String, Object>> out = new ArrayList<>();
         for (User u : userRepository.findAll()) {
             if (u.getId() == null || u.getId().equals(c.id())) continue;
+            if (u.getRole() != null && u.getRole().startsWith("X:")) continue;   // account disattivato
             String acc = rolePermissionService.getEffectiveAccess(u.getId(), u.getRole(), SEZ);
             if (chatOk(acc, u.getRole()))
                 out.add(Map.of("id", u.getId(), "nome", String.valueOf(u.getFullName()), "role", String.valueOf(u.getRole())));

@@ -25,8 +25,11 @@ function renderUsers(users) {
     // solo se puoi aprire il menu di modifica/eliminazione in generale.
     const isAdmin = currentUser?.role === 'ADMIN';
     const canManage = typeof canWrite === 'function' && canWrite('ADMIN');
+    // NUOVO: gli account disattivati vanno in fondo, in una sezione a parte
+    usersCache = users;
+    const attivi = users.filter(u => !u.disattivato), spenti = users.filter(u => u.disattivato);
 
-    container.innerHTML = users.map(u => {
+    container.innerHTML = attivi.map(u => {
         const isCurrentUser = u.id === currentUser?.id;
         const targetIsAdmin = u.role === 'ADMIN';
         // Toccare un account già Admin richiede essere REALMENTE Admin,
@@ -70,11 +73,30 @@ function renderUsers(users) {
                 </div>
             </div>
             <div class="waiting-actions">
-                ${canDelete ? `<button class="btn-small btn-red" onclick="deleteUser(${u.id})">🗑️ Elimina</button>` : ''}
+                ${canDelete ? `<button class="btn-small btn-secondary" onclick="setUserActive(${u.id}, false)" title="Non potrà più accedere, ma i suoi dati restano">⏸ Disattiva</button>
+                <button class="btn-small btn-red" onclick="deleteUser(${u.id})">🗑️ Elimina</button>` : ''}
             </div>
         </div>
         `;
-    }).join('');
+    }).join('') + (spenti.length ? `
+        <div style="margin:22px 0 8px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+            <b style="font-size:14px;color:var(--text-primary)">⏸ Account disattivati (${spenti.length})</b>
+            <small style="color:var(--text-secondary,#8a90a2)">Non possono accedere. I loro dati restano nel CRM: con “Riattiva” tornano com’erano.</small>
+        </div>` + spenti.map(u => {
+        const canTouch = canManage && (u.role !== 'ADMIN' || isAdmin);
+        return `
+        <div class="waiting-card" style="opacity:.62">
+            <div>
+                <div class="waiting-name">${u.fullName} <small style="font-weight:600;color:#e08a8a;margin-left:6px">disattivato</small></div>
+                <div class="waiting-details" style="margin-top:6px">${u.email}</div>
+                <div style="margin-top:8px"><span class="status-badge status-${u.role}">${formatRole(u.role)}</span></div>
+            </div>
+            <div class="waiting-actions">
+                ${canTouch ? `<button class="btn-small btn-green" onclick="setUserActive(${u.id}, true)">▶ Riattiva</button>
+                <button class="btn-small btn-red" onclick="deleteUser(${u.id})">🗑️ Elimina</button>` : ''}
+            </div>
+        </div>`;
+    }).join('') : '');
     if (isAdmin) Presenze.avvia();
 }
 
@@ -171,7 +193,9 @@ async function changeUserRole(userId, newRole) {
             body: JSON.stringify({ role: newRole })
         });
         if (!res.ok) {
-            alert('Errore nel cambio ruolo');
+            let msg = '';
+            try { msg = (await res.json()).error || ''; } catch (e) { /* */ }
+            alert('Errore nel cambio ruolo' + (msg ? ': ' + msg : ''));
             loadUsers();
             return;
         }
@@ -214,14 +238,38 @@ async function createUser() {
     }
 }
 
+let usersCache = [];
+const nomeUtente = id => (usersCache.find(u => u.id === id) || {}).fullName || 'questo utente';
+
 async function deleteUser(id) {
-    if (!confirm('Sei sicuro di voler eliminare questo utente?')) return;
+    const nome = nomeUtente(id);
+    if (!confirm('Eliminare definitivamente ' + nome + '?\n\nNon potrà più accedere e l\'account sparisce. Se ha dati collegati nel CRM (follow-up...) non si può eliminare: ti proporrò di disattivarlo.')) return;
     try {
-        await fetch(`/api/auth/users/${id}`, { method: 'DELETE' });
+        const res = await fetch(`/api/auth/users/${id}`, { method: 'DELETE' });
+        if (!res.ok) {
+            let j = {}, msg = '';
+            try { const t = await res.text(); try { j = JSON.parse(t); msg = j.error || j.message || ''; } catch (e) { msg = t.slice(0, 300); } } catch (e) { /* */ }
+            // ha dati collegati: si propone la disattivazione (i dati restano)
+            if (res.status === 409 && j.collegati) {
+                if (confirm(nome + ': ' + msg + '\n\nVuoi DISATTIVARLO? Non potrà più accedere, ma i suoi dati e le statistiche restano. Potrai riattivarlo quando vuoi.')) await setUserActive(id, false, true);
+            } else alert('Utente non eliminato (errore ' + res.status + ').' + (msg ? '\n\n' + msg : ''));
+        }
         loadUsers();
     } catch (err) {
         console.error('Errore eliminazione utente:', err);
+        alert('Utente non eliminato: ' + err.message);
     }
+}
+
+/* NUOVO: disattiva (non accede più, i dati restano) / riattiva un account */
+async function setUserActive(id, attivo, giaConfermato) {
+    const nome = nomeUtente(id);
+    if (!attivo && !giaConfermato && !confirm('Disattivare ' + nome + '?\n\nNon potrà più accedere (se è dentro ora, esce alla prossima azione). Follow-up, contatti e statistiche restano. Potrai riattivarlo quando vuoi.')) return;
+    try {
+        const res = await fetch(`/api/auth/users/${id}/attivo`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ attivo }) });
+        if (!res.ok) { let msg = ''; try { msg = (await res.json()).error || ''; } catch (e) { /* */ } alert((attivo ? 'Account non riattivato' : 'Account non disattivato') + (msg ? ': ' + msg : '')); }
+    } catch (err) { alert('Errore di rete: ' + err.message); }
+    loadUsers();
 }
 
 function showNewUserForm() {
