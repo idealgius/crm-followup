@@ -535,13 +535,14 @@
             ? `<select class="sa-sel" data-assegna="${esc(r.id)}"><option value="">— Assegna a —</option>${perReparto(st.consulenti).map(([k, l]) => `<optgroup label="${REP[k].t}">` + l.map(c => { const s = statoDi(c).stato; return `<option value="${esc(c)}" ${c === r.consulente ? 'selected' : ''}>${EMO[s] || '○'} ${esc(c)}</option>`; }).join('') + '</optgroup>').join('')}</select>`
             : `<b class="sa-cons">${r.consulente ? bollino(sc) + ' ' + esc(r.consulente) : '—'}</b>`;
         const mioCliente = st.io && r.consulente && st.mio === r.consulente;
+        const modif = st.puoGestire || mioCliente || st.cambiaTutti;   // NUOVO: clic sulla scheda = modifica i dati del cliente
         return `<article class="sa-in ${r.presoAt ? 'preso' : r.consulente ? 'att' : 'nuovo'}">
             <div class="sa-in-t"><b>${ora(r.ora)}</b></div>
-            <div class="sa-in-c">
+            <div class="sa-in-c${modif ? ' sa-in-mod' : ''}" ${modif ? `data-modifica="${esc(r.id)}" role="button" tabindex="0" title="Clicca per modificare nome, cellulare, vetture e note"` : ''}>
               <div class="sa-in-n">${esc(nomeCliente(r))}${r.cellulare ? ` <a href="tel:${esc(r.cellulare)}" class="sa-tel">📞 ${esc(r.cellulare)}</a>` : ''}</div>
               <div class="sa-in-v">${r.consulente ? tagNol(repDi(r.consulente)) : ''}${r.daApp ? `<span class="sa-tag sa-tag-app">📅 Appuntamento${r.appOra ? ' delle ' + esc(r.appOra) : ''}${r.consulentePrevisto && r.consulentePrevisto !== r.consulente ? ' · era di ' + esc(r.consulentePrevisto) : ''}</span>` : ''}${v.length ? v.map(x => `<span class="sa-car">🚗 ${esc(x)}</span>`).join('') : '<span class="sa-hint">Nessuna vettura indicata</span>'}</div>
               ${r.note ? `<div class="sa-in-note">📝 ${esc(r.note)}</div>` : ''}
-              <div class="sa-in-f">Inserito il ${esc(dataOra(r.ora))} da ${esc(r.registratoDa || '')}${r.assegnatoAt ? ` · assegnato alle ${ora(r.assegnatoAt)}` : ''}</div>
+              <div class="sa-in-f">Inserito il ${esc(dataOra(r.ora))} da ${esc(r.registratoDa || '')}${r.assegnatoAt ? ` · assegnato alle ${ora(r.assegnatoAt)}` : ''}${r.modificatoAt ? ` · modificato alle ${ora(r.modificatoAt)} da ${esc(r.modificatoDa || '')}` : ''}${modif ? '<span class="sa-in-edit">✏️ Modifica</span>' : ''}</div>
             </div>
             <div class="sa-in-a">${sel}${stato}
               ${st.puoGestire && r.data === oggi() ? `<button type="button" class="sa-x" data-elimina="${esc(r.id)}" title="Elimina l'ingresso">🗑</button>` : ''}
@@ -565,6 +566,8 @@
             if (a.dataset.act === 'nuovo') apriForm();
             return;
         }
+        const md = e.target.closest('[data-modifica]');
+        if (md && !e.target.closest('a')) { const r = st.ingressi.find(x => x.id === md.dataset.modifica); if (r) apriModifica(r); return; }
         const el = e.target.closest('[data-elimina]');
         if (el) {
             if (!confirm('Eliminare questo ingresso?')) return;
@@ -637,6 +640,50 @@
                 try { await post('/ingressi', body); chiudi(); st.giorno = oggi(); st.mese = oggi().slice(0, 7); caricaGiorno(oggi()); toast(cons ? 'Registrato: notifica inviata a ' + cons : 'Ingresso registrato'); }
                 catch (x) { err.textContent = x.message; b.disabled = false; b.textContent = 'Registra e notifica'; }
             }
+        });
+    }
+    /* ================= NUOVO: modifica i dati di un walk-in (clic sulla scheda) ================= */
+    function apriModifica(r) {
+        const ov = document.createElement('div');
+        ov.className = 'sa-ov';
+        ov.innerHTML = `<div class="sa-modal" role="dialog" aria-modal="true" aria-label="Modifica ingresso">
+          <header><div><small>WALK-IN · ${esc(dataOra(r.ora))}${r.consulente ? ' · ' + esc(r.consulente) : ''}</small><h3>Modifica i dati del cliente</h3></div><button type="button" class="sa-x" data-chiudi aria-label="Chiudi">✕</button></header>
+          <div class="sa-mbody">
+            <div class="sa-row3">
+              <label>Nome<input type="text" id="saNome" autocomplete="off"></label>
+              <label>Cognome<input type="text" id="saCognome" autocomplete="off"></label>
+              <label>Cellulare<input type="tel" id="saCell" autocomplete="off" inputmode="tel"></label>
+            </div>
+            <div class="sa-lbl">Vetture di cui chiede informazioni</div>
+            <div id="saVett"></div>
+            <button type="button" class="sa-btn2" data-addv>＋ Aggiungi vettura</button>
+            <label class="sa-full">Note<textarea id="saNote" rows="3" placeholder="Aggiungi una nota sul cliente…"></textarea></label>
+            <div class="sa-err" id="saErr"></div>
+          </div>
+          <footer><button type="button" class="sa-btn2" data-chiudi>Annulla</button><button type="button" class="sa-btn" data-salva>Salva modifiche</button></footer>
+        </div>`;
+        document.body.appendChild(ov);
+        const $ = q => ov.querySelector(q);
+        $('#saNome').value = r.nome || ''; $('#saCognome').value = r.cognome || ''; $('#saCell').value = r.cellulare || ''; $('#saNote').value = r.note || '';
+        const vett = $('#saVett');
+        const addV = (v) => { const row = rigaVettura(); if (v) { row.querySelector('.sa-marca').value = v.marca || ''; row.querySelector('.sa-modello').value = v.modello || ''; } vett.appendChild(row); };
+        (r.vetture && r.vetture.length ? r.vetture : [null]).forEach(addV);
+        $('#saNome').focus();
+        const chiudi = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+        const onKey = e => { if (e.key === 'Escape' && !ov.querySelector('.sa-dd.open')) chiudi(); };
+        document.addEventListener('keydown', onKey);
+        ov.addEventListener('click', async e => {
+            if (e.target === ov || e.target.closest('[data-chiudi]')) { chiudi(); return; }
+            if (e.target.closest('[data-addv]')) { addV(); return; }
+            const b = e.target.closest('[data-salva]'); if (!b) return;
+            const body = {
+                data: r.data, nome: $('#saNome').value.trim(), cognome: $('#saCognome').value.trim(), cellulare: $('#saCell').value.trim(), note: $('#saNote').value.trim(),
+                vetture: [...vett.querySelectorAll('.sa-vrow')].map(x => ({ marca: x.querySelector('.sa-marca').value, modello: x.querySelector('.sa-modello').value }))
+            };
+            if (!body.nome && !body.cognome) { $('#saErr').textContent = 'Scrivi almeno il nome o il cognome del cliente.'; return; }
+            b.disabled = true; b.textContent = 'Salvataggio…';
+            try { await post('/ingressi/' + encodeURIComponent(r.id), body); chiudi(); caricaGiorno(st.giorno); toast('Dati del cliente aggiornati'); }
+            catch (x) { $('#saErr').textContent = x.message; b.disabled = false; b.textContent = 'Salva modifiche'; }
         });
     }
     const ordStato = s => ({ DISPONIBILE: 0, IN_PIAZZALE: 1, OCCUPATO: 2, TEST_DRIVE: 3, NON_DISPONIBILE: 4 }[s] ?? 5);

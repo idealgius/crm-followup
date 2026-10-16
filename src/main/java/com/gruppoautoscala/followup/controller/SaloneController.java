@@ -356,13 +356,27 @@ public class SaloneController {
 
     @PostMapping("/ingressi/{id}")
     public ResponseEntity<?> modifica(@PathVariable String id, @RequestBody Map<String, Object> b, HttpSession s) {
-        Chi c = chi(s); if (!gestisce(c)) return no(c);
+        // NUOVO: anche il consulente del cliente puo' correggere nome, cellulare, vetture e note
+        // (assegnare ed eliminare restano a Front office / Completo)
+        Chi c = chi(s); if (!vede(c)) return no(c);
+        boolean gest = gestisce(c);
+        boolean soloDati = !b.containsKey("consulente") && !Boolean.TRUE.equals(b.get("elimina"));
+        if (!gest && !soloDati) return no(c);
         String g = giornoValido(String.valueOf(b.getOrDefault("data", id.length() >= 10 ? id.substring(0, 10) : oggi())));
         synchronized (LOCK) {
             List<Map<String, Object>> l = leggi("SALONE_" + g);
             Map<String, Object> r = l.stream().filter(x -> id.equals(x.get("id"))).findFirst().orElse(null);
             if (r == null) return ResponseEntity.status(404).body(Map.of("error", "Ingresso non trovato"));
+            if (!gest && !mio(c, r.get("consulente")) && !cambiaAltri(c))
+                return ResponseEntity.status(403).body(Map.of("error", "Puoi modificare solo i clienti assegnati a te"));
+            boolean datiCliente = b.keySet().stream().anyMatch(k -> List.of("nome", "cognome", "cellulare", "note", "vetture").contains(k));
+            if (datiCliente) {
+                String n = b.containsKey("nome") ? str(b.get("nome")) : str(r.get("nome"));
+                String cg = b.containsKey("cognome") ? str(b.get("cognome")) : str(r.get("cognome"));
+                if (n.isEmpty() && cg.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "Scrivi almeno nome o cognome del cliente"));
+            }
             pulisci(b, r);
+            if (datiCliente) { Instant now = Instant.now(); r.put("modificatoDa", c.nome()); r.put("modificatoAt", now.toString()); r.put("modificatoIt", oraIt(now)); }
             if (b.containsKey("consulente")) {
                 String cons = str(b.get("consulente"));
                 if (!cons.isEmpty() && !CONSULENTI.contains(cons)) return ResponseEntity.badRequest().body(Map.of("error", "Consulente non valido"));

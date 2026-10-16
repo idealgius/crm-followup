@@ -488,3 +488,9 @@ details.sa-in-note div { margin-top:6px; white-space:pre-wrap; line-height:1.5; 
 .sa-ck-row.sc-salta { border-left-color:var(--sa-ink2); }
 .sa-ck-row.sc-togli { border-left-color:#ef4444; }
 .sa-modal .sa-ck-sc { width:auto; min-width:220px; padding:7px 10px; font-size:13px; }
+/* NUOVO: scheda walk-in cliccabile per modificare i dati del cliente */
+.sa-in-mod { cursor:pointer; border-radius:10px; margin:-6px -8px; padding:6px 8px; transition:background .15s; }
+.sa-in-mod:hover, .sa-in-mod:focus-visible { background:rgba(255,255,255,.04); outline:none; }
+.sa-in-edit { margin-left:10px; font-weight:700; color:var(--sa-acc); opacity:0; transition:opacity .15s; }
+.sa-in-mod:hover .sa-in-edit, .sa-in-mod:focus-visible .sa-in-edit { opacity:1; }
+@media (hover:none) { .sa-in-edit { opacity:.8; } }
