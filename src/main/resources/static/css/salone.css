@@ -478,3 +478,13 @@ details.sa-in-note div { margin-top:6px; white-space:pre-wrap; line-height:1.5; 
 #navSaloneTab { position:relative; }
 .sa-tab-n { position:absolute; top:-4px; right:-6px; min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:#ef4444; color:#fff; font-style:normal; font-size:11px; font-weight:900; display:inline-flex; align-items:center; justify-content:center; }
 .sa-tab-n[hidden] { display:none; }
+/* sezione "Senza consulente del salone" nella finestra di controllo dell'import */
+.sa-ck-seg button.on[data-sc="assegna"] { background:#60a5fa; color:#08203f; }
+.sa-ck-seg button.on[data-sc="importa"] { background:var(--sa-acc); color:#062a24; }
+.sa-ck-seg button.on[data-sc="salta"] { background:rgba(154,163,178,.22); color:var(--sa-ink); }
+.sa-ck-seg button.on[data-sc="togli"] { background:#ef4444; color:#fff; }
+.sa-ck-row.sc-assegna { border-left-color:#60a5fa; }
+.sa-ck-row.sc-importa { border-left-color:var(--sa-acc); }
+.sa-ck-row.sc-salta { border-left-color:var(--sa-ink2); }
+.sa-ck-row.sc-togli { border-left-color:#ef4444; }
+.sa-modal .sa-ck-sc { width:auto; min-width:220px; padding:7px 10px; font-size:13px; }

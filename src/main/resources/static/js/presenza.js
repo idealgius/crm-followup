@@ -1,21 +1,34 @@
 /* =====================================================================
-   PRESENZA + AGGIORNAMENTO AUTOMATICO (tutte le pagine del CRM)
-   - ogni 30 s un "battito" al server (/api/presenza/battito): cosi' l'Admin vede in Gestione utenti
-     chi e' online (verde), chi oggi e' entrato ma ora e' disconnesso (rosso), chi oggi non e' entrato (vuoto)
-   - il server risponde con la sua "versione": dopo un nuovo deploy cambia e la pagina si ricarica
-     da sola. Prima compare un avviso con il conto alla rovescia; se si sta scrivendo aspetta.
+   PRESENZA IN TEMPO REALE + AGGIORNAMENTO AUTOMATICO (tutte le pagine del CRM)
+   - FLUSSO sempre aperto con il server (/api/presenza/flusso): l'Admin riceve ogni cambio di presenza
+     nel momento in cui succede (evento "presenze" -> Gestione utenti), e la "versione" del server
+   - un "battito" ogni 10 s (/api/presenza/battito): se internet cade o il PC va in standby, dopo 35 s
+     l'utente risulta disconnesso
+   - dopo un nuovo deploy la versione cambia: la pagina si ricarica da sola. Prima compare un avviso
+     con il conto alla rovescia; se si sta scrivendo aspetta.
    ===================================================================== */
 (function () {
     const API = '/api/presenza';
-    let versione = null, t = null, avviso = null, ultimoTasto = 0, fermo = false;
+    let versione = null, t = null, avviso = null, ultimoTasto = 0, fermo = false, es = null;
 
     async function battito() {
         let d = null;
         try {
             const r = await fetch(API + '/battito', { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
             d = await r.json().catch(() => null);
+            if (r.ok && (!es || es.readyState === 2)) apriFlusso();     // es. appena fatto l'accesso
         } catch (e) { /* rete: si riprova */ }
         controlla(d && d.versione);
+    }
+    /* flusso in tempo reale: si ricollega da solo (anche dopo un deploy) */
+    function apriFlusso() {
+        if (!window.EventSource) return;
+        try { if (es) es.close(); } catch (e) { /* */ }
+        es = new EventSource(API + '/flusso');
+        es.addEventListener('versione', e => controlla(String(e.data || '').replace(/"/g, '')));
+        es.addEventListener('presenze', e => {
+            try { window.dispatchEvent(new CustomEvent('crm:presenze', { detail: JSON.parse(e.data) })); } catch (x) { /* */ }
+        });
     }
     function controlla(v) {
         if (!v) return;
@@ -54,12 +67,14 @@
     /* ---- "Esci": disconnesso subito; finestra chiusa: dopo 20 s (un F5 non conta) ---- */
     window.addEventListener('pagehide', () => {
         try { navigator.sendBeacon(API + '/uscita', new Blob(['{}'], { type: 'application/json' })); } catch (e) { /* */ }
+        try { if (es) es.close(); } catch (e) { /* */ }
     });
     function agganciaEsci() {
         if (typeof window.logout !== 'function' || window.logout.__pres) return;
         const orig = window.logout;
         const w = function () {
             const self = this, args = arguments;
+            try { if (es) { es.close(); es = null; } } catch (e) { /* */ }
             fetch(API + '/uscita', { method: 'POST', credentials: 'same-origin', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: '{"esci":true}' })
                 .catch(() => { /* */ }).finally(() => orig.apply(self, args));
         };
@@ -69,7 +84,8 @@
     function avvia() {
         if (t) return;
         battito();
-        t = setInterval(battito, 30000);
+        apriFlusso();
+        t = setInterval(battito, 10000);
         document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') battito(); });
         setTimeout(agganciaEsci, 3000);   // dopo gli altri script (anche salone.js "aggancia" Esci)
     }

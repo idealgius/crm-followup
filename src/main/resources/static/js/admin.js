@@ -89,10 +89,18 @@ const Presenze = (function () {
     const giornoOra = s => { const d = new Date(s), oggi = F_G.format(new Date()), ieri = F_G.format(new Date(Date.now() - 864e5)), g = F_G.format(d);
         return (g === oggi ? 'oggi' : g === ieri ? 'ieri' : g.slice(0, 5) + (g.slice(6) !== oggi.slice(6) ? '/' + g.slice(8) : '')) + ' alle ' + F_O.format(d); };
     const durata = s => { const m = Math.max(0, Math.round((Date.now() - new Date(s)) / 60000)); return m < 1 ? 'adesso' : m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + String(m % 60).padStart(2, '0') + ' min'; };
+    let ultimi = null;
+    // TEMPO REALE: il server manda ogni cambio (presenza.js -> evento "crm:presenze")
+    window.addEventListener('crm:presenze', e => { ultimi = e.detail; disegna(); });
     async function aggiorna() {
         const box = document.getElementById('usersList');
         if (!box || !box.querySelector('[data-pres]') || box.offsetParent === null) return;
-        let d; try { const r = await fetch('/api/presenza/utenti', { cache: 'no-store' }); if (!r.ok) return; d = await r.json(); } catch (e) { return; }
+        try { const r = await fetch('/api/presenza/utenti', { cache: 'no-store' }); if (!r.ok) return; ultimi = await r.json(); } catch (e) { return; }
+        disegna();
+    }
+    function disegna() {
+        const box = document.getElementById('usersList'), d = ultimi;
+        if (!box || !d) return;
         const U = d.utenti || {};
         box.querySelectorAll('[data-pres]').forEach(el => {
             const x = U[el.dataset.pres] || { stato: 'MAI_OGGI' }, txt = el.querySelector('small');
@@ -104,7 +112,8 @@ const Presenze = (function () {
             txt.textContent = t1; el.title = tip;
         });
     }
-    function avvia() { aggiorna(); setTimeout(aggiorna, 3000); if (!t) t = setInterval(aggiorna, 30000); }
+    // la lista si ridisegna ogni 30 s anche senza cambi ("da 12 min" sempre giusto); i dati arrivano in tempo reale
+    function avvia() { aggiorna(); setTimeout(aggiorna, 3000); if (!t) t = setInterval(() => { if (ultimi) disegna(); aggiorna(); }, 30000); }
     return { avvia, aggiorna };
 })();
 

@@ -1134,6 +1134,12 @@ public class SaloneController {
                     Object mano = prima.get("consulenteMano"), file = r.get("consulente");
                     if (file == null || file.equals(mano)) { r.put("consulente", mano); for (String k : CAMPI_MANO) r.put(k, prima.get(k)); }
                 }
+                // NUOVO: consulente scelto nella finestra di controllo (sezione "Senza consulente"): vale come scelto a mano
+                String scelto = str(raw.get("consulenteScelto"));
+                if (CONSULENTI.contains(scelto)) {
+                    r.put("consulente", scelto); r.put("consulenteMano", scelto);
+                    r.put("assegnatoManoDa", c.nome()); r.put("assegnatoManoIt", oraIt(now)); r.remove("prenotato");
+                }
                 if (r.get("consulente") == null) daAssegnare++;
                 if (prima == null) {
                     r.put("primoImportIt", oraIt(now)); r.put("ultimoImportIt", oraIt(now)); r.put("ultimoImport", impId);

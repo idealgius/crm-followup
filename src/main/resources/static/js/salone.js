@@ -1248,6 +1248,7 @@
               <div class="sa-ck-days" data-ck-zona="giorni"></div>
             </section>
             <section class="sa-ck-sec" data-ck-zona="lista"></section>
+            <section class="sa-ck-sec" data-ck-zona="senza"></section>
             <section class="sa-ck-sec" data-ck-zona="cambi"></section>
             <section class="sa-ck-sec" data-ck-zona="spariti"></section>
             <details class="sa-ck-sec sa-ck-det" data-ck-zona="ok"></details>
@@ -1275,10 +1276,11 @@
             return `<div class="sa-ck-row az-${v.azione}" data-ck-i="${i}">
               <div class="sa-ck-top"><b>${esc(cliApp(r))}</b><span class="sa-hint">Lead ${esc(r.id)}${r.venditore ? ' · ' + esc(r.venditore) : ''}</span>${archivio(v.pr)}</div>
               <div class="sa-ck-campi">${campo('alert', 'Esito alert', r.esitoAlert)}${campo('att', 'Esito ultima attività', r.esitoAttivita)}${campo('ric', 'Data ricontatto', r.dataRicontatto)}</div>
-              <ul class="sa-ck-pb">${c.problemi.map(p => `<li>${esc(p)}</li>`).join('')}</ul>
+              <ul class="sa-ck-pb">${c.problemi.map(p => `<li>${esc(p)}</li>`).join('')}${haDati && !consDopo(v) ? `<li>Venditore nel CSV: <b>${esc(r.venditore || 'vuoto')}</b> · non è un consulente del salone: se lo importi, scegli il consulente o resterà da assegnare</li>` : ''}</ul>
               ${ch.length ? `<p class="sa-ck-lab">Rispetto all’archivio cambierebbe:</p>${tabCambi(ch)}` : ''}
               <div class="sa-ck-az">${seg(opz, v.azione, 'data-az')}
                 ${v.azione === 'modifica' ? `<span class="sa-ck-edit"><input type="date" data-ck-data value="${esc(v.data)}" aria-label="Data appuntamento"><input type="time" data-ck-ora value="${esc(v.ora)}" step="300" aria-label="Ora appuntamento"></span>` : ''}
+                ${haDati && !consDopo(v) && (v.azione === 'modifica' || v.azione === 'forza') ? selCons(v, 'data-ck-sc2').replace('— scegli il consulente —', '— da assegnare —') : ''}
                 ${esito(v)}</div>
               ${v.ricordo ? '<p class="sa-hint sa-ck-ric">↺ Scelta ripresa dall’import precedente (nel file non è cambiato niente)</p>' : ''}
             </div>`;
@@ -1308,7 +1310,39 @@
                 <span>${esc(nomeG(g))}</span><b>${x.n}</b>${x.w ? `<i>⚠ ${x.w}</i>` : ''}${x.s ? `<i class="r">✕ ${x.s}</i>` : ''}</button>`; }).join('') || '<p class="sa-hint">Nessun lead di Agnano nel file.</p>';
         }
         const daControllare = () => agn.filter(v => inSel(v) && !v.c.ok);
-        const cambiati = () => agn.filter(v => inSel(v) && v.c.ok && v.pr && cambi(v).length);
+        /* SENZA CONSULENTE: il venditore del CSV non e' un consulente del salone (e nessuno l'ha scelto a mano):
+           invece di importarli e basta si decide: Assegna a un consulente, Importa da assegnare, Salta o Togli */
+        const haDati = !!ant.consulenti;
+        const consDopo = v => {
+            const f = Object.prototype.hasOwnProperty.call(consulenti, v.r.venditore || '') ? consulenti[v.r.venditore || ''] : null;
+            return f || (v.pr && v.pr.consulenteMano) || null;
+        };
+        const senzaCons = v => haDati && !v.sede && inSel(v) && v.c.ok && !consDopo(v);
+        const senzaL = () => agn.filter(senzaCons);
+        const cambiati = () => agn.filter(v => inSel(v) && v.c.ok && v.pr && cambi(v).length && !senzaCons(v));
+        const AZ_SC = v => [['assegna', '👤 Assegna a…'], ['importa', '📥 Importa da assegnare'], ['salta', '⏭ Salta']].concat(v.pr ? [['togli', '✕ Togli dal calendario']] : []);
+        const selCons = (v, attr) => `<select class="sa-sel sa-ck-sc" ${attr} aria-label="Consulente"><option value="">— scegli il consulente —</option>${perReparto(st.consulenti).map(([k, l]) => `<optgroup label="${REP[k].t}">` + l.map(c => `<option ${v.sc === c ? 'selected' : ''}>${esc(c)}</option>`).join('') + '</optgroup>').join('')}</select>`;
+        function rigaSenza(v) {
+            const i = V.indexOf(v), az = v.nc || 'importa';
+            return `<div class="sa-ck-row sc-${az}" data-ck-i="${i}">
+              <div class="sa-ck-top"><b>${esc(cliApp(v.r))}</b><span class="sa-hint">Lead ${esc(v.r.id)} · ${esc(gm({ data: v.data, ora: v.ora }))}</span>${archivio(v.pr)}</div>
+              <ul class="sa-ck-pb"><li>Venditore nel CSV: <b>${esc(v.r.venditore || 'vuoto')}</b> · non è un consulente del salone</li></ul>
+              ${v.pr ? tabCambi(cambi(v)) : ''}
+              <div class="sa-ck-az">${seg(AZ_SC(v), az, 'data-sc')}
+                ${az === 'assegna' ? selCons(v, 'data-ck-sc') : ''}
+                <span class="sa-ck-es ${az === 'togli' ? 'red' : az === 'salta' ? 'no' : az === 'assegna' && !v.sc ? 'warn' : ''}">${az === 'assegna' ? (v.sc ? '→ Si importa assegnato a ' + esc(v.sc) + ' (resta anche ai prossimi import)' : 'Scegli il consulente')
+                    : az === 'importa' ? '→ Si importa “Da assegnare”' : az === 'salta' ? (v.pr ? 'Resta com’era in archivio' : 'Non verrà importato') : 'Verrà tolto dal calendario'}</span></div>
+            </div>`;
+        }
+        function disegnaSenza() {
+            const L = senzaL();
+            zona('senza').hidden = !haDati;
+            zona('senza').innerHTML = `<h4><span>3</span> Senza consulente del salone <b class="${L.length ? 'sa-ck-w' : 'sa-ck-g'}">${L.length}</b></h4>
+              ${L.length ? `<p class="sa-hint">Nel CSV il venditore di questi appuntamenti non è un consulente del salone, quindi resterebbero <b>da assegnare</b>. Decidi tu: <b>assegnali</b> a un consulente, <b>importali da assegnare</b>, <b>saltali</b> o, se erano già in archivio, <b>toglili dal calendario</b>.</p>
+                <div class="sa-ck-bulk"><span class="sa-hint">Per tutti:</span><button type="button" class="sa-btn2" data-ck-sc-tutti="importa">📥 Importa tutti da assegnare</button><button type="button" class="sa-btn2" data-ck-sc-tutti="salta">⏭ Salta tutti</button></div>
+                <div class="sa-ck-list">${L.map(rigaSenza).join('')}</div>`
+                : '<p class="sa-hint">Nei giorni scelti tutti gli appuntamenti hanno un consulente del salone. 👍</p>'}`;
+        }
         function disegnaLista() {
             const L = daControllare();
             zona('lista').innerHTML = `<h4><span>2</span> Da controllare <b class="${L.length ? 'sa-ck-w' : 'sa-ck-g'}">${L.length}</b></h4>
@@ -1319,7 +1353,7 @@
         }
         function disegnaCambi() {
             const L = cambiati();
-            zona('cambi').innerHTML = `<h4><span>3</span> Cambiati dall’import precedente <b class="${L.length ? 'sa-ck-b' : 'sa-ck-g'}">${L.length}</b></h4>
+            zona('cambi').innerHTML = `<h4><span>4</span> Cambiati dall’import precedente <b class="${L.length ? 'sa-ck-b' : 'sa-ck-g'}">${L.length}</b></h4>
               ${L.length ? `<p class="sa-hint">Questi appuntamenti erano già in archivio e nel nuovo file qualcosa è diverso (barrato = com’è adesso, in grassetto = come sarà). Scegli se <b>aggiornarli</b>, <b>tenerli com’erano</b> o <b>toglierli dal calendario</b>.</p>
                 <div class="sa-ck-bulk"><span class="sa-hint">Per tutti:</span><button type="button" class="sa-btn2" data-ck-agg-tutti="aggiorna">✓ Aggiorna tutti</button><button type="button" class="sa-btn2" data-ck-agg-tutti="tieni">↺ Tieni tutti com’erano</button></div>
                 <div class="sa-ck-list">${L.map(rigaAgg).join('')}</div>`
@@ -1327,7 +1361,7 @@
         }
         function disegnaSpariti() {
             const L = spariti.filter(spSel);
-            zona('spariti').innerHTML = `<h4><span>4</span> Spariti dal file <b class="${L.length ? 'sa-ck-r' : 'sa-ck-g'}">${L.length}</b></h4>
+            zona('spariti').innerHTML = `<h4><span>5</span> Spariti dal file <b class="${L.length ? 'sa-ck-r' : 'sa-ck-g'}">${L.length}</b></h4>
               ${L.length ? `<p class="sa-hint">Questi appuntamenti sono in archivio nei giorni scelti, ma nel nuovo file non ci sono più (o ora sono di un’altra sede). Possono essere stati annullati o spostati fuori dal file: scegli se <b>tenerli</b> o <b>toglierli dal calendario</b>.</p>
                 <div class="sa-ck-bulk"><span class="sa-hint">Per tutti:</span><button type="button" class="sa-btn2" data-ck-sp-tutti="tieni">↺ Tieni tutti</button><button type="button" class="sa-btn2" data-ck-sp-tutti="togli">✕ Togli tutti</button></div>
                 <div class="sa-ck-list">${L.map(rigaSpar).join('')}</div>`
@@ -1336,32 +1370,39 @@
         function disegnaOk() {
             const L = agn.filter(v => inSel(v) && v.c.ok).sort((a, b) => (a.data + a.ora).localeCompare(b.data + b.ora));
             zona('ok').innerHTML = `<summary>✓ Allineati nei giorni scelti (${L.length})</summary>${L.length ? `<table class="sa-tbl"><thead><tr><th>Lead</th><th>Cliente</th><th>Appuntamento</th><th>Venditore</th><th></th></tr></thead><tbody>
-              ${L.map(v => `<tr><td>${esc(v.r.id)}</td><td>${esc(cliApp(v.r))}</td><td>${esc(gm({ data: v.data, ora: v.ora }))}</td><td>${esc(v.r.venditore || '—')}</td><td class="sa-hint">${v.pr ? (cambi(v).length ? 'cambiato' : 'già in archivio, uguale') : 'nuovo'}</td></tr>`).join('')}</tbody></table>` : '<p class="sa-hint">Nessuno.</p>'}`;
+              ${L.map(v => `<tr><td>${esc(v.r.id)}</td><td>${esc(cliApp(v.r))}</td><td>${esc(gm({ data: v.data, ora: v.ora }))}</td><td>${esc(v.r.venditore || '—')}</td><td class="sa-hint">${senzaCons(v) ? 'senza consulente (sezione 3)' : v.pr ? (cambi(v).length ? 'cambiato' : 'già in archivio, uguale') : 'nuovo'}</td></tr>`).join('')}</tbody></table>` : '<p class="sa-hint">Nessuno.</p>'}`;
         }
         /* cosa succede premendo Importa */
         function piano() {
             const avviso = v => v.c.problemi.join(' · ');
             const out = [], rimuovi = [], tenuti = [], saltati = [];
-            let ok = 0, mod = 0, forza = 0, agg = 0;
+            let ok = 0, mod = 0, forza = 0, agg = 0, ass = 0, senza = 0;
             agn.filter(inSel).forEach(v => {
-                if (v.c.ok) {
+                if (v.c.ok && senzaCons(v)) {
+                    const az = v.nc || 'importa';
+                    if (az === 'togli') { rimuovi.push({ id: v.r.id, motivo: 'Senza consulente del salone (nel CSV: ' + (v.r.venditore || 'vuoto') + '), tolto a mano' }); return; }
+                    if (az === 'salta') { saltati.push({ id: v.r.id, cliente: cliApp(v.r), avviso: 'Senza consulente del salone (nel CSV: ' + (v.r.venditore || 'vuoto') + ')' }); return; }
+                    if (az === 'assegna' && v.sc) ass++; else senza++;
+                    ok++; out.push(Object.assign({}, v.r, { appData: v.data, appOra: v.ora, fonteData: 'Data ricontatto', controllo: 'ok', consulenteScelto: az === 'assegna' ? v.sc : '' }));
+                } else if (v.c.ok) {
                     const ch = v.pr ? cambi(v) : [];
                     if (ch.length && v.agg === 'togli') { rimuovi.push({ id: v.r.id, motivo: 'Cambiato nel file, tolto a mano' }); return; }
                     if (ch.length && v.agg === 'tieni') { tenuti.push({ id: v.r.id, cliente: cliApp(v.r), avviso: ch.map(x => x.campo).join(', ') }); return; }
                     if (ch.length) agg++;
                     ok++; out.push(Object.assign({}, v.r, { appData: v.data, appOra: v.ora, fonteData: 'Data ricontatto', controllo: 'ok' }));
                 } else if (v.azione === 'togli') rimuovi.push({ id: v.r.id, motivo: 'Non allineato: ' + avviso(v) });
-                else if (v.azione === 'modifica') { mod++; out.push(Object.assign({}, v.r, { appData: v.data, appOra: v.ora, fonteData: 'Modificato a mano', controllo: 'modificato', avviso: avviso(v) })); }
-                else if (v.azione === 'forza') { forza++; out.push(Object.assign({}, v.r, { appData: v.c.prop ? v.c.prop.data : '', appOra: v.c.prop && v.c.prop.ora || '', fonteData: v.c.prop ? v.c.prop.fonte : '', controllo: 'forzato', avviso: avviso(v) })); }
+                else if (v.azione === 'modifica') { mod++; if (v.sc) ass++; out.push(Object.assign({}, v.r, { appData: v.data, appOra: v.ora, fonteData: 'Modificato a mano', controllo: 'modificato', avviso: avviso(v), consulenteScelto: v.sc || '' })); }
+                else if (v.azione === 'forza') { forza++; if (v.sc) ass++; out.push(Object.assign({}, v.r, { appData: v.c.prop ? v.c.prop.data : '', appOra: v.c.prop && v.c.prop.ora || '', fonteData: v.c.prop ? v.c.prop.fonte : '', controllo: 'forzato', avviso: avviso(v), consulenteScelto: v.sc || '' })); }
                 else saltati.push({ id: v.r.id, cliente: cliApp(v.r), avviso: (v.pr ? 'Lasciato com’era · ' : '') + avviso(v) });
             });
             spariti.filter(spSel).forEach(s => { if (s.azione === 'togli') rimuovi.push({ id: s.id, motivo: s.motivo }); });
             const tenutiSp = spariti.filter(s => spSel(s) && s.azione === 'tieni').length;
-            return { out, rimuovi, tenuti, saltati, ok, mod, forza, agg, tenutiSp, fuori: agn.filter(v => !inSel(v)).length };
+            return { out, rimuovi, tenuti, saltati, ok, mod, forza, agg, ass, senza, tenutiSp, fuori: agn.filter(v => !inSel(v)).length };
         }
         function disegnaFoot() {
             const k = piano(), tot = k.ok + k.mod + k.forza, fare = tot + k.rimuovi.length;
             const pz = [`✓ ${k.ok} allineati${k.agg ? ` (di cui ${k.agg} aggiornati)` : ''}`];
+            if (k.ass) pz.push(`👤 ${k.ass} assegnati ora`); if (k.senza) pz.push(`${k.senza} da assegnare`);
             if (k.mod) pz.push(`✎ ${k.mod} modificati`); if (k.forza) pz.push(`➕ ${k.forza} inseriti comunque`);
             if (k.rimuovi.length) pz.push(`<b class="sa-ck-r">✕ ${k.rimuovi.length} tolti dal calendario</b>`);
             if (k.tenuti.length) pz.push(`↺ ${k.tenuti.length} cambiati ma tenuti com’erano`); if (k.tenutiSp) pz.push(`↺ ${k.tenutiSp} spariti ma tenuti`);
@@ -1370,7 +1411,7 @@
               <button type="button" class="sa-btn2" data-chiudi>Annulla</button>
               <button type="button" class="sa-btn" data-ck="importa" ${fare ? '' : 'disabled'}>Importa ${tot} appuntament${tot === 1 ? 'o' : 'i'}${k.rimuovi.length ? ` e togli ${k.rimuovi.length}` : ''}</button>`;
         }
-        const tutto = () => { disegnaGiorni(); disegnaLista(); disegnaCambi(); disegnaSpariti(); disegnaOk(); disegnaFoot(); };
+        const tutto = () => { disegnaGiorni(); disegnaLista(); disegnaSenza(); disegnaCambi(); disegnaSpariti(); disegnaOk(); disegnaFoot(); };
         tutto();
 
         function descriviPeriodo() {
@@ -1380,6 +1421,12 @@
             return 'Giorni scelti: ' + t + (g.length > 12 ? ` e altri ${g.length - 12}` : '');
         }
         async function importa(btn) {
+            const senzaScelta = senzaL().find(v => v.nc === 'assegna' && !v.sc);
+            if (senzaScelta) {
+                const el = ov.querySelector(`[data-ck-i="${V.indexOf(senzaScelta)}"]`);
+                if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1500); }
+                alert('Per “' + cliApp(senzaScelta.r) + '” hai scelto Assegna: scegli il consulente.'); return;
+            }
             const manca = agn.find(v => inSel(v) && !v.c.ok && v.azione === 'modifica' && !v.data);
             if (manca) {
                 const el = ov.querySelector(`[data-ck-i="${V.indexOf(manca)}"]`);
@@ -1417,6 +1464,10 @@
             }
             const t = e.target.closest('[data-ck-tutti]');
             if (t) { daControllare().forEach(v => { v.azione = t.dataset.ckTutti; v.ricordo = false; }); disegnaLista(); disegnaFoot(); return; }
+            const tsc = e.target.closest('[data-ck-sc-tutti]');
+            if (tsc) { senzaL().forEach(v => { v.nc = tsc.dataset.ckScTutti; }); disegnaSenza(); disegnaFoot(); return; }
+            const scb = e.target.closest('[data-sc]');
+            if (scb) { const row = scb.closest('[data-ck-i]'), v = V[Number(row.dataset.ckI)]; v.nc = scb.dataset.sc; rifai(row, rigaSenza(v)); disegnaFoot(); return; }
             const ta = e.target.closest('[data-ck-agg-tutti]');
             if (ta) { cambiati().forEach(v => { v.agg = ta.dataset.ckAggTutti; }); disegnaCambi(); disegnaFoot(); return; }
             const ts = e.target.closest('[data-ck-sp-tutti]');
@@ -1434,6 +1485,11 @@
             if (ag) { const row = ag.closest('[data-ck-i]'), v = V[Number(row.dataset.ckI)]; v.agg = ag.dataset.agg; rifai(row, rigaAgg(v)); disegnaFoot(); return; }
             const sp = e.target.closest('[data-sp]');
             if (sp) { const row = sp.closest('[data-ck-s]'), s = spariti[Number(row.dataset.ckS)]; s.azione = sp.dataset.sp; rifai(row, rigaSpar(s)); disegnaFoot(); }
+        });
+        ov.addEventListener('change', e => {
+            const sel = e.target.closest('[data-ck-sc], [data-ck-sc2]'); if (!sel) return;
+            const row = sel.closest('[data-ck-i]'), v = V[Number(row.dataset.ckI)];
+            v.sc = sel.value; rifai(row, sel.matches('[data-ck-sc]') ? rigaSenza(v) : riga(v)); disegnaFoot();
         });
         ov.addEventListener('input', e => {
             const inp = e.target.closest('[data-ck-data], [data-ck-ora]'); if (!inp) return;
