@@ -1864,11 +1864,14 @@
         function messaggio(lista, apri) {
             const [k, m] = lista[lista.length - 1];
             const chi = m.nome || 'Un collega';
-            suono();
+            // NUOVO: se in uno dei messaggi c'e' una @menzione per me, la notifica lo dice
+            const mz = lista.find(([, x]) => x.menzioni && x.menzioni.length && Chat && Chat.perMe && Chat.perMe(x));
+            const [km, mm] = mz || [k, m];
+            suono(); if (mz) setTimeout(suono, 450);
             try {
                 if (window.Notification && Notification.permission === 'granted') {
-                    const n = new Notification('💬 ' + chi + (k === 'GRUPPO' ? ' · Gruppo salone' : ''), { body: String(m.testo || ''), tag: 'sa-chat-' + k, renotify: true });
-                    n.onclick = () => { window.focus(); apri(k); n.close(); };
+                    const n = new Notification(mz ? '📣 ' + (mm.nome || 'Un collega') + ' ti ha menzionato' + (km === 'GRUPPO' ? ' · Gruppo salone' : '') : '💬 ' + chi + (k === 'GRUPPO' ? ' · Gruppo salone' : ''), { body: String(mm.testo || ''), tag: 'sa-chat-' + km, renotify: true });
+                    n.onclick = () => { window.focus(); apri(km); n.close(); };
                 }
             } catch (e) { /* */ }
         }
@@ -1890,6 +1893,13 @@
         ['✅', 'Simboli', sp(`✅ ☑️ ✔️ ❌ ❎ ⭕ 🚫 ⛔ ⚠️ ❗ ❕ ❓ ❔ ‼️ ⁉️ ➕ ➖ ➗ ✖️ 💲 ♻️ 🔴 🟠 🟡 🟢 🔵 🟣 ⚫ ⚪ 🟥 🟧 🟨 🟩 🟦 🟪 🔺 🔻 🔸 🔹 ▶️ ⏸️ ⏹️ ⏩ ⏪ 🔝 🆗 🆕 🆓 🆘 🔔 🔕 📣 📢 💬 💭 🗯️ 🔄 🔃 ⬆️ ⬇️ ⬅️ ➡️ ↩️ ↪️`)]
     ];
     const EMOJI = [].concat(...EMO_CAT.map(c => c[2]));
+    // NUOVO: nomi delle emoji (italiano + inglese) per la ricerca
+    const NOMI_EMO = (() => { const m = {}; `😀=faccina con un gran sorriso grinning face|😃=faccina con sorriso e occhi spalancati grinning face with big eyes|😄=faccina con sorriso e occhi sorridenti grinning face with smiling eyes|😁=faccina raggiante con occhi felici beaming face with smiling eyes|😆=sorriso a bocca aperta con occhi chiusi grinning squinting face|😅=faccina con sorriso e goccia di sudore grinning face with sweat|😂=faccina con lacrime di gioia ridere risata face with tears of joy|🤣=ridere a crepapelle ridere rolling on the floor laughing|😊=faccina con occhi sorridenti smiling face with smiling eyes|🙂=faccina con sorriso accennato slightly smiling face|🙃=faccina sottosopra upside-down face|😉=faccina che fa l’occhiolino winking face|😌=faccina sollevata relieved face|😍=faccina con sorriso e occhi a cuore innamorato smiling face with heart-eyes|🥰=faccina con cuoricini smiling face with hearts|😘=faccina che manda un bacio face blowing a kiss|😗=faccina che bacia kissing face|😙=faccina che bacia con occhi sorridenti kissing face with smiling eyes|😚=faccina che bacia con occhi chiusi kissing face with closed eyes|😋=faccina che si lecca i baffi face savoring food|😛=faccina che mostra la lingua face with tongue|😜=faccina che fa l’occhiolino e mostra la lingua winking face with tongue|🤪=faccina impazzita zany face|😝=faccina che strizza gli occhi e mostra la lingua squinting face with tongue|🤑=faccina avida di denaro money-mouth face|🤗=faccina che abbraccia smiling face with open hands|🤭=faccina con mano sulla bocca face with hand over mouth|🤫=faccina che zittisce shushing face|🤔=faccina concentrata pensare dubbio thinking face|🤐=faccina con bocca con cerniera zipper-mouth face|🤨=faccina con sopracciglia alzate face with raised eyebrow|😐=faccina neutra neutral face|😑=faccina inespressiva expressionless face|😶=faccina senza bocca face without mouth|😏=faccina con sorrisetto smirking face|😒=faccina contrariata unamused face|🙄=faccina con occhi al cielo face with rolling eyes|😬=faccina con smorfia grimacing face|🤥=faccina bugiarda lying face|😔=faccina pensierosa pensive face|😪=faccina assonnata sleepy face|🤤=faccina che sbava drooling face|😴=faccina che dorme sonno sleeping face|😷=faccina con mascherina face with medical mask|🤒=faccina con termometro face with thermometer|🤕=faccina con la testa bendata face with head-bandage|🤢=faccina nauseata nauseated face|🤮=faccina che vomita face vomiting|🥵=faccina accaldata hot face|🥶=faccina congelata cold face|🥴=faccina stordita woozy face|😵=faccina frastornata face with crossed-out eyes|🤯=testa che esplode exploding head|🤠=faccina con cappello da cowboy cowboy hat face|🥳=faccina che festeggia festa partying face|😎=faccina con sorriso e occhiali da sole figo occhiali smiling face with sunglasses|🤓=faccina nerd nerd face|🧐=faccina con monocolo face with monocle|😕=faccina confusa confused face|😟=faccina preoccupata worried face|🙁=faccina leggermente imbronciata slightly frowning face|😮=faccina con bocca aperta face with open mouth|😯=faccina sorpresa hushed face|😲=faccina stupita astonished face|😳=faccina imbarazzata flushed face|🥺=faccina supplichevole pleading face|😦=faccina imbronciata con bocca aperta frowning face with open mouth|😧=faccina angosciata anguished face|😨=faccina impaurita fearful face|😰=faccina sudata in ansia anxious face with sweat|😥=faccina delusa ma sollevata sad but relieved face|😢=faccina che piange triste crying face|😭=faccina disperata piangere loudly crying face|😱=faccina terrorizzata face screaming in fear|😖=faccina frustrata confounded face|😣=faccina perseverante persevering face|😞=faccina delusa disappointed face|😓=faccina abbattuta sudata downcast face with sweat|😩=faccina esausta weary face|😫=faccina stanca tired face|🥱=faccina che sbadiglia yawning face|😤=faccina che sbuffa face with steam from nose|😡=faccina accigliata arrabbiato enraged face|😠=faccina arrabbiata angry face|🤬=faccina con simboli sulla bocca face with symbols on mouth|😈=faccina con sorriso e corna smiling face with horns|👿=faccina arrabbiata con corna angry face with horns|💀=teschio skull|🤡=faccina pagliaccio clown face|👻=fantasma ghost|👽=alieno alien|🤖=faccina di robot robot|💩=cacca pile of poo|😺=gatto che sorride grinning cat|😸=gatto che sogghigna grinning cat with smiling eyes|😹=gatto con lacrime di gioia cat with tears of joy|😻=gatto innamorato smiling cat with heart-eyes|🙈=non vedo see-no-evil monkey|🙉=non sento hear-no-evil monkey|🙊=non parlo speak-no-evil monkey|👍=pollice in su ok si bene thumbs up|👎=pollice verso no thumbs down|👌=mano che fa ok ok hand|🤌=mano a pigna pinched fingers|🤏=mano che fa il gesto del pizzico pinching hand|✌️=vittoria victory hand|🤞=dita incrociate crossed fingers|🤟=gesto ti amo love-you gesture|🤘=segno delle corna sign of the horns|🤙=mano con gesto di chiamata call me hand|👈=indice verso sinistra backhand index pointing left|👉=indice verso destra backhand index pointing right|👆=indice alzato backhand index pointing up|👇=indice abbassato backhand index pointing down|☝️=indice verso l’alto index pointing up|✋=mano alzata raised hand|🤚=dorso mano alzata raised back of hand|🖐️=mano aperta hand with fingers splayed|🖖=saluto vulcaniano vulcan salute|👋=mano che saluta ciao saluto waving hand|👏=mani che applaudono bravo applausi clapping hands|🙌=mani alzate raising hands|👐=mani aperte open hands|🤲=mani unite in alto palms up together|🤝=stretta di mano accordo affare handshake|🙏=mani giunte grazie per favore folded hands|✍️=mano che scrive writing hand|💅=smalto per unghie nail polish|💪=bicipite forza grande flexed biceps|🦾=protesi robotica per il braccio mechanical arm|👀=occhi eyes|👁️=occhio eye|👂=orecchio ear|🧠=cervello brain|👶=neonato baby|👦=bambino boy|👧=bambina girl|🧑=persona person|👨=uomo man|👩=donna woman|🧔=persona con la barba person beard|👴=uomo anziano old man|👵=donna anziana old woman|🙋=persona con mano alzata person raising hand|🙅=persona che fa segno di no person gesturing no|🙆=persona con gesto ok person gesturing ok|💁=persona con mano capovolta person tipping hand|🤷=persona che scrolla le spalle person shrugging|🤦=persona esasperata person facepalming|🙇=persona che fa un inchino profondo person bowing|💆=persona che riceve un massaggio person getting massage|🏃=persona che corre person running|🚶=pedone person walking|🧍=persona in piedi person standing|💃=donna che balla woman dancing|🕺=uomo che balla man dancing|👨‍💼=impiegato man office worker|👩‍💼=impiegata woman office worker|👨‍🔧=meccanico uomo man mechanic|👩‍🔧=meccanico donna woman mechanic|🧑‍💻=persona esperta di tecnologia technologist|👮=agente di polizia police officer|🕵️=detective detective|👑=corona crown|🎩=cilindro top hat|❤️=cuore rosso amore red heart|🧡=cuore arancione orange heart|💛=cuore giallo yellow heart|💚=cuore verde green heart|💙=cuore blu blue heart|💜=cuore viola purple heart|🖤=cuore nero black heart|🤍=cuore bianco white heart|🤎=cuore marrone brown heart|💔=cuore infranto broken heart|❣️=punto esclamativo a cuore heart exclamation|💕=due cuori two hearts|💞=cuori che girano revolving hearts|💓=cuore che batte beating heart|💗=cuore che cresce growing heart|💖=cuore che luccica sparkling heart|💘=cuore con freccia heart with arrow|💝=cuore con fiocco heart with ribbon|💯=100 punti hundred points|💢=rabbia anger symbol|💥=collisione collision|💫=stella con scia dizzy|💦=gocce di sudore sweat droplets|💨=nuvola di polvere dashing away|🔥=fuoco top fuoco fire|⭐=stella star|🌟=stella che brilla glowing star|✨=stelline sparkles|⚡=alta tensione high voltage|🎉=spara coriandoli festa auguri party popper|🎊=coriandoli confetti ball|🎈=palloncino balloon|🎁=regalo wrapped gift|🎂=torta di compleanno birthday cake|🏆=coppa trophy|🥇=medaglia d’oro 1st place medal|🥈=medaglia d’argento 2nd place medal|🥉=medaglia di bronzo 3rd place medal|🏅=medaglia sportiva sports medal|🎖️=medaglia militare military medal|🎯=bersaglio bullseye|🚗=auto macchina vettura automobile|🚙=suv macchina suv sport utility vehicle|🏎️=auto da corsa macchina sportiva racing car|🚕=taxi taxi|🚓=macchina della polizia police car|🚑=ambulanza ambulance|🚐=pulmino minibus|🛻=pickup pickup truck|🚚=camion delivery truck|🚛=autoarticolato articulated lorry|🏍️=motocicletta motorcycle|🛵=scooter motor scooter|🚲=bicicletta bicycle|🛴=monopattino kick scooter|🚘=auto in arrivo oncoming automobile|🚖=taxi in arrivo oncoming taxi|⛽=stazione di servizio fuel pump|🛞=ruota wheel|🔧=chiave inglese wrench|🔩=vite e bullone nut and bolt|🛠️=martello e chiave inglese hammer and wrench|⚙️=ingranaggio gear|🔑=chiave consegna key|🗝️=chiave antica old key|🚦=semaforo verticale vertical traffic light|🛣️=autostrada motorway|🏁=bandiera a scacchi chequered flag|🅿️=pulsante p p button|📍=puntina arrotondata round pushpin|🗺️=mappa mondiale world map|🧭=bussola compass|🏢=edificio office building|🏬=grande magazzino department store|🏦=banca bank|💶=banconota euro soldi euro euro banknote|💷=banconota sterlina pound banknote|💵=banconota dollaro dollar banknote|💰=sacco di soldi soldi money bag|💳=carta di credito credit card|🧾=scontrino receipt|📈=grafico con andamento positivo chart increasing|📉=grafico con andamento negativo chart decreasing|📊=grafico a barre bar chart|📞=cornetta telefono chiamata telephone receiver|☎️=telefono fisso telephone|📱=telefono cellulare mobile phone|💻=computer portatile laptop|🖥️=computer fisso desktop computer|🖨️=stampante printer|⌨️=tastiera keyboard|📧=e-mail e-mail|📨=posta in arrivo incoming envelope|📩=posta in uscita envelope with arrow|📝=memo nota memo|📋=portablocco clipboard|📁=cartella file file folder|📂=cartella aperta open file folder|🗂️=divisori per schedario card index dividers|📅=calendario appuntamento calendar|📆=calendario a strappo tear-off calendar|🗓️=calendario a spirale spiral calendar|📌=puntina pushpin|📎=graffetta paperclip|✂️=forbici scissors|🖊️=penna a sfera pen|✏️=matita pencil|🔍=lente di ingrandimento rivolta a sinistra magnifying glass tilted left|🔒=lucchetto chiuso locked|🔓=lucchetto aperto unlocked|⏰=sveglia sveglia orario alarm clock|⏱️=cronometro stopwatch|⏳=clessidra che scorre hourglass not done|⌛=clessidra hourglass done|🕐=ore una one o’clock|🕒=ore tre three o’clock|🕕=ore sei six o’clock|🕘=ore nove nine o’clock|☕=bevanda calda caffè hot beverage|🍵=tazza da tè senza manico teacup without handle|🥤=bicchiere con cannuccia cup with straw|🧃=bevanda monodose beverage box|🍺=boccale di birra beer mug|🍻=boccali di birra clinking beer mugs|🥂=brindisi clinking glasses|🍷=bicchiere di vino wine glass|🍾=bottiglia stappata bottle with popping cork|🍕=pizza pizza pranzo pizza|🍔=hamburger hamburger|🍟=patatine french fries|🌭=hot dog hot dog|🥪=sandwich sandwich|🌮=taco taco|🍝=spaghetti spaghetti|🍜=ciotola fumante steaming bowl|🍣=sushi sushi|🥗=insalata verde green salad|🍩=ciambella doughnut|🍪=biscotto cookie|🍰=fetta di torta shortcake|🧁=cupcake cupcake|🍫=cioccolato chocolate bar|🍬=caramella candy|🍦=cono gelato soft ice cream|🍎=mela rossa red apple|🍌=banana banana|🍓=fragola strawberry|🍉=anguria watermelon|🍋=limone lemon|🥐=croissant croissant|🥖=baguette baguette bread|🧀=fetta di formaggio cheese wedge|🥚=uovo egg|🍳=cucinare cooking|⚽=pallone da calcio soccer ball|🏀=palla da pallacanestro basketball|🎾=tennis tennis|🏐=palla da pallavolo volleyball|🎮=gamepad video game|🎲=dado game die|🎵=nota musicale musical note|🎶=note musicali musical notes|🎧=cuffie headphone|🎤=microfono microphone|🎬=ciak clapper board|📸=fotocamera con flash camera with flash|✈️=aeroplano airplane|🏖️=spiaggia con ombrellone beach with umbrella|⛱️=ombrellone umbrella on ground|🌴=palma palm tree|☀️=sole sun|🌤️=parzialmente nuvoloso sun behind small cloud|⛅=sole coperto sun behind cloud|🌧️=pioggia cloud with rain|⛈️=temporale cloud with lightning and rain|❄️=fiocco di neve snowflake|☃️=pupazzo di neve snowman|🌈=arcobaleno rainbow|🌙=spicchio di luna crescent moon|🌍=europa e africa globe showing europe-africa|✅=pulsante segno di spunta fatto ok check mark button|☑️=riquadro con spunta check box with check|✔️=segno di spunta nero check mark|❌=croce no errore cross mark|❎=croce con quadrato cross mark button|⭕=cerchio rosso vuoto hollow red circle|🚫=segnale di divieto prohibited|⛔=segnale di divieto di accesso no entry|⚠️=simbolo di avviso warning|❗=punto esclamativo rosso red exclamation mark|❕=punto esclamativo bianco white exclamation mark|❓=punto interrogativo rosso red question mark|❔=punto interrogativo bianco white question mark|‼️=doppio punto esclamativo double exclamation mark|⁉️=punto esclamativo e interrogativo exclamation question mark|➕=addizione plus|➖=sottrazione minus|➗=divisione divide|✖️=segno moltiplicazione multiply|💲=dollaro heavy dollar sign|♻️=simbolo del riciclaggio recycling symbol|🔴=cerchio rosso red circle|🟠=cerchio arancione orange circle|🟡=cerchio giallo yellow circle|🟢=cerchio verde green circle|🔵=cerchio blu blue circle|🟣=cerchio viola purple circle|⚫=cerchio nero black circle|⚪=cerchio bianco white circle|🟥=quadrato rosso red square|🟧=quadrato arancione orange square|🟨=quadrato giallo yellow square|🟩=quadrato verde green square|🟦=quadrato blu blue square|🟪=quadrato viola purple square|🔺=triangolo rosso con punta verso l’alto red triangle pointed up|🔻=triangolo rosso con punta verso il basso red triangle pointed down|🔸=rombo arancione piccolo small orange diamond|🔹=rombo blu piccolo small blue diamond|▶️=pulsante di riproduzione play button|⏸️=pulsante pausa pause button|⏹️=pulsante stop stop button|⏩=pulsante di avanzamento rapido fast-forward button|⏪=pulsante di riavvolgimento rapido fast reverse button|🔝=freccia top top arrow|🆗=pulsante ok ok button|🆕=pulsante new new button|🆓=pulsante free free button|🆘=pulsante sos sos button|🔔=campana bell|🔕=campana sbarrata bell with slash|📣=megafono megaphone|📢=altoparlante loudspeaker|💬=fumetto speech balloon|💭=nuvoletta thought balloon|🗯️=nuvoletta rabbia right anger bubble|🔄=frecce che ruotano in senso antiorario counterclockwise arrows button|🔃=frecce verticali che ruotano in senso orario clockwise vertical arrows|⬆️=freccia rivolta verso l’alto up arrow|⬇️=freccia rivolta verso il basso down arrow|⬅️=freccia rivolta a sinistra left arrow|➡️=freccia rivolta verso destra right arrow|↩️=freccia curva a sinistra right arrow curving left|↪️=freccia curva a destra left arrow curving right`.split('|').forEach(r => { const i = r.indexOf('='); m[r.slice(0, i)] = r.slice(i + 1); }); return m; })();
+    function cercaEmoji(q) {
+        const parole = senzaAccenti(q).split(/\s+/).filter(Boolean); if (!parole.length) return [];
+        const visti = new Set();
+        return EMOJI.filter(e => { if (visti.has(e)) return false; const n = senzaAccenti(NOMI_EMO[e] || ''); const ok = parole.every(w => n.split(/[\s’']+/).some(x => x.startsWith(w)) || n.includes(w)); if (ok) visti.add(e); return ok; });
+    }
     // sticker disegnati apposta per il salone (nessuna immagine esterna): id -> [emoji, scritta, colore 1, colore 2]
     const STICKER = {
         contratto: ['🖊️🎉', 'Contratto firmato!', '#f6c445', '#e08a1e'],
@@ -1920,7 +1930,7 @@
     const RECENTI_K = 'saEmoRecenti';
     const recenti = () => { try { return JSON.parse(localStorage.getItem(RECENTI_K) || '[]').filter(x => typeof x === 'string').slice(0, 27); } catch (e) { return []; } };
     const usaRecente = x => { try { const r = [x].concat(recenti().filter(y => y !== x)).slice(0, 27); localStorage.setItem(RECENTI_K, JSON.stringify(r)); } catch (e) { /* */ } };
-    const RAPIDE = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉'];
+    const RAPIDE = ['❤️', '😂', '😮', '😢', '🙏', '👍', '🔥', '🎉'];
     const Chat = (function () {
         let el = null, aperto = false, conv = null, dopo = 0, timer = null, io = null, utenti = [], risposta = null, caricata = false, vietata = false;
         const msgs = {}, nonLetti = {};
@@ -1937,7 +1947,8 @@
                 <div class="sa-chat-conv" hidden><div class="sa-chat-msgs"></div>
                   <div class="sa-chat-reply" hidden></div>
                   <div class="sa-chat-in"><button type="button" class="sa-emo-b" title="Emoji">😊</button><textarea rows="1" placeholder="Scrivi un messaggio…"></textarea><button type="button" class="sa-send" title="Invia">➤</button></div>
-                  <div class="sa-emo" hidden><div class="sa-emo-tabs"></div><div class="sa-emo-g"></div></div>
+                  <div class="sa-emo" hidden><div class="sa-emo-cerca"><input type="search" placeholder="🔍 Cerca emoji (es. ridere, auto, cuore)" autocomplete="off"><span class="sa-emo-per" hidden></span></div><div class="sa-emo-tabs"></div><div class="sa-emo-g"></div></div>
+                  <div class="sa-ment" hidden></div>
                 </div>
               </div>`;
             document.body.appendChild(el);
@@ -1946,31 +1957,125 @@
             el.querySelector('.sa-chat-back').addEventListener('click', () => { conv = null; vista(); });
             el.querySelector('.sa-chat-list').addEventListener('click', e => { const b = e.target.closest('[data-conv]'); if (b) entra(b.dataset.conv); });
             const ta = el.querySelector('textarea');
-            ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); invia(); } });
-            ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(110, ta.scrollHeight) + 'px'; });
+            ta.addEventListener('keydown', e => {
+                if (Ment.tasto(e)) return;                       // menu delle @menzioni aperto: frecce / Invio / Esc
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); invia(); }
+            });
+            ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(110, ta.scrollHeight) + 'px'; Ment.controlla(); });
+            ta.addEventListener('click', () => Ment.controlla());
+            el.querySelector('.sa-ment').addEventListener('mousedown', e => { const b = e.target.closest('[data-ment]'); if (b) { e.preventDefault(); Ment.scegli(b.dataset.ment); } });
+            const cerca = el.querySelector('.sa-emo-cerca input');
+            cerca.addEventListener('input', () => pannello());
+            cerca.addEventListener('keydown', e => { if (e.key === 'Escape') { el.querySelector('.sa-emo').hidden = true; } if (e.key === 'Enter') { e.preventDefault(); const f = el.querySelector('.sa-emo-g [data-emo]'); if (f) f.click(); } });
             el.querySelector('.sa-send').addEventListener('click', invia);
-            el.querySelector('.sa-emo-b').addEventListener('click', () => { const p = el.querySelector('.sa-emo'); p.hidden = !p.hidden; if (!p.hidden) pannello(); });
+            el.querySelector('.sa-emo-b').addEventListener('click', () => { const p = el.querySelector('.sa-emo'); if (!p.hidden && !perReazione) { p.hidden = true; return; } apriPannello(null); });
             el.querySelector('.sa-emo').addEventListener('click', e => {
                 const t = e.target.closest('[data-tabemo]'); if (t) { tabEmo = t.dataset.tabemo; pannello(); return; }
                 const sk = e.target.closest('[data-stk]'); if (sk) { inviaSticker(sk.dataset.stk); return; }
                 const b = e.target.closest('[data-emo]'); if (!b) return;
+                usaRecente(b.dataset.emo);
+                if (perReazione) { const id = perReazione; el.querySelector('.sa-emo').hidden = true; perReazione = null; reagisci(id, b.dataset.emo); return; }
                 // l'emoji va dove c'e' il cursore, non sempre in fondo
                 const a = ta.selectionStart ?? ta.value.length, z = ta.selectionEnd ?? a;
                 ta.value = ta.value.slice(0, a) + b.dataset.emo + ta.value.slice(z);
                 ta.focus(); ta.selectionStart = ta.selectionEnd = a + b.dataset.emo.length;
-                usaRecente(b.dataset.emo);
             });
             // clic fuori dal pannello: si chiude
             document.addEventListener('click', e => { const p = el.querySelector('.sa-emo'); if (!p.hidden && e.target.isConnected && !p.contains(e.target) && !e.target.closest('.sa-emo-b')) p.hidden = true; });
             el.querySelector('.sa-chat-reply').addEventListener('click', e => { if (e.target.closest('[data-annulla]')) { risposta = null; barraRisposta(); } });
             el.querySelector('.sa-chat-msgs').addEventListener('click', onMsgClick);
+            el.querySelector('.sa-chat-msgs').addEventListener('scroll', chiudiRapide, { passive: true });
         }
+        /* ===== NUOVO: @menzioni nella chat di gruppo =====
+           scrivendo @ compare l'elenco dei colleghi (si filtra scrivendo il nome); "@tutti" avvisa tutto il salone.
+           Chi viene menzionato riceve la notifica "ti ha menzionato" e vede il messaggio evidenziato. */
+        const Ment = (function () {
+            let lista = [], sel = 0, inizio = -1;
+            const ta = () => el.querySelector('textarea'), box = () => el.querySelector('.sa-ment');
+            function chiudi() { lista = []; inizio = -1; const b = box(); if (b) b.hidden = true; }
+            function controlla() {
+                if (conv !== 'GRUPPO') { chiudi(); return; }
+                const t = ta(), pos = t.selectionStart, prima = t.value.slice(0, pos);
+                const m = prima.match(/(^|\s)@([^\s@]{0,20}(?: [^\s@]{0,20})?)$/);
+                if (!m) { chiudi(); return; }
+                inizio = pos - m[2].length - 1;
+                const q = senzaAccenti(m[2]);
+                const tutti = [{ id: 0, nome: 'tutti', sub: 'Avvisa tutto il salone' }].concat(utenti.map(u => ({ id: u.id, nome: u.nome, sub: ruolo(u.role) })));
+                lista = tutti.filter(u => !q || senzaAccenti(u.nome).split(/\s+/).some(w => w.startsWith(q.split(' ')[0])) && senzaAccenti(u.nome).includes(q) || senzaAccenti(u.nome).startsWith(q)).slice(0, 7);
+                if (!lista.length) { chiudi(); return; }
+                sel = Math.min(sel, lista.length - 1);
+                disegna();
+            }
+            function disegna() {
+                const b = box(); b.hidden = false;
+                b.innerHTML = lista.map((u, i) => `<button type="button" class="${i === sel ? 'on' : ''}" data-ment="${u.id}"><span class="sa-av">${u.id === 0 ? '📣' : esc(iniziali(u.nome))}</span><span><b>@${esc(u.nome)}</b><small>${esc(u.sub || '')}</small></span></button>`).join('');
+            }
+            function scegli(id) {
+                const u = lista.find(x => String(x.id) === String(id)); if (!u || inizio < 0) return;
+                const t = ta(), pos = t.selectionStart, ins = '@' + u.nome + ' ';
+                t.value = t.value.slice(0, inizio) + ins + t.value.slice(pos);
+                t.selectionStart = t.selectionEnd = inizio + ins.length; t.focus();
+                chiudi();
+            }
+            function tasto(e) {
+                if (!lista.length || box().hidden) return false;
+                if (e.key === 'ArrowDown') { sel = (sel + 1) % lista.length; disegna(); }
+                else if (e.key === 'ArrowUp') { sel = (sel - 1 + lista.length) % lista.length; disegna(); }
+                else if (e.key === 'Enter' || e.key === 'Tab') scegli(lista[sel].id);
+                else if (e.key === 'Escape') chiudi();
+                else return false;
+                e.preventDefault(); return true;
+            }
+            /** id menzionati nel testo (0 = tutti) */
+            function trova(testo) {
+                if (conv !== 'GRUPPO') return [];
+                const out = [], t = ' ' + testo.toLowerCase() + ' ';
+                if (/(^|\s)@tutti\b/.test(t)) out.push(0);
+                utenti.forEach(u => { if (t.includes('@' + u.nome.toLowerCase())) out.push(u.id); });
+                return out;
+            }
+            return { controlla, tasto, scegli, chiudi, trova };
+        })();
+        const reEsc = t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        /** il testo del messaggio con le @menzioni evidenziate */
+        function testoConMenzioni(m) {
+            let h = esc(m.testo).replace(/\n/g, '<br>');
+            const ids = Array.isArray(m.menzioni) ? m.menzioni : [];
+            if (!ids.length) return h;
+            const nomi = ids.map(id => id === 0 ? 'tutti' : id === (io && io.id) ? io.nome : (utenti.find(u => u.id === id) || {}).nome).filter(Boolean).map(esc);
+            nomi.sort((a, b) => b.length - a.length).forEach(n => {
+                const meStesso = n === esc(io ? io.nome : '') || n === 'tutti';
+                h = h.replace(new RegExp('@' + reEsc(n), 'gi'), x => `<span class="sa-at${meStesso ? ' me' : ''}">${x}</span>`);
+            });
+            return h;
+        }
+        const perMe = m => io && m.da !== io.id && Array.isArray(m.menzioni) && (m.menzioni.includes(io.id) || m.menzioni.includes(0));
+        const menzNonLette = {};
+
         /* pannello emoji: Recenti, categorie, Sticker */
-        let tabEmo = null;
+        let tabEmo = null, perReazione = null;      // perReazione = id del messaggio a cui si sta reagendo
+        function apriPannello(idReazione) {
+            const p = el.querySelector('.sa-emo');
+            perReazione = idReazione || null;
+            if (perReazione && tabEmo === 'stk') tabEmo = null;
+            const q = p.querySelector('.sa-emo-cerca input'); q.value = '';
+            const per = p.querySelector('.sa-emo-per'); per.hidden = !perReazione; per.textContent = 'Reazione';
+            p.classList.toggle('rz', !!perReazione);
+            p.hidden = false; pannello();
+            if (matchMedia('(pointer:fine)').matches) q.focus();
+        }
         function pannello() {
             const p = el.querySelector('.sa-emo'), R = recenti();
             if (!tabEmo) tabEmo = R.length ? 'rec' : '0';
-            const tabs = (R.length ? [['rec', '🕘', 'Usate di recente']] : []).concat(EMO_CAT.map((c, i) => [String(i), c[0], c[1]]), [['stk', '🏷️', 'Sticker']]);
+            const q = p.querySelector('.sa-emo-cerca input').value.trim();
+            const tabs = (R.length ? [['rec', '🕘', 'Usate di recente']] : []).concat(EMO_CAT.map((c, i) => [String(i), c[0], c[1]]), perReazione ? [] : [['stk', '🏷️', 'Sticker']]);
+            if (q) {   // ricerca: si cerca tra tutte le emoji
+                p.querySelector('.sa-emo-tabs').innerHTML = tabs.map(([k, ic, t]) => `<button type="button" data-tabemo="${k}" title="${t}">${ic}${k === 'stk' ? '<span>Sticker</span>' : ''}</button>`).join('');
+                const g = p.querySelector('.sa-emo-g'), T = cercaEmoji(q);
+                g.className = 'sa-emo-g';
+                g.innerHTML = T.length ? T.map(x => `<button type="button" data-emo="${x}" title="${esc((NOMI_EMO[x] || '').split(' ').slice(0, 5).join(' '))}">${x}</button>`).join('') : `<p class="sa-emo-vuoto">Nessuna emoji per “${esc(q)}”</p>`;
+                return;
+            }
             p.querySelector('.sa-emo-tabs').innerHTML = tabs.map(([k, ic, t]) => `<button type="button" class="${k === tabEmo ? 'on' : ''}" data-tabemo="${k}" title="${t}">${ic}${k === 'stk' ? '<span>Sticker</span>' : ''}</button>`).join('');
             const g = p.querySelector('.sa-emo-g');
             g.className = 'sa-emo-g' + (tabEmo === 'stk' ? ' stk' : '');
@@ -2023,7 +2128,7 @@
                     const L = msgs[k] = msgs[k] || [];
                     (v.messaggi || []).forEach(m => {
                         const i = L.findIndex(x => x.id === m.id);
-                        if (i >= 0) L[i] = m; else { L.push(m); if (caricata && io && m.da !== io.id) nuovi.push([k, m]); }
+                        if (i >= 0) L[i] = m; else { L.push(m); if (caricata && io && m.da !== io.id) { nuovi.push([k, m]); if (perMe(m) && !(aperto && conv === k)) menzNonLette[k] = true; } }
                         cambiato = true;
                     });
                     L.sort((a, b) => a.ts - b.ts);
@@ -2056,13 +2161,13 @@
             lista.innerHTML = righe.map(r => { const u = ultimo(r.k), n = nonLetti[r.k] || 0; return `<button type="button" class="sa-cl ${n ? 'nl' : ''}" data-conv="${r.k}">
                 <span class="sa-av">${r.k === 'GRUPPO' ? '👥' : esc(iniziali(r.nome))}</span>
                 <span class="sa-cl-t"><b>${esc(r.nome.replace('👥 ', ''))}</b><em>${u ? esc((u.da === io.id ? 'Tu: ' : r.k === 'GRUPPO' ? u.nome.split(' ')[0] + ': ' : '') + u.testo.slice(0, 60)) : esc(r.sub)}</em></span>
-                ${u ? `<small>${ora(u.ts)}</small>` : ''}${n ? `<i class="sa-badge">${n}</i>` : ''}</button>`; }).join('')
+                ${u ? `<small>${ora(u.ts)}</small>` : ''}${menzNonLette[r.k] && n ? '<i class="sa-badge sa-badge-at" title="Ti hanno menzionato">@</i>' : ''}${n ? `<i class="sa-badge">${n}</i>` : ''}</button>`; }).join('')
                 + (utenti.length ? '' : '<p class="sa-hint" style="padding:10px 14px">Nessun altro utente con accesso al salone, per ora.</p>');
         }
         const ruolo = r => ({ FRONT_OFFICE: 'Front Office', CONSULENZA: 'Consulenza', ADMIN: 'Admin' }[r] || r || '');
         const iniziali = n => String(n || '').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
         function entra(k) { conv = k; risposta = null; barraRisposta(); vista(); segnaLetto(k); el.querySelector('textarea').focus(); }
-        async function segnaLetto(k) { nonLetti[k] = 0; badge(); try { await post('/chat/letto', { conv: k }); } catch (e) { /* */ } }
+        async function segnaLetto(k) { nonLetti[k] = 0; delete menzNonLette[k]; badge(); try { await post('/chat/letto', { conv: k }); } catch (e) { /* */ } }
         function disegnaMsgs() {
             const box = el.querySelector('.sa-chat-msgs'), L = msgs[conv] || [];
             const inFondo = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
@@ -2073,11 +2178,11 @@
                 const rif = m.rispostaA ? L.find(x => x.id === m.rispostaA) : null;
                 const rz = Object.entries(m.reazioni || {});
                 const stk = m.sticker && STICKER[m.sticker];
-                return sep + `<div class="sa-m ${mio ? 'mio' : ''}" data-id="${m.id}">
+                return sep + `<div class="sa-m ${mio ? 'mio' : ''}${perMe(m) ? ' ment' : ''}" data-id="${m.id}">
                   <div class="sa-bub${stk ? ' sa-bub-stk' : ''}">
                     ${!mio && conv === 'GRUPPO' ? `<b class="sa-m-n">${esc(m.nome)}</b>` : ''}
                     ${rif ? `<button type="button" class="sa-quote" data-vai="${rif.id}"><b>${esc(rif.da === (io && io.id) ? 'Tu' : rif.nome)}</b><span>${esc(rif.testo.slice(0, 90))}</span></button>` : ''}
-                    ${stk ? stickerHtml(m.sticker) : `<div class="sa-m-t${soloEmoji(m.testo) ? ' emo-big' : ''}">${esc(m.testo).replace(/\n/g, '<br>')}</div>`}
+                    ${stk ? stickerHtml(m.sticker) : `<div class="sa-m-t${soloEmoji(m.testo) ? ' emo-big' : ''}">${testoConMenzioni(m)}</div>`}
                     <small>${ora(m.ts)}</small>
                     <div class="sa-m-a"><button type="button" data-rispondi="${m.id}" title="Rispondi">↩</button><button type="button" data-reagisci="${m.id}" title="Reagisci">😊</button></div>
                   </div>
@@ -2090,19 +2195,34 @@
         // messaggio fatto solo di 1-3 emoji: si mostra piu' grande (come su WhatsApp)
         const soloEmoji = t => { const x = String(t || '').trim(); if (!x || x.length > 24) return false;
             try { return /^(?:\p{Extended_Pictographic}|\p{Emoji_Component}|\u200d|\ufe0f|\s)+$/u.test(x) && /\p{Extended_Pictographic}/u.test(x) && (x.match(/\p{Extended_Pictographic}/gu) || []).length <= 3 && !/^[\d#*\s]+$/.test(x); } catch (e) { return false; } };
+        /* reazioni rapide: barra sopra il messaggio, sempre tutta visibile dentro la chat; ➕ = tutte le emoji con ricerca */
+        function chiudiRapide() { if (el) el.querySelectorAll('.sa-rapide').forEach(x => x.remove()); }
+        function apriRapide(btn, id) {
+            chiudiRapide();
+            const cv = el.querySelector('.sa-chat-conv'), bub = btn.closest('.sa-bub');
+            const p = document.createElement('div'); p.className = 'sa-rapide';
+            p.innerHTML = RAPIDE.map(x => `<button type="button" data-e="${x}">${x}</button>`).join('') + '<button type="button" class="piu" data-piu title="Altre emoji">➕</button>';
+            cv.appendChild(p);
+            const rc = cv.getBoundingClientRect(), rb = bub.getBoundingClientRect(), w = p.offsetWidth, h = p.offsetHeight;
+            const mio = !!btn.closest('.sa-m.mio');
+            let x = mio ? rb.right - rc.left - w : rb.left - rc.left;
+            x = Math.max(8, Math.min(x, rc.width - w - 8));
+            let y = rb.top - rc.top - h - 6;
+            if (y < 6) y = rb.bottom - rc.top + 6;                 // niente spazio sopra: sotto il messaggio
+            y = Math.min(y, rc.height - h - 70);
+            p.style.left = x + 'px'; p.style.top = Math.max(6, y) + 'px';
+            p.addEventListener('click', ev => {
+                ev.stopPropagation();
+                if (ev.target.closest('[data-piu]')) { chiudiRapide(); apriPannello(id); return; }
+                const b = ev.target.closest('[data-e]'); if (!b) return; chiudiRapide(); reagisci(id, b.dataset.e);
+            });
+            setTimeout(() => document.addEventListener('click', function via(ev) { if (!p.contains(ev.target)) { p.remove(); document.removeEventListener('click', via); } }), 0);
+        }
         async function onMsgClick(e) {
             const r = e.target.closest('[data-rispondi]');
             if (r) { risposta = (msgs[conv] || []).find(x => x.id === r.dataset.rispondi) || null; barraRisposta(); el.querySelector('textarea').focus(); return; }
             const re = e.target.closest('[data-reagisci]');
-            if (re) {
-                document.querySelectorAll('.sa-rapide').forEach(x => x.remove());
-                const p = document.createElement('div'); p.className = 'sa-rapide';
-                p.innerHTML = RAPIDE.map(x => `<button type="button" data-e="${x}">${x}</button>`).join('');
-                re.closest('.sa-bub').appendChild(p);
-                p.addEventListener('click', ev => { const b = ev.target.closest('[data-e]'); if (!b) return; ev.stopPropagation(); p.remove(); reagisci(re.dataset.reagisci, b.dataset.e); });
-                setTimeout(() => document.addEventListener('click', function via(ev) { if (!p.contains(ev.target)) { p.remove(); document.removeEventListener('click', via); } }), 0);
-                return;
-            }
+            if (re) { apriRapide(re, re.dataset.reagisci); return; }
             const z = e.target.closest('[data-rz]'); if (z) { reagisci(z.dataset.rz, z.dataset.e); return; }
             const v = e.target.closest('[data-vai]');
             if (v) { const t = el.querySelector(`.sa-m[data-id="${v.dataset.vai}"]`); if (t) { t.scrollIntoView({ block: 'center', behavior: 'smooth' }); t.classList.add('lampo'); setTimeout(() => t.classList.remove('lampo'), 1200); } }
@@ -2121,10 +2241,11 @@
             if (!testo || !conv) return;
             ta.value = ''; ta.style.height = 'auto'; el.querySelector('.sa-emo').hidden = true;
             const rid = risposta && risposta.id; risposta = null; barraRisposta();
-            try { const d = await post('/chat/messaggi', { conv, testo, rispostaA: rid }); (msgs[conv] = msgs[conv] || []).push(d.messaggio); disegnaMsgs(); el.querySelector('.sa-chat-msgs').scrollTop = 1e9; }
+            Ment.chiudi();
+            try { const d = await post('/chat/messaggi', { conv, testo, rispostaA: rid, menzioni: Ment.trova(testo) }); (msgs[conv] = msgs[conv] || []).push(d.messaggio); disegnaMsgs(); el.querySelector('.sa-chat-msgs').scrollTop = 1e9; }
             catch (e) { ta.value = testo; alert('Messaggio non inviato: ' + e.message); }
         }
-        return { mostra, ascolta };
+        return { mostra, ascolta, perMe };
     })();
 
     window.Salone = { can, canFull, entraDiretto, refreshNav, open, hide };

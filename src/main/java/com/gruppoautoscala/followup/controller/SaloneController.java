@@ -1435,6 +1435,12 @@ public class SaloneController {
         m.put("da", c.id()); m.put("nome", c.nome());
         m.put("testo", testo); m.put("ts", now); m.put("agg", now);
         if (!sticker.isEmpty()) m.put("sticker", sticker);
+        // NUOVO: @menzioni (solo nel gruppo): id dei colleghi menzionati, 0 = @tutti
+        if ("GRUPPO".equals(conv) && b.get("menzioni") instanceof List<?> lm) {
+            List<Long> ids = new ArrayList<>();
+            for (Object o : lm) { try { long v = Long.parseLong(String.valueOf(o)); if (v >= 0 && !ids.contains(v) && ids.size() < 30) ids.add(v); } catch (NumberFormatException e) { /* */ } }
+            if (!ids.isEmpty()) m.put("menzioni", ids);
+        }
         if (b.get("rispostaA") != null) m.put("rispostaA", String.valueOf(b.get("rispostaA")));
         m.put("reazioni", new LinkedHashMap<String, List<String>>());
         synchronized (LOCK) {

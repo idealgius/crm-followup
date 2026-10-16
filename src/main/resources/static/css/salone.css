@@ -525,3 +525,24 @@ details.sa-in-note div { margin-top:6px; white-space:pre-wrap; line-height:1.5; 
 .sa-stk-img.pk img { height:96px; }
 .sa-m.mio .sa-stk-img { transform:rotate(4deg); }
 .sa-emo .sa-emo-g.stk button:hover .sa-stk-img { transform:rotate(0) scale(1.05); }
+/* NUOVO: reazioni rapide sempre visibili (posizionate dentro la chat) + ricerca emoji + @menzioni */
+.sa-chat-conv > .sa-rapide { position:absolute; top:auto; right:auto; z-index:6; }
+.sa-rapide button.piu { font-size:15px; width:30px; height:30px; display:grid; place-items:center; background:rgba(255,255,255,.08); }
+.sa-emo-cerca { display:flex; align-items:center; gap:8px; padding:8px 8px 0; flex:none; }
+.sa-emo-cerca input { flex:1; min-width:0; padding:7px 11px; border-radius:10px; border:1.5px solid var(--border, #2a2e3b); background:var(--bg-primary, #0f1117); color:inherit; font:inherit; font-size:12.5px; }
+.sa-emo-cerca input:focus { outline:none; border-color:#22c3a6; }
+.sa-emo-per { flex:none; font-size:11px; font-weight:800; padding:4px 9px; border-radius:999px; background:rgba(34,195,166,.15); color:#8fe3d2; }
+.sa-emo-per[hidden] { display:none; }
+.sa-emo-vuoto { grid-column:1 / -1; text-align:center; font-size:12.5px; color:var(--text-secondary, #9aa3b2); padding:18px 0; }
+.sa-ment { position:absolute; left:10px; right:10px; bottom:60px; z-index:7; max-height:260px; overflow:auto; padding:5px; border-radius:14px; background:var(--bg-card, #171a23); border:1px solid var(--border, #2a2e3b); box-shadow:0 16px 30px -10px rgba(0,0,0,.6); }
+.sa-ment[hidden] { display:none; }
+.sa-ment button { display:flex; align-items:center; gap:9px; width:100%; text-align:left; border:0; background:transparent; color:inherit; font:inherit; padding:6px 8px; border-radius:10px; cursor:pointer; }
+.sa-ment button.on, .sa-ment button:hover { background:rgba(34,195,166,.14); }
+.sa-ment .sa-av { width:30px; height:30px; font-size:11px; }
+.sa-ment b { display:block; font-size:13px; }
+.sa-ment small { display:block; font-size:11px; color:var(--text-secondary, #9aa3b2); }
+.sa-at { font-weight:800; color:#8fe3d2; }
+.sa-at.me { color:#1b1503; background:#f0c040; border-radius:5px; padding:0 3px; }
+.sa-m.ment .sa-bub { box-shadow:inset 3px 0 0 #f0c040; background:rgba(240,192,64,.12); }
+.sa-badge-at { background:#f0c040; color:#1b1503; margin-right:4px; }
+[data-theme="light"] .sa-at { color:#0f7a68; }
