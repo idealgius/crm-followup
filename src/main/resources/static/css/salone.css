@@ -494,3 +494,34 @@ details.sa-in-note div { margin-top:6px; white-space:pre-wrap; line-height:1.5; 
 .sa-in-edit { margin-left:10px; font-weight:700; color:var(--sa-acc); opacity:0; transition:opacity .15s; }
 .sa-in-mod:hover .sa-in-edit, .sa-in-mod:focus-visible .sa-in-edit { opacity:1; }
 @media (hover:none) { .sa-in-edit { opacity:.8; } }
+/* NUOVO: pannello emoji a schede + sticker */
+.sa-emo { display:flex; flex-direction:column; max-height:290px; padding:0; overflow:hidden; grid-template-columns:none; }
+.sa-emo-tabs { display:flex; gap:2px; padding:6px 6px 0; border-bottom:1px solid var(--border, #2a2e3b); overflow-x:auto; scrollbar-width:none; flex:none; }
+.sa-emo .sa-emo-tabs button { flex:none; font-size:18px; padding:5px 8px 7px; border-radius:10px 10px 0 0; border-bottom:2px solid transparent; display:inline-flex; align-items:center; gap:5px; color:inherit; }
+.sa-emo .sa-emo-tabs button span { font-size:12px; font-weight:800; }
+.sa-emo .sa-emo-tabs button.on { border-bottom-color:#22c3a6; background:rgba(34,195,166,.1); }
+.sa-emo-g { flex:1; overflow:auto; display:grid; grid-template-columns:repeat(8, 1fr); gap:2px; padding:8px; align-content:start; }
+.sa-emo-g.stk { grid-template-columns:repeat(2, 1fr); gap:8px; padding:10px; }
+.sa-emo .sa-emo-g.stk button { padding:4px; display:flex; justify-content:center; }
+.sa-emo .sa-emo-g.stk button:hover { background:rgba(255,255,255,.06); }
+.sa-emo .sa-emo-g.stk button:hover .sa-stk { transform:rotate(0) scale(1.04); }
+/* lo sticker: "adesivo" con bordo bianco, leggermente storto */
+.sa-stk { display:inline-flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-width:130px; max-width:170px; padding:12px 14px 10px; border-radius:22px;
+  background:linear-gradient(145deg, var(--a), var(--b)); border:4px solid #fff; box-shadow:0 8px 18px -8px rgba(0,0,0,.55); transform:rotate(-3deg); transition:transform .15s; color:#fff; text-align:center; }
+.sa-stk i { font-style:normal; font-size:38px; line-height:1.1; filter:drop-shadow(0 2px 2px rgba(0,0,0,.25)); }
+.sa-stk b { font-size:14px; font-weight:900; text-transform:uppercase; letter-spacing:.3px; line-height:1.15; text-shadow:0 1px 0 rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.25); }
+.sa-stk.pk { min-width:0; width:100%; padding:8px 8px 7px; border-width:3px; border-radius:16px; }
+.sa-stk.pk i { font-size:28px; }
+.sa-stk.pk b { font-size:11px; }
+.sa-m.mio .sa-stk { transform:rotate(3deg); }
+/* il messaggio-sticker non ha il fumetto colorato */
+.sa-bub.sa-bub-stk, .sa-m.mio .sa-bub.sa-bub-stk, [data-theme="light"] .sa-bub.sa-bub-stk, [data-theme="light"] .sa-m.mio .sa-bub.sa-bub-stk { background:transparent; padding:4px 2px 2px; }
+.sa-bub-stk small { margin-top:6px; }
+/* messaggio di sole emoji: piu' grandi */
+.sa-m-t.emo-big { font-size:34px; line-height:1.15; }
+/* NUOVO: sticker da immagine (es. carta napoletana) */
+.sa-stk-img { display:inline-block; transform:rotate(-4deg); transition:transform .15s; filter:drop-shadow(0 8px 10px rgba(0,0,0,.45)); }
+.sa-stk-img img { display:block; height:150px; width:auto; }
+.sa-stk-img.pk img { height:96px; }
+.sa-m.mio .sa-stk-img { transform:rotate(4deg); }
+.sa-emo .sa-emo-g.stk button:hover .sa-stk-img { transform:rotate(0) scale(1.05); }

@@ -1423,6 +1423,10 @@ public class SaloneController {
                 return ResponseEntity.status(403).body(Map.of("error", "Questa persona non ha la chat del salone"));
         }
         String testo = String.valueOf(b.getOrDefault("testo", "")).trim();
+        // NUOVO: sticker del salone (il disegno e' nella pagina; qui solo il suo nome)
+        String sticker = str(b.get("sticker"));
+        if (!sticker.isEmpty() && !sticker.matches("[a-z0-9_-]{1,30}")) return ResponseEntity.badRequest().body(Map.of("error", "Sticker non valido"));
+        if (testo.isEmpty() && !sticker.isEmpty()) testo = "Sticker";
         if (testo.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "Messaggio vuoto"));
         if (testo.length() > 4000) testo = testo.substring(0, 4000);
         long now = System.currentTimeMillis();
@@ -1430,6 +1434,7 @@ public class SaloneController {
         m.put("id", Long.toString(now, 36) + UUID.randomUUID().toString().substring(0, 4));
         m.put("da", c.id()); m.put("nome", c.nome());
         m.put("testo", testo); m.put("ts", now); m.put("agg", now);
+        if (!sticker.isEmpty()) m.put("sticker", sticker);
         if (b.get("rispostaA") != null) m.put("rispostaA", String.valueOf(b.get("rispostaA")));
         m.put("reazioni", new LinkedHashMap<String, List<String>>());
         synchronized (LOCK) {

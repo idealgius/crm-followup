@@ -1879,9 +1879,48 @@
         return { messaggio, titolo };
     })();
 
-    const EMOJI = ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '🙂', '😉', '😍', '😘', '😎', '🤩', '🥳', '😏', '🤔', '🤨', '😐', '🙄', '😬', '😴', '😮', '😯', '😲', '😳', '🥺', '😢', '😭', '😤', '😡', '🤯', '😱', '🤗', '🤫', '🤐', '😇',
-        '👍', '👎', '👌', '✌️', '🤞', '👏', '🙌', '🙏', '💪', '👋', '🤝', '👀', '❤️', '🧡', '💛', '💚', '💙', '💜', '🔥', '⭐', '✨', '🎉', '✅', '❌', '⚠️', '❗', '❓', '💯', '⏰', '📞', '📅', '📝', '💶', '🚗', '🚙', '🔑', '🏁', '☕', '🍕'];
-    const RAPIDE = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+    /* NUOVO: emoji divise per categoria (piu' di 300) + sticker del salone */
+    const sp = t => t.trim().split(/\s+/);
+    const EMO_CAT = [
+        ['😀', 'Faccine', sp(`😀 😃 😄 😁 😆 😅 😂 🤣 😊 🙂 🙃 😉 😌 😍 🥰 😘 😗 😙 😚 😋 😛 😜 🤪 😝 🤑 🤗 🤭 🤫 🤔 🤐 🤨 😐 😑 😶 😏 😒 🙄 😬 🤥 😔 😪 🤤 😴 😷 🤒 🤕 🤢 🤮 🥵 🥶 🥴 😵 🤯 🤠 🥳 😎 🤓 🧐 😕 😟 🙁 😮 😯 😲 😳 🥺 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 🤡 👻 👽 🤖 💩 😺 😸 😹 😻 🙈 🙉 🙊`)],
+        ['👍', 'Gesti e persone', sp(`👍 👎 👌 🤌 🤏 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 👇 ☝️ ✋ 🤚 🖐️ 🖖 👋 👏 🙌 👐 🤲 🤝 🙏 ✍️ 💅 💪 🦾 👀 👁️ 👂 🧠 👶 👦 👧 🧑 👨 👩 🧔 👴 👵 🙋 🙅 🙆 💁 🤷 🤦 🙇 💆 🏃 🚶 🧍 💃 🕺 👨‍💼 👩‍💼 👨‍🔧 👩‍🔧 🧑‍💻 👮 🕵️ 👑 🎩`)],
+        ['❤️', 'Cuori e feste', sp(`❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 💯 💢 💥 💫 💦 💨 🔥 ⭐ 🌟 ✨ ⚡ 🎉 🎊 🎈 🎁 🎂 🏆 🥇 🥈 🥉 🏅 🎖️ 🎯 👏`)],
+        ['🚗', 'Auto e lavoro', sp(`🚗 🚙 🏎️ 🚕 🚓 🚑 🚐 🛻 🚚 🚛 🏍️ 🛵 🚲 🛴 🚘 🚖 ⛽ 🛞 🔧 🔩 🛠️ ⚙️ 🔑 🗝️ 🚦 🛣️ 🏁 🅿️ 📍 🗺️ 🧭 🏢 🏬 🏦 💶 💷 💵 💰 💳 🧾 📈 📉 📊 📞 ☎️ 📱 💻 🖥️ 🖨️ ⌨️ 📧 📨 📩 📝 📋 📁 📂 🗂️ 📅 📆 🗓️ 📌 📎 ✂️ 🖊️ ✏️ 🔍 🔒 🔓 ⏰ ⏱️ ⏳ ⌛ 🕐 🕒 🕕 🕘`)],
+        ['☕', 'Cibo e tempo libero', sp(`☕ 🍵 🥤 🧃 🍺 🍻 🥂 🍷 🍾 🍕 🍔 🍟 🌭 🥪 🌮 🍝 🍜 🍣 🥗 🍩 🍪 🎂 🍰 🧁 🍫 🍬 🍦 🍎 🍌 🍓 🍉 🍋 🥐 🥖 🧀 🥚 🍳 ⚽ 🏀 🎾 🏐 🎮 🎲 🎵 🎶 🎧 🎤 🎬 📸 ✈️ 🏖️ ⛱️ 🌴 ☀️ 🌤️ ⛅ 🌧️ ⛈️ ❄️ ☃️ 🌈 🌙 🌍`)],
+        ['✅', 'Simboli', sp(`✅ ☑️ ✔️ ❌ ❎ ⭕ 🚫 ⛔ ⚠️ ❗ ❕ ❓ ❔ ‼️ ⁉️ ➕ ➖ ➗ ✖️ 💲 ♻️ 🔴 🟠 🟡 🟢 🔵 🟣 ⚫ ⚪ 🟥 🟧 🟨 🟩 🟦 🟪 🔺 🔻 🔸 🔹 ▶️ ⏸️ ⏹️ ⏩ ⏪ 🔝 🆗 🆕 🆓 🆘 🔔 🔕 📣 📢 💬 💭 🗯️ 🔄 🔃 ⬆️ ⬇️ ⬅️ ➡️ ↩️ ↪️`)]
+    ];
+    const EMOJI = [].concat(...EMO_CAT.map(c => c[2]));
+    // sticker disegnati apposta per il salone (nessuna immagine esterna): id -> [emoji, scritta, colore 1, colore 2]
+    const STICKER = {
+        contratto: ['🖊️🎉', 'Contratto firmato!', '#f6c445', '#e08a1e'],
+        consegna: ['🔑🚗', 'Consegna fatta!', '#36c48f', '#1b8f6a'],
+        arrivo: ['🚶‍♂️', 'Cliente in arrivo', '#3fb6e8', '#2275c9'],
+        testdrive: ['🏎️💨', 'In test drive', '#5a7cf0', '#3a3fc4'],
+        grande: ['💪', 'Grande!', '#ff8a3d', '#e2522b'],
+        top: ['🔥', 'Top!', '#ff5f6d', '#d62a5b'],
+        bravo: ['👏', 'Bravissimo!', '#b07cf0', '#7a45d4'],
+        grazie: ['🙏', 'Grazie!', '#ff9ec4', '#e05592'],
+        ok: ['👌', 'Ok, ci penso io', '#4cd3c2', '#169a8c'],
+        attimo: ['⏳', 'Un attimo…', '#9aa7bd', '#5f6d86'],
+        aiuto: ['🆘', 'Mi serve una mano', '#ff6a5c', '#c4302b'],
+        caffe: ['☕', 'Caffè?', '#c98d5a', '#8a5532'],
+        pranzo: ['🍕', 'Pausa pranzo', '#ffb547', '#e2731f'],
+        buongiorno: ['☀️', 'Buongiorno!', '#ffd84a', '#f59d1c'],
+        serata: ['🌙', 'Buona serata!', '#6f7fe0', '#2f3a8f'],
+        ahah: ['😂', 'Ahahah', '#ffd34d', '#f0a01c']
+    };
+    // NUOVO: sticker da immagine (file in /img/sticker/): id -> [emoji per l'anteprima nelle notifiche, nome, file]
+    const STICKER_IMG = {
+        diecidenari: ['💰', 'Dieci di denari', '/img/sticker/re-denari.png']
+    };
+    Object.entries(STICKER_IMG).forEach(([k, v]) => { STICKER[k] = [v[0], v[1], null, null, v[2]]; });
+    const stickerHtml = (id, piccolo) => { const s = STICKER[id]; if (!s) return '';
+        if (s[4]) return `<span class="sa-stk-img${piccolo ? ' pk' : ''}"><img src="${s[4]}" alt="${esc(s[1])}" draggable="false" loading="lazy"></span>`;
+        return `<span class="sa-stk${piccolo ? ' pk' : ''}" style="--a:${s[2]};--b:${s[3]}"><i>${s[0]}</i><b>${esc(s[1])}</b></span>`; };
+    const RECENTI_K = 'saEmoRecenti';
+    const recenti = () => { try { return JSON.parse(localStorage.getItem(RECENTI_K) || '[]').filter(x => typeof x === 'string').slice(0, 27); } catch (e) { return []; } };
+    const usaRecente = x => { try { const r = [x].concat(recenti().filter(y => y !== x)).slice(0, 27); localStorage.setItem(RECENTI_K, JSON.stringify(r)); } catch (e) { /* */ } };
+    const RAPIDE = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '🎉'];
     const Chat = (function () {
         let el = null, aperto = false, conv = null, dopo = 0, timer = null, io = null, utenti = [], risposta = null, caricata = false, vietata = false;
         const msgs = {}, nonLetti = {};
@@ -1898,7 +1937,7 @@
                 <div class="sa-chat-conv" hidden><div class="sa-chat-msgs"></div>
                   <div class="sa-chat-reply" hidden></div>
                   <div class="sa-chat-in"><button type="button" class="sa-emo-b" title="Emoji">😊</button><textarea rows="1" placeholder="Scrivi un messaggio…"></textarea><button type="button" class="sa-send" title="Invia">➤</button></div>
-                  <div class="sa-emo" hidden>${EMOJI.map(x => `<button type="button" data-emo="${x}">${x}</button>`).join('')}</div>
+                  <div class="sa-emo" hidden><div class="sa-emo-tabs"></div><div class="sa-emo-g"></div></div>
                 </div>
               </div>`;
             document.body.appendChild(el);
@@ -1910,10 +1949,42 @@
             ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); invia(); } });
             ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(110, ta.scrollHeight) + 'px'; });
             el.querySelector('.sa-send').addEventListener('click', invia);
-            el.querySelector('.sa-emo-b').addEventListener('click', () => { const p = el.querySelector('.sa-emo'); p.hidden = !p.hidden; });
-            el.querySelector('.sa-emo').addEventListener('click', e => { const b = e.target.closest('[data-emo]'); if (!b) return; ta.value += b.dataset.emo; ta.focus(); });
+            el.querySelector('.sa-emo-b').addEventListener('click', () => { const p = el.querySelector('.sa-emo'); p.hidden = !p.hidden; if (!p.hidden) pannello(); });
+            el.querySelector('.sa-emo').addEventListener('click', e => {
+                const t = e.target.closest('[data-tabemo]'); if (t) { tabEmo = t.dataset.tabemo; pannello(); return; }
+                const sk = e.target.closest('[data-stk]'); if (sk) { inviaSticker(sk.dataset.stk); return; }
+                const b = e.target.closest('[data-emo]'); if (!b) return;
+                // l'emoji va dove c'e' il cursore, non sempre in fondo
+                const a = ta.selectionStart ?? ta.value.length, z = ta.selectionEnd ?? a;
+                ta.value = ta.value.slice(0, a) + b.dataset.emo + ta.value.slice(z);
+                ta.focus(); ta.selectionStart = ta.selectionEnd = a + b.dataset.emo.length;
+                usaRecente(b.dataset.emo);
+            });
+            // clic fuori dal pannello: si chiude
+            document.addEventListener('click', e => { const p = el.querySelector('.sa-emo'); if (!p.hidden && e.target.isConnected && !p.contains(e.target) && !e.target.closest('.sa-emo-b')) p.hidden = true; });
             el.querySelector('.sa-chat-reply').addEventListener('click', e => { if (e.target.closest('[data-annulla]')) { risposta = null; barraRisposta(); } });
             el.querySelector('.sa-chat-msgs').addEventListener('click', onMsgClick);
+        }
+        /* pannello emoji: Recenti, categorie, Sticker */
+        let tabEmo = null;
+        function pannello() {
+            const p = el.querySelector('.sa-emo'), R = recenti();
+            if (!tabEmo) tabEmo = R.length ? 'rec' : '0';
+            const tabs = (R.length ? [['rec', '🕘', 'Usate di recente']] : []).concat(EMO_CAT.map((c, i) => [String(i), c[0], c[1]]), [['stk', '🏷️', 'Sticker']]);
+            p.querySelector('.sa-emo-tabs').innerHTML = tabs.map(([k, ic, t]) => `<button type="button" class="${k === tabEmo ? 'on' : ''}" data-tabemo="${k}" title="${t}">${ic}${k === 'stk' ? '<span>Sticker</span>' : ''}</button>`).join('');
+            const g = p.querySelector('.sa-emo-g');
+            g.className = 'sa-emo-g' + (tabEmo === 'stk' ? ' stk' : '');
+            g.innerHTML = tabEmo === 'stk'
+                ? Object.keys(STICKER_IMG).concat(Object.keys(STICKER).filter(k => !STICKER_IMG[k])).map(k => `<button type="button" data-stk="${k}" title="Invia lo sticker">${stickerHtml(k, true)}</button>`).join('')
+                : (tabEmo === 'rec' ? R : (EMO_CAT[Number(tabEmo)] || EMO_CAT[0])[2]).map(x => `<button type="button" data-emo="${x}">${x}</button>`).join('');
+            g.scrollTop = 0;
+        }
+        async function inviaSticker(id) {
+            const s = STICKER[id]; if (!s || !conv) return;
+            el.querySelector('.sa-emo').hidden = true;
+            const rid = risposta && risposta.id; risposta = null; barraRisposta();
+            try { const d = await post('/chat/messaggi', { conv, sticker: id, testo: s[0] + ' ' + s[1], rispostaA: rid }); (msgs[conv] = msgs[conv] || []).push(d.messaggio); disegnaMsgs(); el.querySelector('.sa-chat-msgs').scrollTop = 1e9; }
+            catch (e) { alert('Sticker non inviato: ' + e.message); }
         }
         function mostra(on) {
             if (on && !can()) return;
@@ -2001,11 +2072,12 @@
                 const sep = g !== giornoPrec ? `<div class="sa-sep"><span>${g === oggi() ? 'Oggi' : giornoLungo(g)}</span></div>` : ''; giornoPrec = g;
                 const rif = m.rispostaA ? L.find(x => x.id === m.rispostaA) : null;
                 const rz = Object.entries(m.reazioni || {});
+                const stk = m.sticker && STICKER[m.sticker];
                 return sep + `<div class="sa-m ${mio ? 'mio' : ''}" data-id="${m.id}">
-                  <div class="sa-bub">
+                  <div class="sa-bub${stk ? ' sa-bub-stk' : ''}">
                     ${!mio && conv === 'GRUPPO' ? `<b class="sa-m-n">${esc(m.nome)}</b>` : ''}
                     ${rif ? `<button type="button" class="sa-quote" data-vai="${rif.id}"><b>${esc(rif.da === (io && io.id) ? 'Tu' : rif.nome)}</b><span>${esc(rif.testo.slice(0, 90))}</span></button>` : ''}
-                    <div class="sa-m-t">${esc(m.testo).replace(/\n/g, '<br>')}</div>
+                    ${stk ? stickerHtml(m.sticker) : `<div class="sa-m-t${soloEmoji(m.testo) ? ' emo-big' : ''}">${esc(m.testo).replace(/\n/g, '<br>')}</div>`}
                     <small>${ora(m.ts)}</small>
                     <div class="sa-m-a"><button type="button" data-rispondi="${m.id}" title="Rispondi">↩</button><button type="button" data-reagisci="${m.id}" title="Reagisci">😊</button></div>
                   </div>
@@ -2015,6 +2087,9 @@
             if (inFondo || !box.dataset.v) box.scrollTop = box.scrollHeight;
             box.dataset.v = '1';
         }
+        // messaggio fatto solo di 1-3 emoji: si mostra piu' grande (come su WhatsApp)
+        const soloEmoji = t => { const x = String(t || '').trim(); if (!x || x.length > 24) return false;
+            try { return /^(?:\p{Extended_Pictographic}|\p{Emoji_Component}|\u200d|\ufe0f|\s)+$/u.test(x) && /\p{Extended_Pictographic}/u.test(x) && (x.match(/\p{Extended_Pictographic}/gu) || []).length <= 3 && !/^[\d#*\s]+$/.test(x); } catch (e) { return false; } };
         async function onMsgClick(e) {
             const r = e.target.closest('[data-rispondi]');
             if (r) { risposta = (msgs[conv] || []).find(x => x.id === r.dataset.rispondi) || null; barraRisposta(); el.querySelector('textarea').focus(); return; }
