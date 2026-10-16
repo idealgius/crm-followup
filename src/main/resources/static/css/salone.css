@@ -546,3 +546,6 @@ details.sa-in-note div { margin-top:6px; white-space:pre-wrap; line-height:1.5; 
 .sa-m.ment .sa-bub { box-shadow:inset 3px 0 0 #f0c040; background:rgba(240,192,64,.12); }
 .sa-badge-at { background:#f0c040; color:#1b1503; margin-right:4px; }
 [data-theme="light"] .sa-at { color:#0f7a68; }
+/* NUOVO: consulente bloccato dopo la presa in carico */
+.sa-cons.bloc { display:inline-flex; align-items:center; gap:6px; padding:8px 12px; border-radius:10px; border:1px solid var(--sa-line); background:rgba(255,255,255,.03); font-size:13.5px; }
+.sa-cons.bloc i { font-style:normal; font-size:12px; opacity:.75; }

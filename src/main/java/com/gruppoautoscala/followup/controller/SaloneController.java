@@ -380,6 +380,9 @@ public class SaloneController {
             if (b.containsKey("consulente")) {
                 String cons = str(b.get("consulente"));
                 if (!cons.isEmpty() && !CONSULENTI.contains(cons)) return ResponseEntity.badRequest().body(Map.of("error", "Consulente non valido"));
+                // NUOVO: preso in carico -> il consulente non si cambia piu'
+                if (r.get("presoAt") != null && !Objects.equals(cons, r.get("consulente")))
+                    return ResponseEntity.status(409).body(Map.of("error", "Il cliente e' gia' stato preso in carico da " + str(r.get("consulente")) + ": il consulente non si puo' piu' cambiare"));
                 assegna(r, cons, c.nome(), Instant.now());
             }
             if (Boolean.TRUE.equals(b.get("elimina"))) l.remove(r);

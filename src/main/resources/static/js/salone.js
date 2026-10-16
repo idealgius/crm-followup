@@ -531,9 +531,10 @@
             : r.presoAt ? `<span class="sa-st ok">✓ Preso in carico alle ${ora(r.presoAt)}</span>`
             : `<span class="sa-st wait">⏳ Notificato alle ${ora(r.assegnatoAt)} · da prendere in carico</span>`;
         const sc = r.consulente ? statoDi(r.consulente).stato : null;
-        const sel = st.puoGestire && r.data === oggi()
+        // NUOVO: preso in carico = consulente bloccato (non si cambia piu')
+        const sel = st.puoGestire && r.data === oggi() && !r.presoAt
             ? `<select class="sa-sel" data-assegna="${esc(r.id)}"><option value="">— Assegna a —</option>${perReparto(st.consulenti).map(([k, l]) => `<optgroup label="${REP[k].t}">` + l.map(c => { const s = statoDi(c).stato; return `<option value="${esc(c)}" ${c === r.consulente ? 'selected' : ''}>${EMO[s] || '○'} ${esc(c)}</option>`; }).join('') + '</optgroup>').join('')}</select>`
-            : `<b class="sa-cons">${r.consulente ? bollino(sc) + ' ' + esc(r.consulente) : '—'}</b>`;
+            : `<b class="sa-cons${r.presoAt ? ' bloc' : ''}"${r.presoAt ? ' title="Preso in carico: il consulente non si può più cambiare"' : ''}>${r.consulente ? bollino(sc) + ' ' + esc(r.consulente) : '—'}${r.presoAt ? ' <i aria-hidden="true">🔒</i>' : ''}</b>`;
         const mioCliente = st.io && r.consulente && st.mio === r.consulente;
         const modif = st.puoGestire || mioCliente || st.cambiaTutti;   // NUOVO: clic sulla scheda = modifica i dati del cliente
         return `<article class="sa-in ${r.presoAt ? 'preso' : r.consulente ? 'att' : 'nuovo'}">
