@@ -2003,7 +2003,14 @@
     };
     // NUOVO: sticker da immagine (file in /img/sticker/): id -> [emoji per l'anteprima nelle notifiche, nome, file]
     const STICKER_IMG = {
-        diecidenari: ['💰', 'Dieci di denari', '/img/sticker/re-denari.png']
+        diecidenari: ['💰', 'Dieci di denari', '/img/sticker/re-denari.png'],
+        saluto: ['👋', 'Saluto', '/img/sticker/saluto.png'],
+        stammatina: ['💪', 'Stammatin c amma piglia tt chell che e\u2019 o nuostr', '/img/sticker/stammatina.png'],
+        fintanonvisto: ['🙈', 'Faccio finta di non aver visto', '/img/sticker/faccio-finta.png'],
+        haicagato: ['😏', 'Hai cagato?', '/img/sticker/hai-cagato.png'],
+        lafessa: ['😏', 'Aaaah… la fessa!', '/img/sticker/la-fessa.png'],
+        spaccando: ['😈', 'Te lo stai spaccando eh?!', '/img/sticker/spaccando.png'],
+        tremors: ['🤝', 'Lo hai il tremors?', '/img/sticker/tremors.png']
     };
     Object.entries(STICKER_IMG).forEach(([k, v]) => { STICKER[k] = [v[0], v[1], null, null, v[2]]; });
     const stickerHtml = (id, piccolo) => { const s = STICKER[id]; if (!s) return '';

@@ -195,6 +195,7 @@
     function template() {
         return `
 <div class="bh-page">
+ <aside class="bh-side" id="bh-side" hidden aria-label="Opzioni della sezione"></aside>
  <div class="bh-frame" id="bh-frame"><div class="bh-stagewrap" id="bh-sw">
   <div class="bh-card">
     <div class="bh-hd"><small>BUSINESS INTELLIGENCE</small><h1>BI</h1></div>
@@ -336,8 +337,14 @@
   let active = false;
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const sw = $('bh-sw');
-  function scale() { sw.style.setProperty('--k', ($('bh-frame').clientWidth / 1100).toFixed(4)); }
+  function scale() {
+    sw.style.setProperty('--k', ($('bh-frame').clientWidth / 1100).toFixed(4));
+    // il pannello delle opzioni e' alto quanto il riquadro (su schermo stretto va sotto e ha la sua altezza)
+    const sd = $('bh-side'); if (sd) sd.style.height = matchMedia('(max-width:900px)').matches ? '' : $('bh-frame').clientHeight + 'px';
+  }
   addEventListener('resize', () => { if (active) scale(); });
+  // il riquadro si ridimensiona anche quando si apre/chiude il pannello delle opzioni a sinistra
+  if (window.ResizeObserver) new ResizeObserver(() => { if (active) scale(); }).observe($('bh-frame'));
 
   const CH = [
     { acc: '#f4a83a', tint: 'rgba(244,168,58,.28)', sub: SUB[0].map(k => [OPZ[0][k].t]) },
@@ -370,7 +377,6 @@
     const c = CH[i];
     sw.style.setProperty('--acc', c.acc); sw.style.setProperty('--tint', c.tint);
     document.querySelectorAll('#biPage .bh-ch').forEach(b => { b.classList.remove('bh-on'); if (+b.dataset.c === i) { void b.offsetWidth; b.classList.add('bh-on'); b.style.setProperty('--dur', DUR + 'ms'); } });
-    if (xp >= 0 && xp !== i) chiudi();
     $('bh-enter').classList.toggle('bh-off', !!c.off);
     $('bh-enter').firstChild.textContent = c.off ? 'In arrivo ' : 'Entra ';
     const sub = $('bh-sub'); sub.innerHTML = c.sub.map((s, k) => `<li data-sub="${i}|${k}"><i></i><span>${s[0]}</span>${s[1] ? `<em>${s[1]}</em>` : ''}</li>`).join('');
@@ -388,50 +394,43 @@
   };
   function restart() { clearInterval(timer); if (active && !paused && !reduce && xp < 0) timer = setInterval(() => go((cur + 1) % CH.length), DUR); }
 
-  /* ---------- SEZIONE APERTA: solo quel capitolo, con tutte le sue voci ---------- */
+  /* ---------- NUOVO: SEZIONE APERTA = pannello delle opzioni a SINISTRA del riquadro ----------
+     Cliccando un capitolo (Consegne, Stock, Commerciale, Service) a sinistra compare un pannello con
+     TUTTE le voci della sezione (scorre se non ci sta) e lo scorrimento automatico si ferma.
+     Cliccando un altro capitolo il pannello passa a quello; ✕ o Esc lo chiudono. Niente piu'
+     "Mostra opzioni / Nascondi": resta solo "Entra". */
   let xp = -1;
-  const rail = document.querySelector('#biPage .bh-rail'), stage = $('bh-stage');
-  // Sotto le tre voci del capitolo c'e' sempre "Mostra opzioni". Solo cliccandolo restano
-  // il capitolo e la sua animazione (gli altri capitoli si nascondono, lo scorrimento
-  // automatico si ferma) e nella colonna compare l'elenco con TUTTE le voci della sezione
-  // (scorre se non ci sta). "Nascondi opzioni" / "← Tutte le sezioni" / Esc tornano come prima.
-  const tg = document.createElement('button');
-  tg.type = 'button'; tg.className = 'bh-x-tog'; tg.innerHTML = 'Mostra opzioni <span>▾</span>';
-  // in basso, accanto a "Entra" (nella colonna non c'e' spazio sotto i quattro capitoli)
-  $('bh-enter').insertAdjacentElement('afterend', tg);
-  const posTog = () => { const e = $('bh-enter'); tg.style.left = (e.offsetLeft + e.offsetWidth + 10) + 'px'; tg.style.display = cur === 3 ? 'none' : ''; };   // Service: in arrivo, niente opzioni
+  const rail = document.querySelector('#biPage .bh-rail'), side = $('bh-side');
+  const posTog = () => {};
+  const NOMI = ['Consegne', 'Stock', 'Commerciale', 'Service'], DESC = ['Tempistiche, analisi e verifiche', 'Giacenza, marchi e motorizzazioni', 'Contratti, origini e preventivi', 'Prossimamente'];
   function espandi(i) {
     xp = i; clearInterval(timer);
-    rail.classList.add('bh-x-on', 'bh-x-open');
-    document.querySelectorAll('#biPage .bh-ch').forEach(b => b.classList.toggle('bh-x-hid', +b.dataset.c !== i));
-    let back = rail.querySelector('.bh-x-back');
-    if (!back) { back = document.createElement('button'); back.type = 'button'; back.className = 'bh-x-back'; back.textContent = '← Tutte le sezioni'; rail.insertBefore(back, rail.firstChild); }
+    rail.classList.add('bh-x-on');
     const c = CH[i], vietato = c.off && i !== 3;
-    let l = rail.querySelector('.bh-x-list');
-    if (!l) { l = document.createElement('div'); l.className = 'bh-x-list'; rail.appendChild(l); }
-    l.innerHTML = (vietato ? '<p class="bh-x-msg">Non hai il permesso per questa sezione: chiedilo a un amministratore (pagina Permessi).</p>' : i === 3 ? '<p class="bh-x-msg">In arrivo: saranno disponibili presto.</p>' : '') +
+    side.style.setProperty('--acc', c.acc);
+    side.innerHTML = `<div class="bh-side-h"><div><small>${String(i + 1).padStart(2, '0')} · OPZIONI</small><b>${NOMI[i]}</b><em>${DESC[i]}</em></div>
+        <button type="button" class="bh-side-x" aria-label="Chiudi le opzioni" title="Chiudi (Esc)">✕</button></div>
+      <div class="bh-x-list">${(vietato ? '<p class="bh-x-msg">Non hai il permesso per questa sezione: chiedilo a un amministratore (pagina Permessi).</p>' : i === 3 ? '<p class="bh-x-msg">In arrivo: saranno disponibili presto.</p>' : '') +
       OPZ[i].map((o, k) => { const ok = !vietato && (o.go || o.chips); return `<div class="bh-xo ${ok ? '' : 'off'}" ${ok && o.go ? `data-xo="${i}|${k}" role="button" tabindex="0"` : ''}>
-        <span class="bh-xo-i">${o.i}</span><span class="bh-xo-t"><b>${o.t}</b><em>${o.d}</em>${o.chips && ok ? `<span class="bh-xo-c">${o.chips.map((ch, j) => `<button type="button" data-xc="${i}|${k}|${j}">${ch[0]}</button>`).join('')}</span>` : ''}</span></div>`; }).join('');
-    // l'elenco arriva fino a sopra il pulsante "Entra" e poi scorre (misure del palco, non scalate)
-    l.style.maxHeight = Math.max(120, $('bh-enter').offsetTop - (rail.offsetTop + l.offsetTop) - 14) + 'px';
-    l.scrollTop = 0;
-    tg.innerHTML = 'Nascondi <span>▴</span>'; tg.setAttribute('aria-expanded', 'true');
+        <span class="bh-xo-i">${o.i}</span><span class="bh-xo-t"><b>${o.t}</b><em>${o.d}</em>${o.chips && ok ? `<span class="bh-xo-c">${o.chips.map((ch, j) => `<button type="button" data-xc="${i}|${k}|${j}">${ch[0]}</button>`).join('')}</span>` : ''}</span></div>`; }).join('')}</div>`;
+    const prima = side.hidden;
+    side.hidden = false;
+    if (prima) { side.classList.remove('bh-side-in'); void side.offsetWidth; side.classList.add('bh-side-in'); }
+    side.querySelector('.bh-x-list').scrollTop = 0;
   }
   function chiudi() {
     if (xp < 0) return;
     xp = -1;
-    rail.classList.remove('bh-x-on', 'bh-x-open');
-    document.querySelectorAll('#biPage .bh-ch').forEach(b => b.classList.remove('bh-x-hid'));
-    rail.querySelectorAll('.bh-x-list, .bh-x-back').forEach(x => x.remove());
-    tg.innerHTML = 'Mostra opzioni <span>▾</span>'; tg.setAttribute('aria-expanded', 'false');
+    rail.classList.remove('bh-x-on');
+    side.hidden = true; side.innerHTML = '';
     restart();
   }
-  rail.addEventListener('click', e => { if (e.target.closest('.bh-x-back')) chiudi(); });
-  tg.addEventListener('click', () => { if (xp >= 0) chiudi(); else espandi(cur); });
+  side.addEventListener('click', e => { if (e.target.closest('.bh-side-x')) chiudi(); });
+  side.addEventListener('wheel', e => e.stopPropagation(), { passive: true });
   // la rotellina scorre l'elenco senza muovere la pagina
   rail.addEventListener('wheel', e => { const l = e.target.closest('.bh-x-list'); if (l && l.scrollHeight > l.clientHeight) e.stopPropagation(); }, { passive: true });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && active && xp >= 0) chiudi(); });
-  document.querySelectorAll('#biPage .bh-ch').forEach(b => b.addEventListener('click', () => { go(+b.dataset.c); restart(); }));
+  document.querySelectorAll('#biPage .bh-ch').forEach(b => b.addEventListener('click', () => { go(+b.dataset.c); espandi(+b.dataset.c); }));
   $('bh-frame').addEventListener('pointerenter', () => { paused = true; sw.classList.add('bh-paused'); clearInterval(timer); });
   $('bh-frame').addEventListener('pointerleave', () => { paused = false; sw.classList.remove('bh-paused'); restart(); });
 

@@ -579,8 +579,10 @@
             <span class="cg-num">${fmt(n)}</span><span class="cg-sub">${sub}</span></button>`;
     const giacCard = noLine => `<div class="cg-card st-wide ${vede('G_ST_GIAC') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Giacenza</h2><p class="cg-hint" data-hint="stChGiac"></p></div><div class="cg-an-hbtns">${vociBtn('stChGiac')}${typeBtns('stChGiac', noLine)}</div></div>
         <div class="st-giac-grid"><div class="st-chart-box"><canvas id="stChGiac"></canvas></div><div class="st-giac-rep" data-rep="stChGiac"></div></div></div>`;
-    const giacMarcaCard = () => `<div class="cg-card st-wide ${vede('G_ST_GIAC') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Giacenza per marchio</h2>
-        <p class="cg-hint">Giacenza media di ogni marchio · ⚠ modelli critici (più vetture dello stesso modello ferme molto più del normale) e vetture ferme singolarmente · clicca un marchio per il dettaglio</p></div></div>
+    // NUOVO: il riquadro si puo' ridurre (scelta ricordata nel browser) e ha ricerca + filtri
+    const giacMarcaCard = () => `<div class="cg-card st-wide st-gm-card ${gmRidotta ? 'ridotta' : ''} ${vede('G_ST_GIAC') ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>Giacenza per marchio</h2>
+        <p class="cg-hint">Giacenza media di ogni marchio · ⚠ modelli critici (più vetture dello stesso modello ferme molto più del normale) e vetture ferme singolarmente · clicca un marchio per il dettaglio</p></div>
+        <div class="cg-an-hbtns"><button type="button" class="st-gm-rid" data-gmrid aria-expanded="${!gmRidotta}">${gmRidotta ? '▾ Espandi' : '▴ Riduci'}</button></div></div>
         <div class="st-gm" id="stGiacMarca"></div></div>`;
     const chartCard = (id, title, perm, wide, extra, noLine) => `<div class="cg-card ${wide ? 'st-wide' : ''} ${vede(perm) ? '' : 'chart-perm-hidden'}"><div class="st-ch-head"><div><h2>${title}</h2><p class="cg-hint" data-hint="${id}"></p></div><div class="cg-an-hbtns">${extra || ''}${vociBtn(id)}${typeBtns(id, noLine)}</div></div><div class="st-chart-box"><canvas id="${id}"></canvas></div></div>`;
     function bindView(main, baseF) {
@@ -626,13 +628,14 @@
             <span class="cg-num">${fmt(new Set(rows.map(r => r.marca)).size)}</span><span class="cg-sub">Apri la vista Marchi</span></button>
         </div>
         <div class="st-charts">
+          <!-- NUOVO: "Per sede" in cima, sopra Nuove/usate/Km 0 e Disponibili/prenotate/vendute -->
+          ${chartCard('stChSede', 'Per sede', 'G_ST_SEDE', true, `<div class="cg-an-mode" id="stSedeMode"><button type="button" data-sm="g" class="${sedeMode === 'g' ? 'on' : ''}">Riepilogo</button><button type="button" data-sm="d" class="${sedeMode === 'd' ? 'on' : ''}">Dettaglio</button></div>`)}
           ${chartCard('stChTipo', 'Nuove, usate e Km 0', 'G_ST_TIPO')}
           ${chartCard('stChStato', 'Disponibili, prenotate e vendute', 'G_ST_STATO')}
           ${chartCard('stChMotore', 'Per motorizzazione', 'G_ST_MOTORE')}
           ${chartCard('stChMarchi', 'Per marchio', 'G_ST_MARCHI')}
           ${giacCard(false)}
           ${giacMarcaCard()}
-          ${chartCard('stChSede', 'Per sede', 'G_ST_SEDE', true, `<div class="cg-an-mode" id="stSedeMode"><button type="button" data-sm="g" class="${sedeMode === 'g' ? 'on' : ''}">Riepilogo</button><button type="button" data-sm="d" class="${sedeMode === 'd' ? 'on' : ''}">Dettaglio</button></div>`)}
         </div>`;
         main.querySelector('[data-goview]').addEventListener('click', () => showView('marchi'));
         bindView(main, {});
@@ -884,8 +887,60 @@
         return c;
     }
     let gmAperto = new Set(), gmOrdine = 'crit';
+    // NUOVO: ricerca (modello, marchio, telaio, targa) e filtri a tendina (modello, giorni)
+    const LS_GM = 'stock_gm_v1';
+    let gmRidotta = false, gmQ = '', gmMod = '', gmGg = 0;
+    try { const g = JSON.parse(localStorage.getItem(LS_GM) || '{}'); gmRidotta = !!g.ridotta; } catch (e) { /* */ }
+    const GM_GG = [[0, 'Tutte le giacenze'], [30, 'Ferme da oltre 30 gg'], [60, 'Ferme da oltre 60 gg'], [90, 'Ferme da oltre 90 gg'], [120, 'Ferme da oltre 120 gg'], [180, 'Ferme da oltre 180 gg'], [365, 'Ferme da oltre 1 anno']];
+    const modKey = r => (r.marca || '') + '|' + (r.modello || '').trim();
+    const normGm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\s.-]+/g, ' ').trim();
+    function gmPassa(r) {
+        if (gmMod && modKey(r) !== gmMod) return false;
+        if (gmGg && !(conGiorni(r) && +r.giorni > gmGg)) return false;
+        if (gmQ) {
+            const q = normGm(gmQ), qq = q.replace(/ /g, '');
+            const testo = normGm([r.marca, r.modello, r.versione].join(' '));
+            const codici = [r.targa, r.telaio].map(x => normGm(x).replace(/ /g, ''));
+            if (!(q.split(' ').every(w => testo.includes(w)) || (qq.length >= 4 && codici.some(c => c && c.includes(qq))))) return false;
+        }
+        return true;
+    }
     function drawGiacMarca() {
         const box = rootEl.querySelector('#stGiacMarca'); if (!box) return;
+        const card = box.closest('.st-gm-card');
+        // barra con ricerca e filtri: si disegna una volta sola (cosi' scrivendo non si perde il cursore)
+        if (!box.querySelector('.st-gm-ui')) {
+            const mods = new Map();
+            scope.forEach(r => { if (!r.marca || !r.modello) return; const k = modKey(r); mods.set(k, (mods.get(k) || 0) + 1); });
+            const perMarca = new Map();
+            [...mods.keys()].sort((a, b) => a.localeCompare(b, 'it')).forEach(k => { const [m] = k.split('|'); if (!perMarca.has(m)) perMarca.set(m, []); perMarca.get(m).push(k); });
+            if (gmMod && !mods.has(gmMod)) gmMod = '';
+            box.innerHTML = `<div class="st-gm-ui">
+                <label class="st-gm-q"><span aria-hidden="true">🔍</span><input type="search" data-gmq placeholder="Cerca vettura: modello, marchio, telaio o targa" value="${esc(gmQ)}" autocomplete="off"></label>
+                <select data-gmmod aria-label="Filtra per modello"><option value="">Tutti i modelli</option>${[...perMarca].map(([m, l]) => `<optgroup label="${esc(m)}">${l.map(k => `<option value="${esc(k)}" ${k === gmMod ? 'selected' : ''}>${esc(k.split('|')[1])} (${fmt(mods.get(k))})</option>`).join('')}</optgroup>`).join('')}</select>
+                <select data-gmgg aria-label="Filtra per giorni">${GM_GG.map(([v, l]) => `<option value="${v}" ${v === gmGg ? 'selected' : ''}>${l}</option>`).join('')}</select>
+                <button type="button" class="st-gm-reset" data-gmreset hidden>✕ Togli filtri</button>
+              </div><div class="st-gm-body"></div>`;
+            const q = box.querySelector('[data-gmq]');
+            let tq = null;
+            q.addEventListener('input', () => { clearTimeout(tq); tq = setTimeout(() => { gmQ = q.value.trim(); drawGiacMarca(); }, 180); });
+            box.querySelector('[data-gmmod]').addEventListener('change', e => { gmMod = e.target.value; drawGiacMarca(); });
+            box.querySelector('[data-gmgg]').addEventListener('change', e => { gmGg = +e.target.value || 0; drawGiacMarca(); });
+            box.querySelector('[data-gmreset]').addEventListener('click', () => {
+                gmQ = ''; gmMod = ''; gmGg = 0; q.value = ''; box.querySelector('[data-gmmod]').value = ''; box.querySelector('[data-gmgg]').value = '0'; drawGiacMarca();
+            });
+            if (card) {
+                const rb = card.querySelector('[data-gmrid]');
+                if (rb) rb.onclick = () => {
+                    gmRidotta = !gmRidotta; card.classList.toggle('ridotta', gmRidotta);
+                    rb.textContent = gmRidotta ? '▾ Espandi' : '▴ Riduci'; rb.setAttribute('aria-expanded', String(!gmRidotta));
+                    try { localStorage.setItem(LS_GM, JSON.stringify({ ridotta: gmRidotta })); } catch (e) { /* */ }
+                };
+            }
+        }
+        const body = box.querySelector('.st-gm-body');
+        const filtri = !!(gmQ || gmMod || gmGg);
+        box.querySelector('[data-gmreset]').hidden = !filtri;
         const ORD = {
             crit: (a, b) => b.critici.length - a.critici.length || b.singole.length - a.singole.length || b.tutte.length - a.tutte.length,
             media: (a, b) => (b.media || 0) - (a.media || 0),
@@ -901,9 +956,25 @@
             return `<button type="button" class="st-gm-it" data-gm="s|${esc(m.marca)}|${i}"><b>${esc(r.modello || '')} <small>${esc(r.versione || '')}</small></b>
               <span>${esc(r.targa || r.telaio || '')} · ${esc(r.tipo || '')} · ferma da <b>${fmt(r.giorni)} gg</b>${s.peers.length >= 2 ? ` · le altre ${fmt(s.peers.length)} ${esc(r.modello || '')} ${fmt(s.rif)} gg` : ''}</span>
               <ul>${s.cause.map(x => `<li>${esc(x)}</li>`).join('')}</ul></button>`; };
-        box.innerHTML = `<div class="st-gm-top"><div class="cg-an-mode">${[['crit', 'Criticità'], ['media', 'Giacenza media'], ['vetture', 'N° vetture']].map(([k, l]) => `<button type="button" data-gmord="${k}" class="${gmOrdine === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+        // vetture che corrispondono a ricerca/filtri: elenco (le piu' ferme prima) e solo i loro marchi qui sotto
+        const crit = new Set(), ferme = new Set();
+        A.forEach(m => { m.critici.forEach(c => c.ferme.forEach(r => crit.add(r._i))); m.singole.forEach(x => ferme.add(x.r._i)); });
+        const F = filtri ? scope.filter(gmPassa).sort((a, b) => (+b.giorni || -1) - (+a.giorni || -1)) : [];
+        const marcheF = new Set(F.map(r => r.marca));
+        const AV = filtri ? A.filter(m => marcheF.has(m.marca)) : A;
+        if (filtri && gmMod) AV.forEach(m => gmAperto.add(m.marca));
+        const risultati = !filtri ? '' : `<div class="st-gm-res"><p class="st-gm-res-h"><b>${fmt(F.length)}</b> ${F.length === 1 ? 'vettura trovata' : 'vetture trovate'}${F.length > 60 ? ' · le prime 60, le più ferme' : ''}${F.length ? ` · <button type="button" class="st-gm-link" data-gmtutte>apri l’elenco completo →</button>` : ''}</p>
+            ${F.length ? `<div class="st-gm-res-l">${F.slice(0, 60).map(r => `<button type="button" class="st-gm-v" data-gmv="${r._i}">
+                <span class="st-gm-v-n"><b>${esc(r.marca || '')} ${esc(r.modello || '')}</b><small>${esc(r.versione || '')}</small></span>
+                <span class="st-gm-v-c">${esc(r.targa || '—')}<small>${esc(r.telaio || '')}</small></span>
+                <span class="st-gm-v-s">${esc(r.tipo || '')}${r.stato ? ' · ' + esc(r.stato) : ''}</span>
+                <span class="st-gm-v-g" style="--gc:${colore(+r.giorni || 0)}">${conGiorni(r) ? fmt(r.giorni) + ' gg' : '—'}</span>
+                <span class="st-gm-v-t">${crit.has(r._i) ? '<i class="st-gm-tag crit">⚠ modello critico</i>' : ferme.has(r._i) ? '<i class="st-gm-tag">ferma</i>' : ''}</span></button>`).join('')}</div>`
+            : '<p class="cg-hint">Nessuna vettura con questa ricerca o questi filtri.</p>'}</div>`;
+        body.innerHTML = risultati + `<div class="st-gm-top"><div class="cg-an-mode">${[['crit', 'Criticità'], ['media', 'Giacenza media'], ['vetture', 'N° vetture']].map(([k, l]) => `<button type="button" data-gmord="${k}" class="${gmOrdine === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
           <p class="st-gm-sum">${totC ? `<b class="st-gm-warn">⚠ ${fmt(totC)} ${totC === 1 ? 'modello critico' : 'modelli critici'}</b>` : '<b>Nessun modello critico</b>'} · <b>${fmt(totS)}</b> ${totS === 1 ? 'vettura ferma' : 'vetture ferme'} singolarmente</p>
-          <div class="st-gm-rows">${A.map(m => `
+          ${filtri && AV.length < A.length ? `<p class="cg-hint st-gm-solo">Qui sotto solo i marchi delle vetture trovate (${fmt(AV.length)} su ${fmt(A.length)}).</p>` : ''}
+          <div class="st-gm-rows">${AV.map(m => `
             <div class="st-gm-row ${gmAperto.has(m.marca) ? 'open' : ''}" data-marca="${esc(m.marca)}">
               <button type="button" class="st-gm-head" data-gmtog="${esc(m.marca)}">
                 <span class="st-gm-name">${esc(m.marca)}<em>${fmt(m.tutte.length)} ${m.tutte.length === 1 ? 'vettura' : 'vetture'} · ${fmt(m.oltre90)} ${m.oltre90 === 1 ? 'disponibile' : 'disponibili'} oltre 90 gg</em></span>
@@ -916,7 +987,10 @@
                 ${m.singole.length ? `<h4>Vetture ferme singolarmente <small>(il modello si vende, quella vettura no)</small></h4>${m.singole.map((x, i) => sing(m, i)).join('')}` : ''}
                 <button type="button" class="st-gm-all" data-gmlist="${esc(m.marca)}">Vedi tutte le vetture ${esc(m.marca)} →</button>
               </div></div>`).join('')}</div>`;
-        box.onclick = e => {
+        body.onclick = e => {
+            const v = e.target.closest('[data-gmv]');
+            if (v) { const r = scope.find(x => String(x._i) === v.dataset.gmv); if (r) showOne(r); return; }
+            if (e.target.closest('[data-gmtutte]')) { openList('Vetture trovate' + (gmQ ? ' · “' + gmQ + '”' : ''), { ids: F.map(r => r._i) }); return; }
             const o = e.target.closest('[data-gmord]');
             if (o) { gmOrdine = o.dataset.gmord; drawGiacMarca(); return; }
             const t = e.target.closest('[data-gmtog]');

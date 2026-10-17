@@ -131,3 +131,30 @@ html.bi-fs-on, html.bi-fs-on body { overflow:hidden; }
 #biPage .bh-xo-c button { border:1px solid rgba(255,255,255,.16); background:rgba(255,255,255,.05); color:#e8edf3; font:inherit; font-size:11.5px; font-weight:700;
     padding:4px 9px; border-radius:8px; cursor:pointer; }
 #biPage .bh-xo-c button:hover { border-color:var(--acc, #3fcfae); background:rgba(255,255,255,.1); }
+
+/* NUOVO: riquadri aggiunti dalle sezioni sotto "In evidenza" (es. Lavorazione officina delle Consegne) */
+.cg-off-ev { margin-top:12px; }
+.cg-off-ev .bi-ev-h em { font-style:normal; font-weight:600; text-transform:none; letter-spacing:0; }
+.cg-off-b { display:block; width:100%; text-align:left; font:inherit; color:inherit; cursor:pointer; border-left:3px solid #e08a2e; }
+.cg-off-b:hover { background:rgba(224,138,46,.12); border-color:#e08a2e; }
+
+/* NUOVO: opzioni della sezione in un pannello a SINISTRA del riquadro (bi-home.js, espandi) */
+#biPage .bh-page { align-items:flex-start; gap:18px; }
+#biPage .bh-frame { flex:0 1 1120px; min-width:0; }
+#biPage .bh-side { flex:0 0 300px; display:flex; flex-direction:column; min-height:0; padding:18px 14px 14px; border-radius:24px;
+    background:linear-gradient(180deg,#1a1d23,#15171b); box-shadow:0 30px 60px -36px rgba(0,0,0,.9), inset 0 0 0 1px rgba(255,255,255,.06); border-top:3px solid var(--acc, #3fcfae); }
+#biPage .bh-side[hidden] { display:none; }
+#biPage .bh-side.bh-side-in { animation:bh-side-in .28s ease-out; }
+@keyframes bh-side-in { from { opacity:0; transform:translateX(-14px); } to { opacity:1; transform:none; } }
+#biPage .bh-side-h { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; padding:0 4px 12px; border-bottom:1px solid rgba(255,255,255,.07); }
+#biPage .bh-side-h small { display:block; font-size:10.5px; font-weight:800; letter-spacing:1.4px; color:var(--acc, #3fcfae); }
+#biPage .bh-side-h b { display:block; font-size:21px; font-weight:800; letter-spacing:-.4px; margin-top:2px; color:#fff; }
+#biPage .bh-side-h em { display:block; font-style:normal; font-size:12px; color:#8e97a5; margin-top:2px; }
+#biPage .bh-side-x { flex:none; width:32px; height:32px; border-radius:10px; border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.05); color:#e8edf3; cursor:pointer; font-size:14px; }
+#biPage .bh-side-x:hover { border-color:var(--acc, #3fcfae); background:rgba(255,255,255,.1); }
+#biPage .bh-side .bh-x-list { flex:1; min-height:0; margin-top:12px; }
+@media (max-width:900px) {
+    #biPage .bh-page { flex-direction:column; align-items:center; }
+    #biPage .bh-side { flex:none; width:min(1120px, 100%); max-height:60vh; order:2; }
+    #biPage .bh-frame { flex:none; width:min(1120px, 100%); }
+}
