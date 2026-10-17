@@ -852,13 +852,15 @@ async function loadOperatorPermissionsUI() {
     if (!container) return;
     container.innerHTML = `<div class="empty-state"><p>Caricamento operatori…</p></div>`;
     try {
-        const res = await fetch('/api/permissions/operators');
+        const [res, rt] = await Promise.all([fetch('/api/permissions/operators'), fetch('/api/permessi-tempo').catch(() => null)]);
         if (!res.ok) {
             const data = await res.json().catch(() => null);
             container.innerHTML = `<div class="empty-state"><p>${data?.error || 'Errore nel caricamento'}</p></div>`;
             return;
         }
         const data = await res.json();
+        // NUOVO: per quanto vale ogni eccezione (le scadute il server le ha gia' tolte)
+        permDurate = rt && rt.ok ? ((await rt.json().catch(() => ({}))).durate || {}) : {};
         operatorPermissionsCache = data.users || [];
         operatorSectionsCache = data.sections || [];
         renderOperatorPermissions();
@@ -908,7 +910,7 @@ function renderOperatorPermissions() {
                     const currentOverride = ov0 ? valoreVisto(sectionKey, ov0, u.role) : 'INHERIT';
                     return `
                     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid var(--border)">
-                        <button type="button" class="perm-sec" style="font-size:13px;font-weight:600" onclick="apriInfoSezione('${sectionKey}')">${meta.icon} ${meta.label.split(' · ')[0]} <span class="perm-i">ⓘ</span></button>
+                        <span style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap"><button type="button" class="perm-sec" style="font-size:13px;font-weight:600" onclick="apriInfoSezione('${sectionKey}')">${meta.icon} ${meta.label.split(' · ')[0]} <span class="perm-i">ⓘ</span></button>${ov0 ? badgeDurata(u.id, sectionKey) : ''}</span>
                         <div class="permission-cell-group" data-user="${u.id}" data-section="${sectionKey}">
                             <button type="button" class="permission-cell-btn ${currentOverride === 'INHERIT' ? 'active' : ''}"
                                 data-tip="Eredita dal ruolo\nSegue il permesso del suo ruolo (${escAttr(formatRole(u.role))})." onclick="setOperatorPermission(${u.id},'${sectionKey}','INHERIT', this)">↩️</button>
@@ -1042,7 +1044,7 @@ function renderOperatorChartOverrides(u) {
             CHART_PERMISSIONS.filter(c => c.group === g).map(c => {
                 const cur = ov[c.key] || 'INHERIT';
                 return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:4px 0;border-bottom:1px solid var(--border)">
-                    <span style="font-size:13px;font-weight:600">${c.label}</span>
+                    <span style="font-size:13px;font-weight:600">${c.label} ${ov[c.key] ? badgeDurata(u.id, c.key) : ''}</span>
                     <div class="permission-cell-group">
                         <button type="button" class="permission-cell-btn ${cur === 'INHERIT' ? 'active' : ''}" title="Eredita da ruolo"
                             onclick="setOperatorPermission(${u.id},'${c.key}','INHERIT', this)">↩️</button>
@@ -1059,6 +1061,13 @@ function renderOperatorChartOverrides(u) {
 async function setOperatorPermission(userId, section, access, btnEl) {
     const group = btnEl?.closest('.permission-cell-group');
     if (access === 'NONE' && userId === currentUser?.id && !confermaTogliAMe(section, 'a te stesso')) return;
+    // NUOVO: si apre una sezione che il ruolo dell'operatore NON vede -> per quanto tempo?
+    let durata = null;
+    const user0 = operatorPermissionsCache.find(u => u.id === userId);
+    if (access !== 'INHERIT' && access !== 'NONE' && user0 && await livelloRuolo(user0.role, section) === 'NONE') {
+        durata = await chiediDurata(user0, section, permDurate[userId + '|' + section]);
+        if (!durata) return;                 // annullato
+    }
     try {
         const res = await fetch('/api/permissions/operators', {
             method: 'PUT',
@@ -1080,8 +1089,97 @@ async function setOperatorPermission(userId, section, access, btnEl) {
             if (access === 'INHERIT') delete user.overrides[section];
             else user.overrides[section] = access;
         }
+        const k = userId + '|' + section;
+        if (access === 'INHERIT') delete permDurate[k];
+        else if (durata || permDurate[k]) {
+            // durata scelta (o, se ora il ruolo vede gia' la sezione, il limite non serve piu')
+            const corpo = durata || { tipo: 'sempre' };
+            const rd = await fetch('/api/permessi-tempo', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ userId, section }, corpo)) });
+            const dd = await rd.json().catch(() => ({}));
+            if (!rd.ok) alert('Permesso salvato, ma la durata no: ' + (dd.error || rd.status) + '\nPer ora vale SEMPRE.');
+            else if (dd.durata) permDurate[k] = dd.durata; else delete permDurate[k];
+        }
+        renderOperatorPermissions();
     } catch (err) {
         console.error('Errore salvataggio permesso operatore:', err);
         alert('Errore di connessione nel salvataggio del permesso');
     }
+}
+
+
+/* =====================================================================
+   NUOVO: ECCEZIONI A TEMPO
+   Aprendo a un operatore una sezione che il suo ruolo non vede, si sceglie per quanto:
+   solo oggi, questa settimana, questo mese, per un periodo (dal... al...) o sempre.
+   Le regole e la scadenza sono sul server (RolePermissionService, /api/permessi-tempo).
+   ===================================================================== */
+let permDurate = {};
+let permRuoliMatrice = null;
+async function livelloRuolo(role, section) {
+    let m = typeof permissionMatrixCache !== 'undefined' && permissionMatrixCache ? permissionMatrixCache : permRuoliMatrice;
+    if (!m) {
+        try { const r = await fetch('/api/permissions'); if (r.ok) { const d = await r.json(); m = permRuoliMatrice = d.matrix || {}; } } catch (e) { /* */ }
+    }
+    return ((m || {})[role] || {})[section] || 'NONE';
+}
+const isoOggi = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome' }).format(new Date());
+const ggmm = iso => iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) : '';
+const ggmmaa = iso => iso ? ggmm(iso) + '/' + iso.slice(0, 4) : '';
+function finePeriodo(tipo) {
+    const t = isoOggi(), d = new Date(t + 'T12:00:00Z');
+    if (tipo === 'settimana') d.setUTCDate(d.getUTCDate() + ((7 - d.getUTCDay()) % 7));       // fino a domenica
+    if (tipo === 'mese') { d.setUTCMonth(d.getUTCMonth() + 1, 0); }                           // ultimo del mese
+    return d.toISOString().slice(0, 10);
+}
+function badgeDurata(userId, key) {
+    const v = permDurate[userId + '|' + key];
+    if (!v) return '<span class="perm-tempo sempre" title="Eccezione senza scadenza">∞ sempre</span>';
+    const oggi = isoOggi(), futura = v.da > oggi;
+    const testo = futura ? `🕒 dal ${ggmm(v.da)} al ${ggmm(v.a)}` : v.a === oggi ? '⏳ solo oggi' : `⏳ fino al ${ggmm(v.a)}`;
+    const tip = (futura ? 'Non ancora attiva: vale dal ' + ggmmaa(v.da) : 'Attiva') + ' fino al ' + ggmmaa(v.a) + ' compreso, poi l’operatore torna a seguire il suo ruolo'
+        + (v.impostataDa ? '\nImpostata da ' + v.impostataDa + (v.impostataIt ? ' il ' + v.impostataIt : '') : '');
+    return `<span class="perm-tempo ${futura ? 'futura' : v.a === oggi ? 'oggi' : ''}" title="${escAttr(tip)}">${testo}</span>`;
+}
+function chiediDurata(user, section, attuale) {
+    return new Promise(resolve => {
+        const meta = PERMISSION_SECTIONS.find(s => s.key === section) || (typeof CHART_PERMISSIONS !== 'undefined' && CHART_PERMISSIONS.find(c => c.key === section)) || { label: section, icon: '' };
+        const nome = String(meta.label || section).split(' · ')[0];
+        const oggi = isoOggi(), sett = finePeriodo('settimana'), mese = finePeriodo('mese');
+        const scelte = [
+            ['oggi', '☀️ Solo oggi', 'fino a stasera (' + ggmm(oggi) + ')'],
+            ['settimana', '📅 Questa settimana', 'fino a domenica ' + ggmm(sett)],
+            ['mese', '🗓️ Questo mese', 'fino al ' + ggmm(mese)],
+            ['periodo', '↔️ Per un periodo', 'scegli tu dal… al…'],
+            ['sempre', '∞ Sempre', 'finché non la togli']
+        ];
+        let tipo = attuale ? attuale.tipo : 'oggi';
+        const ov = document.createElement('div');
+        ov.className = 'perm-tempo-ov';
+        ov.innerHTML = `<div class="perm-tempo-m" role="dialog" aria-modal="true" aria-label="Per quanto tempo">
+            <h3>Per quanto tempo?</h3>
+            <p>Stai aprendo a <b>${permEsc(user.fullName)}</b> la sezione <b>${meta.icon || ''} ${permEsc(nome)}</b>, che con il suo ruolo (<b>${permEsc(formatRole(user.role))}</b>) non vede.</p>
+            <div class="perm-tempo-l">${scelte.map(([k, t, d]) => `<button type="button" data-t="${k}" class="${k === tipo ? 'on' : ''}"><b>${t}</b><small>${d}</small></button>`).join('')}</div>
+            <div class="perm-tempo-p" ${tipo === 'periodo' ? '' : 'hidden'}><label>Dal <input type="date" data-da min="${oggi}" value="${attuale && attuale.tipo === 'periodo' ? attuale.da : oggi}"></label><label>al <input type="date" data-a min="${oggi}" value="${attuale && attuale.tipo === 'periodo' ? attuale.a : sett}"></label></div>
+            <div class="perm-tempo-err" hidden></div>
+            <p class="perm-tempo-n">Finito il periodo l’operatore torna da solo a seguire il suo ruolo.</p>
+            <footer><button type="button" class="btn-small btn-secondary" data-x>Annulla</button><button type="button" class="btn-small btn-green" data-ok>Conferma</button></footer>
+          </div>`;
+        document.body.appendChild(ov);
+        const fine = v => { ov.remove(); document.removeEventListener('keydown', esc); resolve(v); };
+        const esc = e => { if (e.key === 'Escape') fine(null); };
+        document.addEventListener('keydown', esc);
+        const err = ov.querySelector('.perm-tempo-err');
+        ov.addEventListener('click', e => {
+            if (e.target === ov || e.target.closest('[data-x]')) { fine(null); return; }
+            const b = e.target.closest('[data-t]');
+            if (b) { tipo = b.dataset.t; ov.querySelectorAll('[data-t]').forEach(x => x.classList.toggle('on', x === b)); ov.querySelector('.perm-tempo-p').hidden = tipo !== 'periodo'; err.hidden = true; return; }
+            if (e.target.closest('[data-ok]')) {
+                if (tipo !== 'periodo') { fine({ tipo }); return; }
+                const da = ov.querySelector('[data-da]').value, a = ov.querySelector('[data-a]').value;
+                const pb = !da || !a ? 'Scegli le due date' : a < da ? 'La data di fine è prima di quella di inizio' : a < oggi ? 'Il periodo è già finito' : '';
+                if (pb) { err.textContent = pb; err.hidden = false; return; }
+                fine({ tipo, da, a });
+            }
+        });
+    });
 }

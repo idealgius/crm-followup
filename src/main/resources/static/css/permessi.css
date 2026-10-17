@@ -187,3 +187,31 @@
 .pres.off .pres-dot { background:#ef4444; border-color:#ef4444; box-shadow:0 0 0 3px rgba(239,68,68,.2); }
 .pres.off small { color:#ff9a9d; }
 .pres.mai .pres-dot { background:transparent; }
+
+/* NUOVO: eccezioni a tempo (durata del permesso personale) */
+.perm-tempo { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:800; padding:2px 8px; border-radius:999px; background:rgba(240,192,64,.16); color:#f0c040; white-space:nowrap; }
+.perm-tempo.oggi { background:rgba(255,140,60,.18); color:#ffa463; }
+.perm-tempo.futura { background:rgba(120,140,255,.16); color:#a9b5ff; }
+.perm-tempo.sempre { background:rgba(255,255,255,.06); color:var(--text-secondary); font-weight:700; }
+[data-theme="light"] .perm-tempo { color:#8a6200; }
+[data-theme="light"] .perm-tempo.oggi { color:#b04d00; }
+[data-theme="light"] .perm-tempo.futura { color:#3a46b0; }
+.perm-tempo-ov { position:fixed; inset:0; z-index:10500; background:rgba(0,0,0,.6); display:flex; align-items:center; justify-content:center; padding:16px; }
+.perm-tempo-m { width:min(480px, 100%); background:var(--bg-card); color:var(--text-primary); border:1.5px solid var(--border); border-radius:16px; padding:20px 22px; box-shadow:0 24px 60px -20px rgba(0,0,0,.7); }
+.perm-tempo-m h3 { margin:0 0 8px; font-size:17px; font-weight:800; }
+.perm-tempo-m > p { margin:0 0 12px; font-size:13px; color:var(--text-secondary); line-height:1.45; }
+.perm-tempo-l { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.perm-tempo-l button { display:flex; flex-direction:column; align-items:flex-start; gap:2px; text-align:left; padding:10px 12px; border-radius:12px; border:1.5px solid var(--border); background:transparent; color:inherit; font:inherit; cursor:pointer; }
+.perm-tempo-l button:last-child { grid-column:1 / -1; }
+.perm-tempo-l button b { font-size:13.5px; }
+.perm-tempo-l button small { font-size:11.5px; color:var(--text-secondary); }
+.perm-tempo-l button:hover { border-color:#f0c040; }
+.perm-tempo-l button.on { border-color:#f0c040; background:rgba(240,192,64,.12); }
+.perm-tempo-p { display:flex; gap:12px; flex-wrap:wrap; margin-top:12px; }
+.perm-tempo-p[hidden], .perm-tempo-err[hidden] { display:none; }
+.perm-tempo-p label { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700; }
+.perm-tempo-p input { padding:6px 8px; border-radius:8px; border:1.5px solid var(--border); background:var(--bg-primary, #0f1117); color:inherit; font:inherit; }
+.perm-tempo-err { margin-top:10px; font-size:12.5px; font-weight:700; color:#ff8a8a; }
+.perm-tempo-n { margin:12px 0 0 !important; font-size:12px !important; }
+.perm-tempo-m footer { display:flex; justify-content:flex-end; gap:8px; margin-top:14px; }
+@media (max-width:520px) { .perm-tempo-l { grid-template-columns:1fr; } }

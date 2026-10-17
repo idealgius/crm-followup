@@ -1,11 +1,20 @@
 package com.gruppoautoscala.followup.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.gruppoautoscala.followup.model.ConsegneDataset;
 import com.gruppoautoscala.followup.model.RolePermission;
 import com.gruppoautoscala.followup.model.UserPermission;
+import com.gruppoautoscala.followup.repository.ConsegneDatasetRepository;
 import com.gruppoautoscala.followup.repository.RolePermissionRepository;
 import com.gruppoautoscala.followup.repository.UserPermissionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.temporal.TemporalAdjusters;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -17,6 +26,13 @@ public class RolePermissionService {
 
     @Autowired
     private UserPermissionRepository userPermissionRepository;
+
+    // NUOVO: durata delle eccezioni personali (archivio: consegne_dataset, tipo PERMESSI_TEMPO)
+    @Autowired
+    private ConsegneDatasetRepository datasetRepository;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     // ===== CACHE IN MEMORIA =====
     // Ogni richiesta al CRM controlla i permessi dell'utente, e prima ogni
@@ -260,7 +276,7 @@ public class RolePermissionService {
     // VINCE SEMPRE (override totale); altrimenti si applica il permesso di
     // ruolo, calcolato come sopra.
     public String getEffectiveAccess(Long userId, String role, String section) {
-        Map<String, String> ov = getUserOverrides(userId);
+        Map<String, String> ov = attive(userId, getUserOverrides(userId));   // NUOVO: senza quelle fuori dal loro periodo
         String override = ov.get(section);
         if (override != null) return override;
         Map<String, String> row = matrixSnapshot().getOrDefault(role, Map.of());
@@ -322,6 +338,7 @@ public class RolePermissionService {
     public int resetUser(Long userId) {
         List<UserPermission> righe = new ArrayList<>(userPermissionRepository.findByUserId(userId));
         for (UserPermission up : righe) userPermissionRepository.delete(up);
+        for (UserPermission up : righe) togliDurata(userId, up.getSection());
         invalidateCaches();
         return righe.size();
     }
@@ -336,6 +353,7 @@ public class RolePermissionService {
         if (access == null) {
             userPermissionRepository.findByUserIdAndSection(userId, section)
                 .ifPresent(userPermissionRepository::delete);
+            togliDurata(userId, section);           // NUOVO: tornando al ruolo la durata non serve piu'
             invalidateCaches();
             return;
         }
@@ -347,5 +365,116 @@ public class RolePermissionService {
         up.setAccess(access);
         userPermissionRepository.save(up);
         invalidateCaches();
+    }
+
+    /* ===================================================================
+       NUOVO: ECCEZIONI PERSONALI A TEMPO
+       Quando si apre a un operatore una sezione che il suo ruolo non vede si puo' scegliere per quanto:
+       solo oggi, questa settimana, questo mese, un periodo (dal... al...) o sempre.
+       Fuori dal periodo l'eccezione non vale (l'operatore segue il ruolo); scaduta viene tolta da sola.
+       Chiave "idUtente|SEZIONE" -> { tipo, da, a, impostataDa, impostataIt }.
+       =================================================================== */
+    private static final String KEY_TEMPO = "PERMESSI_TEMPO";
+    private static final ZoneId ITALIA = ZoneId.of("Europe/Rome");
+    public static final List<String> TIPI_DURATA = List.of("oggi", "settimana", "mese", "periodo", "sempre");
+    private volatile Map<String, Map<String, String>> durate;
+
+    private synchronized Map<String, Map<String, String>> durate() {
+        if (durate != null) return durate;
+        Map<String, Map<String, String>> m = new LinkedHashMap<>();
+        try {
+            datasetRepository.findById(KEY_TEMPO).ifPresent(d -> {
+                try { m.putAll(objectMapper.readValue(d.getContenuto(), new TypeReference<Map<String, Map<String, String>>>() {})); }
+                catch (Exception e) { /* contenuto rovinato: si riparte da vuoto */ }
+            });
+        } catch (Exception e) { /* database non raggiungibile */ }
+        durate = m;
+        return durate;
+    }
+    private synchronized void salvaDurate(String chi) {
+        try {
+            ConsegneDataset d = datasetRepository.findById(KEY_TEMPO).orElseGet(() -> { ConsegneDataset n = new ConsegneDataset(); n.setTipo(KEY_TEMPO); return n; });
+            d.setContenuto(objectMapper.writeValueAsString(durate()));
+            d.setRighe(durate().size());
+            d.setAggiornatoAt(LocalDateTime.now(ITALIA));
+            d.setAggiornatoDa(chi == null ? "permessi" : chi);
+            datasetRepository.save(d);
+        } catch (Exception e) { throw new IllegalStateException("Durata non salvata: " + e.getMessage()); }
+    }
+    private static String chiave(Long userId, String section) { return userId + "|" + section; }
+    private static boolean attiva(Map<String, String> v, LocalDate oggi) {
+        if (v == null) return true;
+        try {
+            String da = v.get("da"), a = v.get("a");
+            return (da == null || !oggi.isBefore(LocalDate.parse(da))) && (a == null || !oggi.isAfter(LocalDate.parse(a)));
+        } catch (Exception e) { return true; }
+    }
+    /** le eccezioni dell'utente che valgono oggi */
+    private Map<String, String> attive(Long userId, Map<String, String> ov) {
+        Map<String, Map<String, String>> d = durate();
+        if (d.isEmpty() || ov.isEmpty()) return ov;
+        LocalDate oggi = LocalDate.now(ITALIA);
+        Map<String, String> out = null;
+        for (String sec : ov.keySet()) {
+            if (attiva(d.get(chiave(userId, sec)), oggi)) continue;
+            if (out == null) out = new HashMap<>(ov);
+            out.remove(sec);
+        }
+        return out == null ? ov : out;
+    }
+
+    /** tutte le durate (per la pagina Permessi); prima toglie le eccezioni scadute */
+    public Map<String, Map<String, String>> getDurate() {
+        pulisciScadute();
+        return new LinkedHashMap<>(durate());
+    }
+    public synchronized int pulisciScadute() {
+        LocalDate oggi = LocalDate.now(ITALIA);
+        List<String> via = new ArrayList<>();
+        for (Map.Entry<String, Map<String, String>> e : durate().entrySet()) {
+            String a = e.getValue().get("a");
+            try { if (a != null && oggi.isAfter(LocalDate.parse(a))) via.add(e.getKey()); } catch (Exception x) { /* */ }
+        }
+        if (via.isEmpty()) return 0;
+        for (String k : via) {
+            String[] p = k.split("\\|", 2);
+            try {
+                Long uid = Long.valueOf(p[0]);
+                userPermissionRepository.findByUserIdAndSection(uid, p[1]).ifPresent(userPermissionRepository::delete);
+            } catch (Exception x) { /* */ }
+            durate().remove(k);
+        }
+        salvaDurate("scadenza automatica");
+        invalidateCaches();
+        return via.size();
+    }
+
+    /** imposta per quanto vale l'eccezione personale; "sempre" toglie il limite */
+    public synchronized Map<String, String> setDurata(Long userId, String section, String tipo, String da, String a, String chi, String chiIt) {
+        if (!isValidKey(section)) throw new IllegalArgumentException("Sezione non valida");
+        if (!TIPI_DURATA.contains(tipo)) throw new IllegalArgumentException("Durata non valida");
+        LocalDate oggi = LocalDate.now(ITALIA), dal = oggi, al;
+        switch (tipo) {
+            case "sempre": togliDurata(userId, section); return null;
+            case "oggi": al = oggi; break;
+            case "settimana": al = oggi.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY)); break;
+            case "mese": al = oggi.with(TemporalAdjusters.lastDayOfMonth()); break;
+            default:
+                try { dal = LocalDate.parse(da); al = LocalDate.parse(a); }
+                catch (Exception e) { throw new IllegalArgumentException("Scegli le date del periodo"); }
+                if (al.isBefore(dal)) throw new IllegalArgumentException("La data di fine e' prima di quella di inizio");
+                if (al.isBefore(oggi)) throw new IllegalArgumentException("Il periodo e' gia' finito");
+        }
+        Map<String, String> v = new LinkedHashMap<>();
+        v.put("tipo", tipo); v.put("da", dal.toString()); v.put("a", al.toString());
+        if (chi != null) v.put("impostataDa", chi);
+        if (chiIt != null) v.put("impostataIt", chiIt);
+        durate().put(chiave(userId, section), v);
+        salvaDurate(chi);
+        invalidateCaches();
+        return v;
+    }
+    private synchronized void togliDurata(Long userId, String section) {
+        if (durate().remove(chiave(userId, section)) != null) salvaDurate(null);
     }
 }

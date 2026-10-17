@@ -65,12 +65,22 @@
     const minDa = s => s ? (Date.now() - new Date(s).getTime()) / 60000 : 0;
     const nomeCliente = r => [r.nome, r.cognome].filter(Boolean).join(' ') || 'Cliente';
     const vettTxt = r => (r.vetture || []).map(v => [v.marca, v.modello].filter(Boolean).join(' ')).filter(Boolean);
+    // NUOVO: 502/503/504 (o rete assente) = il server si sta riavviando per un nuovo deploy: niente "Errore 502",
+    // si avvisa con calma e si riprova da soli (appena il server riparte la pagina si ricarica, vedi presenza.js)
+    const RIAVVIO = '🔄 Il CRM si sta aggiornando a una nuova versione: un attimo, riprovo da solo…';
+    const errRiavvio = () => { const x = new Error(RIAVVIO); x.riavvio = true; return x; };
     async function api(path, opt) {
-        const res = await fetch(API + path, Object.assign({ credentials: 'same-origin' }, opt || {}));
+        let res;
+        try { res = await fetch(API + path, Object.assign({ credentials: 'same-origin' }, opt || {})); }
+        catch (e) { throw errRiavvio(); }
+        if (res.status === 502 || res.status === 503 || res.status === 504) throw errRiavvio();
         let d = null; try { d = await res.json(); } catch (e) { /* */ }
         if (!res.ok) throw new Error((d && d.error) || ('Errore ' + res.status));
         return d;
     }
+    const boxErr = m => `<div class="sa-msg ${m === RIAVVIO ? 'riavvio' : 'err'}">${esc(m)}</div>`;
+    let riprova = null;
+    const riprovaTra = (fn, ms) => { if (riprova) return; riprova = setTimeout(() => { riprova = null; fn(); }, ms || 5000); };
     const post = (path, body) => api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
     // senza stato (CRM chiuso / non ancora in salone): bollino VUOTO; il grigio pieno e' il Test drive
     const bollino = (s, grande) => `<i class="sa-dot ${s && STATI[s] ? STATI[s].c : 'vuoto'}${grande ? ' g' : ''}" aria-hidden="true"></i>`;
@@ -384,7 +394,7 @@
             st.giorni = m.giorni || {};
             st.err = '';
             if (eraRep !== st.vedeReport && root) disegnaSchede();
-        } catch (e) { st.err = e.message; }
+        } catch (e) { st.err = e.message; if (e.riavvio) riprovaTra(() => caricaGiorno(st.giorno, true)); }
         if (st.tab !== 'walkin') return;
         if (!silenzioso || !document.activeElement || !root.contains(document.activeElement) || document.activeElement.tagName === 'BUTTON') render();
     }
@@ -477,7 +487,7 @@
         const assegnati = st.ingressi.filter(r => r.consulente).length, presi = st.ingressi.filter(r => r.presoAt).length;
         const perCons = {}; st.ingressi.forEach(r => { if (r.consulente) perCons[r.consulente] = (perCons[r.consulente] || 0) + 1; });
         body.innerHTML = `
-          ${st.err ? `<div class="sa-msg err">${esc(st.err)}</div>` : ''}
+          ${st.err ? boxErr(st.err) : ''}
           ${barraStati()}
           <div class="sa-grid">
             <aside class="sa-side">
@@ -837,7 +847,7 @@
             const [d, m] = await Promise.all([api('/appuntamenti?data=' + g), api('/appuntamenti/giorni?mese=' + A.mese)]);
             A.lista = d.appuntamenti || []; A.info = d; A.puoGestire = !!d.puoGestire; A.io = d.mioConsulente || null; if (d.reparti) st.reparti = d.reparti; A.giorni = m.giorni || {}; A.daAss = m.daAssegnare || {};
             st.vedeTutti = !!d.vedeTutti; st.vedeReport = !!d.vedeReport; st.puoImportare = !!d.puoImportare; A.err = ''; A.caricato = true;
-        } catch (e) { A.err = e.message; }
+        } catch (e) { A.err = e.message; if (e.riavvio) riprovaTra(() => caricaApp(st.app.giorno)); }
         if (st.tab === 'app') render();
     }
     const cliApp = r => [String(r.nome || '').replace(/^\.+$/, ''), r.cognome].filter(Boolean).join(' ') || r.ragioneSociale || 'Cliente';
@@ -854,7 +864,7 @@
         A.lista.forEach(r => { if (r.consulente) perCons[r.consulente] = (perCons[r.consulente] || 0) + 1; else da++; });
         const info = A.info || {};
         body.innerHTML = `
-          ${A.err ? `<div class="sa-msg err">${esc(A.err)}</div>` : ''}
+          ${A.err ? boxErr(A.err) : ''}
           ${!st.vedeTutti && A.io && A.giorno === oggi() && A.lista.some(r => !r.consulente && !r.arrivatoAt) ? (n => `<div class="sa-msg ok">📌 Oggi ${n === 1 ? 'c’è <b>1</b> appuntamento' : `ci sono <b>${n}</b> appuntamenti`} senza consulente: puoi prenotarl${n === 1 ? 'o' : 'i'} alla tua scrivania con <b>📌 Prenota alla mia scrivania</b>.</div>`)(A.lista.filter(r => !r.consulente && !r.arrivatoAt).length) : ''}
           ${st.vedeTutti && info.daAssegnareProssimi ? `<div class="sa-msg warn">⚠️ ${info.daAssegnareProssimi} appuntament${info.daAssegnareProssimi === 1 ? 'o' : 'i'} da oggi in poi ${info.daAssegnareProssimi === 1 ? 'è' : 'sono'} ancora <b>da assegnare</b> (il venditore nel CSV non è un consulente di Agnano). Puoi assegnarli tu con <b>👤 Assegna consulente</b> (anche nei giorni prima), oppure si aggiornano al prossimo import se il CSV indica un consulente di Agnano.</div>` : ''}
           <div class="sa-grid">
@@ -1787,7 +1797,7 @@
               <label class="sa-dt">Dal <input type="date" data-rda value="${esc(R.da || '')}"></label>
               <label class="sa-dt">al <input type="date" data-ra value="${esc(R.a || '')}"></label>
             </div></div>`;
-        if (R.err) { body.innerHTML = barraPeriodo + `<div class="sa-msg err">${esc(R.err)}</div>`; return; }
+        if (R.err) { body.innerHTML = barraPeriodo + boxErr(R.err); return; }
         if (!D) { body.innerHTML = barraPeriodo + '<div class="sa-card sa-none">Caricamento del report…</div>'; return; }
         const C = calcola(D), cons = D.consulenti || [];
         const righeCons = Object.keys(C.per).filter(c => cons.includes(c) || C.per[c].n);
