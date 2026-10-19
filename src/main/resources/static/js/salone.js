@@ -1952,7 +1952,7 @@
             suono(); if (mz) setTimeout(suono, 450);
             try {
                 if (window.Notification && Notification.permission === 'granted') {
-                    const n = new Notification(mz ? '📣 ' + (mm.nome || 'Un collega') + ' ti ha menzionato' + (km === 'GRUPPO' ? ' · Gruppo salone' : '') : '💬 ' + chi + (k === 'GRUPPO' ? ' · Gruppo salone' : ''), { body: String(mm.testo || ''), tag: 'sa-chat-' + km, renotify: true });
+                    const n = new Notification(mz ? '📣 ' + (mm.nome || 'Un collega') + ' ti ha menzionato' + (km === 'GRUPPO' ? ' · Gruppo salone' : '') : '💬 ' + chi + (k === 'GRUPPO' ? ' · Gruppo salone' : ''), { body: testoMsg(mm), tag: 'sa-chat-' + km, renotify: true });
                     n.onclick = () => { window.focus(); apri(km); n.close(); };
                 }
             } catch (e) { /* */ }
@@ -2001,18 +2001,19 @@
         serata: ['🌙', 'Buona serata!', '#6f7fe0', '#2f3a8f'],
         ahah: ['😂', 'Ahahah', '#ffd34d', '#f0a01c']
     };
-    // NUOVO: sticker da immagine (file in /img/sticker/): id -> [emoji per l'anteprima nelle notifiche, nome, file]
+    // NUOVO: sticker da immagine (file in /img/sticker/): id -> [emoji, nome mostrato (per tutti "Sticker"), file]
     const STICKER_IMG = {
-        diecidenari: ['💰', 'Dieci di denari', '/img/sticker/re-denari.png'],
-        saluto: ['👋', 'Saluto', '/img/sticker/saluto.png'],
-        stammatina: ['💪', 'Stammatin c amma piglia tt chell che e\u2019 o nuostr', '/img/sticker/stammatina.png'],
-        fintanonvisto: ['🙈', 'Faccio finta di non aver visto', '/img/sticker/faccio-finta.png'],
-        haicagato: ['😏', 'Hai cagato?', '/img/sticker/hai-cagato.png'],
-        lafessa: ['😏', 'Aaaah… la fessa!', '/img/sticker/la-fessa.png'],
-        spaccando: ['😈', 'Te lo stai spaccando eh?!', '/img/sticker/spaccando.png'],
-        tremors: ['🤝', 'Lo hai il tremors?', '/img/sticker/tremors.png']
+        diecidenari: ['🏷️', 'Sticker', '/img/sticker/re-denari.png'],
+        saluto: ['🏷️', 'Sticker', '/img/sticker/saluto.png'],
+        stammatina: ['🏷️', 'Sticker', '/img/sticker/stammatina.png'],
+        fintanonvisto: ['🏷️', 'Sticker', '/img/sticker/faccio-finta.png'],
+        haicagato: ['🏷️', 'Sticker', '/img/sticker/hai-cagato.png'],
+        lafessa: ['🏷️', 'Sticker', '/img/sticker/la-fessa.png'],
+        spaccando: ['🏷️', 'Sticker', '/img/sticker/spaccando.png'],
+        tremors: ['🏷️', 'Sticker', '/img/sticker/tremors.png']
     };
     Object.entries(STICKER_IMG).forEach(([k, v]) => { STICKER[k] = [v[0], v[1], null, null, v[2]]; });
+    const testoMsg = m => m && m.sticker && STICKER_IMG[m.sticker] ? '🏷️ Sticker' : String((m && m.testo) || '');
     const stickerHtml = (id, piccolo) => { const s = STICKER[id]; if (!s) return '';
         if (s[4]) return `<span class="sa-stk-img${piccolo ? ' pk' : ''}"><img src="${s[4]}" alt="${esc(s[1])}" draggable="false" loading="lazy"></span>`;
         return `<span class="sa-stk${piccolo ? ' pk' : ''}" style="--a:${s[2]};--b:${s[3]}"><i>${s[0]}</i><b>${esc(s[1])}</b></span>`; };
@@ -2249,7 +2250,7 @@
             righe.sort((a, b) => ((ultimo(b.k) || {}).ts || (b.k === 'GRUPPO' ? 1 : 0)) - ((ultimo(a.k) || {}).ts || (a.k === 'GRUPPO' ? 1 : 0)));
             lista.innerHTML = righe.map(r => { const u = ultimo(r.k), n = nonLetti[r.k] || 0; return `<button type="button" class="sa-cl ${n ? 'nl' : ''}" data-conv="${r.k}">
                 <span class="sa-av">${r.k === 'GRUPPO' ? '👥' : esc(iniziali(r.nome))}</span>
-                <span class="sa-cl-t"><b>${esc(r.nome.replace('👥 ', ''))}</b><em>${u ? esc((u.da === io.id ? 'Tu: ' : r.k === 'GRUPPO' ? u.nome.split(' ')[0] + ': ' : '') + u.testo.slice(0, 60)) : esc(r.sub)}</em></span>
+                <span class="sa-cl-t"><b>${esc(r.nome.replace('👥 ', ''))}</b><em>${u ? esc((u.da === io.id ? 'Tu: ' : r.k === 'GRUPPO' ? u.nome.split(' ')[0] + ': ' : '') + testoMsg(u).slice(0, 60)) : esc(r.sub)}</em></span>
                 ${u ? `<small>${ora(u.ts)}</small>` : ''}${menzNonLette[r.k] && n ? '<i class="sa-badge sa-badge-at" title="Ti hanno menzionato">@</i>' : ''}${n ? `<i class="sa-badge">${n}</i>` : ''}</button>`; }).join('')
                 + (utenti.length ? '' : '<p class="sa-hint" style="padding:10px 14px">Nessun altro utente con accesso al salone, per ora.</p>');
         }
@@ -2270,7 +2271,7 @@
                 return sep + `<div class="sa-m ${mio ? 'mio' : ''}${perMe(m) ? ' ment' : ''}" data-id="${m.id}">
                   <div class="sa-bub${stk ? ' sa-bub-stk' : ''}">
                     ${!mio && conv === 'GRUPPO' ? `<b class="sa-m-n">${esc(m.nome)}</b>` : ''}
-                    ${rif ? `<button type="button" class="sa-quote" data-vai="${rif.id}"><b>${esc(rif.da === (io && io.id) ? 'Tu' : rif.nome)}</b><span>${esc(rif.testo.slice(0, 90))}</span></button>` : ''}
+                    ${rif ? `<button type="button" class="sa-quote" data-vai="${rif.id}"><b>${esc(rif.da === (io && io.id) ? 'Tu' : rif.nome)}</b><span>${esc(testoMsg(rif).slice(0, 90))}</span></button>` : ''}
                     ${stk ? stickerHtml(m.sticker) : `<div class="sa-m-t${soloEmoji(m.testo) ? ' emo-big' : ''}">${testoConMenzioni(m)}</div>`}
                     <small>${ora(m.ts)}</small>
                     <div class="sa-m-a"><button type="button" data-rispondi="${m.id}" title="Rispondi">↩</button><button type="button" data-reagisci="${m.id}" title="Reagisci">😊</button></div>
@@ -2323,7 +2324,7 @@
         function barraRisposta() {
             const b = el.querySelector('.sa-chat-reply');
             b.hidden = !risposta;
-            if (risposta) b.innerHTML = `<div><b>Rispondi a ${esc(risposta.da === (io && io.id) ? 'te stesso' : risposta.nome)}</b><span>${esc(risposta.testo.slice(0, 100))}</span></div><button type="button" data-annulla aria-label="Annulla risposta">✕</button>`;
+            if (risposta) b.innerHTML = `<div><b>Rispondi a ${esc(risposta.da === (io && io.id) ? 'te stesso' : risposta.nome)}</b><span>${esc(testoMsg(risposta).slice(0, 100))}</span></div><button type="button" data-annulla aria-label="Annulla risposta">✕</button>`;
         }
         async function invia() {
             const ta = el.querySelector('textarea'), testo = ta.value.trim();

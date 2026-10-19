@@ -1690,6 +1690,25 @@
             </div>
         </div>
 
+        <div id="operatoriFixModal" class="modal-overlay" style="display:none" onclick="closeOperatoriModal(event)">
+            <div class="modal-box" onclick="event.stopPropagation()" style="max-width:720px">
+                <div class="modal-header">
+                    <h3>👤 Operatori da correggere</h3>
+                    <button type="button" class="modal-close" onclick="closeOperatoriModal()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:14px">
+                        Per ora l'inserimento è solo di <b>Emanuele Amendola, Giuseppe Palladino, Davide Scognamiglio e Mattia Zuppa</b>. Questi preventivi (nuovi o già caricati) hanno un altro operatore: scegli a chi vanno. Puoi assegnarli tutti insieme dalla tendina accanto al nome, oppure uno per uno.
+                    </div>
+                    <div id="operatoriFixList"></div>
+                    <div class="form-actions">
+                        <button onclick="applyOperatoriDecisions()" class="btn-gold">APPLICA SCELTE</button>
+                        <button onclick="closeOperatoriModal()" class="btn-secondary">CHIUDI</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div style="margin-bottom:28px">
             <div class="preventivo-section-header vendita">
                 <span>🔴 Preventivi Vendita</span>
@@ -2648,7 +2667,7 @@
 <script src="/js/rent.js?v=20261014a"></script>
 <script src="/js/service.js"></script>
 <script src="/js/veicoli.js"></script>
-<script src="/js/preventivi.js"></script>
+<script src="/js/preventivi.js?v=20261019a"></script>
 <script src="/js/preventivi-sospesi.js"></script>
 <script src="/js/app.js?v=20261014b"></script>
 <script src="/js/macro-home.js?v=20261014b"></script>
@@ -2658,7 +2677,7 @@
 <script src="/js/consegne-analisi.js?v=20261014a"></script>
 <script src="/js/stock-home.js?v=20261017a"></script>
 <script src="/js/commerciale.js?v=20261016a"></script>
-<script src="/js/salone.js?v=20261017a"></script>
+<script src="/js/salone.js?v=20261019a"></script>
 <!-- NUOVO: presenza di tutti gli utenti (Admin -> Utenti) e ricarica automatica dopo un deploy -->
 <script src="/js/installa.js?v=20261016a"></script>
 <script src="/js/presenza.js?v=20261016b"></script>
