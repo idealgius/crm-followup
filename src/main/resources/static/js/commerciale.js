@@ -1066,9 +1066,12 @@
 
     /* ================= finestra di export ================= */
     let expState = null;
+    // NUOVO: argomenti da mettere nel report (Excel = fogli, PDF = blocchi della pagina)
+    const CONT = [['riep', 'Riepilogo e indicatori'], ['mens', 'Andamento mensile'], ['tip', 'Tipologia e pagamento'], ['ori', 'Origini (canali)'],
+        ['cons', 'Consulenti'], ['marche', 'Performance marchi'], ['fall', 'Trattative fallite'], ['serv', 'Servizi'], ['pt', 'Preventivi telefonici']];
     function openExport() {
         const s0 = expState || {
-            fmt: 'xlsx', anno, da, a, b2b: b2bOn, lista: true, ann: true, prev: false,
+            fmt: 'xlsx', anno, da, a, b2b: b2bOn, lista: true, ann: true, prev: false, ptL: false, cont: CONT.map(c => c[0]),
             amb: view.k === 'v' ? ['v|' + view.v] : view.k === 'sede' ? ['sede|' + view.s] : view.k === 'b2b' ? ['b2b|'] : ['all|', 'sede|Agnano', 'sede|Casamarciano', 'sede|Salerno']
         };
         const ck = key => s0.amb.includes(key) ? 'checked' : '';
@@ -1098,10 +1101,14 @@
                 ${['Agnano', 'Casamarciano', 'Salerno', 'Noleggio'].map(s => `<div><h5>Consulenti ${s === 'Noleggio' ? 'noleggio' : s} <button type="button" class="cm-link" data-xg="${s}">tutti</button></h5>
                   ${consG(s).map(v => `<label><input type="checkbox" data-amb="v|${esc(v)}" ${ck('v|' + v)}> ${esc(v)}</label>`).join('') || '<small class="cm-hint">Nessuno</small>'}</div>`).join('')}
               </div></div>
+            <div class="cm-exp-s"><h4>Contenuto <button type="button" class="cm-link" data-call>Tutto</button> <button type="button" class="cm-link" data-cnone>Nessuno</button></h4><div class="cm-exp-row">
+              ${CONT.map(([k, t]) => `<label class="cm-exp-chk"><input type="checkbox" data-cont="${k}" ${(s0.cont || []).includes(k) ? 'checked' : ''}> ${t}</label>`).join('')}
+            </div><p class="cm-hint" style="margin:8px 0 0">Solo quello che spunti finisce nel file o nella stampa: ad esempio solo "Preventivi telefonici".</p></div>
             <div class="cm-exp-s cm-exp-xls"><h4>Fogli in più (solo Excel)</h4><div class="cm-exp-row">
               <label class="cm-exp-chk"><input type="checkbox" id="cmXLista" ${s0.lista ? 'checked' : ''}> Elenco dettagliato dei contratti</label>
               <label class="cm-exp-chk"><input type="checkbox" id="cmXAnn" ${s0.ann ? 'checked' : ''}> Elenco dei contratti annullati</label>
               <label class="cm-exp-chk"><input type="checkbox" id="cmXPrev" ${s0.prev ? 'checked' : ''}> Elenco di tutte le trattative (preventivi)</label>
+              <label class="cm-exp-chk"><input type="checkbox" id="cmXPtL" ${s0.ptL ? 'checked' : ''}> Elenco dei preventivi telefonici</label>
             </div></div>
             <div class="cm-exp-foot"><span class="cm-hint" id="cmXInfo"></span><button type="button" class="cm-chip" data-x>Annulla</button><button type="button" class="cm-btn-go" id="cmXGo">Esporta</button></div>
           </div>`, true);
@@ -1109,14 +1116,21 @@
         $('#cmXDa').value = s0.da; $('#cmXA').value = s0.a;
         const read = () => ({
             fmt: ov.querySelector('[name="cmFmt"]:checked').value, anno: +$('#cmXAnno').value, da: +$('#cmXDa').value, a: +$('#cmXA').value,
-            b2b: $('#cmXB2b').checked, lista: $('#cmXLista').checked, ann: $('#cmXAnn').checked, prev: $('#cmXPrev').checked,
-            amb: [...ov.querySelectorAll('[data-amb]:checked')].map(i => i.dataset.amb)
+            b2b: $('#cmXB2b').checked, lista: $('#cmXLista').checked, ann: $('#cmXAnn').checked, prev: $('#cmXPrev').checked, ptL: $('#cmXPtL').checked,
+            amb: [...ov.querySelectorAll('[data-amb]:checked')].map(i => i.dataset.amb),
+            cont: [...ov.querySelectorAll('[data-cont]:checked')].map(i => i.dataset.cont)
         });
-        const upd = () => { const s = read(); $('.cm-exp-xls').style.display = s.fmt === 'xlsx' ? '' : 'none'; $('#cmXInfo').textContent = s.amb.length + (s.amb.length === 1 ? ' voce scelta' : ' voci scelte'); };
+        // c'e' qualcosa da mettere nel report? (in Excel bastano anche i soli elenchi)
+        const vuoto = s => !s.cont.length && !(s.fmt === 'xlsx' && (s.lista || s.ann || s.prev || s.ptL));
+        const upd = () => { const s = read(); $('.cm-exp-xls').style.display = s.fmt === 'xlsx' ? '' : 'none';
+            $('#cmXInfo').textContent = s.amb.length + (s.amb.length === 1 ? ' voce scelta' : ' voci scelte') + ' · ' + (s.cont.length === CONT.length ? 'tutto il contenuto' : s.cont.length ? s.cont.length + (s.cont.length === 1 ? ' argomento su ' : ' argomenti su ') + CONT.length : 'nessun argomento'); };
         ov.addEventListener('change', upd); upd();
         ov.addEventListener('click', e => {
+            if (e.target.closest('#cmXGo')) return;   // non coprire il messaggio di "Esporta"
             if (e.target.closest('[data-xall]')) ov.querySelectorAll('[data-amb]').forEach(i => { i.checked = true; });
             if (e.target.closest('[data-xnone]')) ov.querySelectorAll('[data-amb]').forEach(i => { i.checked = false; });
+            if (e.target.closest('[data-call]')) ov.querySelectorAll('[data-cont]').forEach(i => { i.checked = true; });
+            if (e.target.closest('[data-cnone]')) ov.querySelectorAll('[data-cont]').forEach(i => { i.checked = false; });
             const g = e.target.closest('[data-xg]');
             if (g) { const box = g.closest('div'); const all = [...box.querySelectorAll('[data-amb]')]; const on = all.some(i => !i.checked); all.forEach(i => { i.checked = on; }); }
             upd();
@@ -1124,6 +1138,7 @@
         $('#cmXGo').addEventListener('click', async () => {
             const s = read();
             if (!s.amb.length) { $('#cmXInfo').textContent = 'Scegli almeno una voce'; return; }
+            if (vuoto(s)) { $('#cmXInfo').textContent = 'Scegli almeno un argomento in "Contenuto"'; return; }
             if (s.a < s.da) { const x = s.a; s.a = s.da; s.da = x; }
             expState = s;
             const btn = $('#cmXGo'); btn.disabled = true; btn.textContent = 'Preparo…';
@@ -1151,21 +1166,22 @@
         const T = (t, w) => ({ t, tipo: 'text', w: w || 24 }), I = (t, w) => ({ t, tipo: 'int', w: w || 12 }), Q = (t, w) => ({ t, tipo: 'pct', w: w || 11 });
         const r = (x, y) => y ? x / y : 0;
         const fogli = [];
-        fogli.push({ nome: 'Riepilogo', tabelle: [{ titolo: 'Riepilogo per voce', nota: 'Preventivi = trattative create nel periodo (data trattativa). Contratti = trattative chiuse nel periodo (data chiusura), comprese quelle aperte in mesi precedenti' + (recOn ? ' e quelle recuperate dal CSV delle Consegne' : '') + '. Conversione = contratti / preventivi. Pagamento e servizi: dalla riga del foglio AVANZAMENTO.',
+        const has = k => !M.s.cont || M.s.cont.includes(k);
+        if (has('riep')) fogli.push({ nome: 'Riepilogo', tabelle: [{ titolo: 'Riepilogo per voce', nota: 'Preventivi = trattative create nel periodo (data trattativa). Contratti = trattative chiuse nel periodo (data chiusura), comprese quelle aperte in mesi precedenti' + (recOn ? ' e quelle recuperate dal CSV delle Consegne' : '') + '. Conversione = contratti / preventivi. Pagamento e servizi: dalla riga del foglio AVANZAMENTO.',
             colonne: [T('Voce', 30), I('Preventivi'), I('Contratti'), Q('Conversione', 12), I('Annullati'), Q('% annullati', 11), I('In corso'), I('Fallite'), I('di cui B2B'), I('Usato'), I('Km0'), I('Nuovo'), Q('% finanziati', 12), I('Prev. telefonici', 13), I('Da prev. tel.', 12), Q('Conv. prev. tel.', 13), I('Contr. da mesi prec.', 14), I('di cui recuperati', 13)],
             righe: D.map(d => [lab(d.vw), d.P, d.Cn, r(d.Cn, d.P), d.A, r(d.A, d.Cn), d.IN.length, d.F.length, d.B2B,
                 (d.tip.find(x => x.k === 'Usato') || { c: 0 }).c, (d.tip.find(x => x.k === 'Km0') || { c: 0 }).c, (d.tip.find(x => x.k === 'Nuovo') || { c: 0 }).c,
                 r(d.FIN, d.CFn), d.isB ? '' : d.X.length, d.isB ? '' : d.TEL, d.isB ? '' : r(d.ptCh, d.X.length), d.PRIMA, d.REC]) }] });
         const mh = D[0].ms.map(m => I(MESI[m].charAt(0).toUpperCase() + MESI[m].slice(1), 8));
         const mens = (titolo, key, tot) => ({ titolo, colonne: [T('Voce', 30)].concat(mh, I('Totale', 10)), righe: D.map(d => [lab(d.vw)].concat(d[key], tot(d))) });
-        fogli.push({ nome: 'Andamento mensile', tabelle: [mens('Preventivi per mese', 'pv', d => d.P), mens('Contratti per mese', 'cv', d => d.Cn), mens('Annullati per mese', 'av', d => d.A), mens('Trattative fallite per mese', 'fv', d => d.F.length)]
-            .concat(D.some(d => !d.isB) ? [{ titolo: 'Preventivi telefonici per mese', colonne: [T('Voce', 30)].concat(mh, I('Totale', 10)), righe: D.filter(d => !d.isB).map(d => [lab(d.vw)].concat(d.ptv, d.X.length)) }] : []) });
+        if (has('mens')) fogli.push({ nome: 'Andamento mensile', tabelle: [mens('Preventivi per mese', 'pv', d => d.P), mens('Contratti per mese', 'cv', d => d.Cn), mens('Annullati per mese', 'av', d => d.A), mens('Trattative fallite per mese', 'fv', d => d.F.length)]
+            .concat(has('pt') && D.some(d => !d.isB) ? [{ titolo: 'Preventivi telefonici per mese', colonne: [T('Voce', 30)].concat(mh, I('Totale', 10)), righe: D.filter(d => !d.isB).map(d => [lab(d.vw)].concat(d.ptv, d.X.length)) }] : []) });
         // origini: per ogni voce preventivi, contratti, conversione
         const oriK = [...new Set(D.flatMap(d => d.ori.map(o => o.k)))];
         const sumO = k => D.reduce((s, d) => s + (d.ori.find(o => o.k === k) || { c: 0 }).c, 0);
         oriK.sort((x, y) => sumO(y) - sumO(x));
         const og = (d, k) => d.ori.find(o => o.k === k) || { p: 0, c: 0 };
-        fogli.push({ nome: 'Origini', tabelle: [
+        if (has('ori')) fogli.push({ nome: 'Origini', tabelle: [
             { titolo: 'Contratti per origine', nota: ORIG_NOTE.map(([k, v]) => k + ' = ' + v).join(' · '), colonne: [T('Voce', 30)].concat(oriK.map(k => I(k, 14)), I('Totale', 10)), righe: D.map(d => [lab(d.vw)].concat(oriK.map(k => og(d, k).c), d.Cn)) },
             { titolo: 'Preventivi per origine', colonne: [T('Voce', 30)].concat(oriK.map(k => I(k, 14)), I('Totale', 10)), righe: D.map(d => [lab(d.vw)].concat(oriK.map(k => og(d, k).p), d.P)) },
             { titolo: 'Conversione per origine (contratti / preventivi)', colonne: [T('Voce', 30)].concat(oriK.map(k => Q(k, 14)), Q('Totale', 10)), righe: D.map(d => [lab(d.vw)].concat(oriK.map(k => r(og(d, k).c, og(d, k).p)), r(d.Cn, d.P))) }] });
@@ -1178,11 +1194,11 @@
         const oriC = [...new Set(VC.map(c => c.origine))].sort((x, y) => VC.filter(c => c.origine === y).length - VC.filter(c => c.origine === x).length);
         const pRC = by(RC, c => c.vend), cRC = by(VC, c => c.vend);
         const rowsC = [...new Set([...pRC.keys(), ...cRC.keys()])].map(v => { const l = pRC.get(v) || [], c = cRC.get(v) || []; return [v, SEDI[sedeOf(v)], l.length, c.length, r(c.length, l.length)].concat(oriC.map(k => c.filter(x => x.origine === k).length), c.filter(x => x.tel).length); }).sort((x, y) => y[3] - x[3]);
-        fogli.push({ nome: 'Consulenti', tabelle: [{ titolo: 'Consulenti: preventivi, contratti e origini dei contratti', colonne: [T('Consulente', 24), T('Sede', 28), I('Preventivi'), I('Contratti'), Q('Conversione', 12)].concat(oriC.map(k => I(k, 14)), I('di cui da prev. tel.', 14)),
+        if (has('cons')) fogli.push({ nome: 'Consulenti', tabelle: [{ titolo: 'Consulenti: preventivi, contratti e origini dei contratti', colonne: [T('Consulente', 24), T('Sede', 28), I('Preventivi'), I('Contratti'), Q('Conversione', 12)].concat(oriC.map(k => I(k, 14)), I('di cui da prev. tel.', 14)),
             righe: rowsC, totale: rowsC.length ? ['Totale', '', RC.length, VC.length, r(VC.length, RC.length)].concat(oriC.map(k => VC.filter(c => c.origine === k).length), VC.filter(c => c.tel).length) : null }] });
         // tipologia e pagamento
         const tg = (d, k) => d.tip.find(x => x.k === k) || { p: 0, c: 0 };
-        fogli.push({ nome: 'Tipologia e pagamento', tabelle: [
+        if (has('tip')) fogli.push({ nome: 'Tipologia e pagamento', tabelle: [
             { titolo: 'Tipologia veicolo', colonne: [T('Voce', 30)].concat(['Usato', 'Km0', 'Nuovo'].flatMap(k => [I(k + ' prev.', 11), I(k + ' contr.', 11), Q(k + ' conv.', 11)])),
               righe: D.map(d => [lab(d.vw)].concat(['Usato', 'Km0', 'Nuovo'].flatMap(k => [tg(d, k).p, tg(d, k).c, r(tg(d, k).c, tg(d, k).p)]))) },
             { titolo: 'Pagamento dei contratti (foglio AVANZAMENTO)', colonne: [T('Voce', 30), I('Finanziamento', 14), I('PC (contanti)', 14), I('Non indicato', 13), Q('% finanziati', 12)], righe: D.map(d => [lab(d.vw), d.FIN, d.PC, d.NI, r(d.FIN, d.CFn)]) }] });
@@ -1192,18 +1208,27 @@
         const ANNx = [...uniA.values()];
         const RMc = [...uniC.values()], pRM = by(RM, x => x.marca), cRM = by(RMc, x => x.marca);
         const mk = [...new Set([...pRM.keys(), ...cRM.keys()])].map(k => { const l = pRM.get(k) || [], c = cRM.get(k) || []; return [k, l.length, c.length, r(c.length, l.length), ANNx.filter(x => x.marca === k).length, l.filter(x => x.stato === 'In corso').length, l.filter(isF).length, c.filter(x => x.tipo === 'Usato').length, c.filter(x => x.tipo === 'Km0').length, c.filter(x => x.tipo === 'Nuovo').length]; }).sort((x, y) => y[2] - x[2] || y[1] - x[1]);
-        fogli.push({ nome: 'Performance marchi', tabelle: [{ titolo: 'Performance per marca (tutte le voci scelte)', colonne: [T('Marca', 20), I('Preventivi'), I('Contratti'), Q('Conversione', 12), I('Annullati'), I('In corso'), I('Fallite'), I('Usato'), I('Km0'), I('Nuovo')],
+        if (has('marche')) fogli.push({ nome: 'Performance marchi', tabelle: [{ titolo: 'Performance per marca (tutte le voci scelte)', colonne: [T('Marca', 20), I('Preventivi'), I('Contratti'), Q('Conversione', 12), I('Annullati'), I('In corso'), I('Fallite'), I('Usato'), I('Km0'), I('Nuovo')],
             righe: mk, totale: ['Totale', RM.length, RMc.length, r(RMc.length, RM.length), ANNx.length, RM.filter(x => x.stato === 'In corso').length, RM.filter(isF).length, RMc.filter(x => x.tipo === 'Usato').length, RMc.filter(x => x.tipo === 'Km0').length, RMc.filter(x => x.tipo === 'Nuovo').length] }] });
         // motivi di fallimento
         const motK = [...new Set(D.flatMap(d => d.motivi.map(m => m.k)))];
-        fogli.push({ nome: 'Trattative fallite', tabelle: [{ titolo: 'Motivi di fallimento', colonne: [T('Voce', 30)].concat(motK.map(k => I(k, 16)), I('Totale', 10)), righe: D.map(d => [lab(d.vw)].concat(motK.map(k => (d.motivi.find(m => m.k === k) || { n: 0 }).n), d.F.length)) }] });
+        if (has('fall')) fogli.push({ nome: 'Trattative fallite', tabelle: [{ titolo: 'Motivi di fallimento', colonne: [T('Voce', 30)].concat(motK.map(k => I(k, 16)), I('Totale', 10)), righe: D.map(d => [lab(d.vw)].concat(motK.map(k => (d.motivi.find(m => m.k === k) || { n: 0 }).n), d.F.length)) }] });
         // servizi
-        fogli.push({ nome: 'Servizi', tabelle: [{ titolo: 'Servizi sui contratti (righe del foglio AVANZAMENTO)', colonne: [T('Voce', 30), I('Contratti del foglio', 14)].concat(SERVIZI.flatMap(k => [I(k, 13), Q('%', 9)])),
+        if (has('serv')) fogli.push({ nome: 'Servizi', tabelle: [{ titolo: 'Servizi sui contratti (righe del foglio AVANZAMENTO)', colonne: [T('Voce', 30), I('Contratti del foglio', 14)].concat(SERVIZI.flatMap(k => [I(k, 13), Q('%', 9)])),
             righe: D.map(d => [lab(d.vw), d.SV].concat(d.serv.flatMap(x => [x.n, r(x.n, d.SV)]))) }] });
         const DP = D.filter(d => !d.isB);
-        if (DP.length) fogli.push({ nome: 'Preventivi telefonici', tabelle: [{ titolo: 'Preventivi telefonici (sezione In bound)', nota: 'Diventati contratto = preventivo abbinato a un contratto (stesso cliente o stessa targa/telaio, contratto firmato dopo il preventivo)',
+        // preventivi telefonici di tutte le voci scelte, senza doppioni
+        const uniPT = new Map(); DP.forEach(d => d.X.forEach(p => uniPT.set(p.id, p)));
+        const PTx = [...uniPT.values()];
+        const ptPer = key => { const g = by(PTx, key); return [...g].map(([k, l]) => [k, l.length].concat(ST.map(s => l.filter(p => p.st === s).length), l.filter(p => p.contr).length, r(l.filter(p => p.contr).length, l.length))).sort((x, y) => y[1] - x[1]); };
+        const ptCol = first => [T(first, 26), I('Preventivi')].concat(ST.map(s => I(STL[s], 15)), I('Diventati contratto', 15), Q('Conversione', 12));
+        const ptTot = () => ['Totale', PTx.length].concat(ST.map(s => PTx.filter(p => p.st === s).length), PTx.filter(p => p.contr).length, r(PTx.filter(p => p.contr).length, PTx.length));
+        if (has('pt') && DP.length) fogli.push({ nome: 'Preventivi telefonici', tabelle: [{ titolo: 'Preventivi telefonici (sezione In bound)', nota: 'Diventati contratto = preventivo abbinato a un contratto (stesso cliente o stessa targa/telaio, contratto firmato dopo il preventivo)',
             colonne: [T('Voce', 30), I('Preventivi')].concat(ST.map(s => I(STL[s], 15)), I('Diventati contratto', 15), Q('Conversione', 12)),
-            righe: DP.map(d => [lab(d.vw), d.X.length].concat(d.esiti.map(e => e.n), d.ptCh, r(d.ptCh, d.X.length))) }] });
+            righe: DP.map(d => [lab(d.vw), d.X.length].concat(d.esiti.map(e => e.n), d.ptCh, r(d.ptCh, d.X.length))) },
+            { titolo: 'Preventivi telefonici per mese', colonne: [T('Voce', 30)].concat(mh, I('Totale', 10)), righe: DP.map(d => [lab(d.vw)].concat(d.ptv, d.X.length)) },
+            { titolo: 'Per consulente (tutte le voci scelte)', colonne: ptCol('Consulente'), righe: ptPer(p => p.vend), totale: PTx.length ? ptTot() : null },
+            { titolo: 'Per operatore che ha inserito il preventivo', colonne: ptCol('Operatore'), righe: ptPer(p => p.op), totale: PTx.length ? ptTot() : null }] });
         // elenchi
         const riga = c => [dd(c.data), c.cliente, c.vend, SEDI[c.sede], c.veicolo, c.tipo, c.origine, esito(c), c.motivo || '', c.b2b ? 'Sì' : '', c.pag || '',
             c.serv ? (c.serv['Blockshaft'] ? 'Sì' : '') : '', c.serv ? (c.serv['Lojack'] ? 'Sì' : '') : '', c.serv ? (c.serv['FIR'] ? 'Sì' : '') : '', c.serv ? (c.serv['Garanzia Mawdy'] ? 'Sì' : '') : '', c.serv ? (c.serv['Pack manutenzione'] ? 'Sì' : '') : '',
@@ -1213,6 +1238,10 @@
         if (M.s.ann) fogli.push({ nome: 'Annullati', tabelle: [{ titolo: 'Contratti annullati', colonne: colL, righe: ANNx.slice().sort(sortD).map(riga) }] });
         if (M.s.lista) fogli.push({ nome: 'Contratti', tabelle: [{ titolo: 'Elenco dei contratti (chiusi nel periodo)', colonne: colL, righe: [...uniC.values()].sort(sortD).map(riga) }] });
         if (M.s.prev) fogli.push({ nome: 'Preventivi', tabelle: [{ titolo: 'Elenco di tutte le trattative (preventivi)', colonne: colL, righe: tutti.map(riga) }] });
+        if (M.s.ptL && DP.length) fogli.push({ nome: 'Elenco prev. telefonici', tabelle: [{ titolo: 'Elenco dei preventivi telefonici (sezione In bound)',
+            colonne: [T('Data', 11), T('Cliente', 28), T('Tipo', 10), T('Marca', 16), T('Modello', 22), T('Consulente', 22), T('Sede', 28), T('Operatore', 22), T('Esito', 22), T('Diventato contratto il', 16)],
+            righe: PTx.slice().sort(sortD).map(p => [dd(p.data), p.cliente, p.tipo, p.marca || '', p.modello || '', p.vend, SEDI[p.sede] || '', p.op, STL[p.st], p.contr ? dd(p.contr.data) : '']) }] });
+        if (!fogli.length) throw new Error('Con le scelte fatte non c\'è nulla da esportare');
         const amb = D.length === 1 ? lab(D[0].vw) : D.length + ' voci';
         const body = { titolo: 'Report commerciale' + (D.length === 1 ? ' · ' + lab(D[0].vw) : ''), sottotitolo: `Periodo ${M.per} · ${amb} · B2B ${M.b2b ? 'incluso' : 'escluso'} · Gruppo Autoscala`,
             file: `commerciale_${M.s.anno}_${String(M.s.da).padStart(2, '0')}-${String(M.s.a).padStart(2, '0')}${D.length === 1 ? '_' + lab(D[0].vw).replace(/[^A-Za-z0-9]+/g, '_') : ''}.xlsx`, fogli };
@@ -1258,45 +1287,55 @@
         const kp = (l, v, s) => `<div class="kpi"><small>${l}</small><b>${v}</b><span>${s}</span></div>`;
         const ct = (head, list, extra) => pTab([head, 'Preventivi', 'Contratti', 'Conv.'].concat(extra ? ['di cui 📞'] : []),
             list.map(o => [esc(o.k), nf(o.p), o.c || '–', o.c ? pct(o.c, o.p) : '–'].concat(extra ? [o.tel || '–'] : [])), ['Totale', nf(d.P), nf(d.Cn), pct(d.Cn, d.P)].concat(extra ? [d.TEL] : []));
-        let h = `<section class="amb"><header><h1>${esc(tit)}</h1><p>${esc(sub)}</p></header>
-          <div class="kpis">
+        // NUOVO: ogni argomento e' un blocco a se', e si stampa solo se scelto in "Contenuto"
+        const has = k => !M.s.cont || M.s.cont.includes(k);
+        const blocchi = [];   // { t: titolo, cards: [...], g2: true se le card vanno affiancate }
+        const blocco = (t, cards, g2) => { cards = cards.filter(Boolean); if (cards.length) blocchi.push({ t, cards, g2: g2 !== false }); };
+        const cAnd = `<div class="card"><h3>Andamento mensile</h3><p class="h">${d.P ? `Picco di preventivi a ${MESIL[d.ms[iMax]]} (${d.pv[iMax]}), calo a ${MESIL[d.ms[iMin]]} (${d.pv[iMin]})` : 'Nessuna trattativa nel periodo'}</p>
+              <div class="leg"><i style="background:${PAL.c2}"></i>Preventivi <i style="background:${PAL.c1}"></i>Contratti</div>${svgBars(d.ms.map(m => MESI[m]), [{ data: d.pv, color: PAL.c2 }, { data: d.cv, color: PAL.c1 }])}</div>`;
+        const cTip = `<div class="card"><h3>Tipologia veicolo</h3><p class="h">${tipP && d.P ? `${tipP.k === 'Usato' ? "L'usato" : tipP.k === 'Km0' ? 'Il Km0' : tipP.k === 'Nuovo' ? 'Il nuovo' : tipP.k} vale il ${pct(tipP.p, d.P)} dei preventivi` : ''}</p>
+              ${ct('Tipologia', d.tip)}
+              <h3 style="margin-top:12px">Pagamento</h3><p class="h">Contratti per modalità</p><div class="don">${svgDonut([{ n: d.FIN, c: PAL.c1 }, { n: d.PC, c: PAL.c2 }, { n: d.NI, c: '#cfdadc' }], 'contratti')}
+              <ul><li><i style="background:${PAL.c1}"></i><b>Finanziamento</b> ${d.FIN} · ${pct(d.FIN, d.Cn)}</li><li><i style="background:${PAL.c2}"></i><b>PC</b> ${d.PC} · ${pct(d.PC, d.Cn)}</li>${d.NI ? `<li><i style="background:#cfdadc"></i><b>Non indicato</b> ${d.NI} · ${pct(d.NI, d.Cn)}</li>` : ''}</ul></div></div>`;
+        blocco(has('mens') && has('tip') ? 'Andamento e tipologia' : has('mens') ? 'Andamento mensile' : 'Tipologia e pagamento', [has('mens') && cAnd, has('tip') && cTip]);
+        if (has('ori')) blocco('Canali', [`<div class="card"><h3>Contratti per origine</h3><p class="h">${d.ori[0] ? `${esc(d.ori[0].k)} porta il ${pct(d.ori[0].c, d.Cn)} dei contratti` : ''}</p>${pHb(d.ori.filter(o => o.c).map(o => ({ k: o.k, n: o.c })))}</div>`,
+            `<div class="card"><h3>Preventivi e contratti per fonte</h3><p class="h">${oriP[0] ? `${esc(oriP[0].k)} genera il ${pct(oriP[0].p, d.P)} dei preventivi` : ''}${convBest.length ? `; ${convBest.map(x => esc(x.k)).join(' e ')} convertono meglio` : ''}</p>
+              ${ct('Fonte', oriP, !d.isB)}</div>`]);
+        blocco(has('marche') && has('fall') ? 'Marche e trattative fallite' : has('marche') ? 'Performance marchi' : 'Trattative fallite', [
+            has('marche') && `<div class="card"><h3>Performance marchi</h3><p class="h">Tutte le marche, per contratti</p>${ct('Marca', d.marche)}</div>`,
+            has('fall') && `<div class="card"><h3>Motivi di fallimento</h3><p class="h">${d.F.length} trattative fallite (${pct(d.F.length, d.P)} dei preventivi)</p>${pHb(d.motivi)}</div>`]);
+        if (has('pt') && !d.isB) {
+            const ptRighe = key => [...by(d.X, key)].map(([k, l]) => ({ k, n: l.length, c: l.filter(p => p.contr).length })).sort((x, y) => y.n - x.n);
+            const ptT = (head, rows) => pTab([head, 'Preventivi', 'Diventati contratto', 'Conv.'], rows.map(x => [esc(x.k), x.n, x.c || '–', pct(x.c, x.n)]), ['Totale', d.X.length, d.ptCh, pct(d.ptCh, d.X.length)]);
+            blocco('Preventivi telefonici', [`<div class="card"><h3>Preventivi telefonici per mese</h3><p class="h">Sezione In bound · ${d.X.length} preventivi, ${d.ptCh} diventati contratto (${pct(d.ptCh, d.X.length)})</p>
+              <div class="leg"><i style="background:${PAL.c2}"></i>Preventivi <i style="background:#2f9e6e"></i>Diventati contratto</div>${svgBars(d.ms.map(m => MESI[m]), [{ data: d.ptv, color: PAL.c2 }, { data: d.ptc, color: '#2f9e6e' }])}</div>`,
+                `<div class="card"><h3>Esito</h3><p class="h">Stato attuale di ogni preventivo</p>${pTab(['Stato', 'Preventivi', '%'], d.esiti.map(e => [STL[e.s], e.n, pct(e.n, d.X.length)]), ['Totale', d.X.length, d.X.length ? '100%' : '–'])}</div>`,
+                d.vw.k !== 'v' && d.X.length ? `<div class="card"><h3>Per consulente</h3><p class="h">Preventivi assegnati a ogni consulente</p>${ptT('Consulente', ptRighe(p => p.vend))}</div>` : '',
+                d.X.length ? `<div class="card"><h3>Per operatore</h3><p class="h">Chi ha inserito il preventivo</p>${ptT('Operatore', ptRighe(p => p.op))}</div>` : '']);
+        }
+        if (has('cons') && d.group && d.cons.length) {
+            const Mx = origMatrix(d.C);
+            blocco('Consulenti', [`<div class="card"><h3>Classifica consulenti</h3>${pTab(['Consulente', 'Sede', 'Preventivi', 'Contratti', 'Conv.', 'Annullati', 'Fallite'].concat(d.isB ? [] : ['Prev. tel.', 'Da prev. tel.']).concat(['Finanziati']),
+                d.cons.map(c => [esc(c.k), c.sede, nf(c.p), c.n, pct(c.n, c.p), c.ann || '–', c.f || '–'].concat(d.isB ? [] : [c.pt || '–', c.tel || '–']).concat([pct(c.fin, c.cf)])),
+                ['Totale', '', nf(d.P), d.Cn, pct(d.Cn, d.P), d.A, d.F.length].concat(d.isB ? [] : [d.X.length, d.TEL]).concat([pct(d.FIN, d.CFn)]))}</div>`,
+              `<div class="card"><h3>Origini per consulente</h3>${pTab(['Consulente'].concat(Mx.cols.map(esc), ['Totale']), Mx.rows.map(r => [esc(r.v)].concat(Mx.cols.map(c => r.m[c] || '–'), [r.n])), ['Totale'].concat(Mx.cols.map(c => Mx.tot[c] || 0), [d.Cn]))}</div>`], false);
+        }
+        if (has('serv')) blocco('Servizi sui contratti', [`<div class="card"><h3>Servizi e accessori</h3><p class="h">Numero di contratti con il servizio</p>${pHb(d.serv.slice().sort((x, y) => y.n - x.n))}</div>`,
+            `<div class="card"><h3>Incidenza sui ${d.SV} contratti del foglio</h3><p class="h">Quota di contratti con il servizio</p>${pTab(['Servizio', 'Contratti', 'Incidenza'], d.serv.slice().sort((x, y) => y.n - x.n).map(x => [x.k, x.n, pct(x.n, d.SV)]), ['Contratti del foglio', d.SV, ''])}</div>`]);
+        // niente da stampare per questa voce (es. solo preventivi telefonici su una voce B2B): pagina saltata
+        if (!has('riep') && !blocchi.length) return '';
+        const soloPt = M.s.cont && M.s.cont.length === 1 && M.s.cont[0] === 'pt';
+        let h = `<section class="amb"><header><h1>${esc(soloPt ? 'Preventivi telefonici · ' + lab(d.vw) : tit)}</h1><p>${esc(sub)}</p></header>`;
+        if (has('riep')) h += `<div class="kpis">
             ${kp('Preventivi', nf(d.P), 'media ' + (d.P / nm).toLocaleString('it-IT', { maximumFractionDigits: 1 }) + ' al mese')}
             ${kp('Contratti', nf(d.Cn), 'media ' + (d.Cn / nm).toLocaleString('it-IT', { maximumFractionDigits: 1 }) + ' al mese' + (d.PRIMA ? ' · ' + d.PRIMA + ' da trattative di mesi precedenti' : ''))}
             ${kp('Conversione', pct(d.Cn, d.P), 'contratti / preventivi')}
             ${kp('Contratti annullati', nf(d.A), 'stato annullata')}
             ${d.isB ? kp('Trattative fallite', nf(d.F.length), pct(d.F.length, d.P) + ' dei preventivi') : kp('Preventivi telefonici', nf(d.X.length), d.ptCh + ' diventati contratto')}
-          </div>
-          <h2>Andamento e tipologia</h2>
-          <div class="g2"><div class="card"><h3>Andamento mensile</h3><p class="h">${d.P ? `Picco di preventivi a ${MESIL[d.ms[iMax]]} (${d.pv[iMax]}), calo a ${MESIL[d.ms[iMin]]} (${d.pv[iMin]})` : 'Nessuna trattativa nel periodo'}</p>
-              <div class="leg"><i style="background:${PAL.c2}"></i>Preventivi <i style="background:${PAL.c1}"></i>Contratti</div>${svgBars(d.ms.map(m => MESI[m]), [{ data: d.pv, color: PAL.c2 }, { data: d.cv, color: PAL.c1 }])}</div>
-            <div class="card"><h3>Tipologia veicolo</h3><p class="h">${tipP && d.P ? `${tipP.k === 'Usato' ? "L'usato" : tipP.k === 'Km0' ? 'Il Km0' : tipP.k === 'Nuovo' ? 'Il nuovo' : tipP.k} vale il ${pct(tipP.p, d.P)} dei preventivi` : ''}</p>
-              ${ct('Tipologia', d.tip)}
-              <h3 style="margin-top:12px">Pagamento</h3><p class="h">Contratti per modalità</p><div class="don">${svgDonut([{ n: d.FIN, c: PAL.c1 }, { n: d.PC, c: PAL.c2 }, { n: d.NI, c: '#cfdadc' }], 'contratti')}
-              <ul><li><i style="background:${PAL.c1}"></i><b>Finanziamento</b> ${d.FIN} · ${pct(d.FIN, d.Cn)}</li><li><i style="background:${PAL.c2}"></i><b>PC</b> ${d.PC} · ${pct(d.PC, d.Cn)}</li>${d.NI ? `<li><i style="background:#cfdadc"></i><b>Non indicato</b> ${d.NI} · ${pct(d.NI, d.Cn)}</li>` : ''}</ul></div></div></div>
-          <h2>Canali</h2>
-          <div class="g2"><div class="card"><h3>Contratti per origine</h3><p class="h">${d.ori[0] ? `${esc(d.ori[0].k)} porta il ${pct(d.ori[0].c, d.Cn)} dei contratti` : ''}</p>${pHb(d.ori.filter(o => o.c).map(o => ({ k: o.k, n: o.c })))}</div>
-            <div class="card"><h3>Preventivi e contratti per fonte</h3><p class="h">${oriP[0] ? `${esc(oriP[0].k)} genera il ${pct(oriP[0].p, d.P)} dei preventivi` : ''}${convBest.length ? `; ${convBest.map(x => esc(x.k)).join(' e ')} convertono meglio` : ''}</p>
-              ${ct('Fonte', oriP, !d.isB)}</div></div>
-          <h2>Marche e trattative fallite</h2>
-          <div class="g2"><div class="card"><h3>Performance marchi</h3><p class="h">Tutte le marche, per contratti</p>${ct('Marca', d.marche)}</div>
-            <div class="card"><h3>Motivi di fallimento</h3><p class="h">${d.F.length} trattative fallite (${pct(d.F.length, d.P)} dei preventivi)</p>${pHb(d.motivi)}</div></div>`;
-        if (!d.isB) h += `<h2>Preventivi telefonici</h2>
-          <div class="g2"><div class="card"><h3>Preventivi telefonici per mese</h3><p class="h">Sezione In bound · ${d.X.length} preventivi, ${d.ptCh} diventati contratto (${pct(d.ptCh, d.X.length)})</p>
-              <div class="leg"><i style="background:${PAL.c2}"></i>Preventivi <i style="background:#2f9e6e"></i>Diventati contratto</div>${svgBars(d.ms.map(m => MESI[m]), [{ data: d.ptv, color: PAL.c2 }, { data: d.ptc, color: '#2f9e6e' }])}</div>
-            <div class="card"><h3>Esito</h3><p class="h">Stato attuale di ogni preventivo</p>${pTab(['Stato', 'Preventivi', '%'], d.esiti.map(e => [STL[e.s], e.n, pct(e.n, d.X.length)]), ['Totale', d.X.length, d.X.length ? '100%' : '–'])}</div></div>`;
-        if (d.group && d.cons.length) {
-            const Mx = origMatrix(d.C);
-            h += `<h2>Consulenti</h2><div class="card"><h3>Classifica consulenti</h3>${pTab(['Consulente', 'Sede', 'Preventivi', 'Contratti', 'Conv.', 'Annullati', 'Fallite'].concat(d.isB ? [] : ['Prev. tel.', 'Da prev. tel.']).concat(['Finanziati']),
-                d.cons.map(c => [esc(c.k), c.sede, nf(c.p), c.n, pct(c.n, c.p), c.ann || '–', c.f || '–'].concat(d.isB ? [] : [c.pt || '–', c.tel || '–']).concat([pct(c.fin, c.cf)])),
-                ['Totale', '', nf(d.P), d.Cn, pct(d.Cn, d.P), d.A, d.F.length].concat(d.isB ? [] : [d.X.length, d.TEL]).concat([pct(d.FIN, d.CFn)]))}</div>
-              <div class="card"><h3>Origini per consulente</h3>${pTab(['Consulente'].concat(Mx.cols.map(esc), ['Totale']), Mx.rows.map(r => [esc(r.v)].concat(Mx.cols.map(c => r.m[c] || '–'), [r.n])), ['Totale'].concat(Mx.cols.map(c => Mx.tot[c] || 0), [d.Cn]))}</div>`;
-        }
-        h += `<h2>Servizi sui contratti</h2>
-          <div class="g2"><div class="card"><h3>Servizi e accessori</h3><p class="h">Numero di contratti con il servizio</p>${pHb(d.serv.slice().sort((x, y) => y.n - x.n))}</div>
-            <div class="card"><h3>Incidenza sui ${d.SV} contratti del foglio</h3><p class="h">Quota di contratti con il servizio</p>${pTab(['Servizio', 'Contratti', 'Incidenza'], d.serv.slice().sort((x, y) => y.n - x.n).map(x => [x.k, x.n, pct(x.n, d.SV)]), ['Contratti del foglio', d.SV, ''])}</div></div>
-          <footer>Gruppo Autoscala · BI Commerciale · fonti: CSV trattative, foglio AVANZAMENTO, preventivi telefonici · generato il ${new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</footer>`;
-        const parti = h.split('<h2>');
-        return parti[0] + parti.slice(1).map(x => '<div class="blk"><h2>' + x + '</div>').join('') + '</section>';
+          </div>`;
+        h += blocchi.map(x => `<div class="blk"><h2>${x.t}</h2>${x.g2 && x.cards.length > 1 ? `<div class="g2">${x.cards.join('')}</div>` : x.cards.join('')}</div>`).join('');
+        h += `<footer>Gruppo Autoscala · BI Commerciale · fonti: CSV trattative, foglio AVANZAMENTO, preventivi telefonici · generato il ${new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</footer>`;
+        return h + '</section>';
     }
     function pdf(D, M) {
         const title = D.length === 1 ? (D[0].vw.k === 'v' ? 'Report venditore – ' + D[0].vw.v : 'Report commerciale – ' + lab(D[0].vw)) : 'Report commerciale – ' + M.per;
@@ -1316,7 +1355,9 @@
           .leg{font-size:9px;color:${PAL.ink2};margin-bottom:2px}.leg i{display:inline-block;width:8px;height:8px;border-radius:2px;margin:0 4px 0 8px}
           .don{display:flex;align-items:center;gap:12px}.don ul{list-style:none;margin:0;padding:0}.don li{margin:4px 0}.don li i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px}
           footer{margin-top:8px;color:${PAL.ink2};font-size:8px;border-top:1px solid ${PAL.line};padding-top:5px}`;
-        const html = `<!doctype html><html lang="it"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${css}</style></head><body>${D.map(d => pdfSection(d, M)).join('')}</body></html>`;
+        const pagine = D.map(d => pdfSection(d, M)).join('');
+        if (!pagine) throw new Error('Con le scelte fatte non c\'è nulla da stampare (i preventivi telefonici non valgono per il B2B)');
+        const html = `<!doctype html><html lang="it"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${css}</style></head><body>${pagine}</body></html>`;
         const fr = document.createElement('iframe');
         fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
         document.body.appendChild(fr);
