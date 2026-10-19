@@ -7,8 +7,8 @@
 let preventiviData = [];
 let preventiviFiltered = [];
 let pendingConsulenteConflicts = [];
-// NUOVO: preventivi con operatore non tra i 4 ammessi (da correggere dopo l'import)
-let pendingOperatori = { operatoriDaCorreggere: [], operatoriAmmessi: [], operatoriAmmessiMancanti: [] };
+// NUOVO: righe con operatore non tra i 4 ammessi, lette dal file prima dell'import
+let pendingOperatori = { righe: [], operatoriAmmessi: [], operatoriAmmessiMancanti: [] };
 
 async function loadPreventivi() {
     const from = document.getElementById('pvFrom')?.value;
@@ -779,14 +779,53 @@ function closePvImportConfirmModal(event) {
     pendingImportFile = null;
 }
 
+// NUOVO: prima di importare si legge il file. Se ci sono operatori diversi
+// dai 4 ammessi si apre la finestra per sceglierli, poi si importa.
 async function confirmPreventiviLeadImport() {
     const file = pendingImportFile;
     document.getElementById('pvImportConfirmModal').style.display = 'none';
     if (!file) return;
 
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+        const res = await fetch('/api/preventivi-telefonici/import-lead/anteprima', { method: 'POST', body: formData });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            alert(data.error || 'Errore nella lettura del file');
+            annullaImportPreventivi();
+            return;
+        }
+        pendingOperatori = {
+            righe: data.righe || [],
+            operatoriAmmessi: data.operatoriAmmessi || [],
+            operatoriAmmessiMancanti: data.operatoriAmmessiMancanti || []
+        };
+        if (pendingOperatori.righe.length === 0) {
+            await eseguiImportPreventivi(file, null);
+        } else {
+            showOperatoriModal();
+        }
+    } catch (err) {
+        console.error('Errore lettura file import:', err);
+        alert('Errore di rete durante la lettura del file');
+        annullaImportPreventivi();
+    }
+}
+
+function annullaImportPreventivi() {
+    const input = document.getElementById('pvImportLeadInput');
+    if (input) input.value = '';
+    pendingImportFile = null;
+}
+
+async function eseguiImportPreventivi(file, assegnazioni) {
     const input = document.getElementById('pvImportLeadInput');
     const formData = new FormData();
     formData.append('file', file);
+    if (assegnazioni && Object.keys(assegnazioni).length > 0) {
+        formData.append('assegnazioni', JSON.stringify(assegnazioni));
+    }
 
     try {
         const res = await fetch('/api/preventivi-telefonici/import-lead', { method: 'POST', body: formData });
@@ -809,29 +848,18 @@ async function confirmPreventiviLeadImport() {
                 <div><div style="font-size:22px;font-weight:800;color:#ff9800">${data.aggiornati || 0}</div><div style="font-size:12px;color:var(--text-secondary)">Aggiornati</div></div>
                 <div><div style="font-size:22px;font-weight:800;color:var(--text-secondary)">${data.invariati || 0}</div><div style="font-size:12px;color:var(--text-secondary)">Invariati</div></div>
                 <div><div style="font-size:22px;font-weight:800;color:#ff3d3d">${(data.errori || []).length}</div><div style="font-size:12px;color:var(--text-secondary)">Errori</div></div>
+                ${data.operatoriCorretti > 0 ? `<div><div style="font-size:22px;font-weight:800;color:#4a90d9">${data.operatoriCorretti}</div><div style="font-size:12px;color:var(--text-secondary)">Operatori corretti</div></div>` : ''}
+                ${data.saltati > 0 ? `<div><div style="font-size:22px;font-weight:800;color:var(--text-secondary)">${data.saltati}</div><div style="font-size:12px;color:var(--text-secondary)">Non importati</div></div>` : ''}
             </div>
             ${(data.errori || []).length > 0 ? `<div style="border-top:1px solid var(--border);padding-top:10px">${data.errori.map(e => `<div style="font-size:12px;color:var(--text-secondary);padding:3px 0">⚠️ ${e}</div>`).join('')}</div>` : ''}
             ${(data.conflittiConsulente || []).length > 0 ? `<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px">
                 <div style="font-size:13px;color:#ff9800;font-weight:700;margin-bottom:8px">⚠️ ${data.conflittiConsulente.length} preventivi hanno un consulente diverso da quello nel file (modificato a mano in precedenza)</div>
                 <button onclick="showConsulenteConflictModal()" class="btn-small btn-secondary">Rivedi conflitti</button>
             </div>` : ''}
-            ${(data.operatoriDaCorreggere || []).length > 0 ? `<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px">
-                <div style="font-size:13px;color:#ff9800;font-weight:700;margin-bottom:8px">👤 ${data.operatoriDaCorreggere.length} preventivi hanno un operatore diverso da Amendola, Palladino, Scognamiglio e Zuppa</div>
-                <button onclick="showOperatoriModal()" class="btn-small btn-secondary">Correggi operatori</button>
-            </div>` : ''}
-            ${data.operatoriRipristinati > 0 ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:10px">↩️ ${data.operatoriRipristinati} preventivi avevano già un operatore corretto: il file non lo ha cambiato.</div>` : ''}
         `;
         pendingConsulenteConflicts = data.conflittiConsulente || [];
-        pendingOperatori = {
-            operatoriDaCorreggere: data.operatoriDaCorreggere || [],
-            operatoriAmmessi: data.operatoriAmmessi || [],
-            operatoriAmmessiMancanti: data.operatoriAmmessiMancanti || []
-        };
         modal.style.display = 'flex';
         await loadPreventivi();
-        // Se ci sono operatori da correggere, la finestra si apre subito
-        // sopra il riepilogo (che resta sotto, con il tasto per riaprirla).
-        if (pendingOperatori.operatoriDaCorreggere.length > 0) showOperatoriModal();
     } catch (err) {
         console.error('Errore import lead CSV:', err);
         alert('Errore di rete durante l\'import');
@@ -932,9 +960,9 @@ async function applyConsulenteConflictDecisions() {
 // ============================================================
 // OPERATORI NON AMMESSI — per ora l'inserimento e' solo di Emanuele
 // Amendola, Giuseppe Palladino, Davide Scognamiglio e Mattia Zuppa.
-// Dopo ogni import compaiono qui TUTTI i preventivi (nuovi e gia'
-// caricati) con un operatore diverso: si sceglie a chi vanno, raggruppati
-// per operatore sbagliato, con la possibilita' di assegnarli tutti insieme.
+// Prima dell'import si mostrano le righe del file con un altro operatore,
+// piu' i preventivi gia' caricati che hanno ancora un operatore diverso:
+// raggruppati per operatore, con la scelta per gruppo o riga per riga.
 function pvEsc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -943,39 +971,45 @@ function showOperatoriModal() {
     const list = document.getElementById('operatoriFixList');
     const modal = document.getElementById('operatoriFixModal');
     if (!list || !modal) return;
-    const righe = pendingOperatori.operatoriDaCorreggere || [];
+    const righe = pendingOperatori.righe || [];
     const ammessi = pendingOperatori.operatoriAmmessi || [];
     const mancanti = pendingOperatori.operatoriAmmessiMancanti || [];
 
     const opzioni = ammessi.map(u => `<option value="${u.id}">${pvEsc(u.fullName)}</option>`).join('');
     const gruppi = {};
-    righe.forEach((r, i) => { (gruppi[r.operatoreAttuale] = gruppi[r.operatoreAttuale] || []).push(i); });
+    righe.forEach((r, i) => { (gruppi[r.operatore] = gruppi[r.operatore] || []).push(i); });
 
     let html = '';
     if (mancanti.length > 0) {
         html += `<div style="font-size:12px;color:#ff3d3d;margin-bottom:12px">⚠️ Non trovo nel CRM un utente per: <b>${mancanti.map(pvEsc).join(', ')}</b>. Va creato (o corretto il nome) in Utenti per poterlo scegliere.</div>`;
     }
-    if (righe.length === 0) {
-        html += `<div style="color:var(--text-secondary);font-size:13px;padding:20px 0">Tutti i preventivi hanno già un operatore corretto 👍</div>`;
-    }
     Object.keys(gruppi).sort((a, b) => gruppi[b].length - gruppi[a].length).forEach((nome, g) => {
         const idx = gruppi[nome];
+        const nonUtente = idx.some(i => !righe[i].operatoreRiconosciuto);
         html += `<div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-                <div style="font-weight:800;font-size:13px;color:var(--text-primary)">👤 ${pvEsc(nome)} <span style="font-weight:600;color:var(--text-secondary)">(${idx.length})</span></div>
-                <select class="input-dark" style="max-width:260px" onchange="pvOperatoriGruppo(${g}, this.value)" data-gruppo-sel="${g}">
+                <div style="font-weight:800;font-size:13px;color:var(--text-primary)">👤 ${pvEsc(nome)} <span style="font-weight:600;color:var(--text-secondary)">(${idx.length})</span>
+                    ${nonUtente ? `<span style="font-weight:600;font-size:11px;color:#ff9800;margin-left:6px">non è un utente del CRM</span>` : ''}</div>
+                <select class="input-dark" style="max-width:260px" onchange="pvOperatoriGruppo(${g}, this.value)">
                     <option value="">Assegna tutti a…</option>${opzioni}
+                    <option value="no">Non importare / lascia così</option>
                 </select>
             </div>
             ${idx.map(i => {
                 const r = righe[i];
+                const badge = !r.esistente
+                    ? `<span style="font-size:10px;font-weight:800;color:#00c853;background:rgba(0,200,83,0.12);padding:2px 7px;border-radius:10px">NUOVO</span>`
+                    : `<span style="font-size:10px;font-weight:800;color:#4a90d9;background:rgba(74,144,217,0.12);padding:2px 7px;border-radius:10px">${r.nelFile ? 'GIÀ CARICATO' : 'GIÀ CARICATO · NON NEL FILE'}</span>`;
+                const ultima = r.esistente
+                    ? `<option value="no">Lascia così</option>`
+                    : `<option value="no">Non importare</option>`;
                 return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border);margin-top:8px;flex-wrap:wrap">
                     <div>
-                        <div style="font-weight:700;font-size:13px;color:var(--text-primary)">${pvEsc(r.clienteNome)} ${pvEsc(r.clienteCognome)} <span style="font-weight:400;color:var(--text-secondary);font-size:11px">${r.sourceLeadId ? '(Lead ' + pvEsc(r.sourceLeadId) + ')' : ''}</span></div>
-                        <div style="font-size:12px;color:var(--text-secondary)">🚘 ${pvEsc(r.marca)} — ${pvEsc(r.modello)} · ${r.tipo === 'VENDITA' ? 'Vendita' : 'Noleggio'} · ${formatPreventivoDateTime(r.createdAt)}</div>
+                        <div style="font-weight:700;font-size:13px;color:var(--text-primary)">${pvEsc(r.clienteNome)} ${pvEsc(r.clienteCognome)} ${badge} <span style="font-weight:400;color:var(--text-secondary);font-size:11px">${r.sourceLeadId ? '(Lead ' + pvEsc(r.sourceLeadId) + ')' : ''}</span></div>
+                        <div style="font-size:12px;color:var(--text-secondary)">🚘 ${pvEsc(r.marca || '—')} — ${pvEsc(r.modello || '—')}${r.esistente && r.nelFile && r.operatoreAttuale ? ' · ora: ' + pvEsc(r.operatoreAttuale) : ''}</div>
                     </div>
                     <select id="operatoreChoice-${i}" data-gruppo="${g}" class="input-dark" style="max-width:220px">
-                        <option value="">— Lascia così —</option>${opzioni}
+                        <option value="">— Scegli —</option>${opzioni}${ultima}
                     </select>
                 </div>`;
             }).join('')}
@@ -985,45 +1019,35 @@ function showOperatoriModal() {
     modal.style.display = 'flex';
 }
 
-function pvOperatoriGruppo(g, userId) {
-    document.querySelectorAll(`#operatoriFixList select[data-gruppo="${g}"]`).forEach(s => { s.value = userId; });
+function pvOperatoriGruppo(g, valore) {
+    document.querySelectorAll(`#operatoriFixList select[data-gruppo="${g}"]`).forEach(s => { s.value = valore; });
 }
 
 function closeOperatoriModal(event) {
     if (event && event.target.id !== 'operatoriFixModal') return;
     document.getElementById('operatoriFixModal').style.display = 'none';
+    annullaImportPreventivi();
 }
 
 async function applyOperatoriDecisions() {
-    const righe = pendingOperatori.operatoriDaCorreggere || [];
-    const decisions = righe.map((r, i) => ({ id: r.id, userId: document.getElementById(`operatoreChoice-${i}`)?.value || '' }))
-        .filter(d => d.userId);
-    if (decisions.length === 0) {
-        alert('Non hai scelto nessun operatore da assegnare.');
-        return;
-    }
-    try {
-        const res = await fetch('/api/preventivi-telefonici/resolve-operatori', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(decisions)
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-            alert(data.error || 'Errore nell\'assegnare gli operatori');
+    const file = pendingImportFile;
+    if (!file) { closeOperatoriModal(); return; }
+    const righe = pendingOperatori.righe || [];
+    const assegnazioni = {};
+    let senzaScelta = 0;
+    righe.forEach((r, i) => {
+        const v = document.getElementById(`operatoreChoice-${i}`)?.value || '';
+        if (!v) { senzaScelta++; return; }
+        if (v === 'no') {
+            if (!r.esistente) assegnazioni[r.chiave] = 'salta';
             return;
         }
-        // Tolgo dall'elenco quelli sistemati: restano solo quelli lasciati così
-        const fatti = new Set(decisions.map(d => String(d.id)));
-        pendingOperatori.operatoriDaCorreggere = righe.filter(r => !fatti.has(String(r.id)));
-        closeOperatoriModal();
-        await loadPreventivi();
-        const rimasti = pendingOperatori.operatoriDaCorreggere.length;
-        alert(`✅ Operatore aggiornato su ${data.applicati || 0} preventivi.` + (rimasti ? `\n${rimasti} lasciati così: li ritrovi al prossimo import.` : ''));
-    } catch (err) {
-        console.error('Errore assegnazione operatori:', err);
-        alert('Errore di rete nell\'assegnare gli operatori');
-    }
+        assegnazioni[r.chiave] = Number(v);
+    });
+    if (senzaScelta > 0 && !confirm(`${senzaScelta} righe sono senza scelta: verranno importate con l'operatore del file (se è un utente del CRM, altrimenti finiscono negli errori) e le ritroverai al prossimo import. Continuare?`)) return;
+
+    document.getElementById('operatoriFixModal').style.display = 'none';
+    await eseguiImportPreventivi(file, assegnazioni);
 }
 
 // Dal badge "Modificato in Rent": passa alla sezione Rent, ricarica le

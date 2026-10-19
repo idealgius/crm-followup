@@ -1,5 +1,7 @@
 package com.gruppoautoscala.followup.controller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gruppoautoscala.followup.model.PreventivoTelefonico;
 import com.gruppoautoscala.followup.model.PreventivoTelefonicoStatusHistory;
 import com.gruppoautoscala.followup.model.NoleggioTrattativa;
@@ -15,7 +17,6 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.text.Normalizer;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -29,16 +30,11 @@ public class PreventivoTelefonicoController {
     private static final ZoneId ITALY_ZONE = ZoneId.of("Europe/Rome");
     private static final Set<String> TIPI_AMMESSI = Set.of("VENDITA", "NOLEGGIO");
 
-    // NUOVO: per ora gli unici operatori ammessi per l'inserimento dei
-    // preventivi telefonici. Il confronto ignora maiuscole, accenti e
-    // l'ordine nome/cognome ("Amendola Emanuele" va bene lo stesso).
-    private static final List<String> OPERATORI_AMMESSI = List.of(
-        "Emanuele Amendola", "Giuseppe Palladino", "Davide Scognamiglio", "Mattia Zuppa");
-
     @Autowired private PreventivoTelefonicoService preventivoService;
     @Autowired private PreventivoRentSyncService rentSyncService;
     @Autowired private PreventivoImportService preventivoImportService;
     @Autowired private UserRepository userRepository;
+    @Autowired private ObjectMapper objectMapper;
 
     @GetMapping
     public ResponseEntity<?> list(@RequestParam(required = false) String from,
@@ -75,8 +71,25 @@ public class PreventivoTelefonicoController {
         return ResponseEntity.ok(buildListResponse(List.of(p.get())).get(0));
     }
 
+    // NUOVO: lettura di prova del file PRIMA dell'import (non salva nulla):
+    // restituisce le righe con operatore diverso dai 4 ammessi, piu' i
+    // preventivi gia' caricati che hanno ancora un operatore non ammesso.
+    @PostMapping("/import-lead/anteprima")
+    public ResponseEntity<?> anteprimaImportLead(@RequestParam("file") MultipartFile file, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        if (file.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "File vuoto"));
+        try {
+            return ResponseEntity.ok(preventivoImportService.anteprimaOperatori(file));
+        } catch (IOException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Errore nella lettura del file: " + e.getMessage()));
+        }
+    }
+
     @PostMapping("/import-lead")
-    public ResponseEntity<?> importLead(@RequestParam("file") MultipartFile file, HttpSession session) {
+    public ResponseEntity<?> importLead(@RequestParam("file") MultipartFile file,
+                                        @RequestParam(value = "assegnazioni", required = false) String assegnazioniJson,
+                                        HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
         if (file.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "File vuoto"));
@@ -84,37 +97,47 @@ public class PreventivoTelefonicoController {
         Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "Utente non trovato"));
 
-        // NUOVO: fotografia degli operatori PRIMA dell'import, per non
-        // perdere le correzioni gia' fatte se il file riporta di nuovo un
-        // operatore non ammesso.
-        Map<Long, User> operatorePrima = new HashMap<>();
-        for (PreventivoTelefonico p : preventivoService.getAll()) {
-            if (p.getUser() != null) operatorePrima.put(p.getId(), p.getUser());
+        // NUOVO: scelte fatte nella finestra "Operatori da correggere".
+        // { "L:<id lead>": idUtente | "salta", "P:<id preventivo>": idUtente }
+        // Si accettano solo i 4 operatori ammessi.
+        Map<String, User> perLead = new HashMap<>();
+        Set<String> salta = new HashSet<>();
+        Map<Long, User> perId = new HashMap<>();
+        if (assegnazioniJson != null && !assegnazioniJson.isBlank()) {
+            Map<String, Object> scelte;
+            try {
+                scelte = objectMapper.readValue(assegnazioniJson, new TypeReference<Map<String, Object>>() {});
+            } catch (Exception e) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Scelte operatori non valide"));
+            }
+            Map<Long, User> ammessi = new HashMap<>();
+            for (User u : preventivoImportService.utentiAmmessi()) ammessi.put(u.getId(), u);
+            for (Map.Entry<String, Object> e : scelte.entrySet()) {
+                String k = e.getKey();
+                String v = String.valueOf(e.getValue());
+                if (k.length() < 3) continue;
+                if (k.startsWith("L:") && "salta".equals(v)) { salta.add(k.substring(2)); continue; }
+                User u;
+                try { u = ammessi.get(Long.valueOf(v)); } catch (NumberFormatException ex) { continue; }
+                if (u == null) continue;
+                if (k.startsWith("L:")) perLead.put(k.substring(2), u);
+                else if (k.startsWith("P:")) {
+                    try { perId.put(Long.valueOf(k.substring(2)), u); } catch (NumberFormatException ignored) {}
+                }
+            }
         }
 
         try {
-            PreventivoImportService.ImportResult result = preventivoImportService.importLeadCsv(file, userOpt.get());
+            PreventivoImportService.ImportResult result = preventivoImportService.importLeadCsv(file, userOpt.get(), perLead, salta);
+            int correttiPerId = preventivoImportService.assegnaOperatorePerId(perId, userOpt.get());
             Map<String, Object> response = new LinkedHashMap<>();
             response.put("creati", result.created);
             response.put("aggiornati", result.updated);
             response.put("invariati", result.unchanged);
             response.put("errori", result.errori);
             response.put("conflittiConsulente", result.conflittiConsulente);
-
-            // NUOVO: se prima l'operatore era uno dei 4 e l'import lo ha
-            // cambiato in uno non ammesso, si rimette quello di prima.
-            int ripristinati = 0;
-            for (PreventivoTelefonico p : preventivoService.getAll()) {
-                User prima = operatorePrima.get(p.getId());
-                if (prima == null || p.getUser() == null) continue;
-                if (!prima.getId().equals(p.getUser().getId()) && ammesso(prima.getFullName()) && !ammesso(p.getUser().getFullName())) {
-                    p.setUser(prima);
-                    preventivoService.update(p, userOpt.get());
-                    ripristinati++;
-                }
-            }
-            response.put("operatoriRipristinati", ripristinati);
-            response.putAll(operatoriDaCorreggere());
+            response.put("saltati", result.saltati);
+            response.put("operatoriCorretti", result.operatoriCorretti + correttiPerId);
             return ResponseEntity.ok(response);
         } catch (IOException e) {
             return ResponseEntity.badRequest().body(Map.of("error", "Errore nella lettura del file: " + e.getMessage()));
@@ -172,116 +195,6 @@ public class PreventivoTelefonicoController {
             applicati++;
         }
         return ResponseEntity.ok(Map.of("applicati", applicati));
-    }
-
-    // ===== OPERATORI NON AMMESSI (NUOVO) =====
-    // Elenco di TUTTI i preventivi (nuovi e gia' caricati) il cui operatore
-    // non e' tra i 4 ammessi, piu' l'elenco dei 4 da proporre nella tendina.
-    @GetMapping("/operatori-da-correggere")
-    public ResponseEntity<?> getOperatoriDaCorreggere(HttpSession session) {
-        Long userId = (Long) session.getAttribute("userId");
-        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
-        return ResponseEntity.ok(operatoriDaCorreggere());
-    }
-
-    // Riceve [{id, userId}] e assegna a ogni preventivo l'operatore scelto,
-    // solo se e' uno dei 4 ammessi.
-    @PostMapping("/resolve-operatori")
-    public ResponseEntity<?> resolveOperatori(@RequestBody List<Map<String, Object>> decisions, HttpSession session) {
-        Long userId = (Long) session.getAttribute("userId");
-        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
-        Optional<User> meOpt = userRepository.findById(userId);
-        if (meOpt.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "Utente non trovato"));
-
-        Map<Long, User> ammessi = new HashMap<>();
-        for (User u : utentiAmmessi()) ammessi.put(u.getId(), u);
-
-        int applicati = 0;
-        List<String> scartati = new ArrayList<>();
-        for (Map<String, Object> d : decisions) {
-            Long id, nuovo;
-            try {
-                id = Long.valueOf(String.valueOf(d.get("id")));
-                nuovo = Long.valueOf(String.valueOf(d.get("userId")));
-            } catch (Exception e) { continue; }
-            User u = ammessi.get(nuovo);
-            if (u == null) { scartati.add("Preventivo " + id + ": operatore non ammesso"); continue; }
-            Optional<PreventivoTelefonico> pOpt = preventivoService.getById(id);
-            if (pOpt.isEmpty()) continue;
-            PreventivoTelefonico p = pOpt.get();
-            if (p.getUser() != null && u.getId().equals(p.getUser().getId())) continue;
-            p.setUser(u);
-            preventivoService.update(p, meOpt.get());
-            applicati++;
-        }
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("applicati", applicati);
-        out.put("scartati", scartati);
-        return ResponseEntity.ok(out);
-    }
-
-    private Map<String, Object> operatoriDaCorreggere() {
-        List<Map<String, Object>> daCorreggere = new ArrayList<>();
-        for (PreventivoTelefonico p : preventivoService.getAll()) {
-            String nome = p.getUser() != null ? p.getUser().getFullName() : null;
-            if (ammesso(nome)) continue;
-            Map<String, Object> m = new LinkedHashMap<>();
-            m.put("id", p.getId());
-            m.put("tipo", p.getTipo());
-            m.put("clienteNome", p.getClienteNome());
-            m.put("clienteCognome", p.getClienteCognome());
-            m.put("marca", p.getMarca());
-            m.put("modello", p.getModello());
-            m.put("sourceLeadId", p.getSourceLeadId());
-            m.put("createdAt", p.getCreatedAt() != null ? p.getCreatedAt().toString() : null);
-            m.put("operatoreAttuale", nome == null ? "—" : nome);
-            daCorreggere.add(m);
-        }
-        List<Map<String, Object>> scelte = new ArrayList<>();
-        Set<String> trovati = new HashSet<>();
-        for (User u : utentiAmmessi()) {
-            scelte.add(Map.of("id", u.getId(), "fullName", u.getFullName()));
-            trovati.add(chiaveNome(u.getFullName()));
-        }
-        List<String> mancanti = OPERATORI_AMMESSI.stream()
-            .filter(n -> !trovati.contains(chiaveNome(n))).collect(Collectors.toList());
-        Map<String, Object> out = new LinkedHashMap<>();
-        out.put("operatoriDaCorreggere", daCorreggere);
-        out.put("operatoriAmmessi", scelte);
-        out.put("operatoriAmmessiMancanti", mancanti);
-        return out;
-    }
-
-    // Gli utenti del CRM che corrispondono ai 4 nomi ammessi (uno per nome,
-    // preferendo l'account attivo se ce ne fosse piu' d'uno).
-    private List<User> utentiAmmessi() {
-        Map<String, User> perNome = new LinkedHashMap<>();
-        for (String n : OPERATORI_AMMESSI) perNome.put(chiaveNome(n), null);
-        for (User u : userRepository.findAll()) {
-            String k = chiaveNome(u.getFullName());
-            if (!perNome.containsKey(k)) continue;
-            User gia = perNome.get(k);
-            boolean disattivo = u.getRole() != null && u.getRole().startsWith("X:");
-            if (gia == null || (!disattivo && gia.getRole() != null && gia.getRole().startsWith("X:"))) perNome.put(k, u);
-        }
-        return perNome.values().stream().filter(Objects::nonNull).collect(Collectors.toList());
-    }
-
-    private boolean ammesso(String fullName) {
-        if (fullName == null) return false;
-        String k = chiaveNome(fullName);
-        return OPERATORI_AMMESSI.stream().anyMatch(n -> chiaveNome(n).equals(k));
-    }
-
-    // "Amendola  Emanuele" e "emanuele amendola" -> "amendola emanuele"
-    private static String chiaveNome(String s) {
-        if (s == null) return "";
-        String n = Normalizer.normalize(s, Normalizer.Form.NFD).replaceAll("\\p{M}", "")
-            .toLowerCase(Locale.ROOT).replaceAll("[^a-z ]", " ").trim();
-        if (n.isEmpty()) return "";
-        String[] parti = n.split("\\s+");
-        Arrays.sort(parti);
-        return String.join(" ", parti);
     }
 
     @PostMapping

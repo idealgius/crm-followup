@@ -77,6 +77,19 @@ public class PreventivoImportService {
         return m;
     }
 
+    // NUOVO: per ora gli unici operatori ammessi per l'inserimento dei
+    // preventivi telefonici. Confronto con la stessa "chiave nome" usata per
+    // il Caller (ordine nome/cognome, maiuscole e accenti non contano).
+    public static final List<String> OPERATORI_AMMESSI = List.of(
+        "Emanuele Amendola", "Giuseppe Palladino", "Davide Scognamiglio", "Mattia Zuppa");
+
+    public static boolean operatoreAmmesso(String fullName) {
+        if (fullName == null || fullName.isBlank()) return false;
+        String k = staticNameKey(fullName);
+        for (String n : OPERATORI_AMMESSI) if (staticNameKey(n).equals(k)) return true;
+        return false;
+    }
+
     @Autowired private PreventivoTelefonicoRepository preventivoRepository;
     @Autowired private PreventivoTelefonicoStatusHistoryRepository historyRepository;
     @Autowired private UserRepository userRepository;
@@ -92,9 +105,20 @@ public class PreventivoImportService {
         // salvato A MANO — non sovrascritti in automatico, in attesa di
         // decisione dell'utente nel popup dedicato.
         public List<Map<String, Object>> conflittiConsulente = new ArrayList<>();
+        // NUOVO: righe non importate per scelta ("Non importare") e
+        // preventivi a cui e' stato cambiato l'operatore.
+        public int saltati = 0;
+        public int operatoriCorretti = 0;
     }
 
     public ImportResult importLeadCsv(MultipartFile file, User importer) throws IOException {
+        return importLeadCsv(file, importer, Map.of(), Set.of());
+    }
+
+    // NUOVO: perLead = operatore scelto a mano per un ID lead (sempre uno dei
+    // 4 ammessi); salta = ID lead da non importare.
+    public ImportResult importLeadCsv(MultipartFile file, User importer,
+                                      Map<String, User> perLead, Set<String> salta) throws IOException {
         ImportResult result = new ImportResult();
 
         // Mappa operatori per "chiave nome" (parole ordinate alfabeticamente,
@@ -107,27 +131,13 @@ public class PreventivoImportService {
             if (u.getFullName() != null) usersByName.put(nameKey(u.getFullName()), u);
         }
 
-        String content = new String(file.getBytes(), StandardCharsets.UTF_8);
-        if (content.startsWith("\uFEFF")) content = content.substring(1);
-
-        CSVFormat format = CSVFormat.DEFAULT.builder()
-            .setDelimiter(';')
-            .setHeader()
-            .setSkipHeaderRecord(true)
-            .setIgnoreEmptyLines(true)
-            .setTrim(true)
-            .setQuote('"')
-            .build();
-
-        try (CSVParser parser = new CSVParser(new StringReader(content), format)) {
-            int rowNum = 1;
-            for (CSVRecord record : parser) {
-                rowNum++;
-                try {
-                    processRow(record, usersByName, importer, result);
-                } catch (Exception e) {
-                    result.errori.add("Riga " + rowNum + ": errore imprevisto (" + e.getMessage() + ")");
-                }
+        int rowNum = 1;
+        for (CSVRecord record : leggiRighe(file)) {
+            rowNum++;
+            try {
+                processRow(record, usersByName, importer, result, perLead, salta);
+            } catch (Exception e) {
+                result.errori.add("Riga " + rowNum + ": errore imprevisto (" + e.getMessage() + ")");
             }
         }
 
@@ -148,10 +158,168 @@ public class PreventivoImportService {
         return importLogRepository.findAllWithUser();
     }
 
-    private void processRow(CSVRecord record, Map<String, User> usersByName, User importer, ImportResult result) {
+    private List<CSVRecord> leggiRighe(MultipartFile file) throws IOException {
+        String content = new String(file.getBytes(), StandardCharsets.UTF_8);
+        if (content.startsWith("\uFEFF")) content = content.substring(1);
+
+        CSVFormat format = CSVFormat.DEFAULT.builder()
+            .setDelimiter(';')
+            .setHeader()
+            .setSkipHeaderRecord(true)
+            .setIgnoreEmptyLines(true)
+            .setTrim(true)
+            .setQuote('"')
+            .build();
+
+        try (CSVParser parser = new CSVParser(new StringReader(content), format)) {
+            return parser.getRecords();
+        }
+    }
+
+    private Map<String, User> utentiPerNome() {
+        Map<String, User> usersByName = new HashMap<>();
+        for (User u : userRepository.findAll()) {
+            if (u.getFullName() != null) usersByName.put(nameKey(u.getFullName()), u);
+        }
+        return usersByName;
+    }
+
+    // ===== OPERATORI AMMESSI (NUOVO) =====
+
+    // Gli utenti del CRM che corrispondono ai 4 nomi ammessi (uno per nome,
+    // preferendo l'account attivo se ce ne fosse piu' d'uno).
+    public List<User> utentiAmmessi() {
+        Map<String, User> perNome = new LinkedHashMap<>();
+        for (String n : OPERATORI_AMMESSI) perNome.put(staticNameKey(n), null);
+        for (User u : userRepository.findAll()) {
+            String k = staticNameKey(u.getFullName());
+            if (!perNome.containsKey(k)) continue;
+            User gia = perNome.get(k);
+            boolean disattivo = u.getRole() != null && u.getRole().startsWith("X:");
+            boolean giaDisattivo = gia != null && gia.getRole() != null && gia.getRole().startsWith("X:");
+            if (gia == null || (!disattivo && giaDisattivo)) perNome.put(k, u);
+        }
+        List<User> out = new ArrayList<>();
+        for (User u : perNome.values()) if (u != null) out.add(u);
+        return out;
+    }
+
+    // Prima dell'import: legge il file e restituisce le righe con un
+    // operatore diverso dai 4 ammessi, cosi' l'utente sceglie a chi vanno.
+    // Comprende anche i preventivi gia' caricati (nel file o no) che hanno
+    // ancora un operatore non ammesso. Non salva nulla.
+    public Map<String, Object> anteprimaOperatori(MultipartFile file) throws IOException {
+        Map<String, User> usersByName = utentiPerNome();
+        List<PreventivoTelefonico> tutti = preventivoRepository.findAllWithUser();
+        Map<String, PreventivoTelefonico> giaCaricati = new HashMap<>();
+        for (PreventivoTelefonico p : tutti) {
+            if (p.getSourceLeadId() != null) giaCaricati.put(p.getSourceLeadId(), p);
+        }
+
+        List<Map<String, Object>> righe = new ArrayList<>();
+        Set<String> nelFile = new HashSet<>();
+        for (CSVRecord record : leggiRighe(file)) {
+            String lead = get(record, "ID");
+            if (isBlank(lead) || !nelFile.add(lead)) continue;
+
+            // Stessa logica dell'import: Caller, altrimenti "Inserito da"
+            String callerName = extractNameBeforeParenthesis(get(record, "Caller"));
+            User caller = callerName != null ? usersByName.get(nameKey(callerName)) : null;
+            String nomeNelFile = caller != null ? caller.getFullName() : callerName;
+            if (caller == null) {
+                String ins = get(record, "Inserito da");
+                User u = ins != null ? usersByName.get(nameKey(ins)) : null;
+                if (u != null) { caller = u; nomeNelFile = u.getFullName(); }
+                else if (nomeNelFile == null && !isBlank(ins)) nomeNelFile = ins;
+            }
+            if (caller != null && operatoreAmmesso(caller.getFullName())) continue;
+
+            PreventivoTelefonico p = giaCaricati.get(lead);
+            // gia' caricato e gia' corretto su uno dei 4: non si richiede piu'
+            if (p != null && p.getUser() != null && operatoreAmmesso(p.getUser().getFullName())) continue;
+
+            String nome = get(record, "Nome"), cognome = get(record, "Cognome");
+            if (isBlank(nome) && isBlank(cognome)) { nome = get(record, "Ragione sociale"); cognome = ""; }
+
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("chiave", "L:" + lead);
+            m.put("sourceLeadId", lead);
+            m.put("esistente", p != null);
+            m.put("nelFile", true);
+            m.put("clienteNome", nome == null ? "" : nome);
+            m.put("clienteCognome", cognome == null ? "" : cognome);
+            m.put("marca", normalizeMarca(get(record, "Marca")));
+            m.put("modello", get(record, "Modello"));
+            m.put("operatore", isBlank(nomeNelFile) ? "—" : nomeNelFile);
+            m.put("operatoreRiconosciuto", caller != null);
+            m.put("operatoreAttuale", p != null && p.getUser() != null ? p.getUser().getFullName() : null);
+            righe.add(m);
+        }
+
+        for (PreventivoTelefonico p : tutti) {
+            if (p.getSourceLeadId() != null && nelFile.contains(p.getSourceLeadId())) continue;
+            String attuale = p.getUser() != null ? p.getUser().getFullName() : null;
+            if (operatoreAmmesso(attuale)) continue;
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("chiave", "P:" + p.getId());
+            m.put("sourceLeadId", p.getSourceLeadId());
+            m.put("esistente", true);
+            m.put("nelFile", false);
+            m.put("clienteNome", p.getClienteNome());
+            m.put("clienteCognome", p.getClienteCognome());
+            m.put("marca", p.getMarca());
+            m.put("modello", p.getModello());
+            m.put("operatore", attuale == null ? "—" : attuale);
+            m.put("operatoreRiconosciuto", true);
+            m.put("operatoreAttuale", attuale);
+            righe.add(m);
+        }
+
+        List<Map<String, Object>> scelte = new ArrayList<>();
+        Set<String> trovati = new HashSet<>();
+        for (User u : utentiAmmessi()) {
+            Map<String, Object> s = new LinkedHashMap<>();
+            s.put("id", u.getId());
+            s.put("fullName", u.getFullName());
+            scelte.add(s);
+            trovati.add(staticNameKey(u.getFullName()));
+        }
+        List<String> mancanti = new ArrayList<>();
+        for (String n : OPERATORI_AMMESSI) if (!trovati.contains(staticNameKey(n))) mancanti.add(n);
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("righe", righe);
+        out.put("operatoriAmmessi", scelte);
+        out.put("operatoriAmmessiMancanti", mancanti);
+        return out;
+    }
+
+    // Preventivi gia' caricati ma non presenti nel file: operatore scelto a mano.
+    public int assegnaOperatorePerId(Map<Long, User> perId, User editor) {
+        int n = 0;
+        for (Map.Entry<Long, User> e : perId.entrySet()) {
+            Optional<PreventivoTelefonico> pOpt = preventivoRepository.findById(e.getKey());
+            if (pOpt.isEmpty()) continue;
+            PreventivoTelefonico p = pOpt.get();
+            if (p.getUser() != null && p.getUser().getId().equals(e.getValue().getId())) continue;
+            p.setUser(e.getValue());
+            p.setLastModifiedBy(editor);
+            p.setLastModifiedAt(LocalDateTime.now());
+            preventivoRepository.save(p);
+            n++;
+        }
+        return n;
+    }
+
+    private void processRow(CSVRecord record, Map<String, User> usersByName, User importer, ImportResult result,
+                            Map<String, User> perLead, Set<String> salta) {
         String sourceLeadId = get(record, "ID");
         if (isBlank(sourceLeadId)) {
             result.errori.add("Riga senza ID lead, saltata");
+            return;
+        }
+        if (salta.contains(sourceLeadId)) {
+            result.saltati++;
             return;
         }
 
@@ -194,7 +362,12 @@ public class PreventivoImportService {
             insertedByRaw = get(record, "Inserito da");
             if (insertedByRaw != null) caller = usersByName.get(nameKey(insertedByRaw));
         }
-        if (caller == null) {
+        // NUOVO: operatore scelto a mano nella finestra prima dell'import
+        User operatoreScelto = perLead.get(sourceLeadId);
+        if (operatoreScelto != null) caller = operatoreScelto;
+        // Lead gia' caricata con operatore del file non riconosciuto: non e'
+        // piu' un errore, si aggiorna il resto e si tiene l'operatore salvato.
+        if (caller == null && preventivoRepository.findBySourceLeadId(sourceLeadId).isEmpty()) {
             result.errori.add("Lead " + sourceLeadId + ": operatore non riconosciuto (Caller: \"" + callerRaw + "\", Inserito da: \"" + insertedByRaw + "\")");
             return;
         }
@@ -297,6 +470,18 @@ public class PreventivoImportService {
         if (!Objects.equals(p.getMarca(), marca)) { p.setMarca(marca); changed = true; }
         if (!Objects.equals(p.getModello(), modello)) { p.setModello(modello); changed = true; }
         if (!Objects.equals(p.getTelefono(), telefono)) { p.setTelefono(telefono); changed = true; }
+
+        // NUOVO: operatore. Vale la scelta fatta a mano; altrimenti, se il
+        // file indica uno dei 4 ammessi diverso da quello salvato, vale il
+        // file (cosi' un nuovo import corregge anche quelli gia' caricati).
+        // Se il file indica un operatore NON ammesso, quello salvato resta.
+        User attuale = p.getUser();
+        if (caller != null && (operatoreScelto != null || operatoreAmmesso(caller.getFullName()))
+                && (attuale == null || !caller.getId().equals(attuale.getId()))) {
+            p.setUser(caller);
+            changed = true;
+            result.operatoriCorretti++;
+        }
 
         if (!Objects.equals(p.getConsultantName(), consultantName)) {
             if (Boolean.TRUE.equals(p.getConsultantManuallyEdited())) {
