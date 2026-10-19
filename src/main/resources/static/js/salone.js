@@ -2010,8 +2010,16 @@
         haicagato: ['🏷️', 'Sticker', '/img/sticker/hai-cagato.png'],
         lafessa: ['🏷️', 'Sticker', '/img/sticker/la-fessa.png'],
         spaccando: ['🏷️', 'Sticker', '/img/sticker/spaccando.png'],
-        tremors: ['🏷️', 'Sticker', '/img/sticker/tremors.png']
+        tremors: ['🏷️', 'Sticker', '/img/sticker/tremors.png'],
+        ecceccis: ['🏷️', 'Sticker', '/img/sticker/ecceccis.png'],
+        bravoimg: ['🏷️', 'Sticker', '/img/sticker/bravo.png'],
+        gesucri: ['🏷️', 'Sticker', '/img/sticker/gesu-cri.png'],
+        ciaogioia: ['🏷️', 'Sticker', '/img/sticker/ciao-gioia.png']
     };
+    // NUOVO: due schede nel pannello. "Sticker" = quelli da immagine; "Salone" = quelli disegnati.
+    // Il 10 di denari compare in tutte e due.
+    const STK_SALONE = ['diecidenari'].concat(Object.keys(STICKER));
+    const STK_IMG = Object.keys(STICKER_IMG);
     Object.entries(STICKER_IMG).forEach(([k, v]) => { STICKER[k] = [v[0], v[1], null, null, v[2]]; });
     const testoMsg = m => m && m.sticker && STICKER_IMG[m.sticker] ? '🏷️ Sticker' : String((m && m.testo) || '');
     const stickerHtml = (id, piccolo) => { const s = STICKER[id]; if (!s) return '';
@@ -2147,7 +2155,7 @@
         function apriPannello(idReazione) {
             const p = el.querySelector('.sa-emo');
             perReazione = idReazione || null;
-            if (perReazione && tabEmo === 'stk') tabEmo = null;
+            if (perReazione && /^stk/.test(tabEmo || '')) tabEmo = null;
             const q = p.querySelector('.sa-emo-cerca input'); q.value = '';
             const per = p.querySelector('.sa-emo-per'); per.hidden = !perReazione; per.textContent = 'Reazione';
             p.classList.toggle('rz', !!perReazione);
@@ -2158,19 +2166,21 @@
             const p = el.querySelector('.sa-emo'), R = recenti();
             if (!tabEmo) tabEmo = R.length ? 'rec' : '0';
             const q = p.querySelector('.sa-emo-cerca input').value.trim();
-            const tabs = (R.length ? [['rec', '🕘', 'Usate di recente']] : []).concat(EMO_CAT.map((c, i) => [String(i), c[0], c[1]]), perReazione ? [] : [['stk', '🏷️', 'Sticker']]);
+            const tabs = (R.length ? [['rec', '🕘', 'Usate di recente']] : []).concat(EMO_CAT.map((c, i) => [String(i), c[0], c[1]]), perReazione ? [] : [['stk', '🖼️', 'Sticker'], ['stks', '🏷️', 'Salone']]);
+            const etich = k => k === 'stk' ? '<span>Sticker</span>' : k === 'stks' ? '<span>Salone</span>' : '';
             if (q) {   // ricerca: si cerca tra tutte le emoji
-                p.querySelector('.sa-emo-tabs').innerHTML = tabs.map(([k, ic, t]) => `<button type="button" data-tabemo="${k}" title="${t}">${ic}${k === 'stk' ? '<span>Sticker</span>' : ''}</button>`).join('');
+                p.querySelector('.sa-emo-tabs').innerHTML = tabs.map(([k, ic, t]) => `<button type="button" data-tabemo="${k}" title="${t}">${ic}${etich(k)}</button>`).join('');
                 const g = p.querySelector('.sa-emo-g'), T = cercaEmoji(q);
                 g.className = 'sa-emo-g';
                 g.innerHTML = T.length ? T.map(x => `<button type="button" data-emo="${x}" title="${esc((NOMI_EMO[x] || '').split(' ').slice(0, 5).join(' '))}">${x}</button>`).join('') : `<p class="sa-emo-vuoto">Nessuna emoji per “${esc(q)}”</p>`;
                 return;
             }
-            p.querySelector('.sa-emo-tabs').innerHTML = tabs.map(([k, ic, t]) => `<button type="button" class="${k === tabEmo ? 'on' : ''}" data-tabemo="${k}" title="${t}">${ic}${k === 'stk' ? '<span>Sticker</span>' : ''}</button>`).join('');
+            p.querySelector('.sa-emo-tabs').innerHTML = tabs.map(([k, ic, t]) => `<button type="button" class="${k === tabEmo ? 'on' : ''}" data-tabemo="${k}" title="${t}">${ic}${etich(k)}</button>`).join('');
             const g = p.querySelector('.sa-emo-g');
-            g.className = 'sa-emo-g' + (tabEmo === 'stk' ? ' stk' : '');
-            g.innerHTML = tabEmo === 'stk'
-                ? Object.keys(STICKER_IMG).concat(Object.keys(STICKER).filter(k => !STICKER_IMG[k])).map(k => `<button type="button" data-stk="${k}" title="Invia lo sticker">${stickerHtml(k, true)}</button>`).join('')
+            const stk = tabEmo === 'stk' ? STK_IMG : tabEmo === 'stks' ? STK_SALONE : null;
+            g.className = 'sa-emo-g' + (stk ? ' stk' : '');
+            g.innerHTML = stk
+                ? stk.map(k => `<button type="button" data-stk="${k}" title="Invia lo sticker">${stickerHtml(k, true)}</button>`).join('')
                 : (tabEmo === 'rec' ? R : (EMO_CAT[Number(tabEmo)] || EMO_CAT[0])[2]).map(x => `<button type="button" data-emo="${x}">${x}</button>`).join('');
             g.scrollTop = 0;
         }
