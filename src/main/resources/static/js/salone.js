@@ -2254,7 +2254,7 @@
                 ${u ? `<small>${ora(u.ts)}</small>` : ''}${menzNonLette[r.k] && n ? '<i class="sa-badge sa-badge-at" title="Ti hanno menzionato">@</i>' : ''}${n ? `<i class="sa-badge">${n}</i>` : ''}</button>`; }).join('')
                 + (utenti.length ? '' : '<p class="sa-hint" style="padding:10px 14px">Nessun altro utente con accesso al salone, per ora.</p>');
         }
-        const ruolo = r => ({ FRONT_OFFICE: 'Front Office', CONSULENZA: 'Consulenza', ADMIN: 'Admin' }[r] || r || '');
+        const ruolo = r => ({ FRONT_OFFICE: 'Front Office', CONSULENZA: 'Consulenza', ADMIN: 'Admin', UTENTE: 'Servizio Clienti', BACK_OFFICE: 'Back Office', MODERATORE: 'Moderatore', GESTORE: 'Gestore', NOLEGGIO: 'Noleggio', SERVICE: 'Service' }[r] || r || '');
         const iniziali = n => String(n || '').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
         function entra(k) { conv = k; risposta = null; barraRisposta(); vista(); segnaLetto(k); el.querySelector('textarea').focus(); }
         async function segnaLetto(k) { nonLetti[k] = 0; delete menzNonLette[k]; badge(); try { await post('/chat/letto', { conv: k }); } catch (e) { /* */ } }
