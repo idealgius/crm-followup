@@ -867,6 +867,118 @@ async function eseguiImportPreventivi(file, assegnazioni) {
     }
 }
 
+// ============================================================
+// EXPORT EXCEL — esporta quello che si vede a schermo (periodo + filtri),
+// con tutti i dettagli: un riepilogo, l'elenco completo dei preventivi e
+// lo storico di ogni cambio di stato. Il file lo costruisce il server.
+async function exportPreventiviExcel(btn) {
+    const items = preventiviFiltered.slice();
+    if (items.length === 0) {
+        alert('Nessun preventivo da esportare con il periodo e i filtri scelti.');
+        return;
+    }
+    const pad = n => String(n).padStart(2, '0');
+    const gg = iso => { if (!iso) return ''; const d = new Date(iso); return isNaN(d) ? '' : `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`; };
+    const ora = iso => { if (!iso) return ''; const d = new Date(iso); return isNaN(d) ? '' : `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+    const ggIt = s => s ? s.split('-').reverse().join('/') : '';
+    const T = (t, w) => ({ t, tipo: 'text', w: w || 22 }), I = (t, w) => ({ t, tipo: 'int', w: w || 12 }), Q = (t, w) => ({ t, tipo: 'pct', w: w || 12 }), D = (t, w) => ({ t, tipo: 'data', w: w || 12 });
+    const r = (x, y) => y ? x / y : 0;
+    const generata = p => ['TRATTATIVA_GENERATA', 'CHIUSA', 'FALLITA'].includes(p.status);
+    const lbl = s => PREVENTIVO_STATUS_LABELS[s] || s || '';
+
+    // filtri attivi, scritti in cima al file
+    const from = document.getElementById('pvFrom')?.value, to = document.getElementById('pvTo')?.value;
+    const periodo = from && to ? (from === to ? 'giorno ' + ggIt(from) : `dal ${ggIt(from)} al ${ggIt(to)}`) : from ? 'dal ' + ggIt(from) : to ? 'fino al ' + ggIt(to) : 'tutto lo storico';
+    const filtri = [];
+    const val = id => document.getElementById(id)?.value || '';
+    if (val('pvSearchText').trim()) filtri.push('ricerca "' + val('pvSearchText').trim() + '"');
+    if (val('pvFilterOperatore')) filtri.push('operatore ' + val('pvFilterOperatore'));
+    if (val('pvFilterConsulente')) filtri.push('consulente ' + val('pvFilterConsulente'));
+    if (val('pvFilterTipo')) filtri.push(val('pvFilterTipo') === 'VENDITA' ? 'solo vendita' : 'solo noleggio');
+    if (val('pvFilterStatus')) filtri.push('stato ' + lbl(val('pvFilterStatus')));
+
+    // riepiloghi: per stato, per operatore, per consulente, per marca
+    const STATI = Object.keys(PREVENTIVO_STATUS_LABELS);
+    const gruppo = keyFn => {
+        const m = new Map();
+        items.forEach(p => { const k = keyFn(p) || '—'; m.set(k, (m.get(k) || []).concat(p)); });
+        return [...m.entries()].sort((a, b) => b[1].length - a[1].length);
+    };
+    const colGruppo = first => [T(first, 26), I('Preventivi'), I('Vendita'), I('Noleggio')].concat(STATI.map(s => I(lbl(s), 15)), I('Trattative generate', 14), Q('% trattative', 12), I('In sospeso', 11));
+    const rigaGruppo = (k, l) => [k, l.length, l.filter(p => p.tipo === 'VENDITA').length, l.filter(p => p.tipo === 'NOLEGGIO').length]
+        .concat(STATI.map(s => l.filter(p => p.status === s).length), l.filter(generata).length, r(l.filter(generata).length, l.length), l.filter(p => preventivoGiorniSospeso(p) > 0).length);
+    const totale = rigaGruppo('Totale', items);
+    const sospesi = items.filter(p => preventivoGiorniSospeso(p) > 0);
+
+    const riepilogo = { nome: 'Riepilogo', tabelle: [
+        { titolo: 'In sintesi', colonne: [T('Voce', 34), I('Preventivi'), Q('%', 10)], righe: [
+            ['Preventivi telefonici', items.length, 1],
+            ['Vendita', items.filter(p => p.tipo === 'VENDITA').length, r(items.filter(p => p.tipo === 'VENDITA').length, items.length)],
+            ['Noleggio', items.filter(p => p.tipo === 'NOLEGGIO').length, r(items.filter(p => p.tipo === 'NOLEGGIO').length, items.length)],
+            ['Trattative generate (anche chiuse o fallite)', items.filter(generata).length, r(items.filter(generata).length, items.length)],
+            ['Trattative chiuse', items.filter(p => p.status === 'CHIUSA').length, r(items.filter(p => p.status === 'CHIUSA').length, items.length)],
+            ['In sospeso (ancora "generato" dal giorno dopo)', sospesi.length, r(sospesi.length, items.length)],
+            ['Senza link lead', items.filter(p => !p.linkLead).length, r(items.filter(p => !p.linkLead).length, items.length)]
+        ] },
+        { titolo: 'Per stato', colonne: [T('Stato', 34), I('Preventivi'), Q('%', 10), I('Vendita'), I('Noleggio')],
+          righe: STATI.map(s => { const l = items.filter(p => p.status === s); return [lbl(s), l.length, r(l.length, items.length), l.filter(p => p.tipo === 'VENDITA').length, l.filter(p => p.tipo === 'NOLEGGIO').length]; }),
+          totale: ['Totale', items.length, 1, items.filter(p => p.tipo === 'VENDITA').length, items.filter(p => p.tipo === 'NOLEGGIO').length] },
+        { titolo: 'Per operatore (chi ha inserito il preventivo)', colonne: colGruppo('Operatore'), righe: gruppo(p => p.user?.fullName).map(([k, l]) => rigaGruppo(k, l)), totale },
+        { titolo: 'Per consulente', colonne: colGruppo('Consulente'), righe: gruppo(p => p.consultantName).map(([k, l]) => rigaGruppo(k, l)), totale },
+        { titolo: 'Per marca', colonne: colGruppo('Marca'), righe: gruppo(p => p.marca).map(([k, l]) => rigaGruppo(k, l)), totale },
+        { titolo: 'Per giorno di caricamento', colonne: [D('Giorno', 12)].concat(colGruppo('x').slice(1)),
+          righe: gruppo(p => gg(p.createdAt)).sort((a, b) => a[0].split('/').reverse().join('').localeCompare(b[0].split('/').reverse().join(''))).map(([k, l]) => rigaGruppo(k, l)), totale }
+    ] };
+
+    // elenco completo, una riga per preventivo
+    const ultimoCambio = p => { const h = (p.statusHistory || []).slice().sort((a, b) => String(a.changedAt).localeCompare(String(b.changedAt))); return h[h.length - 1]; };
+    const elenco = { nome: 'Preventivi', tabelle: [{ titolo: 'Elenco dei preventivi telefonici', nota: 'Una riga per preventivo, nell\'ordine in cui compaiono nella pagina. "In sospeso" = giorni passati in "Preventivo telefonico generato" dal giorno dopo il caricamento.',
+        colonne: [T('Rif.', 10), T('ID lead', 12), T('Tipo', 10), D('Data caricamento'), T('Ora', 7), T('Nome', 16), T('Cognome', 18), T('Telefono', 14), T('Marca', 14), T('Modello', 20), T('Targa / telaio', 16),
+            T('Consulente', 22), T('Consulente corretto a mano', 12), T('Operatore', 22), T('Stato', 24), I('Giorni in sospeso', 11), D('Ultimo cambio stato'), T('Cambiato da', 20),
+            D('Ultima modifica'), T('Modificato da', 20), T('Trattativa Rent', 16), T('Link lead', 40), T('Storico stati', 60)],
+        righe: items.map(p => {
+            const u = ultimoCambio(p);
+            const storico = (p.statusHistory || []).slice().sort((a, b) => String(a.changedAt).localeCompare(String(b.changedAt)))
+                .map(h => `${lbl(h.status)} (${gg(h.changedAt)} ${ora(h.changedAt)}${h.changedBy?.fullName ? ', ' + h.changedBy.fullName : ''})`).join(' → ');
+            return [preventivoRef(p), p.sourceLeadId || '', p.tipo === 'VENDITA' ? 'Vendita' : 'Noleggio', gg(p.createdAt), ora(p.createdAt), p.clienteNome || '', p.clienteCognome || '', p.telefono || '',
+                p.marca || '', p.modello || '', p.targaTelaio || '', p.consultantName || '', p.consultantManuallyEdited ? 'Sì' : '', p.user?.fullName || '', lbl(p.status),
+                preventivoGiorniSospeso(p) || '', u ? gg(u.changedAt) : '', u?.changedBy?.fullName || '', gg(p.lastModifiedAt), p.lastModifiedBy?.fullName || '',
+                p.rentTrattativaId ? (p.rentModificataDopoSync ? 'Sì, modificata in Rent' : 'Sì') : '', p.linkLead || '', storico];
+        }) }] };
+
+    // storico: una riga per ogni cambio di stato
+    const storico = { nome: 'Storico stati', tabelle: [{ titolo: 'Tutti i cambi di stato', colonne: [T('Rif.', 10), T('ID lead', 12), T('Cliente', 28), T('Tipo', 10), T('Stato', 26), D('Data'), T('Ora', 7), T('Da', 22)],
+        righe: items.flatMap(p => (p.statusHistory || []).map(h => [preventivoRef(p), p.sourceLeadId || '', `${p.clienteNome || ''} ${p.clienteCognome || ''}`.trim(), p.tipo === 'VENDITA' ? 'Vendita' : 'Noleggio', lbl(h.status), gg(h.changedAt), ora(h.changedAt), h.changedBy?.fullName || '']))
+            .sort((a, b) => a[5].split('/').reverse().join('').localeCompare(b[5].split('/').reverse().join('')) || a[6].localeCompare(b[6])) }] };
+
+    const oggi = new Date();
+    const body = {
+        titolo: 'Preventivi telefonici',
+        sottotitolo: `Periodo: ${periodo}` + (filtri.length ? ' · Filtri: ' + filtri.join(', ') : ' · Nessun filtro') + ` · ${items.length} preventivi · Gruppo Autoscala`,
+        file: `preventivi_telefonici_${from || 'storico'}${to && to !== from ? '_' + to : ''}_${oggi.getFullYear()}${pad(oggi.getMonth() + 1)}${pad(oggi.getDate())}.xlsx`,
+        fogli: [riepilogo, elenco, storico]
+    };
+
+    const testo = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Preparo…'; }
+    try {
+        const res = await fetch('/api/preventivi-telefonici/export/excel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert(err.error || 'Errore durante l\'export (' + res.status + ')');
+            return;
+        }
+        const blob = await res.blob(), url = URL.createObjectURL(blob), a = document.createElement('a');
+        a.href = url; a.download = body.file; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+    } catch (err) {
+        console.error('Errore export preventivi telefonici:', err);
+        alert('Errore di rete durante l\'export');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = testo; }
+    }
+}
+
 async function showPreventiviImportLog() {
     const modal = document.getElementById('preventivoDrilldownModal');
     const titleEl = document.getElementById('preventivoDrilldownTitle');

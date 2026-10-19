@@ -1500,6 +1500,7 @@
                 <input type="file" id="pvImportLeadInput" accept=".csv" style="display:none" onchange="importPreventiviLeadCsv(this.files[0])">
                 <button onclick="document.getElementById('pvImportLeadInput').click()" class="btn-secondary" style="margin-left:auto">📥 IMPORTA LEAD DA CSV</button>
                 <button onclick="showPreventiviImportLog()" class="btn-secondary">🕓 Storico Import</button>
+                <button onclick="exportPreventiviExcel(this)" class="btn-secondary" title="Scarica in Excel i preventivi del periodo, con i filtri attivi">📊 Esporta Excel</button>
                 <button onclick="showNewPreventivoForm()" class="btn-gold">+ NUOVO PREVENTIVO TELEFONICO</button>
             </div>
             <div class="filter-bar" style="margin-top:10px">
@@ -2667,7 +2668,7 @@
 <script src="/js/rent.js?v=20261014a"></script>
 <script src="/js/service.js"></script>
 <script src="/js/veicoli.js"></script>
-<script src="/js/preventivi.js?v=20261019b"></script>
+<script src="/js/preventivi.js?v=20261019c"></script>
 <script src="/js/preventivi-sospesi.js"></script>
 <script src="/js/app.js?v=20261014b"></script>
 <script src="/js/macro-home.js?v=20261014b"></script>

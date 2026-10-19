@@ -7,11 +7,14 @@ import com.gruppoautoscala.followup.model.PreventivoTelefonicoStatusHistory;
 import com.gruppoautoscala.followup.model.NoleggioTrattativa;
 import com.gruppoautoscala.followup.model.User;
 import com.gruppoautoscala.followup.repository.UserRepository;
+import com.gruppoautoscala.followup.service.CommercialeExcelService;
 import com.gruppoautoscala.followup.service.PreventivoTelefonicoService;
 import com.gruppoautoscala.followup.service.PreventivoImportService;
 import com.gruppoautoscala.followup.service.PreventivoRentSyncService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -35,6 +38,7 @@ public class PreventivoTelefonicoController {
     @Autowired private PreventivoImportService preventivoImportService;
     @Autowired private UserRepository userRepository;
     @Autowired private ObjectMapper objectMapper;
+    @Autowired private CommercialeExcelService excelService;
 
     @GetMapping
     public ResponseEntity<?> list(@RequestParam(required = false) String from,
@@ -141,6 +145,39 @@ public class PreventivoTelefonicoController {
             return ResponseEntity.ok(response);
         } catch (IOException e) {
             return ResponseEntity.badRequest().body(Map.of("error", "Errore nella lettura del file: " + e.getMessage()));
+        }
+    }
+
+    // NUOVO: export Excel della pagina Preventivi telefonici. La pagina manda i
+    // fogli gia' pronti (stessi filtri che si vedono a schermo), qui si
+    // costruisce il file con lo stesso motore dell'export del Commerciale.
+    // Basta essere autenticati, come per vedere l'elenco.
+    @PostMapping("/export/excel")
+    public ResponseEntity<?> exportExcel(@RequestBody Map<String, Object> body, HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        int righe = 0;
+        if (body.get("fogli") instanceof List<?> fogli)
+            for (Object f : fogli)
+                if (f instanceof Map<?, ?> fm && fm.get("tabelle") instanceof List<?> tabs)
+                    for (Object t : tabs)
+                        if (t instanceof Map<?, ?> tm && tm.get("righe") instanceof List<?> r) righe += r.size();
+        if (righe > 50000) return ResponseEntity.badRequest().body(Map.of("error", "Troppe righe (" + righe + "): restringi il periodo o i filtri"));
+
+        Map<String, Object> dati = new HashMap<>(body);
+        dati.putIfAbsent("colore", "blu");
+        dati.put("aCapo", true);
+        try {
+            String chi = userRepository.findById(userId).map(User::getFullName).orElse(null);
+            byte[] xlsx = excelService.export(dati, chi);
+            String file = String.valueOf(body.getOrDefault("file", "preventivi_telefonici.xlsx")).replaceAll("[^A-Za-z0-9._-]", "_");
+            if (!file.endsWith(".xlsx")) file += ".xlsx";
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + file + "\"")
+                    .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                    .body(xlsx);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Export non riuscito: " + e.getMessage()));
         }
     }
 
