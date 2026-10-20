@@ -18,7 +18,8 @@ const PAGE_TO_SECTION = {
     dashboard: 'DASHBOARD', followups: 'FOLLOWUPS', waiting: 'WAITING',
     contacts: 'CONTACTS', promo: 'PROMO', admin: 'ADMIN',
     rent: 'RENT', service: 'SERVICE', veicoli: 'VEICOLI',
-    preventivi: 'PREVENTIVI'
+    preventivi: 'PREVENTIVI',
+    quotazioni: 'QUOTAZIONI_RENT'   // NUOVO: Quotazioni Rent (vedi /js/quotazioni-rent.js)
 };
 
 // FIX: se il caricamento della matrice permessi fallisce (endpoint non
@@ -32,10 +33,10 @@ const PAGE_TO_SECTION = {
 const PERMISSION_MATRIX_FALLBACK = {
     UTENTE: { CONTACTS: 'FULL' },
     BACK_OFFICE: { CONTACTS: 'FULL' },
-    MODERATORE: { DASHBOARD: 'FULL', FOLLOWUPS: 'FULL', WAITING: 'FULL', CONTACTS: 'FULL', PROMO: 'FULL', RENT: 'FULL', SERVICE: 'FULL', GRAFICI: 'FULL', PREVENTIVI: 'FULL' },
-    GESTORE: { DASHBOARD: 'ADMIN_FULL', FOLLOWUPS: 'ADMIN_FULL', WAITING: 'ADMIN_FULL', CONTACTS: 'ADMIN_FULL', PROMO: 'ADMIN_FULL', RENT: 'ADMIN_FULL', SERVICE: 'ADMIN_FULL', GRAFICI: 'ADMIN_FULL', ADMIN: 'ADMIN_FULL', PREVENTIVI: 'ADMIN_FULL' },
-    ADMIN: { DASHBOARD: 'ADMIN_FULL', FOLLOWUPS: 'ADMIN_FULL', WAITING: 'ADMIN_FULL', CONTACTS: 'ADMIN_FULL', PROMO: 'ADMIN_FULL', RENT: 'ADMIN_FULL', SERVICE: 'ADMIN_FULL', GRAFICI: 'ADMIN_FULL', ADMIN: 'ADMIN_FULL', VEICOLI: 'ADMIN_FULL', PREVENTIVI: 'ADMIN_FULL' },
-    NOLEGGIO: { RENT: 'FULL' },
+    MODERATORE: { DASHBOARD: 'FULL', FOLLOWUPS: 'FULL', WAITING: 'FULL', CONTACTS: 'FULL', PROMO: 'FULL', RENT: 'FULL', SERVICE: 'FULL', GRAFICI: 'FULL', PREVENTIVI: 'FULL', QUOTAZIONI_RENT: 'FULL' },
+    GESTORE: { DASHBOARD: 'ADMIN_FULL', FOLLOWUPS: 'ADMIN_FULL', WAITING: 'ADMIN_FULL', CONTACTS: 'ADMIN_FULL', PROMO: 'ADMIN_FULL', RENT: 'ADMIN_FULL', SERVICE: 'ADMIN_FULL', GRAFICI: 'ADMIN_FULL', ADMIN: 'ADMIN_FULL', PREVENTIVI: 'ADMIN_FULL', QUOTAZIONI_RENT: 'ADMIN_FULL' },
+    ADMIN: { DASHBOARD: 'ADMIN_FULL', FOLLOWUPS: 'ADMIN_FULL', WAITING: 'ADMIN_FULL', CONTACTS: 'ADMIN_FULL', PROMO: 'ADMIN_FULL', RENT: 'ADMIN_FULL', SERVICE: 'ADMIN_FULL', GRAFICI: 'ADMIN_FULL', ADMIN: 'ADMIN_FULL', VEICOLI: 'ADMIN_FULL', PREVENTIVI: 'ADMIN_FULL', QUOTAZIONI_RENT: 'ADMIN_FULL' },
+    NOLEGGIO: { RENT: 'FULL', QUOTAZIONI_RENT: 'FULL' },
     SERVICE: { SERVICE: 'FULL' }
 };
 
@@ -58,6 +59,11 @@ async function loadPermissionMatrix() {
 // dalla pagina Permessi per Ruolo, che deve leggere la matrice per TUTTI i
 // ruoli, ignorando gli override personali di chiunque).
 function getAccess(section, role) {
+    // NUOVO: Quotazioni Rent — il livello vero (con eccezioni personali e a tempo) lo
+    // chiede quotazioni-rent.js al server; finche' non e' arrivato vale la regola sotto
+    if (section === 'QUOTAZIONI_RENT' && (!role || role === currentUser?.role) && window.QuotazioniRent && QuotazioniRent.livello()) {
+        return QuotazioniRent.livello();
+    }
     if ((!role || role === currentUser?.role) && Object.keys(myEffectivePermissions).length > 0) {
         return myEffectivePermissions[section] || 'NONE';
     }
@@ -224,7 +230,7 @@ function refreshChartsOnThemeChange() {
 
 // Pagine valide riconosciute dal router — usato per validare l'hash dell'URL
 // (evita che un hash sporco o obsoleto mandi l'app in uno stato indefinito)
-const VALID_PAGES = ['dashboard', 'followups', 'waiting', 'contacts', 'promo', 'admin', 'rent', 'service', 'veicoli', 'preventivi'];
+const VALID_PAGES = ['dashboard', 'followups', 'waiting', 'contacts', 'promo', 'admin', 'rent', 'service', 'veicoli', 'preventivi', 'quotazioni'];
 
 // FIX: prima qui c'erano RENT_ROLES/SERVICE_ROLES (array fissi di nomi
 // ruolo) e un blocco di if/else per ogni singolo link di navbar — ora la
@@ -243,6 +249,8 @@ function applyRolePermissions(role) {
     if (window.MacroHome) MacroHome.refreshNav();
     // NUOVO: voce "Appuntamenti e ingressi" nel menu del nome (permesso SALONE) e notifiche ai consulenti
     if (window.Salone) Salone.refreshNav();
+    // NUOVO: Quotazioni Rent: voce nel menu (7 sezioni In bound o meno) oppure pulsante 📝 nel Rent
+    if (window.QuotazioniRent) QuotazioniRent.refreshNav();
     Object.entries(NAV_ID_BY_SECTION).forEach(([section, navId]) => {
         const el = document.getElementById(navId);
         if (!el) return;
@@ -281,7 +289,7 @@ function applyRolePermissions(role) {
 function applyPageTheme(page, role) {
     const isNoleggio = role === 'NOLEGGIO';
     const isService = role === 'SERVICE';
-    const isRentPage = page === 'rent';
+    const isRentPage = page === 'rent' || page === 'quotazioni';   // Quotazioni Rent: stessi colori del Rent
     const isServicePage = page === 'service';
     const showRentTheme = isNoleggio || isRentPage;
     const showServiceTheme = isService || isServicePage;
@@ -401,6 +409,8 @@ async function showPage(page, updateHash = true) {
     if (veicoliPageEl) veicoliPageEl.style.display = 'none';
     const preventiviPageEl = document.getElementById('preventiviPage');
     if (preventiviPageEl) preventiviPageEl.style.display = 'none';
+    const quotazioniPageEl = document.getElementById('quotazioniPage');
+    if (quotazioniPageEl) quotazioniPageEl.style.display = 'none';
 
     document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
 
@@ -478,6 +488,10 @@ async function showPage(page, updateHash = true) {
         const navPreventivi = document.getElementById('navPreventivi');
         if (navPreventivi) navPreventivi.classList.add('active');
         if (typeof loadPreventivi === 'function') loadPromise = Promise.resolve(loadPreventivi());
+    } else if (page === 'quotazioni') {
+        // NUOVO: Quotazioni Rent
+        if (quotazioniPageEl) quotazioniPageEl.style.display = 'block';
+        if (window.QuotazioniRent) loadPromise = Promise.resolve(QuotazioniRent.apri());
     }
 
     applyPageTheme(page, role);

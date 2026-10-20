@@ -96,6 +96,8 @@
             <a href="#preventivi" class="nav-link" id="navPreventivi" style="display:none" onclick="showPage('preventivi');return false"><span class="nav-link-icon">📝</span><span class="nav-link-label">PREVENTIVI TELEFONICI</span></a>
             <a href="#promo" class="nav-link" id="navPromo" style="display:none" onclick="showPage('promo');return false"><span class="nav-link-icon">🎯</span><span class="nav-link-label">PROMO</span></a>
             <a href="#rent" class="nav-link" id="navRent" style="display:none" onclick="showPage('rent');return false"><span class="nav-link-icon">🚗</span><span class="nav-link-label">RENT</span></a>
+            <!-- NUOVO: Quotazioni Rent nel menu solo per chi vede 7 sezioni In bound o meno (gli altri hanno il pulsante 📝 dentro Rent) -->
+            <a href="#quotazioni" class="nav-link" id="navQuotazioni" style="display:none" onclick="showPage('quotazioni');return false"><span class="nav-link-icon">📝</span><span class="nav-link-label">QUOTAZIONI RENT</span></a>
             <a href="#service" class="nav-link" id="navService" style="display:none" onclick="showPage('service');return false"><span class="nav-link-icon">🔧</span><span class="nav-link-label">SERVICE</span></a>
             <a href="#veicoli" class="nav-link" id="navVeicoli" style="display:none" onclick="showPage('veicoli');return false"><span class="nav-link-icon">🚙</span><span class="nav-link-label">VETTURE IN CONSEGNA</span></a>
             <a href="#admin" class="nav-link" id="adminLink" style="display:none" onclick="showPage('admin');return false"><span class="nav-link-icon">⚙️</span><span class="nav-link-label">UTENTI</span></a>
@@ -2099,6 +2101,7 @@
                 </div>
 
                 <button onclick="showNewRentForm()" class="btn-primary" style="width:auto;padding:10px 20px">+ NUOVA TRATTATIVA</button>
+                <button id="rentQuotBtn" onclick="showPage('quotazioni')" class="btn-secondary" style="display:none" title="Quotazioni Rent: importa le quotazioni dei portali, classifiche e ricerca">📝</button>
                 <button onclick="exportRentExcel()" class="btn-secondary" style="padding:10px 16px">📥 EXCEL</button>
             </div>
         </div>
@@ -2342,6 +2345,11 @@
     </div>
 
 <!-- SERVICE PAGE -->
+<!-- NUOVO: Quotazioni Rent (tutto il contenuto lo disegna /js/quotazioni-rent.js) -->
+<div id="quotazioniPage" class="page" style="display:none">
+    <div id="quotazioniRoot"></div>
+</div>
+
 <div id="servicePage" class="page" style="display:none">
     <div class="page-header">
         <h2>🔧 SERVICE — GESTIONE OFFICINA</h2>
@@ -2664,13 +2672,14 @@
 <script src="/js/dashboard-fu.js"></script>
 <script src="/js/contact.js?v=20261014a"></script>
 <script src="/js/promo.js"></script>
-<script src="/js/admin.js?v=20261017a"></script>
+<script src="/js/admin.js?v=20261020a"></script>
 <script src="/js/rent.js?v=20261014a"></script>
 <script src="/js/service.js"></script>
 <script src="/js/veicoli.js"></script>
 <script src="/js/preventivi.js?v=20261020a"></script>
 <script src="/js/preventivi-sospesi.js"></script>
-<script src="/js/app.js?v=20261014b"></script>
+<script src="/js/quotazioni-rent.js?v=20261020c"></script>
+<script src="/js/app.js?v=20261020a"></script>
 <script src="/js/macro-home.js?v=20261014b"></script>
 <script src="/js/bi-home.js?v=20261017a"></script>
 <script src="/js/bi-tools.js?v=20261014f"></script>

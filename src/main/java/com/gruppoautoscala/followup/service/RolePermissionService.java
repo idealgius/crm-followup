@@ -85,7 +85,10 @@ public class RolePermissionService {
         "ALLERT",
         // NUOVO: Appuntamenti e ingressi (walk-in, appuntamenti, chat del salone).
         // Solo lettura = vede e usa la chat · Completo = registra e assegna i clienti
-        "SALONE"
+        "SALONE",
+        // NUOVO: Quotazioni Rent (import dei preventivi dei portali di noleggio, classifiche
+        // e ricerca). Solo lettura = consulta · Completo = importa, corregge ed elimina
+        "QUOTAZIONI_RENT"
     );
     // ===== NUOVO: PERMESSI DEI GRAFICI =====
     // Un grafico e' una "sezione" come le altre, salvata nella stessa tabella
@@ -157,6 +160,7 @@ public class RolePermissionService {
         moderatoreDefaults.put("CONSEGNE", "FULL");
         moderatoreDefaults.put("STOCK", "FULL");
         moderatoreDefaults.put("ALLERT", "ADMIN_FULL");
+        moderatoreDefaults.put("QUOTAZIONI_RENT", "FULL");
         DEFAULTS.put("MODERATORE", moderatoreDefaults);
         Map<String, String> gestoreDefaults = new HashMap<>(Map.of(
             "DASHBOARD", "ADMIN_FULL", "FOLLOWUPS", "ADMIN_FULL", "WAITING", "ADMIN_FULL",
@@ -166,6 +170,7 @@ public class RolePermissionService {
         gestoreDefaults.put("CONSEGNE", "ADMIN_FULL");
         gestoreDefaults.put("STOCK", "ADMIN_FULL");
         gestoreDefaults.put("ALLERT", "ADMIN_FULL");
+        gestoreDefaults.put("QUOTAZIONI_RENT", "ADMIN_FULL");
         DEFAULTS.put("GESTORE", gestoreDefaults);
         Map<String, String> adminDefaults = new HashMap<>();
         adminDefaults.put("DASHBOARD", "ADMIN_FULL");
@@ -183,11 +188,12 @@ public class RolePermissionService {
         adminDefaults.put("STOCK", "ADMIN_FULL");
         adminDefaults.put("ALLERT", "ADMIN_FULL");
         adminDefaults.put("SALONE", "S_ALL");          // Appuntamenti e ingressi: Completo (tutto + chat)
+        adminDefaults.put("QUOTAZIONI_RENT", "ADMIN_FULL");
         DEFAULTS.put("ADMIN", adminDefaults);
         // NUOVO: Front Office registra e assegna i clienti; Consulenza riceve le notifiche e usa la chat
         DEFAULTS.put("FRONT_OFFICE", Map.of("SALONE", "S_FO"));
         DEFAULTS.put("CONSULENZA", Map.of("SALONE", "S_CONS"));
-        DEFAULTS.put("NOLEGGIO", Map.of("RENT", "FULL", "SALONE", "S_CONS"));   // consulenti del noleggio: come Consulenza, scheda accanto a RENT
+        DEFAULTS.put("NOLEGGIO", Map.of("RENT", "FULL", "SALONE", "S_CONS", "QUOTAZIONI_RENT", "FULL"));   // consulenti del noleggio: come Consulenza, scheda accanto a RENT
         DEFAULTS.put("SERVICE", Map.of("SERVICE", "FULL"));
     }
 
