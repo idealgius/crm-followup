@@ -435,14 +435,45 @@
   $('bh-frame').addEventListener('pointerleave', () => { paused = false; sw.classList.remove('bh-paused'); restart(); });
 
   /* ---------- STOCK: pedana girevole con i loghi ---------- */
-  // loghi dei marchi (cartella /img/marchi), nell'ordine dei piu' venduti
-  const LOGHI = ["/img/marchi/peugeot.png", "/img/marchi/citroen.png", "/img/marchi/fiat.png", "/img/marchi/dr.png", "/img/marchi/bmw.png", "/img/marchi/volkswagen.png", "/img/marchi/audi.png", "/img/marchi/mg.png", "/img/marchi/sportequipe.png", "/img/marchi/ich-x.png", "/img/marchi/dacia.png", "/img/marchi/toyota.png", "/img/marchi/ford.png", "/img/marchi/kia.png", "/img/marchi/alfa-romeo.png", "/img/marchi/byd.png", "/img/marchi/opel.png", "/img/marchi/nissan.png"];
-  const ring = $('bh-ring'), N = LOGHI.length, R = 270;
-  LOGHI.forEach((src, i) => {
+  // loghi dei marchi (cartella /img/marchi). Prima questi (i piu' venduti), poi tutti gli altri
+  // marchi che hanno un logo nella cartella: si prova a caricarli e si tengono quelli che esistono.
+  const PRIMI = ['peugeot', 'citroen', 'fiat', 'dr', 'bmw', 'volkswagen', 'audi', 'mg', 'sportequipe', 'ich-x', 'dacia', 'toyota', 'ford', 'kia', 'alfa-romeo', 'byd', 'opel', 'nissan'];
+  const slugM = m => String(m).normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const ALTRI = (typeof MARCHE_LIST !== 'undefined' ? MARCHE_LIST : []).concat(['ABARTH', 'ALPINE', 'HONDA', 'JAGUAR', 'LEXUS', 'LYNK & CO', 'POLESTAR', 'SUBARU', 'VOLVO', 'XPENG', 'KGM', 'SSANGYONG', 'MERCEDES'])
+    .map(slugM).filter(x => x && x !== 'marca-generica' && !PRIMI.includes(x)).sort();
+  const CANDIDATI = [...new Set(PRIMI.concat(ALTRI))];
+  // La pedana ha 18 posti (piu' loghi insieme non ci stanno): quando un logo passa DIETRO, dove
+  // non si vede, prende il marchio successivo. Giro dopo giro passano tutti, senza doppioni davanti.
+  const ring = $('bh-ring'), N = 18, R = 270, POSTI = [];
+  for (let i = 0; i < N; i++) {
     const d = document.createElement('div'); d.className = 'bh-plq';
     d.style.transform = `rotateY(${i * 360 / N}deg) translateZ(${R}px)`;
-    d.innerHTML = `<img src="${src}" alt="">`; ring.appendChild(d);
+    d.innerHTML = '<img alt="">'; d.style.visibility = 'hidden'; ring.appendChild(d);
+    POSTI.push({ el: d, img: d.querySelector('img'), dietro: false });
+  }
+  const loghi = [];        // url dei loghi che esistono, nell'ordine di CANDIDATI
+  let prossimo = 0;
+  const prova = (url) => new Promise(ok => { const im = new Image(); im.onload = () => ok(url); im.onerror = () => ok(null); im.src = url; });
+  const caricaLogo = async sl => (await prova('/img/marchi/' + sl + '.png')) || (sl.includes('-') ? await prova('/img/marchi/' + sl.replace(/-/g, '') + '.png') : null);
+  Promise.all(CANDIDATI.map(caricaLogo)).then(urls => {
+    urls.forEach(u => { if (u) loghi.push(u); });
+    if (!loghi.length) return;
+    POSTI.forEach((p, i) => { p.img.src = loghi[i % loghi.length]; p.el.style.visibility = ''; });
+    prossimo = N % loghi.length;
+    if (loghi.length > N) setInterval(cambiaDietro, 250);
   });
+  function cambiaDietro() {
+    if (document.hidden || !ring.getAnimations) return;
+    const an = ring.getAnimations().find(a => a.animationName === 'bh-spin');
+    if (!an || an.currentTime == null) return;
+    const giro = -((an.currentTime % 40000) / 40000) * 360;          // bh-spin: rotateY da 0 a -360 in 40s
+    POSTI.forEach((p, i) => {
+      const ang = (((i * 360 / N + giro) % 360) + 360) % 360;         // 180 = esattamente dietro
+      const dietro = ang > 140 && ang < 220;
+      if (dietro && !p.dietro) { p.img.src = loghi[prossimo]; prossimo = (prossimo + 1) % loghi.length; }
+      p.dietro = dietro;
+    });
+  }
   // La rotazione della pedana e' in CSS (bh-spin) e parte al caricamento, senza legame con il
   // capitolo: Stock risultava sfasato e si fermava con il mouse sopra. Qui la riportiamo a 0
   // ogni volta che il capitolo diventa attivo e la forziamo in play: con play() esplicito
