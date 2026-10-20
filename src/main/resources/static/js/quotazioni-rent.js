@@ -19,6 +19,7 @@
     const IVA = 0.22;
     const PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
     const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const PDFLIB_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js';   // per togliere le condizioni generali dai PDF da conservare
     const TIPI = { PRIVATO: 'Privato', PIVA: 'P.IVA', AZIENDA: 'Azienda' };
 
     /* ================= LETTURA DEL PDF ================= */
@@ -274,8 +275,8 @@
     }
 
     /* ================= STATO E UTILITA' ================= */
-    let quot = [], puoModificare = false, livelloAcc = null, caricato = false, rootEl = null;
-    const st = { portale: 'Tutti', ordina: 'mensile', tipoTab: 'PRIVATO', cerca: null, elencoQ: '', grafici: [] };
+    let quot = [], puoModificare = false, livelloAcc = null, caricato = false, rootEl = null, pdfMaxKb = 200 * 1024;
+    const st = { portale: 'Tutti', ordina: 'mensile', tipoTab: 'PRIVATO', cerca: null, elencoQ: '', mese: '', grafici: [] };
     const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const eur = (v, dec) => v == null || !isFinite(v) ? '–' : v.toLocaleString('it-IT', { minimumFractionDigits: dec == null ? 2 : dec, maximumFractionDigits: dec == null ? 2 : dec }) + ' €';
     const nf = v => v == null ? '–' : Math.round(v).toLocaleString('it-IT');
@@ -294,6 +295,25 @@
         const k = st.ordina === 'km' ? 'alKm' : st.ordina === 'listino' ? 'suListino' : 'mensile';
         return lista.map(q => ({ q, c: costi(q, base) })).filter(x => x.c[k] != null).sort((a, b) => a.c[k] - b.c[k]);
     };
+
+    // NUOVO: offerte uguali (stesso portale, auto, durata, km, canone e anticipo) contate una volta sola
+    // nelle classifiche, con "richiesta N volte"; per la top 5 anche una sola offerta per auto.
+    const nV = t => String(t || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+    const condKey = q => [q.portale, nV(q.marca), nV(q.modello), nV(q.versione), q.mesi, Math.round(q.kmTotali || 0), Math.round(q.canoneEscl || 0), Math.round(q.anticipoEscl || 0)].join('|');
+    function unici(lista, perAuto) {     // lista gia' ordinata: si tiene la prima (la migliore) di ogni gruppo
+        const g = new Map(), out = [];
+        lista.forEach(x => {
+            const k = perAuto ? nV(x.q.marca) + '|' + nV(x.q.modello) : condKey(x.q);
+            const y = g.get(k);
+            if (y) { if (perAuto) y.nAuto += 1; else y.n += 1; }
+            else { const z = Object.assign({ n: 1, nAuto: 1 }, x); g.set(k, z); out.push(z); }
+        });
+        return out;
+    }
+    const meseDi = q => { const m = String(q.data || '').match(/\d{2}\/(\d{2})\/(\d{4})/); return m ? m[2] + '-' + m[1] : ''; };
+    const MESI_IT = ['', 'Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
+    const nomeMese = k => { const [y, m] = k.split('-'); return MESI_IT[+m] + ' ' + y; };
+    const mb = kb => (kb / 1024).toLocaleString('it-IT', { maximumFractionDigits: 1 }) + ' MB';
 
     async function api(url, opt) {
         const r = await fetch(url, Object.assign({ credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } }, opt || {}));
@@ -359,6 +379,7 @@
             const d = await api('/api/quotazioni-rent');
             quot = (d.quotazioni || []).filter(q => q && q.canoneEscl != null && q.mesi);
             puoModificare = !!d.puoModificare;
+            if (d.pdfMaxKb) pdfMaxKb = d.pdfMaxKb;
             caricato = true;
             messaggio('');
         } catch (e) { messaggio('⚠️ ' + esc(e.message), 'err'); quot = []; }
@@ -387,7 +408,7 @@
           ${kpi(L)}
           <section class="qr-card qr-cerca-card"><h3>🔍 Cosa stai cercando?</h3><p class="qr-hint">Imposta anticipo, rata e il resto: ti mostro le quotazioni caricate che si avvicinano di più, dalla più conveniente.</p>${formCerca()}<div class="qr-cerca-ris"></div></section>
           <section class="qr-card"><div class="qr-card-h"><h3>🏆 Top 5 quotazioni${st.portale === 'Tutti' ? '' : ' · ' + esc(st.portale)}</h3>${selOrdina()}</div>
-            <p class="qr-hint">Le più convenienti in assoluto, confrontate tutte + IVA (così privati e aziende stanno sulla stessa base).</p>${top5(L)}</section>
+            <p class="qr-hint">Le più convenienti, una per auto (così non escono 5 volte le stesse), confrontate tutte + IVA: privati e aziende sulla stessa base.</p>${top5(L)}</section>
           <section class="qr-card"><div class="qr-card-h"><h3>📊 Classifiche per tipo di cliente</h3>${selOrdina()}</div>
             <div class="qr-ttabs">${Object.entries(TIPI).map(([k, l]) => `<button type="button" class="${st.tipoTab === k ? 'on' : ''}" data-tipotab="${k}">${l} <b>${L.filter(q => q.tipoCliente === k).length}</b></button>`).join('')}</div>
             <div class="qr-classifica">${classifica(L)}</div></section>
@@ -403,8 +424,7 @@
               <div class="qr-ch qr-wide"><h4>Quotazioni caricate per mese</h4><div class="qr-ch-b"><canvas id="qrChMese"></canvas></div></div>
             </div></section>
           ${st.portale === 'Tutti' && [...new Set(quot.map(q => q.portale))].length > 0 ? `<section class="qr-card"><h3>⚖️ Confronto tra portali</h3><p class="qr-hint">Ogni portale con i suoi numeri: costi medi, quotazione tipo, marca più quotata e la sua offerta migliore.</p>${confronto()}</section>` : ''}
-          <section class="qr-card"><div class="qr-card-h"><h3>🗂️ Tutte le quotazioni${st.portale === 'Tutti' ? '' : ' · ' + esc(st.portale)}</h3>
-            <input type="search" class="qr-in" data-elq placeholder="Cerca cliente, veicolo, numero…" value="${esc(st.elencoQ)}"></div><div class="qr-elenco"></div></section>`;
+          ${archivio(L)}`;
         disegnaElenco();
         grafici(L);
         if (st.cerca) cerca();
@@ -436,7 +456,8 @@
         return `<button type="button" class="qr-off ${i === 0 ? 'best' : ''}" data-det="${esc(q.id)}">
           <span class="qr-pos">${i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}</span>
           <span class="qr-off-v"><b>${esc(nomeVeicolo(q))}</b><small>${esc(q.versione || '')}</small>
-            <em><i class="qr-pt">${esc(q.portale)}</i> <i class="qr-tc t-${q.tipoCliente}">${TIPI[q.tipoCliente] || ''}</i> ${esc(q.cliente || '')}${q.data ? ' · ' + esc(q.data) : ''}</em></span>
+            <em><i class="qr-pt">${esc(q.portale)}</i> <i class="qr-tc t-${q.tipoCliente}">${TIPI[q.tipoCliente] || ''}</i> ${esc(q.cliente || '')}${q.data ? ' · ' + esc(q.data) : ''}</em>
+            ${x.n > 1 || x.nAuto > 1 ? `<em class="qr-rip">${x.n > 1 ? '🔁 stesse condizioni richieste ' + x.n + ' volte' : ''}${x.n > 1 && x.nAuto > 1 ? ' · ' : ''}${x.nAuto > 1 ? 'la migliore di ' + x.nAuto + ' offerte su questa auto' : ''}</em>` : ''}</span>
           <span class="qr-off-n"><small>Canone</small><b>${eur(c.canone)}</b><em>${ivaLab(c.base)}</em></span>
           <span class="qr-off-n"><small>Anticipo</small><b>${c.anticipo ? eur(c.anticipo, 0) : 'Nessuno'}</b><em>${q.speseEscl ? '+ spese ' + eur(c.spese, 0) : '&nbsp;'}</em></span>
           <span class="qr-off-n"><small>Durata</small><b>${q.mesi} mesi</b><em>${kmLab(q.kmAnnui)}</em></span>
@@ -448,18 +469,18 @@
     }
 
     function top5(L) {
-        const T = ordinaPer(L, 'ESCL').slice(0, 5);
+        const T = unici(unici(ordinaPer(L, 'ESCL')), true).slice(0, 5);   // offerte diverse, una per auto
         return T.length ? `<div class="qr-offs">${T.map((x, i) => rigaOfferta(x, i)).join('')}</div>` : '<p class="qr-hint">Nessuna quotazione completa.</p>';
     }
 
     function classifica(L) {
         const tipo = st.tipoTab, base = tipo === 'PRIVATO' ? 'INCL' : 'ESCL';
-        const R = ordinaPer(L.filter(q => q.tipoCliente === tipo), base);
+        const R = unici(ordinaPer(L.filter(q => q.tipoCliente === tipo), base));   // offerte uguali una volta sola
         if (!R.length) return `<p class="qr-hint">Nessuna quotazione per ${TIPI[tipo]}${st.portale === 'Tutti' ? '' : ' su ' + esc(st.portale)}.</p>`;
         const mostra = st.tutteClass ? R : R.slice(0, 10);
         return `<p class="qr-hint">${TIPI[tipo]}: importi ${base === 'INCL' ? 'IVA inclusa (il privato paga l\'IVA)' : '+ IVA'}. Il costo mensile reale tiene conto dell'anticipo e delle spese iniziali: 280 € con 3.000 € di anticipo su 36 mesi costa in realtà 363 € al mese.</p>
           <div class="qr-offs">${mostra.map((x, i) => rigaOfferta(x, i)).join('')}</div>
-          ${R.length > 10 ? `<button type="button" class="qr-link" data-act="tutteclass">${st.tutteClass ? 'Mostra solo le prime 10' : 'Mostra tutte (' + R.length + ')'}</button>` : ''}`;
+          ${R.length > 10 ? `<button type="button" class="qr-link" data-act="tutteclass">${st.tutteClass ? 'Mostra solo le prime 10' : 'Mostra tutte (' + R.length + ' offerte diverse)'}</button>` : ''}`;
     }
 
     function piuRichieste(L) {
@@ -486,17 +507,31 @@
         return `<div class="qr-scroll"><table class="qr-t"><tr><th class="l">Portale</th><th>Quotazioni</th><th>Canone medio + IVA</th><th>Mensile reale medio + IVA</th><th>Senza anticipo</th><th class="l">Quotazione tipo</th><th class="l">Marca più quotata</th><th class="l">Offerta migliore</th></tr>${righe}</table></div>`;
     }
 
+    // NUOVO: archivio = "cartella" delle quotazioni, divisa per portale (tab in alto) e per mese
+    function archivio(L) {
+        const mesi = contaPer(L, meseDi).sort((a, b) => b[0].localeCompare(a[0]));
+        if (st.mese && !mesi.some(m => m[0] === st.mese)) st.mese = '';
+        const usati = quot.reduce((t, q) => t + (+q.pdfKb || 0), 0), nPdf = quot.filter(q => q.pdfKey).length;
+        return `<section class="qr-card qr-arch"><div class="qr-card-h"><h3>🗂️ Archivio quotazioni${st.portale === 'Tutti' ? '' : ' · ' + esc(st.portale)}</h3>
+            <div class="qr-arch-a"><span class="qr-spazio" title="Spazio usato dai PDF conservati (i dati delle quotazioni non contano: pesano pochissimo)">📎 ${nPdf} PDF · ${mb(usati)} su ${mb(pdfMaxKb)}<i style="width:${Math.min(100, usati / pdfMaxKb * 100)}%"></i></span>
+            ${puoModificare && nPdf ? '<button type="button" class="qr-btn" data-act="pulizia">Libera spazio</button>' : ''}
+            <input type="search" class="qr-in" data-elq placeholder="Cerca cliente, veicolo, numero…" value="${esc(st.elencoQ)}"></div></div>
+          <div class="qr-mesi"><button type="button" class="${st.mese ? '' : 'on'}" data-mese="">📁 Tutti i mesi <b>${L.length}</b></button>${mesi.map(([k, n]) => `<button type="button" class="${st.mese === k ? 'on' : ''}" data-mese="${k}">📁 ${nomeMese(k)} <b>${n}</b></button>`).join('')}</div>
+          <div class="qr-elenco"></div></section>`;
+    }
+
     function disegnaElenco() {
         const box = rootEl && rootEl.querySelector('.qr-elenco'); if (!box) return;
         const q0 = st.elencoQ.trim().toLowerCase();
-        const L = delPortale().filter(q => !q0 || [q.cliente, q.veicolo, q.numero, q.portale, q.marca, q.modello].join(' ').toLowerCase().includes(q0))
+        const L = delPortale().filter(q => (!st.mese || meseDi(q) === st.mese) && (!q0 || [q.cliente, q.veicolo, q.numero, q.portale, q.marca, q.modello].join(' ').toLowerCase().includes(q0)))
             .sort((a, b) => dataNum(b.data) - dataNum(a.data) || String(b.caricataIl || '').localeCompare(String(a.caricataIl || '')));
         if (!L.length) { box.innerHTML = '<p class="qr-hint">Nessuna quotazione trovata.</p>'; return; }
-        box.innerHTML = `<div class="qr-scroll"><table class="qr-t qr-el"><tr><th class="l">Data</th><th class="l">Portale</th><th class="l">N°</th><th class="l">Cliente</th><th class="l">Tipo</th><th class="l">Veicolo</th><th>Canone + IVA</th><th>Anticipo + IVA</th><th>Durata</th><th>Km/anno</th><th>Mensile reale</th>${puoModificare ? '<th></th>' : ''}</tr>
+        box.innerHTML = `<div class="qr-scroll"><table class="qr-t qr-el"><tr><th class="l">Data</th><th class="l">Portale</th><th class="l">N°</th><th class="l">Cliente</th><th class="l">Tipo</th><th class="l">Veicolo</th><th>Canone + IVA</th><th>Anticipo + IVA</th><th>Durata</th><th>Km/anno</th><th>Mensile reale</th><th title="PDF conservato">📎</th>${puoModificare ? '<th></th>' : ''}</tr>
           ${L.map(q => { const c = costi(q); return `<tr data-det="${esc(q.id)}"><td class="l">${esc(q.data || '')}</td><td class="l">${esc(q.portale)}</td><td class="l">${esc(q.numero || '')}</td><td class="l">${esc(q.cliente || '–')}</td>
             <td class="l">${puoModificare ? `<select data-tipo="${esc(q.id)}">${Object.entries(TIPI).map(([k, l]) => `<option value="${k}" ${q.tipoCliente === k ? 'selected' : ''}>${l}</option>`).join('')}</select>` : (TIPI[q.tipoCliente] || '')}</td>
             <td class="l">${esc(nomeVeicolo(q))}<small>${esc(q.versione || '')}</small></td><td>${eur(q.canoneEscl)}</td><td>${q.anticipoEscl ? eur(q.anticipoEscl, 0) : '–'}</td><td>${q.mesi}</td><td>${nf(q.kmAnnui)}</td>
             <td><b>${eur(c.mensile, 0)}</b><small>${ivaLab(c.base)}</small></td>
+            <td>${q.pdfKey ? `<a class="qr-pdf" href="/api/quotazioni-rent/${encodeURIComponent(q.id)}/pdf" target="_blank" rel="noopener" title="Apri il PDF (${nf(q.pdfKb)} KB)">📎</a>` : '<span class="qr-nopdf" title="PDF non conservato">–</span>'}</td>
             ${puoModificare ? `<td><button type="button" class="qr-del" data-del="${esc(q.id)}" title="Elimina">🗑️</button></td>` : ''}</tr>`; }).join('')}</table></div>`;
     }
 
@@ -540,6 +575,7 @@
             if (inFascia.length) { lista = inFascia.sort((a, b) => a.c.mensile - b.c.mensile); titolo = `${inFascia.length} quotazioni con rata tra ${eur(rata * (1 - tol), 0)} e ${eur(rata * (1 + tol), 0)} ${ivaLab(base)}, dalla più conveniente`; }
             else { vicine = true; lista = L.sort((a, b) => Math.abs(a.c.canone - rata) - Math.abs(b.c.canone - rata)).slice(0, 8).sort((a, b) => a.c.mensile - b.c.mensile); titolo = `Nessuna rata intorno a ${eur(rata, 0)}: ecco le ${lista.length} più vicine`; }
         } else { lista = L.sort((a, b) => a.c.mensile - b.c.mensile); titolo = `${L.length} quotazioni trovate, dalla più conveniente`; }
+        lista = unici(lista);   // offerte uguali una volta sola
         const mostra = lista.slice(0, 10);
         const extra = x => rata ? `<span class="qr-diff ${x.c.canone <= rata ? 'giu' : 'su'}">${x.c.canone <= rata ? '−' : '+'}${eur(Math.abs(x.c.canone - rata), 0)}<small>dalla rata cercata</small></span>` : '';
         box.innerHTML = `<div class="qr-ris-h ${vicine ? 'warn' : ''}">${esc(titolo)} · importi ${base === 'INCL' ? 'IVA inclusa' : '+ IVA'}</div>
@@ -616,7 +652,8 @@
           <div class="qr-scroll"><table class="qr-t"><tr><th class="l"></th><th>Costo totale</th><th>Mensile reale</th><th>Al km</th><th>Sul listino</th></tr>
             <tr><td class="l">+ IVA (P.IVA, azienda)</td><td>${eur(ce.totale)}</td><td><b>${eur(ce.mensile)}</b></td><td>${ce.alKm != null ? ce.alKm.toLocaleString('it-IT', { maximumFractionDigits: 3 }) + ' €' : '–'}</td><td>${pct(ce.suListino, 1)}</td></tr>
             <tr><td class="l">IVA inclusa (privato)</td><td>${eur(ci.totale)}</td><td><b>${eur(ci.mensile)}</b></td><td>${ci.alKm != null ? ci.alKm.toLocaleString('it-IT', { maximumFractionDigits: 3 }) + ' €' : '–'}</td><td></td></tr></table></div>
-          <p class="qr-hint">Costo totale = anticipo + canone × ${q.mesi} mesi${q.speseEscl ? ' + spese iniziali' : ''}. Mensile reale = costo totale diviso i mesi. "Sul listino" = quanto si paga in tutto rispetto al prezzo dell'auto.${q.file ? ' File: ' + esc(q.file) : ''}</p>`, true);
+          <p class="qr-hint">Costo totale = anticipo + canone × ${q.mesi} mesi${q.speseEscl ? ' + spese iniziali' : ''}. Mensile reale = costo totale diviso i mesi. "Sul listino" = quanto si paga in tutto rispetto al prezzo dell'auto.${q.file ? ' File: ' + esc(q.file) : ''}</p>
+          <div class="qr-m-a">${q.pdfKey ? `<a class="qr-btn go qr-a" href="/api/quotazioni-rent/${encodeURIComponent(q.id)}/pdf" target="_blank" rel="noopener">📎 Apri il PDF (${nf(q.pdfKb)} KB)</a>${puoModificare ? `<button type="button" class="qr-btn" data-togli-pdf="${esc(q.id)}">Togli il PDF (i dati restano)</button>` : ''}` : '<span class="qr-hint">PDF non conservato per questa quotazione.</span>'}</div>`, true);
     }
 
     /* ================= IMPORT DEI PDF ================= */
@@ -643,7 +680,9 @@
             for (const f of files) {
                 try {
                     const righe = await righeDaPdf(lib, new Uint8Array(await f.arrayBuffer()), 4);
-                    lette.push(leggiQuotazione(righe, f.name));
+                    const q = leggiQuotazione(righe, f.name);
+                    Object.defineProperty(q, '_file', { value: f, enumerable: false });   // per conservare il PDF (non va al server con i dati)
+                    lette.push(q);
                 } catch (e) { lette.push({ file: f.name, errore: 'PDF non leggibile (' + e.message + ')', avvisi: [] }); }
             }
         } catch (e) { messaggio('⚠️ ' + esc(e.message), 'err'); return; }
@@ -689,6 +728,8 @@
           <p class="qr-hint">Controlla i dati letti. Il <b>tipo di cliente</b> lo riconosco da ragione sociale e codice fiscale: se è sbagliato correggilo dalla tendina. Le quotazioni già caricate (stesso portale e numero) vengono aggiornate, non doppiate.</p>
           ${nUguali ? `<div class="qr-ris-h warn">🔁 ${nUguali === 1 ? '1 quotazione ha' : nUguali + ' quotazioni hanno'} le stesse condizioni (stesso portale, auto, durata, km, canone e anticipo) di una già presente, a un altro cliente. Le ho lasciate <b>non spuntate</b>: spuntale se vuoi tenerle, così contano come una richiesta in più nelle statistiche.</div>` : ''}
           <div class="qr-scroll"><table class="qr-t qr-imp"><tr><th class="l"></th><th class="l">Portale · N°</th><th class="l">Cliente</th><th class="l">Tipo</th><th class="l">Veicolo</th><th>Canone + IVA</th><th>Anticipo + IVA</th><th>Durata</th><th>Mensile reale</th><th class="l">Controllo</th></tr>${righe}</table></div>
+          <label class="qr-conserva"><input type="checkbox" data-conserva ${conservaPdf() ? 'checked' : ''}> 📎 <b>Conserva anche i PDF nell'archivio</b>
+            <span>Solo le pagine dell'offerta, senza le condizioni generali (es. Agos da 14 a 2 pagine). Circa 40–600 KB l'uno · spazio usato ${mb(quot.reduce((t, q) => t + (+q.pdfKb || 0), 0))} su ${mb(pdfMaxKb)}</span></label>
           <div class="qr-m-a"><span class="qr-hint">${ok.length - nUguali} su ${lette.length} spuntate${nUguali ? ' · ' + nUguali + ' con stesse condizioni da decidere' : ''}</span><button type="button" class="qr-btn" data-x>Annulla</button><button type="button" class="qr-btn go" data-salva ${ok.length ? '' : 'disabled'}>Importa</button></div>`, true);
         ov.querySelector('[data-salva]').addEventListener('click', async e => {
             const scelte = lette.map((q, i) => {
@@ -698,13 +739,95 @@
                 delete x.avvisi; return x;
             }).filter(Boolean);
             if (!scelte.length) return;
+            const conserva = ov.querySelector('[data-conserva]').checked;
+            conservaPdf(conserva);
+            const fileDi = new Map(lette.filter(q => q._file).map(q => [(q.portale + '|' + q.numero).toUpperCase(), q._file]));
             e.target.disabled = true; e.target.textContent = 'Salvo…';
             try {
                 const d = await api('/api/quotazioni-rent', { method: 'POST', body: JSON.stringify({ quotazioni: scelte }) });
+                let pdfOk = 0, pdfKo = [];
+                if (conserva) {
+                    const da = (d.salvate || []).filter(x => fileDi.has((x.portale + '|' + x.numero).toUpperCase()));
+                    for (let k = 0; k < da.length; k++) {
+                        e.target.textContent = `Salvo i PDF ${k + 1}/${da.length}…`;
+                        const f = fileDi.get((da[k].portale + '|' + da[k].numero).toUpperCase());
+                        try { await salvaPdf(da[k].id, f); pdfOk++; }
+                        catch (err) { pdfKo.push(f.name + ': ' + err.message); if (/spazio/i.test(err.message)) break; }
+                    }
+                }
                 ov.chiudi();
-                messaggio(`✅ Import completato: ${d.nuove} nuove${d.aggiornate ? ', ' + d.aggiornate + ' aggiornate' : ''} · ${d.totale} quotazioni in tutto.`, 'ok');
+                messaggio(`✅ Import completato: ${d.nuove} nuove${d.aggiornate ? ', ' + d.aggiornate + ' aggiornate' : ''} · ${d.totale} quotazioni in tutto.`
+                    + (conserva ? ` 📎 ${pdfOk} PDF conservati.` : '') + (pdfKo.length ? `<br>⚠️ PDF non conservati: ${esc(pdfKo.join(' · '))}` : ''), pdfKo.length ? 'err' : 'ok');
                 await carica();
             } catch (err) { e.target.disabled = false; e.target.textContent = 'Importa'; alert('Import non riuscito: ' + err.message); }
+        });
+    }
+
+    /* ================= PDF CONSERVATI ================= */
+    function conservaPdf(v) {
+        try { if (v === undefined) return localStorage.getItem('qrConservaPdf') !== '0'; localStorage.setItem('qrConservaPdf', v ? '1' : '0'); } catch (e) { /* */ }
+        return v === undefined ? true : v;
+    }
+    let pdfLibPromessa = null;
+    function pdfLib() {
+        if (window.PDFLib) return Promise.resolve(window.PDFLib);
+        if (pdfLibPromessa) return pdfLibPromessa;
+        pdfLibPromessa = new Promise((ok, ko) => {
+            const s = document.createElement('script'); s.src = PDFLIB_URL; s.async = true;
+            s.onload = () => window.PDFLib ? ok(window.PDFLib) : ko(new Error('pdf-lib non disponibile'));
+            s.onerror = () => { pdfLibPromessa = null; ko(new Error('non riesco a caricare lo strumento per i PDF')); };
+            document.head.appendChild(s);
+        });
+        return pdfLibPromessa;
+    }
+    // tiene solo le pagine dell'offerta: si ferma alla prima pagina delle "Condizioni generali"
+    async function pdfLeggero(file) {
+        const buf = new Uint8Array(await file.arrayBuffer());
+        try {
+            const lib = await pdfjs(), doc = await lib.getDocument({ data: buf.slice(), disableFontFace: true, isEvalSupported: false }).promise;
+            let fine = doc.numPages;
+            for (let n = 2; n <= doc.numPages; n++) {
+                const t = (await (await doc.getPage(n)).getTextContent()).items.map(i => i.str).join(' ');
+                if (/CONDIZIONI\s+GENERALI\s+(DEL|DI|DEL\s+CONTRATTO)/i.test(t)) { fine = n - 1; break; }
+            }
+            if (fine >= doc.numPages) return buf;
+            const PL = await pdfLib(), src = await PL.PDFDocument.load(buf, { ignoreEncryption: true }), out = await PL.PDFDocument.create();
+            (await out.copyPages(src, [...Array(fine).keys()])).forEach(pg => out.addPage(pg));
+            const ridotto = await out.save({ useObjectStreams: true });
+            return ridotto.length < buf.length ? ridotto : buf;
+        } catch (e) { return buf; }   // se qualcosa va storto si conserva il PDF intero
+    }
+    function base64(bytes) {
+        let s = ''; const passo = 0x8000;
+        for (let i = 0; i < bytes.length; i += passo) s += String.fromCharCode.apply(null, bytes.subarray(i, i + passo));
+        return btoa(s);
+    }
+    async function salvaPdf(id, file) {
+        const b = await pdfLeggero(file);
+        return api('/api/quotazioni-rent/' + encodeURIComponent(id) + '/pdf', { method: 'PUT', body: JSON.stringify({ nome: file.name, dati: base64(b) }) });
+    }
+    async function togliPdf(id) {
+        if (!confirm('Togliere il PDF di questa quotazione? I dati restano nell\'archivio e nelle statistiche.')) return;
+        try { await api('/api/quotazioni-rent/' + encodeURIComponent(id) + '/pdf', { method: 'DELETE' }); document.querySelectorAll('.qr-ov').forEach(o => o.remove()); await carica(); }
+        catch (e) { alert('Non tolto: ' + e.message); }
+    }
+    function pulizia() {
+        const conPdf = quot.filter(q => q.pdfKey);
+        const oggi = new Date(), sei = new Date(oggi.getFullYear(), oggi.getMonth() - 6, oggi.getDate());
+        const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+        const ov = finestra('Libera spazio', `
+          <p class="qr-hint">Toglie i PDF delle quotazioni caricate prima della data scelta. <b>I dati restano</b>: classifiche, ricerca e statistiche non cambiano, sparisce solo il file.</p>
+          <label class="qr-lab">Togli i PDF caricati prima del <input type="date" class="qr-in" data-primadel value="${iso(sei)}"></label>
+          <p class="qr-hint" data-stima></p>
+          <div class="qr-m-a"><button type="button" class="qr-btn" data-x>Annulla</button><button type="button" class="qr-btn go" data-ok-pul>Togli i PDF</button></div>`);
+        const stima = () => { const v = ov.querySelector('[data-primadel]').value; const L = conPdf.filter(q => String(q.caricataIl || '').slice(0, 10) < v);
+            ov.querySelector('[data-stima]').textContent = `${L.length} PDF su ${conPdf.length} · si liberano ${mb(L.reduce((t, q) => t + (+q.pdfKb || 0), 0))}`; return L.length; };
+        ov.querySelector('[data-primadel]').addEventListener('input', stima); stima();
+        ov.querySelector('[data-ok-pul]').addEventListener('click', async () => {
+            if (!stima()) return;
+            try { const d = await api('/api/quotazioni-rent/pdf/pulizia', { method: 'POST', body: JSON.stringify({ primaDel: ov.querySelector('[data-primadel]').value }) });
+                ov.chiudi(); messaggio(`✅ Tolti ${d.tolti} PDF · liberati ${mb(d.liberatiKb)}. I dati delle quotazioni restano.`, 'ok'); await carica(); }
+            catch (e) { alert('Non riuscito: ' + e.message); }
         });
     }
 
@@ -715,11 +838,14 @@
             const act = a.dataset.act;
             if (act === 'importa') rootEl.querySelector('#qrFile').click();
             else if (act === 'rent' && typeof showPage === 'function') showPage('rent');
+            else if (act === 'pulizia') pulizia();
             else if (act === 'tutteclass') { st.tutteClass = !st.tutteClass; rootEl.querySelector('.qr-classifica').innerHTML = classifica(delPortale()); }
             else if (act === 'cercareset') { st.cerca = null; const card = rootEl.querySelector('.qr-cerca-card'); card.querySelector('form').outerHTML = formCerca(); card.querySelector('.qr-cerca-ris').innerHTML = ''; }
             return;
         }
-        const p = e.target.closest('[data-portale]'); if (p) { st.portale = p.dataset.portale; disegna(); return; }
+        if (e.target.closest('a')) return;   // 📎 apre il PDF in una nuova scheda
+        const p = e.target.closest('[data-portale]'); if (p) { st.portale = p.dataset.portale; st.mese = ''; disegna(); return; }
+        const ms = e.target.closest('[data-mese]'); if (ms) { st.mese = ms.dataset.mese; rootEl.querySelectorAll('[data-mese]').forEach(b => b.classList.toggle('on', b === ms)); disegnaElenco(); return; }
         const t = e.target.closest('[data-tipotab]'); if (t) { st.tipoTab = t.dataset.tipotab; st.tutteClass = false; rootEl.querySelectorAll('[data-tipotab]').forEach(b => b.classList.toggle('on', b === t)); rootEl.querySelector('.qr-classifica').innerHTML = classifica(delPortale()); return; }
         const d = e.target.closest('[data-del]');
         if (d) { e.stopPropagation(); elimina(d.dataset.del); return; }
@@ -739,6 +865,8 @@
         cerca();
     });
 
+    document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-togli-pdf]'); if (b) togliPdf(b.dataset.togliPdf); });
+
     async function correggiTipo(id, tipo) {
         try { const d = await api('/api/quotazioni-rent/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify({ tipoCliente: tipo }) });
             const i = quot.findIndex(q => String(q.id) === String(id)); if (i >= 0) quot[i] = d.quotazione; disegna(); }
@@ -754,7 +882,7 @@
     /* ================= GRAFICA =================
        Gli stili stanno qui dentro (non in un file .css a parte): cosi' la pagina ha
        sempre la sua grafica, anche se il file css non arriva al browser. */
-    const CSS = "/* =====================================================================\n   QUOTAZIONI RENT — stili (prefisso qr-). Colori del Rent (verde).\n   ===================================================================== */\n#quotazioniRoot, .qr-ov { --qr-acc:#2fd47a; --qr-acc2:#1fa35c; --qr-card:var(--bg-card, #171a23); --qr-bg:var(--bg-primary, #0f1117);\n  --qr-ink:var(--text-primary, #eef1f6); --qr-ink2:var(--text-secondary, #9aa3b2); --qr-line:var(--border, #2a2e3b); --qr-soft:rgba(47,212,122,.1); }\n#quotazioniPage { padding-bottom:40px; }\n#quotazioniRoot { max-width:1500px; margin:0 auto; color:var(--qr-ink); }\n#quotazioniRoot *, .qr-ov * { box-sizing:border-box; }\n\n.qr-head { display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; margin:6px 0 16px; }\n.qr-head h2 { margin:4px 0 2px; letter-spacing:3px; color:var(--qr-acc); }\n.qr-sub { margin:0; color:var(--qr-ink2); font-size:13px; }\n.qr-back { border:0; background:none; color:var(--qr-ink2); font-weight:700; cursor:pointer; padding:0; font-size:13px; }\n.qr-back:hover { color:var(--qr-acc); }\n.qr-btn { height:40px; padding:0 16px; border-radius:11px; border:1px solid var(--qr-line); background:var(--qr-card); color:var(--qr-ink); font:inherit; font-size:13px; font-weight:800; cursor:pointer; }\n.qr-btn:hover { border-color:var(--qr-acc); }\n.qr-btn.go { background:var(--qr-acc); border-color:var(--qr-acc); color:#062b16; }\n.qr-btn.go:hover { background:#46e08b; }\n.qr-btn:disabled { opacity:.55; cursor:default; }\n.qr-msg { padding:11px 14px; border-radius:12px; margin-bottom:14px; font-size:13.5px; font-weight:600; border:1px solid var(--qr-line); }\n.qr-msg.ok { background:rgba(47,212,122,.12); border-color:rgba(47,212,122,.4); }\n.qr-msg.err { background:rgba(229,72,77,.12); border-color:rgba(229,72,77,.45); color:#ffb4b6; }\n\n.qr-tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }\n.qr-tabs button { height:38px; padding:0 14px; border-radius:999px; border:1px solid var(--qr-line); background:var(--qr-card); color:var(--qr-ink); font:inherit; font-size:13px; font-weight:800; cursor:pointer; display:inline-flex; align-items:center; gap:8px; }\n.qr-tabs button b { font-size:11px; padding:2px 8px; border-radius:999px; background:var(--qr-soft); color:var(--qr-acc); }\n.qr-tabs button.on { background:var(--qr-acc); border-color:var(--qr-acc); color:#062b16; }\n.qr-tabs button.on b { background:rgba(0,0,0,.15); color:#062b16; }\n\n.qr-card { background:var(--qr-card); border:1px solid var(--qr-line); border-radius:18px; padding:18px 20px; margin-bottom:16px; }\n.qr-card h3 { margin:0 0 4px; font-size:15px; letter-spacing:.3px; }\n.qr-card-h { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:4px; }\n.qr-hint { margin:4px 0 12px; color:var(--qr-ink2); font-size:12.5px; line-height:1.45; }\n.qr-vuoto { text-align:center; padding:50px 20px; }\n.qr-vuoto p { color:var(--qr-ink2); max-width:520px; margin:6px auto 0; }\n\n.qr-kpis { display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:12px; margin-bottom:16px; }\n.qr-kpi { background:var(--qr-card); border:1px solid var(--qr-line); border-top:3px solid var(--qr-acc); border-radius:16px; padding:13px 14px; min-width:0; }\n.qr-kpi small { display:block; font-size:11px; font-weight:800; letter-spacing:.5px; text-transform:uppercase; color:var(--qr-ink2); }\n.qr-kpi b { display:block; font-size:24px; font-weight:900; margin:6px 0 2px; }\n.qr-kpi span { font-size:11.5px; color:var(--qr-ink2); }\n\n.qr-ord { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:var(--qr-ink2); }\n.qr-ord select, .qr-in, .qr-form select, .qr-form input, .qr-el select, .qr-imp select { height:36px; border-radius:10px; border:1.5px solid var(--qr-line); background:var(--qr-bg); color:var(--qr-ink); padding:0 10px; font:inherit; font-size:13px; }\n.qr-in { min-width:260px; }\n.qr-ord select:focus, .qr-in:focus, .qr-form select:focus, .qr-form input:focus { outline:none; border-color:var(--qr-acc); }\n\n/* offerte (top 5, classifiche, ricerca) */\n.qr-offs { display:flex; flex-direction:column; gap:8px; }\n.qr-off { display:grid; grid-template-columns:44px minmax(220px,2.2fr) repeat(4, minmax(100px,1fr)) auto; gap:12px; align-items:center; width:100%; text-align:left;\n  border:1px solid var(--qr-line); background:var(--qr-bg); color:inherit; font:inherit; border-radius:14px; padding:10px 14px; cursor:pointer; }\n.qr-off:hover { border-color:var(--qr-acc); }\n.qr-off.best { border-color:rgba(47,212,122,.55); background:linear-gradient(90deg, rgba(47,212,122,.10), transparent 60%); }\n.qr-pos { font-size:22px; font-weight:900; text-align:center; color:var(--qr-ink2); }\n.qr-off-v { min-width:0; }\n.qr-off-v b { display:block; font-size:14.5px; }\n.qr-off-v small { display:block; font-size:12px; color:var(--qr-ink2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }\n.qr-off-v em { display:block; font-style:normal; font-size:11.5px; color:var(--qr-ink2); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }\n.qr-pt, .qr-tc { font-style:normal; font-weight:800; font-size:10.5px; padding:2px 7px; border-radius:999px; background:var(--qr-soft); color:var(--qr-acc); }\n.qr-tc.t-PRIVATO { background:rgba(63,167,255,.14); color:#6dbbff; }\n.qr-tc.t-PIVA { background:rgba(244,183,64,.16); color:#f4b740; }\n.qr-tc.t-AZIENDA { background:rgba(176,124,240,.16); color:#c39cf5; }\n.qr-off-n small { display:block; font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:.4px; color:var(--qr-ink2); }\n.qr-off-n b { display:block; font-size:14px; margin:2px 0 1px; white-space:nowrap; }\n.qr-off-n em { display:block; font-style:normal; font-size:11px; color:var(--qr-ink2); white-space:nowrap; }\n.qr-off-n.hi b { color:var(--qr-acc); font-size:17px; }\n.qr-diff { font-weight:900; font-size:13px; text-align:right; white-space:nowrap; }\n.qr-diff small { display:block; font-weight:600; font-size:10.5px; color:var(--qr-ink2); }\n.qr-diff.giu { color:var(--qr-acc); } .qr-diff.su { color:#f4b740; }\n.qr-link { border:0; background:none; color:var(--qr-acc); font:inherit; font-weight:800; cursor:pointer; padding:8px 0 0; font-size:13px; text-align:left; }\n\n.qr-ttabs { display:flex; gap:6px; margin:6px 0 4px; flex-wrap:wrap; }\n.qr-ttabs button { height:34px; padding:0 14px; border-radius:10px; border:1px solid var(--qr-line); background:var(--qr-bg); color:var(--qr-ink); font:inherit; font-size:13px; font-weight:800; cursor:pointer; }\n.qr-ttabs button b { margin-left:6px; color:var(--qr-ink2); }\n.qr-ttabs button.on { border-color:var(--qr-acc); box-shadow:inset 0 0 0 1px var(--qr-acc); }\n\n/* ricerca */\n.qr-form { display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:10px 12px; align-items:end; }\n.qr-form label { display:flex; flex-direction:column; gap:4px; font-size:11px; font-weight:800; letter-spacing:.4px; text-transform:uppercase; color:var(--qr-ink2); min-width:0; }\n.qr-form label[hidden] { display:none; }\n.qr-form .qr-w { grid-column:span 2; }\n.qr-form-a { display:flex; gap:8px; }\n.qr-cerca-ris { margin-top:14px; }\n.qr-ris-h { font-size:13px; font-weight:700; margin-bottom:10px; padding:9px 12px; border-radius:10px; background:var(--qr-soft); }\n.qr-ris-h.warn { background:rgba(244,183,64,.14); color:#f4c56a; }\n.qr-noris { padding:14px; border-radius:12px; border:1px dashed var(--qr-line); color:var(--qr-ink2); font-size:13px; }\n\n/* cosa gira di piu' */\n.qr-piu { display:grid; grid-template-columns:1fr 1.2fr 1fr; gap:16px; margin:8px 0 14px; }\n.qr-piu h4, .qr-ch h4 { margin:0 0 8px; font-size:12px; letter-spacing:.6px; text-transform:uppercase; color:var(--qr-ink2); }\n.qr-piu-top { border-radius:14px; padding:14px; background:linear-gradient(135deg, rgba(47,212,122,.16), rgba(47,212,122,.04)); border:1px solid rgba(47,212,122,.35); }\n.qr-piu-top small { display:block; font-size:11px; font-weight:800; letter-spacing:.5px; text-transform:uppercase; color:var(--qr-ink2); }\n.qr-piu-top b { display:block; font-size:18px; margin:6px 0; }\n.qr-piu-top span { font-size:12px; color:var(--qr-ink2); }\n.qr-ol { list-style:none; margin:0; padding:0; }\n.qr-ol li { position:relative; display:flex; justify-content:space-between; gap:10px; padding:6px 10px; margin-bottom:4px; border-radius:8px; font-size:13px; overflow:hidden; }\n.qr-ol li i { position:absolute; left:0; top:0; bottom:0; background:var(--qr-soft); z-index:0; border-radius:8px; }\n.qr-ol li span, .qr-ol li b { position:relative; z-index:1; }\n.qr-charts { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:14px; }\n.qr-ch { border:1px solid var(--qr-line); border-radius:14px; padding:12px; min-width:0; }\n.qr-ch.qr-wide { grid-column:span 3; }\n.qr-ch-b { position:relative; height:220px; }\n.qr-ch-b.tall { height:300px; }\n\n/* tabelle */\n.qr-scroll { overflow:auto; }\n.qr-t { width:100%; border-collapse:collapse; font-size:13px; }\n.qr-t th { text-align:right; font-size:10.5px; letter-spacing:.4px; text-transform:uppercase; color:var(--qr-ink2); padding:8px; border-bottom:1.5px solid var(--qr-line); white-space:nowrap; }\n.qr-t td { text-align:right; padding:8px; border-bottom:1px solid var(--qr-line); vertical-align:top; }\n.qr-t th.l, .qr-t td.l { text-align:left; }\n.qr-t td small { display:block; font-size:11px; color:var(--qr-ink2); }\n.qr-el tr[data-det] { cursor:pointer; }\n.qr-el tr[data-det]:hover td { background:rgba(255,255,255,.03); }\n.qr-del { border:0; background:none; cursor:pointer; font-size:15px; opacity:.7; }\n.qr-del:hover { opacity:1; }\n.qr-imp tr.ko td { color:#ffb4b6; }\n.qr-avv { color:#f4c56a; font-size:12px; }\n.qr-dup { color:#f4b740; font-weight:700; }\n.qr-uguale td { background:rgba(244,183,64,.06); }\n.qr-uguale .qr-dup { display:block; font-size:12px; max-width:340px; line-height:1.35; }\n\n/* finestre */\n.qr-ov { position:fixed; inset:0; z-index:10050; background:rgba(5,8,12,.62); display:flex; align-items:flex-start; justify-content:center; padding:5vh 16px; overflow:auto; }\n.qr-modal { width:min(820px, 100%); background:var(--qr-card); color:var(--qr-ink); border:1px solid var(--qr-line); border-radius:20px; box-shadow:0 30px 80px -20px rgba(0,0,0,.6); }\n.qr-modal.wide { width:min(1240px, 100%); }\n.qr-m-h { display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid var(--qr-line); }\n.qr-m-h h3 { margin:0; font-size:16px; }\n.qr-x { border:1px solid var(--qr-line); background:none; color:inherit; border-radius:10px; width:34px; height:34px; cursor:pointer; }\n.qr-m-b { padding:16px 20px 20px; }\n.qr-m-a { display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:14px; }\n.qr-m-a .qr-hint { margin:0 auto 0 0; }\n.qr-grid { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; }\n.qr-f { background:var(--qr-bg); border-radius:12px; padding:9px 12px; min-width:0; }\n.qr-f small { display:block; font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:.4px; color:var(--qr-ink2); }\n.qr-f b { font-size:13.5px; word-break:break-word; }\n.qr-h4 { margin:16px 0 8px; font-size:12px; letter-spacing:.6px; text-transform:uppercase; color:var(--qr-ink2); }\n\n/* pulsante 📝 nel Rent */\n#rentQuotBtn { width:auto; padding:10px 14px; font-size:16px; line-height:1; }\n\n@media (max-width:1200px) { .qr-kpis { grid-template-columns:repeat(3, minmax(0,1fr)); } .qr-form { grid-template-columns:repeat(3, minmax(0,1fr)); } .qr-piu { grid-template-columns:1fr; } }\n@media (max-width:900px) {\n  .qr-off { grid-template-columns:36px 1fr 1fr; } .qr-off-v { grid-column:2 / -1; }\n  .qr-charts { grid-template-columns:1fr; } .qr-ch.qr-wide { grid-column:auto; }\n  .qr-grid { grid-template-columns:repeat(2, minmax(0,1fr)); }\n}\n@media (max-width:560px) { .qr-kpis, .qr-form { grid-template-columns:1fr 1fr; } .qr-form .qr-w { grid-column:span 2; } .qr-in { min-width:0; width:100%; } }\n";
+    const CSS = "/* =====================================================================\n   QUOTAZIONI RENT — stili (prefisso qr-). Colori del Rent (verde).\n   ===================================================================== */\n#quotazioniRoot, .qr-ov { --qr-acc:#2fd47a; --qr-acc2:#1fa35c; --qr-card:var(--bg-card, #171a23); --qr-bg:var(--bg-primary, #0f1117);\n  --qr-ink:var(--text-primary, #eef1f6); --qr-ink2:var(--text-secondary, #9aa3b2); --qr-line:var(--border, #2a2e3b); --qr-soft:rgba(47,212,122,.1); }\n#quotazioniPage { padding-bottom:40px; }\n#quotazioniRoot { max-width:1500px; margin:0 auto; color:var(--qr-ink); }\n#quotazioniRoot *, .qr-ov * { box-sizing:border-box; }\n\n.qr-head { display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; margin:6px 0 16px; }\n.qr-head h2 { margin:4px 0 2px; letter-spacing:3px; color:var(--qr-acc); }\n.qr-sub { margin:0; color:var(--qr-ink2); font-size:13px; }\n.qr-back { border:0; background:none; color:var(--qr-ink2); font-weight:700; cursor:pointer; padding:0; font-size:13px; }\n.qr-back:hover { color:var(--qr-acc); }\n.qr-btn { height:40px; padding:0 16px; border-radius:11px; border:1px solid var(--qr-line); background:var(--qr-card); color:var(--qr-ink); font:inherit; font-size:13px; font-weight:800; cursor:pointer; }\n.qr-btn:hover { border-color:var(--qr-acc); }\n.qr-btn.go { background:var(--qr-acc); border-color:var(--qr-acc); color:#062b16; }\n.qr-btn.go:hover { background:#46e08b; }\n.qr-btn:disabled { opacity:.55; cursor:default; }\n.qr-msg { padding:11px 14px; border-radius:12px; margin-bottom:14px; font-size:13.5px; font-weight:600; border:1px solid var(--qr-line); }\n.qr-msg.ok { background:rgba(47,212,122,.12); border-color:rgba(47,212,122,.4); }\n.qr-msg.err { background:rgba(229,72,77,.12); border-color:rgba(229,72,77,.45); color:#ffb4b6; }\n\n.qr-tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:16px; }\n.qr-tabs button { height:38px; padding:0 14px; border-radius:999px; border:1px solid var(--qr-line); background:var(--qr-card); color:var(--qr-ink); font:inherit; font-size:13px; font-weight:800; cursor:pointer; display:inline-flex; align-items:center; gap:8px; }\n.qr-tabs button b { font-size:11px; padding:2px 8px; border-radius:999px; background:var(--qr-soft); color:var(--qr-acc); }\n.qr-tabs button.on { background:var(--qr-acc); border-color:var(--qr-acc); color:#062b16; }\n.qr-tabs button.on b { background:rgba(0,0,0,.15); color:#062b16; }\n\n.qr-card { background:var(--qr-card); border:1px solid var(--qr-line); border-radius:18px; padding:18px 20px; margin-bottom:16px; }\n.qr-card h3 { margin:0 0 4px; font-size:15px; letter-spacing:.3px; }\n.qr-card-h { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:4px; }\n.qr-hint { margin:4px 0 12px; color:var(--qr-ink2); font-size:12.5px; line-height:1.45; }\n.qr-vuoto { text-align:center; padding:50px 20px; }\n.qr-vuoto p { color:var(--qr-ink2); max-width:520px; margin:6px auto 0; }\n\n.qr-kpis { display:grid; grid-template-columns:repeat(6, minmax(0,1fr)); gap:12px; margin-bottom:16px; }\n.qr-kpi { background:var(--qr-card); border:1px solid var(--qr-line); border-top:3px solid var(--qr-acc); border-radius:16px; padding:13px 14px; min-width:0; }\n.qr-kpi small { display:block; font-size:11px; font-weight:800; letter-spacing:.5px; text-transform:uppercase; color:var(--qr-ink2); }\n.qr-kpi b { display:block; font-size:24px; font-weight:900; margin:6px 0 2px; }\n.qr-kpi span { font-size:11.5px; color:var(--qr-ink2); }\n\n.qr-ord { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:var(--qr-ink2); }\n.qr-ord select, .qr-in, .qr-form select, .qr-form input, .qr-el select, .qr-imp select { height:36px; border-radius:10px; border:1.5px solid var(--qr-line); background:var(--qr-bg); color:var(--qr-ink); padding:0 10px; font:inherit; font-size:13px; }\n.qr-in { min-width:260px; }\n.qr-ord select:focus, .qr-in:focus, .qr-form select:focus, .qr-form input:focus { outline:none; border-color:var(--qr-acc); }\n\n/* offerte (top 5, classifiche, ricerca) */\n.qr-offs { display:flex; flex-direction:column; gap:8px; }\n.qr-off { display:grid; grid-template-columns:44px minmax(220px,2.2fr) repeat(4, minmax(100px,1fr)) auto; gap:12px; align-items:center; width:100%; text-align:left;\n  border:1px solid var(--qr-line); background:var(--qr-bg); color:inherit; font:inherit; border-radius:14px; padding:10px 14px; cursor:pointer; }\n.qr-off:hover { border-color:var(--qr-acc); }\n.qr-off.best { border-color:rgba(47,212,122,.55); background:linear-gradient(90deg, rgba(47,212,122,.10), transparent 60%); }\n.qr-pos { font-size:22px; font-weight:900; text-align:center; color:var(--qr-ink2); }\n.qr-off-v { min-width:0; }\n.qr-off-v b { display:block; font-size:14.5px; }\n.qr-off-v small { display:block; font-size:12px; color:var(--qr-ink2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }\n.qr-off-v em { display:block; font-style:normal; font-size:11.5px; color:var(--qr-ink2); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }\n.qr-pt, .qr-tc { font-style:normal; font-weight:800; font-size:10.5px; padding:2px 7px; border-radius:999px; background:var(--qr-soft); color:var(--qr-acc); }\n.qr-tc.t-PRIVATO { background:rgba(63,167,255,.14); color:#6dbbff; }\n.qr-tc.t-PIVA { background:rgba(244,183,64,.16); color:#f4b740; }\n.qr-tc.t-AZIENDA { background:rgba(176,124,240,.16); color:#c39cf5; }\n.qr-off-n small { display:block; font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:.4px; color:var(--qr-ink2); }\n.qr-off-n b { display:block; font-size:14px; margin:2px 0 1px; white-space:nowrap; }\n.qr-off-n em { display:block; font-style:normal; font-size:11px; color:var(--qr-ink2); white-space:nowrap; }\n.qr-off-n.hi b { color:var(--qr-acc); font-size:17px; }\n.qr-diff { font-weight:900; font-size:13px; text-align:right; white-space:nowrap; }\n.qr-diff small { display:block; font-weight:600; font-size:10.5px; color:var(--qr-ink2); }\n.qr-diff.giu { color:var(--qr-acc); } .qr-diff.su { color:#f4b740; }\n.qr-link { border:0; background:none; color:var(--qr-acc); font:inherit; font-weight:800; cursor:pointer; padding:8px 0 0; font-size:13px; text-align:left; }\n\n.qr-ttabs { display:flex; gap:6px; margin:6px 0 4px; flex-wrap:wrap; }\n.qr-ttabs button { height:34px; padding:0 14px; border-radius:10px; border:1px solid var(--qr-line); background:var(--qr-bg); color:var(--qr-ink); font:inherit; font-size:13px; font-weight:800; cursor:pointer; }\n.qr-ttabs button b { margin-left:6px; color:var(--qr-ink2); }\n.qr-ttabs button.on { border-color:var(--qr-acc); box-shadow:inset 0 0 0 1px var(--qr-acc); }\n\n/* ricerca */\n.qr-form { display:grid; grid-template-columns:repeat(5, minmax(0,1fr)); gap:10px 12px; align-items:end; }\n.qr-form label { display:flex; flex-direction:column; gap:4px; font-size:11px; font-weight:800; letter-spacing:.4px; text-transform:uppercase; color:var(--qr-ink2); min-width:0; }\n.qr-form label[hidden] { display:none; }\n.qr-form .qr-w { grid-column:span 2; }\n.qr-form-a { display:flex; gap:8px; }\n.qr-cerca-ris { margin-top:14px; }\n.qr-ris-h { font-size:13px; font-weight:700; margin-bottom:10px; padding:9px 12px; border-radius:10px; background:var(--qr-soft); }\n.qr-ris-h.warn { background:rgba(244,183,64,.14); color:#f4c56a; }\n.qr-noris { padding:14px; border-radius:12px; border:1px dashed var(--qr-line); color:var(--qr-ink2); font-size:13px; }\n\n/* cosa gira di piu' */\n.qr-piu { display:grid; grid-template-columns:1fr 1.2fr 1fr; gap:16px; margin:8px 0 14px; }\n.qr-piu h4, .qr-ch h4 { margin:0 0 8px; font-size:12px; letter-spacing:.6px; text-transform:uppercase; color:var(--qr-ink2); }\n.qr-piu-top { border-radius:14px; padding:14px; background:linear-gradient(135deg, rgba(47,212,122,.16), rgba(47,212,122,.04)); border:1px solid rgba(47,212,122,.35); }\n.qr-piu-top small { display:block; font-size:11px; font-weight:800; letter-spacing:.5px; text-transform:uppercase; color:var(--qr-ink2); }\n.qr-piu-top b { display:block; font-size:18px; margin:6px 0; }\n.qr-piu-top span { font-size:12px; color:var(--qr-ink2); }\n.qr-ol { list-style:none; margin:0; padding:0; }\n.qr-ol li { position:relative; display:flex; justify-content:space-between; gap:10px; padding:6px 10px; margin-bottom:4px; border-radius:8px; font-size:13px; overflow:hidden; }\n.qr-ol li i { position:absolute; left:0; top:0; bottom:0; background:var(--qr-soft); z-index:0; border-radius:8px; }\n.qr-ol li span, .qr-ol li b { position:relative; z-index:1; }\n.qr-charts { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:14px; }\n.qr-ch { border:1px solid var(--qr-line); border-radius:14px; padding:12px; min-width:0; }\n.qr-ch.qr-wide { grid-column:span 3; }\n.qr-ch-b { position:relative; height:220px; }\n.qr-ch-b.tall { height:300px; }\n\n/* tabelle */\n.qr-scroll { overflow:auto; }\n.qr-t { width:100%; border-collapse:collapse; font-size:13px; }\n.qr-t th { text-align:right; font-size:10.5px; letter-spacing:.4px; text-transform:uppercase; color:var(--qr-ink2); padding:8px; border-bottom:1.5px solid var(--qr-line); white-space:nowrap; }\n.qr-t td { text-align:right; padding:8px; border-bottom:1px solid var(--qr-line); vertical-align:top; }\n.qr-t th.l, .qr-t td.l { text-align:left; }\n.qr-t td small { display:block; font-size:11px; color:var(--qr-ink2); }\n.qr-el tr[data-det] { cursor:pointer; }\n.qr-el tr[data-det]:hover td { background:rgba(255,255,255,.03); }\n.qr-del { border:0; background:none; cursor:pointer; font-size:15px; opacity:.7; }\n.qr-del:hover { opacity:1; }\n.qr-imp tr.ko td { color:#ffb4b6; }\n.qr-avv { color:#f4c56a; font-size:12px; }\n.qr-dup { color:#f4b740; font-weight:700; }\n.qr-uguale td { background:rgba(244,183,64,.06); }\n.qr-rip { color:#f4b740 !important; font-weight:700; }\n.qr-arch-a { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }\n.qr-spazio { position:relative; overflow:hidden; display:inline-block; padding:8px 12px; border-radius:10px; border:1px solid var(--qr-line); font-size:12px; font-weight:700; color:var(--qr-ink2); }\n.qr-spazio i { position:absolute; left:0; bottom:0; height:3px; background:var(--qr-acc); }\n.qr-mesi { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0 12px; }\n.qr-mesi button { height:34px; padding:0 12px; border-radius:10px; border:1px solid var(--qr-line); background:var(--qr-bg); color:var(--qr-ink); font:inherit; font-size:12.5px; font-weight:700; cursor:pointer; }\n.qr-mesi button b { margin-left:6px; color:var(--qr-ink2); }\n.qr-mesi button.on { border-color:var(--qr-acc); box-shadow:inset 0 0 0 1px var(--qr-acc); }\n.qr-pdf { text-decoration:none; font-size:16px; }\n.qr-nopdf { color:var(--qr-ink2); }\n.qr-a { display:inline-flex; align-items:center; text-decoration:none; }\n.qr-conserva { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; margin-top:12px; padding:10px 12px; border-radius:12px; border:1px solid var(--qr-line); font-size:13px; cursor:pointer; }\n.qr-conserva span { width:100%; padding-left:24px; font-size:12px; color:var(--qr-ink2); }\n.qr-lab { display:flex; align-items:center; gap:10px; font-size:13px; font-weight:700; }\n.qr-uguale .qr-dup { display:block; font-size:12px; max-width:340px; line-height:1.35; }\n\n/* finestre */\n.qr-ov { position:fixed; inset:0; z-index:10050; background:rgba(5,8,12,.62); display:flex; align-items:flex-start; justify-content:center; padding:5vh 16px; overflow:auto; }\n.qr-modal { width:min(820px, 100%); background:var(--qr-card); color:var(--qr-ink); border:1px solid var(--qr-line); border-radius:20px; box-shadow:0 30px 80px -20px rgba(0,0,0,.6); }\n.qr-modal.wide { width:min(1240px, 100%); }\n.qr-m-h { display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid var(--qr-line); }\n.qr-m-h h3 { margin:0; font-size:16px; }\n.qr-x { border:1px solid var(--qr-line); background:none; color:inherit; border-radius:10px; width:34px; height:34px; cursor:pointer; }\n.qr-m-b { padding:16px 20px 20px; }\n.qr-m-a { display:flex; justify-content:flex-end; align-items:center; gap:10px; margin-top:14px; }\n.qr-m-a .qr-hint { margin:0 auto 0 0; }\n.qr-grid { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; }\n.qr-f { background:var(--qr-bg); border-radius:12px; padding:9px 12px; min-width:0; }\n.qr-f small { display:block; font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:.4px; color:var(--qr-ink2); }\n.qr-f b { font-size:13.5px; word-break:break-word; }\n.qr-h4 { margin:16px 0 8px; font-size:12px; letter-spacing:.6px; text-transform:uppercase; color:var(--qr-ink2); }\n\n/* pulsante 📝 nel Rent */\n#rentQuotBtn { width:auto; padding:10px 14px; font-size:16px; line-height:1; }\n\n@media (max-width:1200px) { .qr-kpis { grid-template-columns:repeat(3, minmax(0,1fr)); } .qr-form { grid-template-columns:repeat(3, minmax(0,1fr)); } .qr-piu { grid-template-columns:1fr; } }\n@media (max-width:900px) {\n  .qr-off { grid-template-columns:36px 1fr 1fr; } .qr-off-v { grid-column:2 / -1; }\n  .qr-charts { grid-template-columns:1fr; } .qr-ch.qr-wide { grid-column:auto; }\n  .qr-grid { grid-template-columns:repeat(2, minmax(0,1fr)); }\n}\n@media (max-width:560px) { .qr-kpis, .qr-form { grid-template-columns:1fr 1fr; } .qr-form .qr-w { grid-column:span 2; } .qr-in { min-width:0; width:100%; } }\n";
     function stili() {
         if (document.getElementById('qr-stili')) return;
         const el = document.createElement('style');

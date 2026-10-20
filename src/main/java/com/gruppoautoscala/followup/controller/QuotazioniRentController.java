@@ -7,6 +7,8 @@ import com.gruppoautoscala.followup.repository.ConsegneDatasetRepository;
 import com.gruppoautoscala.followup.service.RolePermissionService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -36,6 +38,14 @@ public class QuotazioniRentController {
     private static final ZoneId ITALIA = ZoneId.of("Europe/Rome");
     private static final int MAX = 20000;
     private static final Set<String> TIPI = Set.of("PRIVATO", "PIVA", "AZIENDA");
+
+    // NUOVO: PDF conservati nell'archivio. Ogni PDF sta in una riga a parte di consegne_dataset
+    // (chiave RQPDF_...), cosi' l'elenco delle quotazioni resta leggero. La pagina salva solo le
+    // pagine dell'offerta (senza le condizioni generali). Tetto massimo di spazio per non
+    // riempire il database del CRM: oltre, i dati si salvano lo stesso ma il PDF no.
+    private static final long MAX_PDF_FILE_KB = 3 * 1024;
+    private static final long MAX_PDF_TOTALE_KB = 200 * 1024;
+    private static final String PREFISSO_PDF = "RQPDF_";
 
     // campi accettati: testo e numeri. Tutto il resto viene scartato.
     private static final List<String> TESTI = List.of("portale", "numero", "data", "scadenza", "cliente", "cf", "tipoCliente",
@@ -111,6 +121,8 @@ public class QuotazioniRentController {
         Map<String, Object> out = new HashMap<>();
         out.put("quotazioni", leggi());
         out.put("puoModificare", modifica(s));
+        out.put("pdfMaxKb", MAX_PDF_TOTALE_KB);
+        out.put("pdfFileMaxKb", MAX_PDF_FILE_KB);
         return ResponseEntity.ok(out);
     }
 
@@ -127,6 +139,7 @@ public class QuotazioniRentController {
             Map<String, Map<String, Object>> perChiave = new LinkedHashMap<>();
             for (Map<String, Object> q : lista) perChiave.put(chiave(q), q);
             int nuove = 0, aggiornate = 0;
+            List<Map<String, Object>> salvate = new ArrayList<>();
             for (Object o : arrivate) {
                 if (!(o instanceof Map<?, ?> m)) continue;
                 @SuppressWarnings("unchecked") Map<String, Object> q = pulisci((Map<String, Object>) m);
@@ -135,6 +148,7 @@ public class QuotazioniRentController {
                 Map<String, Object> prima = perChiave.get(chiave(q));
                 if (prima != null) {
                     q.put("id", prima.get("id"));
+                    for (String k : List.of("pdfKey", "pdfKb", "pdfNome")) if (prima.get(k) != null) q.put(k, prima.get(k));
                     q.put("caricataDa", prima.get("caricataDa"));
                     q.put("caricataIl", prima.get("caricataIl"));
                     q.put("aggiornataDa", chi);
@@ -147,12 +161,13 @@ public class QuotazioniRentController {
                     nuove++;
                 }
                 perChiave.put(chiave(q), q);
+                salvate.add(Map.of("id", q.get("id"), "portale", q.get("portale"), "numero", q.get("numero")));
             }
             List<Map<String, Object>> nuovaLista = new ArrayList<>(perChiave.values());
             if (nuovaLista.size() > MAX) return ResponseEntity.badRequest().body(Map.of("error", "Troppe quotazioni salvate (massimo " + MAX + ")"));
             try { scrivi(nuovaLista, chi); }
             catch (Exception e) { return ResponseEntity.status(500).body(Map.of("error", "Quotazioni non salvate: " + e.getMessage())); }
-            return ResponseEntity.ok(Map.of("nuove", nuove, "aggiornate", aggiornate, "totale", nuovaLista.size()));
+            return ResponseEntity.ok(Map.of("nuove", nuove, "aggiornate", aggiornate, "totale", nuovaLista.size(), "salvate", salvate));
         }
     }
 
@@ -180,11 +195,114 @@ public class QuotazioniRentController {
         if (!modifica(s)) return ResponseEntity.status(403).body(Map.of("error", "Serve il permesso Completo su Quotazioni Rent"));
         synchronized (this) {
             List<Map<String, Object>> lista = leggi();
+            lista.stream().filter(q -> id.equals(String.valueOf(q.get("id"))) && q.get("pdfKey") != null)
+                .findFirst().ifPresent(q -> togliPdf(String.valueOf(q.get("pdfKey"))));
             boolean tolta = lista.removeIf(q -> id.equals(String.valueOf(q.get("id"))));
             if (!tolta) return ResponseEntity.status(404).body(Map.of("error", "Quotazione non trovata"));
             try { scrivi(lista, (String) s.getAttribute("userFullName")); }
             catch (Exception e) { return ResponseEntity.status(500).body(Map.of("error", "Non eliminata: " + e.getMessage())); }
         }
         return ResponseEntity.ok(Map.of("eliminata", true));
+    }
+
+    /* ===================== PDF NELL'ARCHIVIO ===================== */
+    private void togliPdf(String key) {
+        try { if (key != null && key.startsWith(PREFISSO_PDF)) repository.deleteById(key); } catch (Exception ignored) { /* gia' tolto */ }
+    }
+    private static long kb(Object o) { try { return Math.round(Double.parseDouble(String.valueOf(o))); } catch (Exception e) { return 0; } }
+
+    @PutMapping("/{id}/pdf")
+    public ResponseEntity<?> salvaPdf(@PathVariable String id, @RequestBody Map<String, Object> body, HttpSession s) {
+        if (s.getAttribute("userId") == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        if (!modifica(s)) return ResponseEntity.status(403).body(Map.of("error", "Serve il permesso Completo su Quotazioni Rent"));
+        String dati = body.get("dati") == null ? "" : String.valueOf(body.get("dati")).replaceAll("\\s", "");
+        byte[] pdf;
+        try { pdf = Base64.getDecoder().decode(dati); } catch (Exception e) { return ResponseEntity.badRequest().body(Map.of("error", "PDF non valido")); }
+        if (pdf.length < 5 || !new String(pdf, 0, 5).startsWith("%PDF")) return ResponseEntity.badRequest().body(Map.of("error", "Il file non e' un PDF"));
+        long peso = Math.max(1, Math.round(pdf.length / 1024.0));
+        if (peso > MAX_PDF_FILE_KB) return ResponseEntity.badRequest().body(Map.of("error", "PDF troppo grande (" + peso + " KB, massimo " + MAX_PDF_FILE_KB + " KB)"));
+        String nome = testo(body.get("nome"), 150);
+        synchronized (this) {
+            List<Map<String, Object>> lista = leggi();
+            Map<String, Object> q = lista.stream().filter(x -> id.equals(String.valueOf(x.get("id")))).findFirst().orElse(null);
+            if (q == null) return ResponseEntity.status(404).body(Map.of("error", "Quotazione non trovata"));
+            long usati = lista.stream().filter(x -> x != q).mapToLong(x -> kb(x.get("pdfKb"))).sum();
+            if (usati + peso > MAX_PDF_TOTALE_KB)
+                return ResponseEntity.status(409).body(Map.of("error", "Spazio per i PDF finito (" + usati / 1024 + " MB su " + MAX_PDF_TOTALE_KB / 1024 + " MB): libera spazio dall'archivio. I dati della quotazione sono salvati lo stesso.", "pieno", true));
+            String key = q.get("pdfKey") != null ? String.valueOf(q.get("pdfKey"))
+                : PREFISSO_PDF + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+            try {
+                ConsegneDataset d = repository.findById(key).orElseGet(() -> { ConsegneDataset n = new ConsegneDataset(); n.setTipo(key); return n; });
+                d.setContenuto(Base64.getEncoder().encodeToString(pdf));
+                d.setRighe(1);
+                d.setAggiornatoAt(LocalDateTime.now(ITALIA));
+                d.setAggiornatoDa((String) s.getAttribute("userFullName"));
+                repository.save(d);
+                q.put("pdfKey", key); q.put("pdfKb", peso); q.put("pdfNome", nome == null ? "quotazione.pdf" : nome);
+                scrivi(lista, (String) s.getAttribute("userFullName"));
+            } catch (Exception e) { return ResponseEntity.status(500).body(Map.of("error", "PDF non salvato: " + e.getMessage())); }
+            return ResponseEntity.ok(Map.of("pdfKb", peso, "usatiKb", usati + peso));
+        }
+    }
+
+    @GetMapping("/{id}/pdf")
+    public ResponseEntity<?> apriPdf(@PathVariable String id, HttpSession s) {
+        if (s.getAttribute("userId") == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        if (!vede(s)) return ResponseEntity.status(403).body(Map.of("error", "Non hai il permesso per Quotazioni Rent"));
+        Map<String, Object> q = leggi().stream().filter(x -> id.equals(String.valueOf(x.get("id")))).findFirst().orElse(null);
+        if (q == null || q.get("pdfKey") == null) return ResponseEntity.status(404).body(Map.of("error", "PDF non conservato per questa quotazione"));
+        Optional<ConsegneDataset> d = repository.findById(String.valueOf(q.get("pdfKey")));
+        if (d.isEmpty() || d.get().getContenuto() == null) return ResponseEntity.status(404).body(Map.of("error", "PDF non trovato"));
+        byte[] pdf = Base64.getDecoder().decode(d.get().getContenuto());
+        String nome = String.valueOf(q.getOrDefault("pdfNome", "quotazione.pdf")).replaceAll("[^A-Za-z0-9._ -]", "_");
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + nome + "\"")
+            .contentType(MediaType.APPLICATION_PDF)
+            .body(pdf);
+    }
+
+    @DeleteMapping("/{id}/pdf")
+    public ResponseEntity<?> togliPdfQuotazione(@PathVariable String id, HttpSession s) {
+        if (s.getAttribute("userId") == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        if (!modifica(s)) return ResponseEntity.status(403).body(Map.of("error", "Serve il permesso Completo su Quotazioni Rent"));
+        synchronized (this) {
+            List<Map<String, Object>> lista = leggi();
+            for (Map<String, Object> q : lista) if (id.equals(String.valueOf(q.get("id"))) && q.get("pdfKey") != null) {
+                togliPdf(String.valueOf(q.get("pdfKey")));
+                q.remove("pdfKey"); q.remove("pdfKb"); q.remove("pdfNome");
+                try { scrivi(lista, (String) s.getAttribute("userFullName")); }
+                catch (Exception e) { return ResponseEntity.status(500).body(Map.of("error", e.getMessage())); }
+                return ResponseEntity.ok(Map.of("tolto", true));
+            }
+        }
+        return ResponseEntity.status(404).body(Map.of("error", "PDF non trovato"));
+    }
+
+    // Libera spazio: toglie i PDF delle quotazioni caricate prima di una data (i dati restano)
+    @PostMapping("/pdf/pulizia")
+    public ResponseEntity<?> pulisciPdf(@RequestBody Map<String, Object> body, HttpSession s) {
+        if (s.getAttribute("userId") == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        if (!modifica(s)) return ResponseEntity.status(403).body(Map.of("error", "Serve il permesso Completo su Quotazioni Rent"));
+        String prima = testo(body.get("primaDel"), 10);
+        if (prima == null || !prima.matches("\\d{4}-\\d{2}-\\d{2}")) return ResponseEntity.badRequest().body(Map.of("error", "Data non valida"));
+        int tolti = 0; long liberati = 0;
+        synchronized (this) {
+            List<Map<String, Object>> lista = leggi();
+            for (Map<String, Object> q : lista) {
+                if (q.get("pdfKey") == null) continue;
+                String quando = String.valueOf(q.getOrDefault("caricataIl", ""));
+                if (quando.length() >= 10 && quando.substring(0, 10).compareTo(prima) < 0) {
+                    togliPdf(String.valueOf(q.get("pdfKey")));
+                    liberati += kb(q.get("pdfKb"));
+                    q.remove("pdfKey"); q.remove("pdfKb"); q.remove("pdfNome");
+                    tolti++;
+                }
+            }
+            if (tolti > 0) {
+                try { scrivi(lista, (String) s.getAttribute("userFullName")); }
+                catch (Exception e) { return ResponseEntity.status(500).body(Map.of("error", e.getMessage())); }
+            }
+        }
+        return ResponseEntity.ok(Map.of("tolti", tolti, "liberatiKb", liberati));
     }
 }
