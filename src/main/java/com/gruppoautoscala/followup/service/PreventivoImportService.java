@@ -209,7 +209,7 @@ public class PreventivoImportService {
         PreventivoImportLog log = new PreventivoImportLog();
         log.setFileName(file.getOriginalFilename());
         log.setImportedBy(importer);
-        log.setImportedAt(LocalDateTime.now());
+        log.setImportedAt(LocalDateTime.now(ZoneId.of("Europe/Rome")));
         log.setCreati(result.created);
         log.setAggiornati(result.updated);
         log.setInvariati(result.unchanged);
@@ -398,7 +398,7 @@ public class PreventivoImportService {
             scelte.add(scelta(p.getId(), p.getUser() != null ? p.getUser().getFullName() : null, e.getValue()));
             p.setUser(e.getValue());
             p.setLastModifiedBy(editor);
-            p.setLastModifiedAt(LocalDateTime.now());
+            p.setLastModifiedAt(LocalDateTime.now(ZoneId.of("Europe/Rome")));
             preventivoRepository.save(p);
             n++;
         }
@@ -622,7 +622,7 @@ public class PreventivoImportService {
 
         if (changed) {
             p.setLastModifiedBy(importer);
-            p.setLastModifiedAt(LocalDateTime.now());
+            p.setLastModifiedAt(LocalDateTime.now(ZoneId.of("Europe/Rome")));
             preventivoRepository.save(p);
             result.updated++;
         } else {

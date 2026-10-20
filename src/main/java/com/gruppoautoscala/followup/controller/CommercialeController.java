@@ -123,7 +123,7 @@ public class CommercialeController {
             ConsegneDataset d = repository.findById(CHIAVE_TRATTATIVE).orElseGet(() -> { ConsegneDataset n = new ConsegneDataset(); n.setTipo(CHIAVE_TRATTATIVE); return n; });
             d.setContenuto(objectMapper.writeValueAsString(lista));
             d.setRighe(lista.size());
-            d.setAggiornatoAt(LocalDateTime.now());
+            d.setAggiornatoAt(LocalDateTime.now(ITALY));   // ora italiana (il server e' in UTC)
             d.setAggiornatoDa(chi);
             repository.save(d);
             Map<String, Object> st = new LinkedHashMap<>(body);
@@ -165,7 +165,7 @@ public class CommercialeController {
             ConsegneDataset d = repository.findById(CHIAVE_STORICO).orElseGet(() -> { ConsegneDataset n = new ConsegneDataset(); n.setTipo(CHIAVE_STORICO); return n; });
             d.setContenuto(objectMapper.writeValueAsString(lista));
             d.setRighe(lista.size());
-            d.setAggiornatoAt(LocalDateTime.now());
+            d.setAggiornatoAt(LocalDateTime.now(ITALY));   // ora italiana (il server e' in UTC)
             d.setAggiornatoDa(nome(session));
             repository.save(d);
             return ResponseEntity.ok(Map.of("storico", lista));

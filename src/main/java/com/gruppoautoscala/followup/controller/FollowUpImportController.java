@@ -252,7 +252,7 @@ public class FollowUpImportController {
         ConsegneDataset d = datasetRepository.findById(CHIAVE_IMPORTS).orElseGet(() -> { ConsegneDataset n = new ConsegneDataset(); n.setTipo(CHIAVE_IMPORTS); return n; });
         d.setContenuto(objectMapper.writeValueAsString(lista));
         d.setRighe(lista.size());
-        d.setAggiornatoAt(LocalDateTime.now());
+        d.setAggiornatoAt(LocalDateTime.now(ITALY));   // ora italiana (il server e' in UTC)
         d.setAggiornatoDa(chi);
         datasetRepository.save(d);
         return id;

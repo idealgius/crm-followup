@@ -20,6 +20,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -76,6 +77,8 @@ public class ConsegneService {
 
     // Stato dell'ultima lettura del foglio (solo in memoria, per mostrarlo a video)
     private volatile LocalDateTime ultimoControllo;
+    // ora italiana: il server (Railway) e' in UTC, 2 ore indietro
+    private static final ZoneId ITALIA_ORA = ZoneId.of("Europe/Rome");
     private volatile String ultimoErrore;
 
     public boolean isFoglioConfigurato() {
@@ -149,11 +152,11 @@ public class ConsegneService {
                 officinaService.registra(officinaService.inizializzato() ? vecchio : null, body,
                         "Aggiornamento automatico".equals(chi) ? "Lettura automatica del foglio" : "Aggiorna dal foglio Google · " + chi);
             }
-            ultimoControllo = LocalDateTime.now();
+            ultimoControllo = LocalDateTime.now(ITALIA_ORA);
             ultimoErrore = null;
             return risultato;
         } catch (IOException | InterruptedException | RuntimeException e) {
-            ultimoControllo = LocalDateTime.now();
+            ultimoControllo = LocalDateTime.now(ITALIA_ORA);
             ultimoErrore = e.getMessage();
             throw e;
         }
@@ -251,7 +254,7 @@ public class ConsegneService {
         });
         d.setContenuto(contenuto);
         d.setRighe(righe);
-        d.setAggiornatoAt(LocalDateTime.now());
+        d.setAggiornatoAt(LocalDateTime.now(ITALIA_ORA));
         d.setAggiornatoDa(chi);
         ConsegneDataset salvato = repository.save(d);
         if (IN_MEMORIA.contains(tipo)) memoria.put(tipo, Optional.of(salvato));
