@@ -262,3 +262,8 @@ html[data-bi="commerciale"] .cm-band { border-top:0; }
 .cm-pinbox:empty { display:none; }
 .cm-msg.cm-fissa { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .cm-msg.cm-fissa .cm-link { margin-left:auto; font-weight:700; }
+/* NUOVO: freccia per sede (consulenti che lavorano su piu' sedi) */
+.cm-sedi { border:1px solid var(--cm-line); background:var(--cm-card); color:var(--cm-ink); border-radius:8px; width:30px; height:26px; cursor:pointer; font-size:13px; font-weight:800; line-height:1; }
+.cm-sedi:hover { border-color:var(--cm-acc, #2a9d8f); }
+.cm-t tr.cm-subr td { font-size:12.5px; color:var(--cm-ink-2); background:var(--cm-grey-soft, rgba(127,127,127,.06)); }
+.cm-t tr.cm-subr td:first-child { padding-left:22px; font-weight:700; }

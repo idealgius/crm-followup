@@ -183,7 +183,8 @@
     let sediDoppio = new Map();
     const ORD_SEDI = ['Agnano', 'Casamarciano', 'Salerno', 'Noleggio'];
     const sediDi = v => doppio(v) ? (sediDoppio.get(v) || [doppio(v), 'Noleggio']) : [sedeOf(v)];
-    const sedeLab = (v, s) => s ? SEDI[s] : doppio(v) ? sediDi(v).join(' + ') : SEDI[sedeOf(v)];
+    // senzaNol: in Panoramica e B2B il noleggio non conta (ha la sua vista)
+    const sedeLab = (v, s, senzaNol) => s ? SEDI[s] : doppio(v) ? sediDi(v).filter(x => !senzaNol || x !== 'Noleggio').join(' + ') : SEDI[sedeOf(v)];
     const escluso = v => { const tk = toks(v); return ESCLUSI.some(n => [...toks(n)].every(w => tk.has(w))); };
     function tipoOf(v) {
         const t = up(v).replace(/[.\s]/g, '');
@@ -464,6 +465,13 @@
             try { const o = JSON.parse(sessionStorage.getItem('cmOpen') || '{}'); o[tog.dataset.tog] = g.classList.contains('open'); sessionStorage.setItem('cmOpen', JSON.stringify(o)); } catch (x) { /* */ }
             return;
         }
+        const sedi = e.target.closest('[data-sedi]');
+        if (sedi) {   // freccia ▾: apre/chiude le righe per sede, senza aprire il report
+            const apri = sedi.getAttribute('aria-expanded') !== 'true';
+            sedi.setAttribute('aria-expanded', apri ? 'true' : 'false'); sedi.textContent = apri ? '▴' : '▾';
+            sedi.closest('table').querySelectorAll('tr.cm-subr').forEach(tr => { if (tr.dataset.par === sedi.dataset.sedi) tr.hidden = !apri; });
+            return;
+        }
         const vw = e.target.closest('[data-vw]');
         if (vw) { go(JSON.parse(vw.dataset.vw)); return; }
         const lst = e.target.closest('[data-list]');
@@ -733,7 +741,8 @@
     }
     function sortTable(th) {
         const table = th.closest('table'), idx = [...th.parentNode.children].indexOf(th);
-        const rows = [...table.querySelectorAll('tr')].slice(1).filter(r => !r.classList.contains('tot'));
+        const rows = [...table.querySelectorAll('tr')].slice(1).filter(r => !r.classList.contains('tot') && !r.classList.contains('cm-subr'));
+        const subs = [...table.querySelectorAll('tr.cm-subr')];
         const tot = [...table.querySelectorAll('tr.tot')];
         const dir = th.dataset.dir === 'desc' ? 'asc' : 'desc';
         table.querySelectorAll('th').forEach(x => { delete x.dataset.dir; });
@@ -743,7 +752,7 @@
             const n = parseFloat(t.replace(/\./g, '').replace(',', '.').replace('%', '')); return t === '–' ? -1 : (isNaN(n) ? t.toLowerCase() : n); };
         rows.sort((x, y) => { const a1 = val(x), b1 = val(y); const r = typeof a1 === 'number' && typeof b1 === 'number' ? a1 - b1 : String(a1).localeCompare(String(b1), 'it'); return dir === 'asc' ? r : -r; });
         const parent = rows.length ? rows[0].parentNode : null;
-        if (parent) { rows.forEach(r => parent.appendChild(r)); tot.forEach(r => parent.appendChild(r)); }
+        if (parent) { rows.forEach(r => { parent.appendChild(r); subs.filter(x => x.dataset.par === r.dataset.k).forEach(x => parent.appendChild(x)); }); tot.forEach(r => parent.appendChild(r)); }
     }
 
     const kpi = (icon, bg, label, n, sub, click, wait) => `<${click ? 'button type="button"' : 'div'} class="cm-kpi ${wait ? 'cm-wait' : ''}" ${click ? `data-list='${esc(JSON.stringify(click))}'` : ''}><span class="cm-k-top"><span>${label}</span><span class="cm-dot" style="background:${bg}">${icon}</span></span><span class="cm-num">${n}</span><span class="cm-sub">${sub}</span></${click ? 'button' : 'div'}>`;
@@ -817,9 +826,23 @@
             }).sort((x, y) => y.c - x.c || y.p - x.p);
             const best = Math.max(...rv.filter(r => r.c >= 5).map(r => r.c / r.p));
             const showS = view.k === 'all' || isB;
+            // NUOVO: chi lavora su piu' sedi ha una freccia ▾ che apre una riga per ogni sede
+            // (in Panoramica e B2B il noleggio non conta: ha la sua vista)
+            const perSede = k => {
+                if (!showS || !doppio(k)) return [];
+                const S = ORD_SEDI.filter(x => x !== 'Noleggio' && [...(pv.get(k) || []), ...(cv.get(k) || [])].some(r => r.sede === x));
+                return S.length > 1 ? S.map(sd => {
+                    const l = (pv.get(k) || []).filter(r => r.sede === sd), c = (cv.get(k) || []).filter(r => r.sede === sd);
+                    return { sd, p: l.length, c: c.length, ann: ANN.filter(x => x.vend === k && x.sede === sd).length, f: l.filter(isF).length, tel: c.filter(x => x.tel).length, pt: X.filter(p => p.vend === k && p.sede === sd).length, fin: c.filter(x => x.pag === 'Finanziamento').length, cf: c.filter(x => x.foglio).length };
+                }) : [];
+            };
+            const celleSede = (k, sub) => sub.length ? `<button type="button" class="cm-sedi" data-sedi="${esc(k)}" title="Vedi i numeri per sede" aria-expanded="false">▾</button>`
+                : doppio(k) ? esc(sedeLab(k, view.k === 'sede' ? view.s : null, true)) : sedeOf(k);
+            const numeri = r => `<td>${nf(r.p)}</td><td>${r.c}</td><td class="${r.c >= 5 && r.c / r.p === best ? 'best' : ''}">${pct(r.c, r.p)}</td><td>${r.ann || '–'}</td><td>${r.f || '–'}</td>${isB ? '' : `<td>${r.pt || '–'}</td><td>${r.tel || '–'}</td>`}<td>${pct(r.fin, r.cf)}</td>`;
             rank = `<div class="cm-sec">Consulenti</div><div class="cm-card"><h2>Classifica consulenti</h2><p class="cm-hint">Clicca un'intestazione per ordinare · clicca un nome per aprire il suo report</p>
             <div class="cm-scroll"><table class="cm-t cm-sort"><tr><th>Consulente</th>${showS ? '<th class="l">Sede</th>' : ''}<th>Preventivi</th><th>Contratti</th><th>Conv.</th><th>Annullati</th><th>Fallite</th>${isB ? '' : '<th>Prev. tel.</th><th>Da prev. tel.</th>'}<th>Finanziati</th></tr>
-            ${rv.map(r => `<tr data-vw='${esc(JSON.stringify(isB ? { k: 'b2b', v: r.k } : doppio(r.k) && view.k === 'sede' ? { k: 'v', v: r.k, s: view.s } : { k: 'v', v: r.k }))}'><td>${esc(r.k)}</td>${showS ? `<td class="l">${doppio(r.k) ? (view.k === 'sede' ? view.s : sedeLab(r.k)) : sedeOf(r.k)}</td>` : ''}<td>${nf(r.p)}</td><td>${r.c}</td><td class="${r.c >= 5 && r.c / r.p === best ? 'best' : ''}">${pct(r.c, r.p)}</td><td>${r.ann || '–'}</td><td>${r.f || '–'}</td>${isB ? '' : `<td>${r.pt || '–'}</td><td>${r.tel || '–'}</td>`}<td>${pct(r.fin, r.cf)}</td></tr>`).join('')}
+            ${rv.map(r => { const sub = perSede(r.k); return `<tr data-k="${esc(r.k)}" data-vw='${esc(JSON.stringify(isB ? { k: 'b2b', v: r.k } : doppio(r.k) && view.k === 'sede' ? { k: 'v', v: r.k, s: view.s } : { k: 'v', v: r.k }))}'><td>${esc(r.k)}</td>${showS ? `<td class="l">${celleSede(r.k, sub)}</td>` : ''}${numeri(r)}</tr>`
+              + sub.map(x => `<tr class="cm-subr" data-par="${esc(r.k)}" hidden data-vw='${esc(JSON.stringify(isB ? { k: 'b2b', v: r.k } : { k: 'v', v: r.k, s: x.sd }))}'><td>↳ ${esc(x.sd)}</td><td class="l"></td>${numeri(x)}</tr>`).join(''); }).join('')}
             <tr class="tot"><td>Totale</td>${showS ? '<td></td>' : ''}<td>${nf(P)}</td><td>${C.length}</td><td>${pct(C.length, P)}</td><td>${ANN.length}</td><td>${F.length}</td>${isB ? '' : `<td>${X.length}</td><td>${TEL}</td>`}<td>${pct(FIN, CF.length)}</td></tr></table></div></div>` + origCard(C, isB);
         }
         const tip = perVoce(R, C, r => r.tipo, ['Usato', 'Km0', 'Nuovo', 'Non indicata']);
@@ -1083,7 +1106,7 @@
         const pvM = by(R, r => r.vend), cvM = by(C, r => r.vend);
         const cons = [...new Set([...pvM.keys(), ...cvM.keys()])].map(k => {
             const l = pvM.get(k) || [], c = cvM.get(k) || [];
-            return { k, sede: doppio(k) ? (vw.k === 'sede' ? vw.s : sedeLab(k)) : sedeOf(k), p: l.length, n: c.length, ann: ANN.filter(x => x.vend === k).length, f: l.filter(isF).length, tel: c.filter(x => x.tel).length, pt: X.filter(p => p.vend === k).length, fin: c.filter(x => x.pag === 'Finanziamento').length, cf: c.filter(x => x.foglio).length };
+            return { k, sede: doppio(k) ? (vw.k === 'sede' ? vw.s : sedeLab(k, null, vw.k === 'all' || vw.k === 'b2b')) : sedeOf(k), p: l.length, n: c.length, ann: ANN.filter(x => x.vend === k).length, f: l.filter(isF).length, tel: c.filter(x => x.tel).length, pt: X.filter(p => p.vend === k).length, fin: c.filter(x => x.pag === 'Finanziamento').length, cf: c.filter(x => x.foglio).length };
         }).sort((x, y) => y.n - x.n || y.p - x.p);
         return {
             vw, isB, R, C, ANN, F, IN, X, P: R.length, Cn: C.length, A: ANN.length, TEL: C.filter(c => c.tel).length, FIN, PC, NI: C.length - FIN - PC, CFn: CF.length, ms,
