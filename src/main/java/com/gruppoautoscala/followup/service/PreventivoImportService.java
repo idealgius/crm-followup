@@ -1,9 +1,13 @@
 package com.gruppoautoscala.followup.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.gruppoautoscala.followup.model.ConsegneDataset;
 import com.gruppoautoscala.followup.model.PreventivoImportLog;
 import com.gruppoautoscala.followup.model.PreventivoTelefonico;
 import com.gruppoautoscala.followup.model.PreventivoTelefonicoStatusHistory;
 import com.gruppoautoscala.followup.model.User;
+import com.gruppoautoscala.followup.repository.ConsegneDatasetRepository;
 import com.gruppoautoscala.followup.repository.PreventivoImportLogRepository;
 import com.gruppoautoscala.followup.repository.PreventivoTelefonicoRepository;
 import com.gruppoautoscala.followup.repository.PreventivoTelefonicoStatusHistoryRepository;
@@ -19,6 +23,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
@@ -95,6 +100,61 @@ public class PreventivoImportService {
     @Autowired private UserRepository userRepository;
     @Autowired private PreventivoImportLogRepository importLogRepository;
     @Autowired private PreventivoRentSyncService rentSyncService;
+    @Autowired private ConsegneDatasetRepository datasetRepository;
+    @Autowired private ObjectMapper objectMapper;
+
+    // NUOVO: registro delle scelte fatte a mano nella finestra "Operatori da
+    // correggere". Chiave = id del preventivo, valore = { da, a, chi, quando }.
+    // Una scelta fatta a mano resta: un import successivo non la cambia da
+    // solo (nemmeno se il file indica un altro dei 4), ma la finestra la
+    // ripropone come "modificato l'ultima volta" per poterla cambiare.
+    private static final String KEY_SCELTE = "PREVENTIVI_OPERATORI";
+    private static final DateTimeFormatter IT_ORA = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+
+    public Map<String, Map<String, String>> scelteOperatore() {
+        Map<String, Map<String, String>> m = new LinkedHashMap<>();
+        try {
+            datasetRepository.findById(KEY_SCELTE).ifPresent(d -> {
+                try {
+                    if (d.getContenuto() != null && !d.getContenuto().isBlank())
+                        m.putAll(objectMapper.readValue(d.getContenuto(), new TypeReference<Map<String, Map<String, String>>>() {}));
+                } catch (Exception ignored) { /* registro illeggibile: si riparte vuoti */ }
+            });
+        } catch (Exception ignored) { /* */ }
+        return m;
+    }
+
+    // aggiunge le scelte nuove al registro (tiene il "da" della prima scelta)
+    private void registraScelte(List<Map<String, String>> nuove, User chi) {
+        if (nuove == null || nuove.isEmpty()) return;
+        Map<String, Map<String, String>> m = scelteOperatore();
+        String quando = LocalDateTime.now(ZoneId.of("Europe/Rome")).format(IT_ORA);
+        for (Map<String, String> s : nuove) {
+            Map<String, String> v = new LinkedHashMap<>();
+            Map<String, String> prima = m.get(s.get("id"));
+            v.put("da", prima != null && prima.get("da") != null ? prima.get("da") : s.getOrDefault("da", "—"));
+            v.put("a", s.get("a"));
+            v.put("chi", chi != null ? chi.getFullName() : "");
+            v.put("quando", quando);
+            m.put(s.get("id"), v);
+        }
+        try {
+            ConsegneDataset d = datasetRepository.findById(KEY_SCELTE).orElseGet(() -> { ConsegneDataset n = new ConsegneDataset(); n.setTipo(KEY_SCELTE); return n; });
+            d.setContenuto(objectMapper.writeValueAsString(m));
+            d.setRighe(m.size());
+            d.setAggiornatoAt(LocalDateTime.now(ZoneId.of("Europe/Rome")));
+            d.setAggiornatoDa(chi != null ? chi.getFullName() : "import preventivi");
+            datasetRepository.save(d);
+        } catch (Exception ignored) { /* il registro e' solo un promemoria: l'import resta valido */ }
+    }
+
+    private static Map<String, String> scelta(Long id, String da, User a) {
+        Map<String, String> s = new HashMap<>();
+        s.put("id", String.valueOf(id));
+        s.put("da", da == null || da.isBlank() ? "—" : da);
+        s.put("a", a.getFullName());
+        return s;
+    }
 
     public static class ImportResult {
         public int created = 0;
@@ -109,6 +169,8 @@ public class PreventivoImportService {
         // preventivi a cui e' stato cambiato l'operatore.
         public int saltati = 0;
         public int operatoriCorretti = 0;
+        // scelte fatte a mano in questo import, da aggiungere al registro
+        public List<Map<String, String>> scelte = new ArrayList<>();
     }
 
     public ImportResult importLeadCsv(MultipartFile file, User importer) throws IOException {
@@ -131,15 +193,18 @@ public class PreventivoImportService {
             if (u.getFullName() != null) usersByName.put(nameKey(u.getFullName()), u);
         }
 
+        Map<String, Map<String, String>> scelteSalvate = scelteOperatore();
         int rowNum = 1;
         for (CSVRecord record : leggiRighe(file)) {
             rowNum++;
             try {
-                processRow(record, usersByName, importer, result, perLead, salta);
+                processRow(record, usersByName, importer, result, perLead, salta, scelteSalvate);
             } catch (Exception e) {
                 result.errori.add("Riga " + rowNum + ": errore imprevisto (" + e.getMessage() + ")");
             }
         }
+
+        registraScelte(result.scelte, importer);
 
         PreventivoImportLog log = new PreventivoImportLog();
         log.setFileName(file.getOriginalFilename());
@@ -210,6 +275,7 @@ public class PreventivoImportService {
     // ancora un operatore non ammesso. Non salva nulla.
     public Map<String, Object> anteprimaOperatori(MultipartFile file) throws IOException {
         Map<String, User> usersByName = utentiPerNome();
+        Map<String, Map<String, String>> sceltePrima = scelteOperatore();
         List<PreventivoTelefonico> tutti = preventivoRepository.findAllWithUser();
         Map<String, PreventivoTelefonico> giaCaricati = new HashMap<>();
         for (PreventivoTelefonico p : tutti) {
@@ -232,9 +298,35 @@ public class PreventivoImportService {
                 if (u != null) { caller = u; nomeNelFile = u.getFullName(); }
                 else if (nomeNelFile == null && !isBlank(ins)) nomeNelFile = ins;
             }
-            if (caller != null && operatoreAmmesso(caller.getFullName())) continue;
-
             PreventivoTelefonico p = giaCaricati.get(lead);
+
+            // NUOVO: operatore gia' scelto a mano in un import precedente: resta
+            // com'e', ma si ripropone come "modificato l'ultima volta" (se il
+            // file indica ancora un operatore diverso) per poterlo cambiare.
+            Map<String, String> sc = p != null ? sceltePrima.get(String.valueOf(p.getId())) : null;
+            if (sc != null && p.getUser() != null && operatoreAmmesso(p.getUser().getFullName())) {
+                boolean uguale = caller != null && caller.getId().equals(p.getUser().getId());
+                if (!uguale) {
+                    Map<String, Object> m = new LinkedHashMap<>();
+                    m.put("chiave", "L:" + lead);
+                    m.put("sourceLeadId", lead);
+                    m.put("esistente", true);
+                    m.put("nelFile", true);
+                    m.put("clienteNome", p.getClienteNome());
+                    m.put("clienteCognome", p.getClienteCognome());
+                    m.put("marca", p.getMarca());
+                    m.put("modello", p.getModello());
+                    m.put("operatore", isBlank(nomeNelFile) ? "—" : nomeNelFile);
+                    m.put("operatoreRiconosciuto", caller != null);
+                    m.put("operatoreAttuale", p.getUser().getFullName());
+                    m.put("operatoreAttualeId", p.getUser().getId());
+                    m.put("giaScelto", sc);
+                    righe.add(m);
+                }
+                continue;
+            }
+
+            if (caller != null && operatoreAmmesso(caller.getFullName())) continue;
             // gia' caricato e gia' corretto su uno dei 4: non si richiede piu'
             if (p != null && p.getUser() != null && operatoreAmmesso(p.getUser().getFullName())) continue;
 
@@ -297,22 +389,25 @@ public class PreventivoImportService {
     // Preventivi gia' caricati ma non presenti nel file: operatore scelto a mano.
     public int assegnaOperatorePerId(Map<Long, User> perId, User editor) {
         int n = 0;
+        List<Map<String, String>> scelte = new ArrayList<>();
         for (Map.Entry<Long, User> e : perId.entrySet()) {
             Optional<PreventivoTelefonico> pOpt = preventivoRepository.findById(e.getKey());
             if (pOpt.isEmpty()) continue;
             PreventivoTelefonico p = pOpt.get();
             if (p.getUser() != null && p.getUser().getId().equals(e.getValue().getId())) continue;
+            scelte.add(scelta(p.getId(), p.getUser() != null ? p.getUser().getFullName() : null, e.getValue()));
             p.setUser(e.getValue());
             p.setLastModifiedBy(editor);
             p.setLastModifiedAt(LocalDateTime.now());
             preventivoRepository.save(p);
             n++;
         }
+        registraScelte(scelte, editor);
         return n;
     }
 
     private void processRow(CSVRecord record, Map<String, User> usersByName, User importer, ImportResult result,
-                            Map<String, User> perLead, Set<String> salta) {
+                            Map<String, User> perLead, Set<String> salta, Map<String, Map<String, String>> scelteSalvate) {
         String sourceLeadId = get(record, "ID");
         if (isBlank(sourceLeadId)) {
             result.errori.add("Riga senza ID lead, saltata");
@@ -362,6 +457,8 @@ public class PreventivoImportService {
             insertedByRaw = get(record, "Inserito da");
             if (insertedByRaw != null) caller = usersByName.get(nameKey(insertedByRaw));
         }
+        // nome dell'operatore come lo indica il file (per il registro delle scelte)
+        String operatoreNelFile = caller != null ? caller.getFullName() : (callerName != null ? callerName : insertedByRaw);
         // NUOVO: operatore scelto a mano nella finestra prima dell'import
         User operatoreScelto = perLead.get(sourceLeadId);
         if (operatoreScelto != null) caller = operatoreScelto;
@@ -455,6 +552,7 @@ public class PreventivoImportService {
 
             rentSyncService.sync(p);
 
+            if (operatoreScelto != null) result.scelte.add(scelta(p.getId(), operatoreNelFile, operatoreScelto));
             result.created++;
             return;
         }
@@ -475,9 +573,13 @@ public class PreventivoImportService {
         // file indica uno dei 4 ammessi diverso da quello salvato, vale il
         // file (cosi' un nuovo import corregge anche quelli gia' caricati).
         // Se il file indica un operatore NON ammesso, quello salvato resta.
+        // Una scelta fatta a mano in un import precedente resta: il file non la
+        // cambia piu' da solo (si cambia solo scegliendo di nuovo nella finestra).
         User attuale = p.getUser();
-        if (caller != null && (operatoreScelto != null || operatoreAmmesso(caller.getFullName()))
+        boolean sceltoPrima = scelteSalvate.containsKey(String.valueOf(p.getId()));
+        if (caller != null && (operatoreScelto != null || (operatoreAmmesso(caller.getFullName()) && !sceltoPrima))
                 && (attuale == null || !caller.getId().equals(attuale.getId()))) {
+            if (operatoreScelto != null) result.scelte.add(scelta(p.getId(), operatoreNelFile, operatoreScelto));
             p.setUser(caller);
             changed = true;
             result.operatoriCorretti++;

@@ -1089,7 +1089,9 @@ function showOperatoriModal() {
 
     const opzioni = ammessi.map(u => `<option value="${u.id}">${pvEsc(u.fullName)}</option>`).join('');
     const gruppi = {};
-    righe.forEach((r, i) => { (gruppi[r.operatore] = gruppi[r.operatore] || []).push(i); });
+    // NUOVO: quelli gia' scelti a mano in un import precedente stanno a parte
+    const giaScelti = [];
+    righe.forEach((r, i) => { if (r.giaScelto) { giaScelti.push(i); return; } (gruppi[r.operatore] = gruppi[r.operatore] || []).push(i); });
 
     let html = '';
     if (mancanti.length > 0) {
@@ -1127,6 +1129,30 @@ function showOperatoriModal() {
             }).join('')}
         </div>`;
     });
+    if (giaScelti.length > 0) {
+        const nuovi = Object.keys(gruppi).length > 0;
+        html += `<details class="pv-gia" ${nuovi ? '' : 'open'} style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px">
+            <summary style="cursor:pointer;font-weight:800;font-size:13px;color:var(--text-primary)">🔁 Già scelti in precedenza (${giaScelti.length}) <span style="font-weight:600;font-size:12px;color:var(--text-secondary)">— restano così se non li cambi</span></summary>
+            ${giaScelti.map(i => {
+                const r = righe[i], g = r.giaScelto || {};
+                const altri = ammessi.filter(u => String(u.id) !== String(r.operatoreAttualeId)).map(u => `<option value="${u.id}">Cambia in ${pvEsc(u.fullName)}</option>`).join('');
+                return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border);margin-top:8px;flex-wrap:wrap">
+                    <div>
+                        <div style="font-weight:700;font-size:13px;color:var(--text-primary)">${pvEsc(r.clienteNome)} ${pvEsc(r.clienteCognome)}
+                            <span style="font-size:10px;font-weight:800;color:#ff9800;background:rgba(255,152,0,0.12);padding:2px 7px;border-radius:10px">MODIFICATO L'ULTIMA VOLTA</span>
+                            <span style="font-weight:400;color:var(--text-secondary);font-size:11px">${r.sourceLeadId ? '(Lead ' + pvEsc(r.sourceLeadId) + ')' : ''}</span></div>
+                        <div style="font-size:12px;color:var(--text-secondary)">🚘 ${pvEsc(r.marca || '—')} — ${pvEsc(r.modello || '—')}</div>
+                        <div style="font-size:12px;margin-top:3px">${pvEsc(g.da || '—')} → <b>${pvEsc(r.operatoreAttuale || g.a || '—')}</b>
+                            <span style="color:var(--text-secondary)">· ${pvEsc(g.quando || '')}${g.chi ? ' da ' + pvEsc(g.chi) : ''}</span></div>
+                        <div style="font-size:11px;color:var(--text-secondary);margin-top:2px">Nel file di oggi: ${pvEsc(r.operatore)}</div>
+                    </div>
+                    <select id="operatoreChoice-${i}" class="input-dark" style="max-width:240px">
+                        <option value="">Mantieni ${pvEsc(r.operatoreAttuale || '')}</option>${altri}
+                    </select>
+                </div>`;
+            }).join('')}
+        </details>`;
+    }
     list.innerHTML = html;
     modal.style.display = 'flex';
 }
@@ -1149,7 +1175,7 @@ async function applyOperatoriDecisions() {
     let senzaScelta = 0;
     righe.forEach((r, i) => {
         const v = document.getElementById(`operatoreChoice-${i}`)?.value || '';
-        if (!v) { senzaScelta++; return; }
+        if (!v) { if (!r.giaScelto) senzaScelta++; return; }   // gia' scelti: vuoto = mantieni
         if (v === 'no') {
             if (!r.esistente) assegnazioni[r.chiave] = 'salta';
             return;
