@@ -58,6 +58,10 @@
         ['Salerno', ['Claudio Gerardi', 'Simone Bruno']],
         ['Noleggio', ['Raffaele Crispo', 'Francesco Sementa', 'Ciro Imperato', 'Riccardo Meregalli']]
     ];
+    // NUOVO: consulenti che fanno sia vendita sia noleggio. Per loro la sede la decide la singola
+    // trattativa (colonna Sede del CSV): "Gruppo Autoscala Noleggio" = noleggio, le altre = vendita.
+    // Qui la sede di vendita, usata quando la trattativa non lo dice (es. righe solo nel foglio).
+    const DOPPIA_SEDE = { 'Ciro Imperato': 'Agnano' };
     const ESCLUSI = ['Emanuele Amendola', 'Giuseppe Palladino', 'Davide Scognamiglio', 'Alessia Gisonna'];
     const WWW = 'www.gruppoautoscala.com';
     const ORIG_MAP = {
@@ -155,6 +159,31 @@
         for (const [sede, list] of SEDE_CONSULENTI) if (list.some(n => [...toks(n)].every(w => tk.has(w)))) { s = sede; break; }
         sedeCache.set(v, s); return s;
     }
+    // consulente con due sedi? -> sede di vendita, altrimenti null
+    const doppioCache = new Map();
+    function doppio(v) {
+        if (doppioCache.has(v)) return doppioCache.get(v);
+        const tk = toks(v); let r = null;
+        for (const [n, sv] of Object.entries(DOPPIA_SEDE)) if ([...toks(n)].every(w => tk.has(w))) { r = sv; break; }
+        doppioCache.set(v, r); return r;
+    }
+    // sede della singola trattativa dalla colonna Sede del CSV
+    function sedeDaCsv(t) {
+        const x = String(t || '').toLowerCase();
+        if (!x.trim()) return null;
+        if (/noleggio/.test(x)) return 'Noleggio';
+        if (/salerno/.test(x)) return 'Salerno';
+        if (/nola|casamarciano/.test(x)) return 'Casamarciano';
+        return 'Agnano';
+    }
+    // sede di un record: per chi fa vendita e noleggio decide il record, per gli altri il consulente
+    const sedeRec = (v, sedeRecord) => doppio(v) ? (sedeRecord || doppio(v)) : sedeOf(v);
+    // tutte le sedi di un consulente: per chi fa vendita e noleggio sono quelle delle sue trattative
+    // (es. Casamarciano, Agnano e Noleggio), riempite in build() da sediDoppio
+    let sediDoppio = new Map();
+    const ORD_SEDI = ['Agnano', 'Casamarciano', 'Salerno', 'Noleggio'];
+    const sediDi = v => doppio(v) ? (sediDoppio.get(v) || [doppio(v), 'Noleggio']) : [sedeOf(v)];
+    const sedeLab = (v, s) => s ? SEDI[s] : doppio(v) ? sediDi(v).join(' + ') : SEDI[sedeOf(v)];
     const escluso = v => { const tk = toks(v); return ESCLUSI.some(n => [...toks(n)].every(w => tk.has(w))); };
     function tipoOf(v) {
         const t = up(v).replace(/[.\s]/g, '');
@@ -190,7 +219,7 @@
             const raw = foglioDi.get(t) || null;
             const cli = `${t.nome || ''} ${t.cognome || ''}`.replace(/\s+/g, ' ').trim() || String(t.rag || '').trim();
             const r = {
-                i: TR.length, dataT: dtT, yT: dtT.getFullYear(), mT: dtT.getMonth() + 1, rec: !!t.rec, vend: v, sede: sedeOf(v),
+                i: TR.length, dataT: dtT, yT: dtT.getFullYear(), mT: dtT.getMonth() + 1, rec: !!t.rec, vend: v, sede: sedeRec(v, sedeDaCsv(t.sede)),
                 noleggio: /noleggio/i.test(t.sede || ''), tipo: tipoOf(t.tipo), origine: orig(t.origine), origineRaw: t.origine || '',
                 stato, motivo: stato === 'Fallita' ? (String(t.motivo || '').trim() || 'Non indicato') : '', etichetta: t.etichetta || '',
                 marca: marcaOf(t.marca), veicolo: `${t.marca || ''} ${t.modello || ''}`.replace(/\s+/g, ' ').trim(),
@@ -230,12 +259,19 @@
             const vRaw = up(raw['VENDITORE']), v = vmap.get(vRaw) || (vRaw ? nice(vRaw) : 'Non indicato');
             if (escluso(v)) return;
             const mod = String(raw['MODELLO'] || '').replace(/\s+/g, ' ').trim(), pag = up(raw['PAGAMENTO']);
-            AF.push({ i: 'f' + n, data: dt || new Date(y, m - 1, 1), y, m, yT: y, mT: m, vend: v, sede: sedeOf(v), noleggio: false, tipo: tipoOf(raw['CANALE']),
+            AF.push({ i: 'f' + n, data: dt || new Date(y, m - 1, 1), y, m, yT: y, mT: m, vend: v, sede: sedeRec(v, Object.values(raw).some(x => /noleggio/i.test(String(x || ''))) ? 'Noleggio' : null), noleggio: false, tipo: tipoOf(raw['CANALE']),
                 origine: 'Solo nel foglio', stato: 'Chiusa', motivo: '', etichetta: '', marca: marcaOf(mod.split(' ')[0]), veicolo: mod,
                 cliente: nice(raw['CLIENTE']), targa: String(raw['TARGA/TELAIO'] || '').trim(), foglio: true, soloFoglio: true, tel: null, ann: true, annFoglio: true,
                 b2b: up(raw['B2C']) === 'TRUE', pag: !pag ? 'Non indicato' : pag === 'PC' ? 'PC (contanti)' : 'Finanziamento', serv: null });
         });
         vend = [...new Set(TR.map(r => r.vend))].sort((x, y) => x.localeCompare(y, 'it'));
+        // sedi in cui lavora chi fa vendita e noleggio (dalle sue trattative), sempre con il Noleggio
+        sediDoppio = new Map();
+        vend.filter(doppio).forEach(v => {
+            const S = new Set(TR.filter(r => r.vend === v).map(r => r.sede)); S.add('Noleggio');
+            if (![...S].some(x => x !== 'Noleggio')) S.add(doppio(v));
+            sediDoppio.set(v, ORD_SEDI.filter(x => S.has(x)));
+        });
         anni = [...new Set(TR.map(r => r.y))].sort((x, y) => y - x);
     }
 
@@ -251,7 +287,7 @@
             const cli = `${p.clienteNome || ''} ${p.clienteCognome || ''}`.replace(/\s+/g, ' ').trim();
             const v = canon(p.consultantName || '');
             return {
-                id: p.id, data: dt, m: dt ? dt.getMonth() + 1 : 0, y: dt ? dt.getFullYear() : 0, vend: v, sede: sedeOf(v),
+                id: p.id, data: dt, m: dt ? dt.getMonth() + 1 : 0, y: dt ? dt.getFullYear() : 0, vend: v, sede: sedeRec(v, p.tipo === 'NOLEGGIO' ? 'Noleggio' : null),
                 tipo: p.tipo === 'NOLEGGIO' ? 'Noleggio' : 'Vendita', st: ST.includes(p.status) ? p.status : 'GENERATO',
                 op: (p.user && p.user.fullName) || 'Non indicato', marca: marcaOf(p.marca), modello: p.modello || '',
                 cliente: nice(cli), tk: toks(cli), targa: pl(p.targaTelaio), contr: null
@@ -321,14 +357,14 @@
         if (!b2bOn && c.b2b) return false;
         if (vw.k === 'all') return s !== 'Noleggio';
         if (vw.k === 'sede') return s === vw.s;
-        if (vw.k === 'v') return c.vend === vw.v;
+        if (vw.k === 'v') return c.vend === vw.v && (!vw.s || s === vw.s);   // vw.s: solo la parte vendita o noleggio
         return true;
     }
     function okV(v, vw) {
-        vw = vw || view; const s = sedeOf(v);
-        if (vw.k === 'b2b') return s !== 'Noleggio' && (!vw.v || v === vw.v);
-        if (vw.k === 'all') return s !== 'Noleggio';
-        if (vw.k === 'sede') return s === vw.s;
+        vw = vw || view; const S = sediDi(v);
+        if (vw.k === 'b2b') return S.some(x => x !== 'Noleggio') && (!vw.v || v === vw.v);
+        if (vw.k === 'all') return S.some(x => x !== 'Noleggio');
+        if (vw.k === 'sede') return S.includes(vw.s);
         if (vw.k === 'v') return v === vw.v;
         return true;
     }
@@ -458,8 +494,9 @@
             return `<div class="cm-nav-grp ${isOpen ? 'open' : ''}"><div class="cm-nav-row">${item(head, ic, label, cntC(head))}<button type="button" class="cm-nav-tog" data-tog="${key}" aria-label="Mostra i consulenti">▸</button></div>
               <div class="cm-nav-subs">${subs.map(s => item(s, '', s.v, cntC(s), true)).join('') || '<div class="cm-hint" style="padding:6px 10px">Nessun consulente</div>'}</div></div>`;
         };
-        const consOf = s => vend.filter(v => sedeOf(v) === s).map(v => ({ k: 'v', v })).sort((x, y) => cntC(y) - cntC(x));
-        const b2bSubs = vend.filter(v => sedeOf(v) !== 'Noleggio' && contr().some(c => c.vend === v && c.b2b)).map(v => ({ k: 'b2b', v })).sort((x, y) => cntC(y) - cntC(x));
+        // chi fa vendita e noleggio compare in tutte e due le liste, ognuna con la sua parte (s)
+        const consOf = s => vend.filter(v => sediDi(v).includes(s)).map(v => doppio(v) ? { k: 'v', v, s } : { k: 'v', v }).sort((x, y) => cntC(y) - cntC(x));
+        const b2bSubs = vend.filter(v => sediDi(v).some(x => x !== 'Noleggio') && contr().some(c => c.vend === v && c.b2b)).map(v => ({ k: 'b2b', v })).sort((x, y) => cntC(y) - cntC(x));
         rootEl.querySelector('#cmSide').innerHTML = item({ k: 'all' }, '📊', 'Panoramica', cntC({ k: 'all' })) +
             '<div class="cm-nav-t">Sedi</div>' + ['Agnano', 'Casamarciano', 'Salerno'].map(s => grp(s, { k: 'sede', s }, '🏢', SEDI[s], consOf(s))).join('') +
             '<div class="cm-nav-t">Categorie</div>' + grp('B2B', { k: 'b2b' }, '💼', 'B2B', b2bSubs) + grp('Noleggio', { k: 'sede', s: 'Noleggio' }, '🔑', 'Noleggio', consOf('Noleggio')) +
@@ -710,9 +747,9 @@
     }
 
     const kpi = (icon, bg, label, n, sub, click, wait) => `<${click ? 'button type="button"' : 'div'} class="cm-kpi ${wait ? 'cm-wait' : ''}" ${click ? `data-list='${esc(JSON.stringify(click))}'` : ''}><span class="cm-k-top"><span>${label}</span><span class="cm-dot" style="background:${bg}">${icon}</span></span><span class="cm-num">${n}</span><span class="cm-sub">${sub}</span></${click ? 'button' : 'div'}>`;
-    function title() { return view.k === 'v' ? view.v : view.k === 'all' ? 'Panoramica' : view.k === 'b2b' ? (view.v ? 'B2B · ' + view.v : 'B2B') : SEDI[view.s]; }
+    function title() { return view.k === 'v' ? view.v + (view.s ? (view.s === 'Noleggio' ? ' · noleggio' : ' · vendita') : '') : view.k === 'all' ? 'Panoramica' : view.k === 'b2b' ? (view.v ? 'B2B · ' + view.v : 'B2B') : SEDI[view.s]; }
     function subTitle() {
-        const s = view.k === 'v' ? SEDI[sedeOf(view.v)] : view.k === 'all' ? 'Agnano · Casamarciano · Salerno' : view.k === 'b2b' ? 'Trattative con società (B2B)' : view.s === 'Noleggio' ? 'Consulenti del noleggio' : 'Tutti i consulenti della sede';
+        const s = view.k === 'v' ? sedeLab(view.v, view.s) : view.k === 'all' ? 'Agnano · Casamarciano · Salerno' : view.k === 'b2b' ? 'Trattative con società (B2B)' : view.s === 'Noleggio' ? 'Consulenti del noleggio' : 'Tutti i consulenti della sede';
         return s + ' · ' + per() + (view.k !== 'b2b' ? (b2bOn ? ' · B2B incluso' : ' · B2B escluso') : '');
     }
     function render() {
@@ -765,7 +802,7 @@
     function renderReport() {
         const isB = view.k === 'b2b', R = trIn(view), C = cIn(view), ANN = annIn(view), F = R.filter(isF), IN = R.filter(r => r.stato === 'In corso');
         const PRIMA = C.filter(c => c.prima || c.rec).length, REC = C.filter(c => c.rec).length;
-        const X = isB ? [] : PT.filter(p => inPer(p) && okV(p.vend));
+        const X = isB ? [] : PT.filter(p => inPer(p) && okC(p));
         const P = R.length, nm = a - da + 1, TEL = C.filter(c => c.tel).length, CF = C.filter(c => c.pag), FIN = C.filter(c => c.pag === 'Finanziamento').length;
         const b2bN = contr().filter(c => inPer(c) && c.b2b && c.sede !== 'Noleggio' && okV(c.vend)).length;
         const topMot = [...by(F, r => r.motivo)].sort((x, y) => y[1].length - x[1].length)[0];
@@ -782,7 +819,7 @@
             const showS = view.k === 'all' || isB;
             rank = `<div class="cm-sec">Consulenti</div><div class="cm-card"><h2>Classifica consulenti</h2><p class="cm-hint">Clicca un'intestazione per ordinare · clicca un nome per aprire il suo report</p>
             <div class="cm-scroll"><table class="cm-t cm-sort"><tr><th>Consulente</th>${showS ? '<th class="l">Sede</th>' : ''}<th>Preventivi</th><th>Contratti</th><th>Conv.</th><th>Annullati</th><th>Fallite</th>${isB ? '' : '<th>Prev. tel.</th><th>Da prev. tel.</th>'}<th>Finanziati</th></tr>
-            ${rv.map(r => `<tr data-vw='${esc(JSON.stringify(isB ? { k: 'b2b', v: r.k } : { k: 'v', v: r.k }))}'><td>${esc(r.k)}</td>${showS ? `<td class="l">${sedeOf(r.k)}</td>` : ''}<td>${nf(r.p)}</td><td>${r.c}</td><td class="${r.c >= 5 && r.c / r.p === best ? 'best' : ''}">${pct(r.c, r.p)}</td><td>${r.ann || '–'}</td><td>${r.f || '–'}</td>${isB ? '' : `<td>${r.pt || '–'}</td><td>${r.tel || '–'}</td>`}<td>${pct(r.fin, r.cf)}</td></tr>`).join('')}
+            ${rv.map(r => `<tr data-vw='${esc(JSON.stringify(isB ? { k: 'b2b', v: r.k } : doppio(r.k) && view.k === 'sede' ? { k: 'v', v: r.k, s: view.s } : { k: 'v', v: r.k }))}'><td>${esc(r.k)}</td>${showS ? `<td class="l">${doppio(r.k) ? (view.k === 'sede' ? view.s : sedeLab(r.k)) : sedeOf(r.k)}</td>` : ''}<td>${nf(r.p)}</td><td>${r.c}</td><td class="${r.c >= 5 && r.c / r.p === best ? 'best' : ''}">${pct(r.c, r.p)}</td><td>${r.ann || '–'}</td><td>${r.f || '–'}</td>${isB ? '' : `<td>${r.pt || '–'}</td><td>${r.tel || '–'}</td>`}<td>${pct(r.fin, r.cf)}</td></tr>`).join('')}
             <tr class="tot"><td>Totale</td>${showS ? '<td></td>' : ''}<td>${nf(P)}</td><td>${C.length}</td><td>${pct(C.length, P)}</td><td>${ANN.length}</td><td>${F.length}</td>${isB ? '' : `<td>${X.length}</td><td>${TEL}</td>`}<td>${pct(FIN, CF.length)}</td></tr></table></div></div>` + origCard(C, isB);
         }
         const tip = perVoce(R, C, r => r.tipo, ['Usato', 'Km0', 'Nuovo', 'Non indicata']);
@@ -886,7 +923,7 @@
         const ALL = TR.filter(c => (isC(c) || c.ann) && annBase(c) && annSedeOk(c)).concat(AF.filter(c => annBase(c) && annSedeOk(c)));
         const chips = [['all', 'Tutte le sedi'], ['Agnano', 'Agnano'], ['Casamarciano', 'Casamarciano'], ['Salerno', 'Salerno']];
         const AN = ALL.filter(c => c.ann), F = ALL.length, N = AN.length;
-        const perV = [...by(ALL, c => c.vend)].map(([v, l]) => ({ v, f: l.length, n: l.filter(c => c.ann).length, sede: sedeOf(v) })).filter(r => r.n).sort((x, y) => y.n - x.n || x.f - y.f);
+        const perV = [...by(ALL, c => c.vend)].map(([v, l]) => ({ v, f: l.length, n: l.filter(c => c.ann).length, sede: doppio(v) ? sedeLab(v) : sedeOf(v) })).filter(r => r.n).sort((x, y) => y.n - x.n || x.f - y.f);
         const worst = perV.filter(r => r.f >= 5).sort((x, y) => y.n / y.f - x.n / x.f)[0];
         rootEl.querySelector('#cmMain').innerHTML = `
         <div class="cm-vhead"><h2>Contratti annullati</h2><p>Stato ANNULLATA nel foglio AVANZAMENTO o etichetta "CONTRATTO ANNULLATO" nel CSV · ${annS === 'all' ? 'Agnano, Casamarciano e Salerno' : SEDI[annS]} · ${per()}${b2bOn ? ' · B2B incluso' : ' · B2B escluso'}</p></div>
@@ -962,7 +999,7 @@
     }
     // elenco aperto da una card dei numeri
     function openList(o) {
-        if (o.pt) { openRecs(o.t, PT.filter(p => inPer(p) && (o.vw.k === 'any' || okV(p.vend, o.vw))), 'pt'); return; }
+        if (o.pt) { openRecs(o.t, PT.filter(p => inPer(p) && (o.vw.k === 'any' || okC(p, o.vw))), 'pt'); return; }
         let L = trIn(o.vw);                                   // preventivi (trattative create nel periodo)
         if (o.w === 'chiuse') L = cIn(o.vw);                  // contratti (chiusi nel periodo)
         if (o.w === 'ann') L = annIn(o.vw);
@@ -1036,17 +1073,17 @@
 
 
     /* ================= calcoli per un ambito (export) ================= */
-    function lab(vw) { return vw.k === 'v' ? vw.v : vw.k === 'all' ? 'Panoramica' : vw.k === 'b2b' ? (vw.v ? 'B2B · ' + vw.v : 'B2B') : SEDI[vw.s]; }
+    function lab(vw) { return vw.k === 'v' ? vw.v + (vw.s ? (vw.s === 'Noleggio' ? ' (noleggio)' : ' (vendita)') : '') : vw.k === 'all' ? 'Panoramica' : vw.k === 'b2b' ? (vw.v ? 'B2B · ' + vw.v : 'B2B') : SEDI[vw.s]; }
     function calc(vw) {
         const isB = vw.k === 'b2b', ms = months();
         const R = trIn(vw), C = cIn(vw), ANN = annIn(vw), F = R.filter(isF), IN = R.filter(r => r.stato === 'In corso');
-        const X = isB ? [] : PT.filter(p => inPer(p) && okV(p.vend, vw));
+        const X = isB ? [] : PT.filter(p => inPer(p) && okC(p, vw));
         const CF = C.filter(c => c.foglio), SV = C.filter(c => c.serv);
         const FIN = C.filter(c => c.pag === 'Finanziamento').length, PC = C.filter(c => c.pag === 'PC (contanti)').length;
         const pvM = by(R, r => r.vend), cvM = by(C, r => r.vend);
         const cons = [...new Set([...pvM.keys(), ...cvM.keys()])].map(k => {
             const l = pvM.get(k) || [], c = cvM.get(k) || [];
-            return { k, sede: sedeOf(k), p: l.length, n: c.length, ann: ANN.filter(x => x.vend === k).length, f: l.filter(isF).length, tel: c.filter(x => x.tel).length, pt: X.filter(p => p.vend === k).length, fin: c.filter(x => x.pag === 'Finanziamento').length, cf: c.filter(x => x.foglio).length };
+            return { k, sede: doppio(k) ? (vw.k === 'sede' ? vw.s : sedeLab(k)) : sedeOf(k), p: l.length, n: c.length, ann: ANN.filter(x => x.vend === k).length, f: l.filter(isF).length, tel: c.filter(x => x.tel).length, pt: X.filter(p => p.vend === k).length, fin: c.filter(x => x.pag === 'Finanziamento').length, cf: c.filter(x => x.foglio).length };
         }).sort((x, y) => y.n - x.n || y.p - x.p);
         return {
             vw, isB, R, C, ANN, F, IN, X, P: R.length, Cn: C.length, A: ANN.length, TEL: C.filter(c => c.tel).length, FIN, PC, NI: C.length - FIN - PC, CFn: CF.length, ms,
@@ -1072,10 +1109,10 @@
     function openExport() {
         const s0 = expState || {
             fmt: 'xlsx', anno, da, a, b2b: b2bOn, lista: true, ann: true, prev: false, ptL: false, cont: CONT.map(c => c[0]),
-            amb: view.k === 'v' ? ['v|' + view.v] : view.k === 'sede' ? ['sede|' + view.s] : view.k === 'b2b' ? ['b2b|'] : ['all|', 'sede|Agnano', 'sede|Casamarciano', 'sede|Salerno']
+            amb: view.k === 'v' ? ['v|' + view.v + (view.s ? '|' + view.s : '')] : view.k === 'sede' ? ['sede|' + view.s] : view.k === 'b2b' ? ['b2b|'] : ['all|', 'sede|Agnano', 'sede|Casamarciano', 'sede|Salerno']
         };
         const ck = key => s0.amb.includes(key) ? 'checked' : '';
-        const consG = s => vend.filter(v => sedeOf(v) === s);
+        const consG = s => vend.filter(v => sediDi(v).includes(s));
         const ml = []; for (let m = 1; m <= 12; m++) ml.push(`<option value="${m}">${MESIL[m].charAt(0).toUpperCase() + MESIL[m].slice(1)}</option>`);
         const ov = modal('Esporta il report commerciale', `
           <div class="cm-exp">
@@ -1099,7 +1136,7 @@
                   <label><input type="checkbox" data-amb="sede|Noleggio" ${ck('sede|Noleggio')}> Noleggio</label>
                 </div>
                 ${['Agnano', 'Casamarciano', 'Salerno', 'Noleggio'].map(s => `<div><h5>Consulenti ${s === 'Noleggio' ? 'noleggio' : s} <button type="button" class="cm-link" data-xg="${s}">tutti</button></h5>
-                  ${consG(s).map(v => `<label><input type="checkbox" data-amb="v|${esc(v)}" ${ck('v|' + v)}> ${esc(v)}</label>`).join('') || '<small class="cm-hint">Nessuno</small>'}</div>`).join('')}
+                  ${consG(s).map(v => { const key = 'v|' + v + (doppio(v) ? '|' + s : ''); return `<label><input type="checkbox" data-amb="${esc(key)}" ${ck(key)}> ${esc(v)}${doppio(v) ? (s === 'Noleggio' ? ' (noleggio)' : ' (vendita)') : ''}</label>`; }).join('') || '<small class="cm-hint">Nessuno</small>'}</div>`).join('')}
               </div></div>
             <div class="cm-exp-s"><h4>Contenuto <button type="button" class="cm-link" data-call>Tutto</button> <button type="button" class="cm-link" data-cnone>Nessuno</button></h4><div class="cm-exp-row">
               ${CONT.map(([k, t]) => `<label class="cm-exp-chk"><input type="checkbox" data-cont="${k}" ${(s0.cont || []).includes(k) ? 'checked' : ''}> ${t}</label>`).join('')}
@@ -1147,7 +1184,7 @@
             finally { btn.disabled = false; btn.textContent = 'Esporta'; }
         });
     }
-    const ambVw = key => { const [k, x] = key.split('|'); return k === 'all' ? { k: 'all' } : k === 'sede' ? { k: 'sede', s: x } : k === 'b2b' ? { k: 'b2b' } : { k: 'v', v: x }; };
+    const ambVw = key => { const [k, x, y] = key.split('|'); return k === 'all' ? { k: 'all' } : k === 'sede' ? { k: 'sede', s: x } : k === 'b2b' ? { k: 'b2b' } : (y ? { k: 'v', v: x, s: y } : { k: 'v', v: x }); };
     // calcola con periodo e B2B scelti nella finestra, poi rimette quelli della pagina
     async function esegui(s) {
         const keep = { anno, da, a, b2bOn };
@@ -1193,7 +1230,7 @@
         const RC = [...uniTR.values()].filter(x => consSel.has(x.vend)), VC = [...uniC.values()].filter(x => consSel.has(x.vend));
         const oriC = [...new Set(VC.map(c => c.origine))].sort((x, y) => VC.filter(c => c.origine === y).length - VC.filter(c => c.origine === x).length);
         const pRC = by(RC, c => c.vend), cRC = by(VC, c => c.vend);
-        const rowsC = [...new Set([...pRC.keys(), ...cRC.keys()])].map(v => { const l = pRC.get(v) || [], c = cRC.get(v) || []; return [v, SEDI[sedeOf(v)], l.length, c.length, r(c.length, l.length)].concat(oriC.map(k => c.filter(x => x.origine === k).length), c.filter(x => x.tel).length); }).sort((x, y) => y[3] - x[3]);
+        const rowsC = [...new Set([...pRC.keys(), ...cRC.keys()])].map(v => { const l = pRC.get(v) || [], c = cRC.get(v) || []; return [v, sedeLab(v), l.length, c.length, r(c.length, l.length)].concat(oriC.map(k => c.filter(x => x.origine === k).length), c.filter(x => x.tel).length); }).sort((x, y) => y[3] - x[3]);
         if (has('cons')) fogli.push({ nome: 'Consulenti', tabelle: [{ titolo: 'Consulenti: preventivi, contratti e origini dei contratti', colonne: [T('Consulente', 24), T('Sede', 28), I('Preventivi'), I('Contratti'), Q('Conversione', 12)].concat(oriC.map(k => I(k, 14)), I('di cui da prev. tel.', 14)),
             righe: rowsC, totale: rowsC.length ? ['Totale', '', RC.length, VC.length, r(VC.length, RC.length)].concat(oriC.map(k => VC.filter(c => c.origine === k).length), VC.filter(c => c.tel).length) : null }] });
         // tipologia e pagamento
@@ -1280,7 +1317,7 @@
     const pTab = (head, rows, tot) => `<table><tr>${head.map((h, i) => `<th${i ? '' : ' class="l"'}>${h}</th>`).join('')}</tr>${rows.map(r => `<tr>${r.map((v, i) => `<td${i ? '' : ' class="l"'}>${v}</td>`).join('')}</tr>`).join('')}${tot ? `<tr class="tot">${tot.map((v, i) => `<td${i ? '' : ' class="l"'}>${v}</td>`).join('')}</tr>` : ''}</table>`;
     function pdfSection(d, M) {
         const tit = d.vw.k === 'v' ? 'Report venditore: ' + d.vw.v : d.vw.k === 'all' ? 'Report commerciale: Panoramica' : d.vw.k === 'b2b' ? 'Report B2B' + (d.vw.v ? ': ' + d.vw.v : '') : d.vw.s === 'Noleggio' ? 'Report Noleggio' : 'Report sede: ' + SEDI[d.vw.s];
-        const sub = (d.vw.k === 'v' ? SEDI[sedeOf(d.vw.v)] : 'Gruppo Autoscala') + ' · periodo ' + M.per + (d.isB ? '' : ' · B2B ' + (M.b2b ? 'incluso' : 'escluso'));
+        const sub = (d.vw.k === 'v' ? sedeLab(d.vw.v, d.vw.s) : 'Gruppo Autoscala') + ' · periodo ' + M.per + (d.isB ? '' : ' · B2B ' + (M.b2b ? 'incluso' : 'escluso'));
         const nm = d.ms.length, iMax = d.pv.indexOf(Math.max(...d.pv)), nz = d.pv.filter(x => x > 0), iMin = d.pv.indexOf(nz.length ? Math.min(...nz) : 0);
         const tipP = [...d.tip].sort((x, y) => y.p - x.p)[0], oriP = [...d.ori].sort((x, y) => y.p - x.p);
         const convBest = d.ori.filter(o => o.c >= 3 && o !== oriP[0]).sort((x, y) => y.c / y.p - x.c / x.p).slice(0, 2);

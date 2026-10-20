@@ -10,8 +10,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.*;
@@ -57,6 +59,12 @@ public class QuotazioniRentController {
     @Autowired private ConsegneDatasetRepository repository;
     @Autowired private RolePermissionService rolePermissionService;
     @Autowired private ObjectMapper objectMapper;
+    // NUOVO: ogni modifica arriva subito a tutti (stesso sistema del Rent, canale /topic/quotazioni)
+    @Autowired(required = false) private SimpMessagingTemplate messagingTemplate;
+
+    // NUOVO: controllo di validita'. 30 giorni dopo il caricamento la quotazione va verificata:
+    // "ancora valida" -> si ricontrolla dopo 15 giorni (e cosi' via); "non piu' valida" -> eliminata.
+    private static final int PRIMO_CONTROLLO_GG = 30, RICONTROLLO_GG = 15;
 
     private String livello(HttpSession s) {
         Long id = (Long) s.getAttribute("userId");
@@ -81,7 +89,27 @@ public class QuotazioniRentController {
         d.setAggiornatoAt(LocalDateTime.now(ITALIA));
         d.setAggiornatoDa(chi == null ? "quotazioni rent" : chi);
         repository.save(d);
+        avvisaTutti(chi);
     }
+
+    private void avvisaTutti(String chi) {
+        if (messagingTemplate == null) return;
+        try {
+            Map<String, Object> ev = new HashMap<>();
+            ev.put("type", "cambiate");
+            ev.put("da", chi == null ? "" : chi);
+            ev.put("at", System.currentTimeMillis());
+            messagingTemplate.convertAndSend("/topic/quotazioni", ev);
+        } catch (Exception ignored) { /* l'avviso in tempo reale e' un di piu': il salvataggio resta valido */ }
+    }
+
+    /** data del prossimo controllo di validita' (se manca: 30 giorni dopo il caricamento) */
+    private static LocalDate prossimoControllo(Map<String, Object> q) {
+        try { if (q.get("prossimoControllo") != null) return LocalDate.parse(String.valueOf(q.get("prossimoControllo"))); } catch (Exception ignored) { /* */ }
+        try { return LocalDate.parse(String.valueOf(q.get("caricataIl")).substring(0, 10)).plusDays(PRIMO_CONTROLLO_GG); }
+        catch (Exception e) { return LocalDate.now(ITALIA).plusDays(PRIMO_CONTROLLO_GG); }
+    }
+    private static boolean daVerificare(Map<String, Object> q) { return !prossimoControllo(q).isAfter(LocalDate.now(ITALIA)); }
 
     private static String testo(Object o, int max) {
         if (o == null) return null;
@@ -111,7 +139,11 @@ public class QuotazioniRentController {
     @GetMapping("/accesso")
     public ResponseEntity<?> accesso(HttpSession s) {
         if (s.getAttribute("userId") == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
-        return ResponseEntity.ok(Map.of("livello", livello(s)));
+        Map<String, Object> out = new HashMap<>();
+        out.put("livello", livello(s));
+        // quante quotazioni aspettano il controllo di validita' (solo per chi puo' rispondere)
+        out.put("daVerificare", modifica(s) ? leggi().stream().filter(QuotazioniRentController::daVerificare).count() : 0);
+        return ResponseEntity.ok(out);
     }
 
     @GetMapping
@@ -153,11 +185,13 @@ public class QuotazioniRentController {
                     q.put("caricataIl", prima.get("caricataIl"));
                     q.put("aggiornataDa", chi);
                     q.put("aggiornataIl", quando);
+                    q.put("prossimoControllo", LocalDate.now(ITALIA).plusDays(PRIMO_CONTROLLO_GG).toString());   // offerta ricaricata: si riparte da 30 giorni
                     aggiornate++;
                 } else {
                     q.put("id", UUID.randomUUID().toString());
                     q.put("caricataDa", chi);
                     q.put("caricataIl", quando);
+                    q.put("prossimoControllo", LocalDate.now(ITALIA).plusDays(PRIMO_CONTROLLO_GG).toString());
                     nuove++;
                 }
                 perChiave.put(chiave(q), q);
@@ -203,6 +237,34 @@ public class QuotazioniRentController {
             catch (Exception e) { return ResponseEntity.status(500).body(Map.of("error", "Non eliminata: " + e.getMessage())); }
         }
         return ResponseEntity.ok(Map.of("eliminata", true));
+    }
+
+    /* ===================== CONTROLLO DI VALIDITA' ===================== */
+    // { valida: true }  -> si ricontrolla tra 15 giorni
+    // { valida: false } -> la quotazione non e' piu' valida: si elimina tutto (dati e PDF)
+    @PostMapping("/{id}/verifica")
+    public ResponseEntity<?> verifica(@PathVariable String id, @RequestBody Map<String, Object> body, HttpSession s) {
+        if (s.getAttribute("userId") == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        if (!modifica(s)) return ResponseEntity.status(403).body(Map.of("error", "Serve il permesso Completo su Quotazioni Rent"));
+        boolean valida = Boolean.TRUE.equals(body.get("valida"));
+        String chi = (String) s.getAttribute("userFullName");
+        synchronized (this) {
+            List<Map<String, Object>> lista = leggi();
+            Map<String, Object> q = lista.stream().filter(x -> id.equals(String.valueOf(x.get("id")))).findFirst().orElse(null);
+            if (q == null) return ResponseEntity.status(404).body(Map.of("error", "Quotazione non trovata (forse e' gia' stata eliminata)"));
+            if (!valida) {
+                if (q.get("pdfKey") != null) togliPdf(String.valueOf(q.get("pdfKey")));
+                lista.remove(q);
+            } else {
+                q.put("prossimoControllo", LocalDate.now(ITALIA).plusDays(RICONTROLLO_GG).toString());
+                q.put("verifiche", (int) kb(q.getOrDefault("verifiche", 0)) + 1);
+                q.put("ultimaVerificaDa", chi);
+                q.put("ultimaVerificaIl", LocalDateTime.now(ITALIA).withNano(0).toString());
+            }
+            try { scrivi(lista, chi); }
+            catch (Exception e) { return ResponseEntity.status(500).body(Map.of("error", "Non salvato: " + e.getMessage())); }
+            return ResponseEntity.ok(valida ? Map.of("valida", true, "prossimoControllo", q.get("prossimoControllo")) : Map.of("eliminata", true));
+        }
     }
 
     /* ===================== PDF NELL'ARCHIVIO ===================== */
