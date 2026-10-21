@@ -1,0 +1,227 @@
+/* =====================================================================
+   TELEFONO — correzioni per schermi piccoli. Vale SOLO sotto i 760px
+   (e qualche ritocco sotto i 480px): su computer non cambia niente.
+   Caricato per ultimo in index.html, cosi' vince sugli altri fogli.
+   ===================================================================== */
+
+/* fuori dal telefono il pulsante "Cambia ▾" del menu Commerciale non serve */
+.cm-side-m { display:none; }
+
+@media (max-width:760px) {
+
+/* ---------- BI: pagina con i capitoli ---------- */
+/* il riquadro non si rimpicciolisce piu' tutto insieme: testo a grandezza
+   normale, si rimpicciolisce solo il palco con l'animazione (bi-home.js) */
+#biPage { min-height:0; }
+#biPage .bh-page { padding:12px 12px 24px; }
+#biPage .bh-frame { aspect-ratio:auto; width:100%; }
+#biPage .bh-stagewrap { position:relative; width:100%; height:auto; transform:none; }
+#biPage .bh-card { position:relative; inset:auto; display:flex; flex-direction:column; padding:18px 14px 16px; border-radius:22px; }
+#biPage .bh-hd { position:static; order:0; padding-right:110px; }
+#biPage .bh-hd h1 { font-size:28px; }
+#biPage .bh-av { display:none; }
+#biPage .bh-back { left:auto; right:14px; top:22px; height:38px; }
+#biPage .bh-stage { position:relative; left:auto; top:auto; right:auto; bottom:auto; order:1; flex:none;
+    width:750px; height:580px; margin:14px calc(750px * (var(--k, .45) - 1)) calc(580px * (var(--k, .45) - 1)) 0;
+    transform:scale(var(--k, .45)); transform-origin:0 0; border-radius:calc(24px / var(--k, .45)); }
+#biPage .bh-rail { position:static; order:2; width:auto; margin-top:14px; display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+#biPage .bh-ch { padding:8px 12px 14px; border-radius:14px; background:rgba(255,255,255,.03); }
+#biPage .bh-ch .bh-t { font-size:17px; }
+#biPage .bh-ch .bh-d { font-size:11px; line-height:1.3; }
+#biPage .bh-ch .bh-bar { left:12px; right:12px; }
+#biPage .bh-sub { grid-column:1 / -1; margin-top:4px; }
+#biPage .bh-sub li { padding:8px 12px; font-size:14px; }
+#biPage .bh-enter { position:static; order:3; margin-top:14px; width:100%; justify-content:center; height:52px; }
+#biPage .bh-x-tog { display:none; }
+/* opzioni della sezione: pannello che sale dal basso */
+#biPage .bh-side { position:fixed; left:0; right:0; bottom:0; z-index:10030; width:auto !important; height:auto !important; max-height:82vh; order:0;
+    border-radius:22px 22px 0 0; padding:16px 14px calc(14px + env(safe-area-inset-bottom)); box-shadow:0 -24px 60px rgba(0,0,0,.75), inset 0 0 0 1px rgba(255,255,255,.06); }
+#biPage .bh-side.bh-side-in { animation:bh-sheet-in .28s ease-out; }
+@keyframes bh-sheet-in { from { transform:translateY(40px); opacity:0; } to { transform:none; opacity:1; } }
+#biPage .bh-side-x { width:40px; height:40px; }
+#biPage .bh-xo { padding:11px 12px; }
+#biPage .bh-xo-c button { padding:7px 11px; font-size:12.5px; }
+
+/* ---------- regola generale delle sezioni BI e delle altre pagine nuove ----------
+   Su telefono un riquadro non deve mai allargarsi oltre lo schermo per colpa
+   di una tabella o di un testo lungo: e' la tabella che scorre di lato al suo
+   interno. (:where = priorita' zero, le regole specifiche restano valide) */
+:where(#consegnePage, #stockPage, #commercialePage, #salonePage, #quotazioniPage, #biPage) :where(div, section, aside, article, nav, header, form, fieldset, label) { min-width:0; }
+
+/* ---------- finestre delle sezioni BI: a tutto schermo ---------- */
+.cg-ov, .cm-ov { padding:0; align-items:stretch; }
+.cg-modal, .cm-modal { width:100% !important; max-width:none; max-height:none; height:100%; height:100dvh; border-radius:0; }
+.cg-m-head { padding:14px 14px 10px; gap:8px; }
+.cg-m-head h3 { font-size:16px; }
+.cg-stat { gap:4px 12px; }
+.cg-stat .cg-n { font-size:22px; }
+.cg-m-tools { padding:10px 14px; }
+.cg-m-tools input { min-width:0; font-size:16px; }   /* 16px: il telefono non fa zoom quando si scrive */
+.cg-m-body { padding:0 14px 16px; -webkit-overflow-scrolling:touch; }
+
+/* ---------- CONSEGNE ---------- */
+/* tabella tempistiche: il mese resta fermo a sinistra mentre si scorre */
+.cg-heat th:first-child, .cg-heat td.cg-m { position:sticky; left:0; z-index:2; background:var(--cg-card); box-shadow:6px 0 8px -6px rgba(0,0,0,.45); }
+/* analisi avanzamento: i pulsanti del grafico vanno sotto il titolo */
+.cg-an-card header { flex-wrap:wrap; }
+.cg-an-hbtns { flex-wrap:wrap; flex-shrink:1; }
+.cg-an-card header > div:first-child, .st-ch-head > div:first-child { flex:1 1 100%; }
+
+/* ---------- COMMERCIALE ---------- */
+/* menu delle viste: chiuso, si vede solo la vista attuale con "Cambia ▾" */
+#commercialeRoot .cm-side { padding:6px; }
+#commercialeRoot .cm-side-m { display:flex; align-items:center; gap:8px; width:100%; border:0; background:none; color:var(--cm-ink); font:inherit; font-size:14px; font-weight:800; padding:10px; border-radius:12px; cursor:pointer; text-align:left; }
+#commercialeRoot .cm-side-m em { margin-left:auto; flex:none; font-style:normal; font-size:12px; font-weight:800; color:var(--cm-acc-ink, #4a90d9); }
+#commercialeRoot .cm-side:not(.m-open) > :not(.cm-side-m) { display:none; }
+#commercialeRoot .cm-side.m-open .cm-side-m { border-bottom:1px solid var(--cm-line); border-radius:12px 12px 0 0; margin-bottom:4px; }
+#commercialeRoot .cm-nav-i { padding:11px 10px; }
+#commercialeRoot .cm-nav-tog { width:40px; height:40px; }
+.cm-cc-h { flex-wrap:wrap; }
+.cm-cc-h > div:first-child { flex:1 1 100%; }
+.cm-cc-btns { flex:1 1 auto; flex-wrap:wrap; }
+/* tabelle: il nome (prima colonna) resta fermo mentre si scorre di lato */
+#commercialeRoot table.cm-t th:first-child { position:sticky; left:0; z-index:2; }
+#commercialeRoot table.cm-t td:first-child { position:sticky; left:0; z-index:1; background:var(--cm-card); box-shadow:6px 0 8px -6px rgba(0,0,0,.45); }
+#commercialeRoot table.cm-t tr.tot td:first-child { background:linear-gradient(var(--cm-acc-soft), var(--cm-acc-soft)), var(--cm-card); }
+
+/* ---------- APPUNTAMENTI E INGRESSI ---------- */
+/* le tabelle del report scorrono di lato dentro il riquadro */
+#salonePage table.sa-tbl { display:block; max-width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+#salonePage .sa-tab { padding-left:10px; padding-right:10px; }
+#salonePage .sa-legend { flex-wrap:wrap; gap:6px 14px; }
+
+/* ---------- STOCK ---------- */
+.st-ch-head { flex-wrap:wrap; }
+.st-sidesel select { min-width:0; width:100%; }
+
+}
+
+/* ---------- STOCK: sotto i 1000px l'elenco delle viste diventa una tendina ----------
+   (in stock-home.css una regola successiva rimetteva le due colonne anche
+   su schermo stretto: la colonna principale restava larga pochi pixel) */
+@media (max-width:1000px) {
+  .st-layout { grid-template-columns:minmax(0,1fr); }
+}
+
+/* ---------- QUOTAZIONI RENT: righe delle offerte su schermo stretto ----------
+   il numero/medaglia resta a sinistra e i valori (canone, anticipo, durata,
+   mensile reale) si mettono su due colonne accanto, senza accavallarsi */
+@media (max-width:900px) {
+  :is(#quotazioniRoot, .qr-ov) .qr-off { grid-template-columns:34px minmax(0,1fr) minmax(0,1fr); gap:8px 12px; }
+  :is(#quotazioniRoot, .qr-ov) .qr-off .qr-pos { grid-row:1 / span 4; align-self:start; padding-top:4px; }
+  :is(#quotazioniRoot, .qr-ov) .qr-off .qr-off-v { grid-column:2 / -1; }
+  :is(#quotazioniRoot, .qr-ov) .qr-off-n b, .qr-off-n em { white-space:normal; }
+  :is(#quotazioniRoot, .qr-ov) .qr-off .qr-diff { text-align:left; }
+}
+@media (max-width:760px) {
+  /* tabelle (archivio, confronto): righe basse, si scorre di lato */
+  :is(#quotazioniRoot, .qr-ov) .qr-t td { white-space:nowrap; }
+  :is(#quotazioniRoot, .qr-ov) .qr-uguale .qr-dup { white-space:normal; min-width:200px; }
+  :is(#quotazioniRoot, .qr-ov) .qr-in { min-width:0; width:100%; }
+  .qr-m-b { padding:14px; }
+  .qr-ov { padding:10px 8px; }
+  .qr-grid { grid-template-columns:1fr 1fr; }
+}
+
+/* =====================================================================
+   IN BOUND (Dashboard, Follow-up, Recall, Registro contatti, Preventivi,
+   Promo, Rent, Service, Vetture in consegna, Utenti) e home di selezione.
+   Stessa soglia di style.css (768px), che gia' mette il menu in basso.
+   ===================================================================== */
+@media (max-width:768px) {
+
+/* ---------- barra in alto: logo, area, tema e utente ci stanno sempre ---------- */
+.navbar { gap:8px; padding:0 10px; }
+.nav-logo { gap:8px !important; min-width:0; flex:1 1 auto; overflow:hidden; }
+.nav-logo img { height:26px; max-width:120px; object-fit:contain; flex:none; }
+#navBrandBadge { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+.nav-user { gap:6px; }
+.theme-switch .theme-icon { display:none; }
+.theme-switch { gap:0; }
+.switch-track { width:36px; height:20px; }
+.switch-thumb { width:14px; height:14px; }
+[data-theme="light"] .switch-thumb { transform:translateX(16px); }
+
+/* menu in basso: icona sopra e scritta sotto anche quando la voce viene
+   mostrata dai permessi (app.js le mette display:block, che annullava la colonna) */
+.nav-links .nav-link:not([style*="display: none"]):not([style*="display:none"]) { display:flex !important; }
+
+/* ---------- intestazioni e riquadri dei numeri ---------- */
+.page-header { margin-bottom:16px; gap:10px; }
+.page-header h2 { font-size:17px; letter-spacing:2px; line-height:1.25; }
+.stats-grid { grid-template-columns:repeat(2, minmax(0,1fr)) !important; gap:10px; margin-bottom:18px; }
+.stat-card { padding:14px 14px 13px; min-width:0; }
+.stat-label { font-size:10px; letter-spacing:1px; margin-bottom:6px; }
+.stat-value { font-size:26px; overflow-wrap:anywhere; }
+
+/* ---------- filtri: si dividono la riga invece di andare a capo storti ---------- */
+.filter-bar { gap:8px; }
+.filter-bar > .input-dark, .filter-bar > .input-field, .filter-bar > select, .filter-bar > input[type="date"] { flex:1 1 140px; min-width:0 !important; max-width:100%; }
+.filter-bar > button, .filter-bar > .btn-gold, .filter-bar > .btn-secondary { flex:0 1 auto; }
+
+/* sul telefono un campo con il testo sotto i 16px fa zoomare tutta la pagina
+   quando lo si tocca: tutti i campi a 16px */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select, textarea { font-size:16px !important; }
+
+/* ---------- schede (Recall, Vetture in consegna): contenuto e pulsanti uno sotto l'altro ---------- */
+.waiting-card { grid-template-columns:minmax(0,1fr); padding:14px; gap:10px; }
+.waiting-actions { justify-content:flex-start; }
+.followup-card { padding:14px; }
+
+/* ---------- Preventivi telefonici: schede su piu' righe invece che tagliate a destra ---------- */
+.preventivo-card { padding:14px 14px; }
+.preventivo-card.terminal { padding:12px 14px; }
+.preventivo-header { flex-wrap:wrap; gap:10px; padding-left:4px; }
+.preventivo-header > * { min-width:0; max-width:100%; }
+.preventivo-header > div:last-child { flex-wrap:wrap; }
+.preventivo-client { flex:1 1 100%; gap:10px; }
+.preventivo-meta { flex-wrap:wrap; }
+
+/* ---------- Service: le pratiche occupano tutta la larghezza ---------- */
+#servicePage div[onclick^="openServicePraticaModal"] { width:auto !important; flex:1 1 100% !important; box-sizing:border-box; }
+
+/* ---------- Registro contatti e Rent: la tabella diventa un elenco di schede ----------
+   (le etichette di ogni campo le aggiunge mobile.js leggendo l'intestazione) */
+.contact-table-wrapper { overflow:visible; }
+.contact-table, .contact-table > tbody, .contact-table > tbody > tr, .contact-table > tbody > tr > td { display:block; width:auto !important; }
+.contact-table > thead { display:none; }
+.contact-table > tbody > tr { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:8px 12px; margin:0 0 10px; }
+.contact-table > tbody > tr > td { border:0 !important; padding:5px 0 !important; white-space:normal !important; }
+.contact-table > tbody > tr > td[data-label] { position:relative; padding-left:92px !important; min-height:26px; }
+.contact-table > tbody > tr > td[data-label]::before { content:attr(data-label); position:absolute; left:0; top:8px; width:84px; font-size:10px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; color:var(--text-secondary); }
+.contact-table > tbody > tr > td[colspan] { display:block; text-align:center; }
+.contact-table > tbody > tr > td[colspan]::before { content:none; }
+.contact-table > tbody > tr > td:empty { display:none; }
+
+/* ---------- grafici del Registro contatti ---------- */
+.contact-charts-row > .chart-card { padding:16px; gap:14px; }
+.contact-chart-service-inner { flex-direction:column; }
+.charts-grid { grid-template-columns:minmax(0,1fr); }
+.chart-card { padding:16px; min-width:0; }
+.chart-grid-allcharts { grid-template-columns:minmax(0,1fr) !important; }
+
+/* ---------- Utenti e permessi: le 4 schede vanno su due righe ---------- */
+#adminPage div:has(> #adminTabUtentiBtn) { flex-wrap:wrap; gap:8px !important; }
+#adminPage div:has(> #adminTabUtentiBtn) > .btn-sede { flex:1 1 calc(50% - 8px); padding:10px 8px; }
+.permission-matrix-table th, .permission-matrix-table td { padding:8px 8px; }
+
+/* ---------- finestre: margini interni piu' stretti ---------- */
+.modal-header { padding:14px 16px; }
+.modal-body { padding:12px 16px 18px; }
+.form-card { padding:16px; }
+.form-actions { flex-wrap:wrap; }
+
+/* ---------- avvisi in basso (preventivi in sospeso ecc.): sopra il menu ---------- */
+#inbAvvisi { left:10px !important; right:10px !important; bottom:calc(84px + env(safe-area-inset-bottom, 0px)) !important; max-width:none !important; }
+/* con una finestra aperta l'avviso si nasconde (prima le restava sopra) */
+body:has(.modal-overlay[style*="display: flex"], .modal-overlay[style*="display:flex"], .modal-overlay[style*="display: block"], #pvsModal[style*="flex"], .cg-ov.open, .cm-ov, .qr-ov) #inbAvvisi { display:none !important; }
+.inb-avviso { padding:9px 10px; gap:8px; }
+.inb-avviso em { display:none !important; }
+.inb-avviso b { font-size:12.5px; }
+
+/* ---------- home di selezione: le due aree una sotto l'altra ---------- */
+.mh-home-wrap { padding:20px 12px 28px; }
+.mh-head { margin-bottom:16px; }
+.mh-bays { grid-template-columns:minmax(0,1fr); gap:14px; }
+
+}

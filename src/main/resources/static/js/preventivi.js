@@ -799,9 +799,11 @@ async function confirmPreventiviLeadImport() {
         pendingOperatori = {
             righe: data.righe || [],
             operatoriAmmessi: data.operatoriAmmessi || [],
-            operatoriAmmessiMancanti: data.operatoriAmmessiMancanti || []
+            operatoriAmmessiMancanti: data.operatoriAmmessiMancanti || [],
+            nonPiuNelFile: data.nonPiuNelFile || [],
+            periodo: data.periodo || {}
         };
-        if (pendingOperatori.righe.length === 0) {
+        if (pendingOperatori.righe.length === 0 && pendingOperatori.nonPiuNelFile.length === 0) {
             await eseguiImportPreventivi(file, null);
         } else {
             showOperatoriModal();
@@ -819,13 +821,15 @@ function annullaImportPreventivi() {
     pendingImportFile = null;
 }
 
-async function eseguiImportPreventivi(file, assegnazioni) {
+async function eseguiImportPreventivi(file, assegnazioni, rimuovi) {
     const input = document.getElementById('pvImportLeadInput');
     const formData = new FormData();
     formData.append('file', file);
     if (assegnazioni && Object.keys(assegnazioni).length > 0) {
         formData.append('assegnazioni', JSON.stringify(assegnazioni));
     }
+    // NUOVO: preventivi da togliere perche' non piu' nel file
+    if (rimuovi && rimuovi.length > 0) formData.append('rimuovi', JSON.stringify(rimuovi));
 
     try {
         const res = await fetch('/api/preventivi-telefonici/import-lead', { method: 'POST', body: formData });
@@ -850,8 +854,10 @@ async function eseguiImportPreventivi(file, assegnazioni) {
                 <div><div style="font-size:22px;font-weight:800;color:#ff3d3d">${(data.errori || []).length}</div><div style="font-size:12px;color:var(--text-secondary)">Errori</div></div>
                 ${data.operatoriCorretti > 0 ? `<div><div style="font-size:22px;font-weight:800;color:#4a90d9">${data.operatoriCorretti}</div><div style="font-size:12px;color:var(--text-secondary)">Operatori corretti</div></div>` : ''}
                 ${data.saltati > 0 ? `<div><div style="font-size:22px;font-weight:800;color:var(--text-secondary)">${data.saltati}</div><div style="font-size:12px;color:var(--text-secondary)">Non importati</div></div>` : ''}
+                ${data.rimossi > 0 ? `<div><div style="font-size:22px;font-weight:800;color:#ff3d3d">${data.rimossi}</div><div style="font-size:12px;color:var(--text-secondary)">Rimossi</div></div>` : ''}
             </div>
             ${(data.errori || []).length > 0 ? `<div style="border-top:1px solid var(--border);padding-top:10px">${data.errori.map(e => `<div style="font-size:12px;color:var(--text-secondary);padding:3px 0">⚠️ ${e}</div>`).join('')}</div>` : ''}
+            ${(data.erroriRimozione || []).length > 0 ? `<div style="border-top:1px solid var(--border);padding-top:10px">${data.erroriRimozione.map(e => `<div style="font-size:12px;color:var(--text-secondary);padding:3px 0">🗑️ ${pvEsc(e)}</div>`).join('')}</div>` : ''}
             ${(data.conflittiConsulente || []).length > 0 ? `<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px">
                 <div style="font-size:13px;color:#ff9800;font-weight:700;margin-bottom:8px">⚠️ ${data.conflittiConsulente.length} preventivi hanno un consulente diverso da quello nel file (modificato a mano in precedenza)</div>
                 <button onclick="showConsulenteConflictModal()" class="btn-small btn-secondary">Rivedi conflitti</button>
@@ -1086,6 +1092,19 @@ function showOperatoriModal() {
     const righe = pendingOperatori.righe || [];
     const ammessi = pendingOperatori.operatoriAmmessi || [];
     const mancanti = pendingOperatori.operatoriAmmessiMancanti || [];
+    const spariti = pendingOperatori.nonPiuNelFile || [];
+
+    // NUOVO: la finestra serve anche per i preventivi non piu' nel file,
+    // quindi titolo e spiegazione cambiano in base a cosa c'e' da vedere
+    const titolo = modal.querySelector('.modal-header h3');
+    const intro = list.previousElementSibling;
+    if (intro && intro.dataset.orig === undefined) intro.dataset.orig = intro.innerHTML;
+    if (titolo) titolo.textContent = righe.length > 0 && spariti.length > 0 ? '🔎 Controllo prima dell\'import'
+        : righe.length > 0 ? '👤 Operatori da correggere' : '🗑️ Preventivi non più nel file';
+    if (intro) {
+        intro.innerHTML = righe.length > 0 ? intro.dataset.orig : '';
+        intro.style.display = righe.length > 0 ? '' : 'none';
+    }
 
     const opzioni = ammessi.map(u => `<option value="${u.id}">${pvEsc(u.fullName)}</option>`).join('');
     const gruppi = {};
@@ -1153,8 +1172,35 @@ function showOperatoriModal() {
             }).join('')}
         </details>`;
     }
+    if (spariti.length > 0) {
+        const per = pendingOperatori.periodo || {};
+        const gIt = s => s ? String(s).slice(0, 10).split('-').reverse().join('/') : '';
+        html += `<div class="pv-spariti" style="border:1px solid rgba(255,61,61,0.45);border-radius:10px;padding:10px 12px;margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+                <div style="font-weight:800;font-size:13px;color:var(--text-primary)">🗑️ Non più nel file <span style="font-weight:600;color:var(--text-secondary)">(${spariti.length})</span></div>
+                <div style="font-size:12px;display:flex;gap:10px">
+                    <a href="#" onclick="pvSpariti(true);return false" style="color:#4a90d9">Seleziona tutti</a>
+                    <a href="#" onclick="pvSpariti(false);return false" style="color:#4a90d9">Nessuno</a>
+                </div>
+            </div>
+            <div style="font-size:12px;color:var(--text-secondary);margin-top:6px">Il file copre il periodo <b>dal ${gIt(per.dal)} al ${gIt(per.al)}</b>. Questi preventivi, caricati da import precedenti e con data in quel periodo, nel file non ci sono più. Quelli spuntati vengono <b>eliminati</b> (con il loro storico). Togli la spunta a quelli da tenere. I preventivi inseriti a mano e quelli fuori dal periodo non vengono toccati.</div>
+            ${spariti.map(p => `<label style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--border);margin-top:8px;cursor:pointer">
+                <input type="checkbox" class="pv-sparito" value="${p.id}" checked style="margin-top:3px">
+                <div>
+                    <div style="font-weight:700;font-size:13px;color:var(--text-primary)">${pvEsc(p.clienteNome)} ${pvEsc(p.clienteCognome)}
+                        <span style="font-size:10px;font-weight:800;color:var(--text-secondary);background:rgba(127,127,127,0.15);padding:2px 7px;border-radius:10px">${pvEsc(PREVENTIVO_STATUS_LABELS[p.status] || p.status || '')}</span>
+                        <span style="font-weight:400;color:var(--text-secondary);font-size:11px">${p.sourceLeadId ? '(Lead ' + pvEsc(p.sourceLeadId) + ')' : ''}</span></div>
+                    <div style="font-size:12px;color:var(--text-secondary)">🚘 ${pvEsc(p.marca || '—')} — ${pvEsc(p.modello || '—')} · 📅 ${gIt(p.data)}${p.operatore ? ' · 👤 ' + pvEsc(p.operatore) : ''}${p.consulente ? ' · 🤝 ' + pvEsc(p.consulente) : ''}</div>
+                </div>
+            </label>`).join('')}
+        </div>`;
+    }
     list.innerHTML = html;
     modal.style.display = 'flex';
+}
+
+function pvSpariti(si) {
+    document.querySelectorAll('#operatoriFixList .pv-sparito').forEach(c => { c.checked = si; });
 }
 
 function pvOperatoriGruppo(g, valore) {
@@ -1183,9 +1229,11 @@ async function applyOperatoriDecisions() {
         assegnazioni[r.chiave] = Number(v);
     });
     if (senzaScelta > 0 && !confirm(`${senzaScelta} righe sono senza scelta: verranno importate con l'operatore del file (se è un utente del CRM, altrimenti finiscono negli errori) e le ritroverai al prossimo import. Continuare?`)) return;
+    const rimuovi = [...document.querySelectorAll('#operatoriFixList .pv-sparito:checked')].map(c => Number(c.value));
+    if (rimuovi.length > 0 && !confirm(`Verranno eliminati ${rimuovi.length} preventivi non più presenti nel file. Continuare?`)) return;
 
     document.getElementById('operatoriFixModal').style.display = 'none';
-    await eseguiImportPreventivi(file, assegnazioni);
+    await eseguiImportPreventivi(file, assegnazioni, rimuovi);
 }
 
 // Dal badge "Modificato in Rent": passa alla sezione Rent, ricarica le

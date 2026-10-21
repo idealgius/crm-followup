@@ -789,7 +789,9 @@
             ctx.save(); ctx.font = '600 11px Inter, system-ui, sans-serif'; ctx.fillStyle = (rootEl && getComputedStyle(rootEl).getPropertyValue('--cg-ink').trim()) || o.color; ctx.textBaseline = 'middle';   // colore letto al momento: giusto anche dopo il cambio tema
             meta.data.forEach((el, i) => {
                 const v = ds.data[i]; if (!v) return;
-                const t = `${fmt(v)} · ${pctS(v, o.tot)}`;
+                let t = `${fmt(v)} · ${pctS(v, o.tot)}`;
+                // NUOVO: barre strette (telefono): se "numero · %" non ci sta, solo il numero
+                if (chart.options.indexAxis !== 'y' && ctx.measureText(t).width > chart.chartArea.width / meta.data.length - 2) t = fmt(v);
                 if (chart.options.indexAxis === 'y') { ctx.textAlign = 'left'; ctx.fillText(t, el.x + 6, el.y); }
                 else { ctx.textAlign = 'center'; ctx.fillText(t, el.x, el.y - 9); }
             });

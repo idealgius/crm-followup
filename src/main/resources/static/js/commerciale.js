@@ -459,6 +459,12 @@
             if (act.dataset.act === 'fissa') { try { salvaFissa(JSON.parse(act.dataset.v)); } catch (x) { /* */ } }
             return;
         }
+        const mt = e.target.closest('[data-mtog]');
+        if (mt) {   // telefono: apre/chiude il menu delle viste
+            const sd = rootEl.querySelector('#cmSide'), o = sd.classList.toggle('m-open');
+            mt.setAttribute('aria-expanded', o); mt.querySelector('em').textContent = o ? 'Chiudi ▴' : 'Cambia ▾';
+            return;
+        }
         const tog = e.target.closest('[data-tog]');
         if (tog) {
             const g = tog.closest('.cm-nav-grp'); g.classList.toggle('open');
@@ -487,6 +493,7 @@
         if (th) sortTable(th);
     }
     function go(vw) {
+        const sd = rootEl.querySelector('#cmSide'); if (sd) sd.classList.remove('m-open');   // telefono: il menu si richiude
         view = vw; render();
         const m = rootEl.querySelector('#cmMain');
         if (m && (m.getBoundingClientRect().top < 60 || innerWidth <= 760)) m.scrollIntoView({ behavior: 'smooth' });
@@ -511,6 +518,9 @@
             '<div class="cm-nav-t">Report</div>' + item({ k: 'marche' }, '🏷️', 'Performance marchi', new Set(contr().filter(inPer).map(c => c.marca)).size) +
             item({ k: 'pt' }, '📞', 'Preventivi telefonici', PT.filter(inPer).length) + item({ k: 'ann' }, '↩️', 'Contratti annullati', TR.filter(c => c.ann && annBase(c)).length + AF.filter(annBase).length) +
             item({ k: 'list' }, '📋', 'Tutte le trattative', trIn({ k: 'any' }).length);
+        // NUOVO (telefono): il menu e' chiuso, si vede solo la vista attuale con "Cambia ▾"
+        const sd = rootEl.querySelector('#cmSide'), on = sd.querySelector('.cm-nav-i.on');
+        sd.insertAdjacentHTML('afterbegin', `<button type="button" class="cm-side-m" data-mtog aria-expanded="${sd.classList.contains('m-open')}"><span class="cm-nav-ic">${on ? on.querySelector('.cm-nav-ic').textContent || '👤' : '📋'}</span><span class="cm-nav-l">${on ? esc(on.querySelector('.cm-nav-l').textContent) : 'Scegli cosa vedere'}</span><em>${sd.classList.contains('m-open') ? 'Chiudi ▴' : 'Cambia ▾'}</em></button>`);
     }
 
 

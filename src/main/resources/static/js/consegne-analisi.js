@@ -512,7 +512,9 @@
             ctx.save(); ctx.font = '600 11px Inter, system-ui, sans-serif'; ctx.fillStyle = document.documentElement.getAttribute('data-theme') === 'dark' ? '#e8edf3' : '#1f2d3d'; ctx.textBaseline = 'middle';   // colore del tema attuale
             meta.data.forEach((el, i) => {
                 const v = ds.data[i]; if (!v) return;
-                const t = `${o.money ? euro(v) : A().fmt(v)} · ${pctS(v, o.tot)}`;
+                let t = `${o.money ? euro(v) : A().fmt(v)} · ${pctS(v, o.tot)}`;
+                // NUOVO: barre strette (telefono): se "numero · %" non ci sta, solo il numero
+                if (!o.horiz && ctx.measureText(t).width > chart.chartArea.width / meta.data.length - 2) t = o.money ? euro(v) : A().fmt(v);
                 if (o.horiz) { ctx.textAlign = 'left'; ctx.fillText(t, el.x + 6, el.y); }
                 else { ctx.textAlign = 'center'; ctx.fillText(t, el.x, el.y - 10); }
             });

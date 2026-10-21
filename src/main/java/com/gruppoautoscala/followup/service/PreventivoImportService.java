@@ -22,6 +22,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -284,9 +285,18 @@ public class PreventivoImportService {
 
         List<Map<String, Object>> righe = new ArrayList<>();
         Set<String> nelFile = new HashSet<>();
+        LocalDate dal = null, al = null;
         for (CSVRecord record : leggiRighe(file)) {
             String lead = get(record, "ID");
             if (isBlank(lead) || !nelFile.add(lead)) continue;
+
+            // NUOVO: periodo coperto dal file (stessa data usata all'import)
+            LocalDateTime dr = dataRiga(record);
+            if (dr != null) {
+                LocalDate g = dr.toLocalDate();
+                if (dal == null || g.isBefore(dal)) dal = g;
+                if (al == null || g.isAfter(al)) al = g;
+            }
 
             // Stessa logica dell'import: Caller, altrimenti "Inserito da"
             String callerName = extractNameBeforeParenthesis(get(record, "Caller"));
@@ -383,7 +393,77 @@ public class PreventivoImportService {
         out.put("righe", righe);
         out.put("operatoriAmmessi", scelte);
         out.put("operatoriAmmessiMancanti", mancanti);
+
+        // NUOVO: preventivi importati che cadono nel periodo del file ma nel
+        // file non ci sono piu'. Si propongono per la rimozione (decide l'utente).
+        Map<String, Object> periodo = new LinkedHashMap<>();
+        periodo.put("dal", dal == null ? null : dal.toString());
+        periodo.put("al", al == null ? null : al.toString());
+        out.put("periodo", periodo);
+        List<Map<String, Object>> spariti = new ArrayList<>();
+        for (PreventivoTelefonico p : nonPiuNelFile(tutti, nelFile, dal, al)) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("id", p.getId());
+            m.put("sourceLeadId", p.getSourceLeadId());
+            m.put("clienteNome", p.getClienteNome());
+            m.put("clienteCognome", p.getClienteCognome());
+            m.put("marca", p.getMarca());
+            m.put("modello", p.getModello());
+            m.put("tipo", p.getTipo());
+            m.put("status", p.getStatus());
+            m.put("consulente", p.getConsultantName());
+            m.put("operatore", p.getUser() != null ? p.getUser().getFullName() : null);
+            m.put("data", p.getCreatedAt() == null ? null : p.getCreatedAt().toString());
+            spariti.add(m);
+        }
+        out.put("nonPiuNelFile", spariti);
         return out;
+    }
+
+    // NUOVO: id dei preventivi che si possono togliere con questo file
+    // (ricalcolato al momento dell'import: si toglie solo cio' che e' davvero
+    // nel periodo del file e manca dal file, qualunque cosa arrivi dal browser).
+    public Set<Long> idNonPiuNelFile(MultipartFile file) throws IOException {
+        Set<String> nelFile = new HashSet<>();
+        LocalDate dal = null, al = null;
+        for (CSVRecord record : leggiRighe(file)) {
+            String lead = get(record, "ID");
+            if (isBlank(lead) || !nelFile.add(lead)) continue;
+            LocalDateTime dr = dataRiga(record);
+            if (dr == null) continue;
+            LocalDate g = dr.toLocalDate();
+            if (dal == null || g.isBefore(dal)) dal = g;
+            if (al == null || g.isAfter(al)) al = g;
+        }
+        Set<Long> ids = new HashSet<>();
+        for (PreventivoTelefonico p : nonPiuNelFile(preventivoRepository.findAllWithUser(), nelFile, dal, al)) ids.add(p.getId());
+        return ids;
+    }
+
+    private List<PreventivoTelefonico> nonPiuNelFile(List<PreventivoTelefonico> tutti, Set<String> nelFile,
+                                                     LocalDate dal, LocalDate al) {
+        List<PreventivoTelefonico> out = new ArrayList<>();
+        if (dal == null || al == null || nelFile.isEmpty()) return out;
+        for (PreventivoTelefonico p : tutti) {
+            // solo quelli arrivati da un import (i preventivi inseriti a mano restano)
+            if (p.getSourceLeadId() == null || nelFile.contains(p.getSourceLeadId())) continue;
+            if (p.getCreatedAt() == null) continue;
+            LocalDate g = p.getCreatedAt().toLocalDate();
+            if (g.isBefore(dal) || g.isAfter(al)) continue;
+            out.add(p);
+        }
+        out.sort(Comparator.comparing(PreventivoTelefonico::getCreatedAt));
+        return out;
+    }
+
+    // Data della riga come all'import: "Data ricontatto", altrimenti "Data inserimento".
+    private LocalDateTime dataRiga(CSVRecord record) {
+        for (String col : new String[]{"Data ricontatto", "Data inserimento"}) {
+            String v = get(record, col);
+            if (isBlank(v)) continue;
+            try { return LocalDateTime.parse(v, DATA_RICONTATTO_FORMAT); } catch (Exception ignored) {}
+        }
+        return null;
     }
 
     // Preventivi gia' caricati ma non presenti nel file: operatore scelto a mano.

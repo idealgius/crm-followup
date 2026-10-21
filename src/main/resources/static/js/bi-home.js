@@ -338,7 +338,13 @@
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const sw = $('bh-sw');
   function scale() {
-    sw.style.setProperty('--k', ($('bh-frame').clientWidth / 1100).toFixed(4));
+    // NUOVO (telefono): il riquadro non si rimpicciolisce tutto insieme (diventerebbe illeggibile).
+    // Il testo resta a grandezza normale e si rimpicciolisce solo il palco con l'animazione (750x580).
+    if (matchMedia('(max-width:760px)').matches) {
+      const card = sw.querySelector('.bh-card'), cs = getComputedStyle(card);
+      const w = card.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      sw.style.setProperty('--k', Math.max(.2, Math.min(1, w / 750)).toFixed(4));
+    } else sw.style.setProperty('--k', ($('bh-frame').clientWidth / 1100).toFixed(4));
     // il pannello delle opzioni e' alto quanto il riquadro (su schermo stretto va sotto e ha la sua altezza)
     const sd = $('bh-side'); if (sd) sd.style.height = matchMedia('(max-width:900px)').matches ? '' : $('bh-frame').clientHeight + 'px';
   }
@@ -455,7 +461,16 @@
   let prossimo = 0;
   const prova = (url) => new Promise(ok => { const im = new Image(); im.onload = () => ok(url); im.onerror = () => ok(null); im.src = url; });
   const caricaLogo = async sl => (await prova('/img/marchi/' + sl + '.png')) || (sl.includes('-') ? await prova('/img/marchi/' + sl.replace(/-/g, '') + '.png') : null);
-  Promise.all(CANDIDATI.map(caricaLogo)).then(urls => {
+  // elenco vero dei file della cartella (dal server); se non arriva, si provano i nomi dei marchi
+  const daServer = fetch('/api/marchi/loghi', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null).catch(() => null)
+    .then(d => {
+      const nomi = d && Array.isArray(d.loghi) ? d.loghi : [];
+      if (!nomi.length) return null;
+      const base = n => n.replace(/\.[a-z]+$/i, '').toLowerCase();
+      const ord = n => { const i = PRIMI.findIndex(p => p === base(n) || p.replace(/-/g, '') === base(n).replace(/-/g, '')); return i < 0 ? 999 : i; };
+      return nomi.slice().sort((x, y) => ord(x) - ord(y) || x.localeCompare(y)).map(n => '/img/marchi/' + encodeURIComponent(n));
+    });
+  daServer.then(lista => lista || Promise.all(CANDIDATI.map(caricaLogo))).then(urls => {
     urls.forEach(u => { if (u) loghi.push(u); });
     if (!loghi.length) return;
     POSTI.forEach((p, i) => { p.img.src = loghi[i % loghi.length]; p.el.style.visibility = ''; });

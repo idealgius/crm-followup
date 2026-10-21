@@ -93,6 +93,7 @@ public class PreventivoTelefonicoController {
     @PostMapping("/import-lead")
     public ResponseEntity<?> importLead(@RequestParam("file") MultipartFile file,
                                         @RequestParam(value = "assegnazioni", required = false) String assegnazioniJson,
+                                        @RequestParam(value = "rimuovi", required = false) String rimuoviJson,
                                         HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
@@ -131,7 +132,22 @@ public class PreventivoTelefonicoController {
             }
         }
 
+        // NUOVO: preventivi da togliere perche' non piu' nel file (scelti
+        // dall'utente nella finestra di controllo). Si tolgono solo quelli che
+        // il server conferma essere nel periodo del file e assenti dal file.
+        Set<Long> daRimuovere = new LinkedHashSet<>();
+        if (rimuoviJson != null && !rimuoviJson.isBlank()) {
+            try {
+                for (Object o : objectMapper.readValue(rimuoviJson, new TypeReference<List<Object>>() {})) {
+                    try { daRimuovere.add(Long.valueOf(String.valueOf(o))); } catch (NumberFormatException ignored) {}
+                }
+            } catch (Exception e) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Elenco da rimuovere non valido"));
+            }
+        }
+
         try {
+            if (!daRimuovere.isEmpty()) daRimuovere.retainAll(preventivoImportService.idNonPiuNelFile(file));
             PreventivoImportService.ImportResult result = preventivoImportService.importLeadCsv(file, userOpt.get(), perLead, salta);
             int correttiPerId = preventivoImportService.assegnaOperatorePerId(perId, userOpt.get());
             Map<String, Object> response = new LinkedHashMap<>();
@@ -142,6 +158,20 @@ public class PreventivoTelefonicoController {
             response.put("conflittiConsulente", result.conflittiConsulente);
             response.put("saltati", result.saltati);
             response.put("operatoriCorretti", result.operatoriCorretti + correttiPerId);
+            int rimossi = 0;
+            List<String> erroriRimozione = new ArrayList<>();
+            for (Long id : daRimuovere) {
+                try {
+                    Optional<PreventivoTelefonico> pOpt = preventivoService.getById(id);
+                    if (pOpt.isEmpty()) continue;
+                    preventivoService.delete(pOpt.get());
+                    rimossi++;
+                } catch (Exception e) {
+                    erroriRimozione.add("Preventivo " + id + ": " + e.getMessage());
+                }
+            }
+            response.put("rimossi", rimossi);
+            response.put("erroriRimozione", erroriRimozione);
             return ResponseEntity.ok(response);
         } catch (IOException e) {
             return ResponseEntity.badRequest().body(Map.of("error", "Errore nella lettura del file: " + e.getMessage()));
