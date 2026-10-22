@@ -801,7 +801,8 @@ async function confirmPreventiviLeadImport() {
             operatoriAmmessi: data.operatoriAmmessi || [],
             operatoriAmmessiMancanti: data.operatoriAmmessiMancanti || [],
             nonPiuNelFile: data.nonPiuNelFile || [],
-            periodo: data.periodo || {}
+            periodo: data.periodo || {},
+            conteggi: data.conteggi || null
         };
         if (pendingOperatori.righe.length === 0 && pendingOperatori.nonPiuNelFile.length === 0) {
             await eseguiImportPreventivi(file, null);
@@ -819,6 +820,24 @@ function annullaImportPreventivi() {
     const input = document.getElementById('pvImportLeadInput');
     if (input) input.value = '';
     pendingImportFile = null;
+}
+
+// NUOVO: riepilogo del confronto file / CRM (in cima alla finestra di controllo e nel risultato)
+function pvRiepilogoConfronto(c, per, rimossi) {
+    if (!c) return '';
+    const gIt = s => s ? String(s).slice(0, 10).split('-').reverse().join('/') : '';
+    const box = (n, l, col) => `<div style="flex:1 1 90px;min-width:0;padding:8px 10px;border-radius:10px;background:rgba(140,150,170,.1)"><div style="font-size:18px;font-weight:800;color:${col || 'var(--text-primary)'}">${n}</div><div style="font-size:11px;color:var(--text-secondary);line-height:1.3">${l}</div></div>`;
+    const tenuti = rimossi == null ? null : Math.max(0, (c.nonPiuNelFile || 0) - rimossi);
+    return `<div style="border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin-bottom:14px">
+        <div style="font-size:12px;font-weight:800;color:var(--text-secondary);margin-bottom:8px">📊 CONFRONTO FILE / CRM${per && per.dal ? ` · periodo dal ${gIt(per.dal)} al ${gIt(per.al)}` : ''}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            ${box(c.nelFile, 'preventivi nel file')}
+            ${box(c.giaNelCrm, 'già nel CRM')}
+            ${box(c.nuovi, 'nuovi', '#00c853')}
+            ${box(c.nelPeriodoCrm, 'nel CRM per questo periodo')}
+            ${box(c.nonPiuNelFile, 'nel CRM ma non più nel file', c.nonPiuNelFile ? '#ff3d3d' : '')}
+            ${tenuti == null || !c.nonPiuNelFile ? '' : box(`${rimossi} / ${tenuti}`, 'rimossi / tenuti')}
+        </div></div>`;
 }
 
 async function eseguiImportPreventivi(file, assegnazioni, rimuovi) {
@@ -846,7 +865,7 @@ async function eseguiImportPreventivi(file, assegnazioni, rimuovi) {
         const titleEl = document.getElementById('preventivoDrilldownTitle');
         const list = document.getElementById('preventivoDrilldownList');
         titleEl.textContent = 'Risultato Import Lead';
-        list.innerHTML = `
+        list.innerHTML = pvRiepilogoConfronto(pendingOperatori.conteggi, pendingOperatori.periodo, data.rimossi || 0) + `
             <div style="display:flex;gap:20px;margin-bottom:16px">
                 <div><div style="font-size:22px;font-weight:800;color:#00c853">${data.creati || 0}</div><div style="font-size:12px;color:var(--text-secondary)">Creati</div></div>
                 <div><div style="font-size:22px;font-weight:800;color:#ff9800">${data.aggiornati || 0}</div><div style="font-size:12px;color:var(--text-secondary)">Aggiornati</div></div>
@@ -1112,7 +1131,7 @@ function showOperatoriModal() {
     const giaScelti = [];
     righe.forEach((r, i) => { if (r.giaScelto) { giaScelti.push(i); return; } (gruppi[r.operatore] = gruppi[r.operatore] || []).push(i); });
 
-    let html = '';
+    let html = pvRiepilogoConfronto(pendingOperatori.conteggi, pendingOperatori.periodo, null);
     if (mancanti.length > 0) {
         html += `<div style="font-size:12px;color:#ff3d3d;margin-bottom:12px">⚠️ Non trovo nel CRM un utente per: <b>${mancanti.map(pvEsc).join(', ')}</b>. Va creato (o corretto il nome) in Utenti per poterlo scegliere.</div>`;
     }

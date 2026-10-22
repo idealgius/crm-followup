@@ -417,6 +417,25 @@ public class PreventivoImportService {
             spariti.add(m);
         }
         out.put("nonPiuNelFile", spariti);
+
+        // NUOVO: conteggi del confronto file / CRM, mostrati a ogni import
+        int giaNelCrm = 0;
+        for (String lead : nelFile) if (giaCaricati.containsKey(lead)) giaNelCrm++;
+        int nelPeriodoCrm = 0;
+        if (dal != null && al != null) {
+            for (PreventivoTelefonico p : tutti) {
+                if (p.getSourceLeadId() == null || p.getCreatedAt() == null) continue;
+                LocalDate g = p.getCreatedAt().toLocalDate();
+                if (!g.isBefore(dal) && !g.isAfter(al)) nelPeriodoCrm++;
+            }
+        }
+        Map<String, Object> conteggi = new LinkedHashMap<>();
+        conteggi.put("nelFile", nelFile.size());
+        conteggi.put("giaNelCrm", giaNelCrm);
+        conteggi.put("nuovi", nelFile.size() - giaNelCrm);
+        conteggi.put("nelPeriodoCrm", nelPeriodoCrm);
+        conteggi.put("nonPiuNelFile", spariti.size());
+        out.put("conteggi", conteggi);
         return out;
     }
 
