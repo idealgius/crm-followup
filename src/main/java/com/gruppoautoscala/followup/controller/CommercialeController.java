@@ -50,6 +50,8 @@ public class CommercialeController {
 
     private static final String CHIAVE_STORICO = "TRATTATIVE_STORICO";
     private static final String CHIAVE_TRATTATIVE = "COMMERCIALE_TRATTATIVE";
+    // NUOVO: dal file dei lead si tengono solo [ID trattativa generata, data del lead] (tempi medi)
+    private static final String CHIAVE_LEAD = "COMMERCIALE_LEAD";
     private static final int MAX_STORICO = 60;
     private static final ZoneId ITALY = ZoneId.of("Europe/Rome");
 
@@ -106,8 +108,59 @@ public class CommercialeController {
         } else out.put("trattative", null);
         out.put("storico", leggiStorico());
         out.put("puoImportare", puoImportare(session));
+        // NUOVO: lead (solo per i tempi lead -> trattativa -> contratto)
+        Optional<ConsegneDataset> l = repository.findById(CHIAVE_LEAD);
+        if (l.isPresent()) {
+            Map<String, Object> m = new LinkedHashMap<>();
+            try {
+                Map<String, Object> c = objectMapper.readValue(l.get().getContenuto(), new TypeReference<Map<String, Object>>() {});
+                m.putAll(c);
+            } catch (Exception e) { m.put("rows", List.of()); }
+            m.put("aggiornatoAt", l.get().getAggiornatoAt() != null ? l.get().getAggiornatoAt().toString() : null);
+            m.put("aggiornatoDa", l.get().getAggiornatoDa());
+            out.put("lead", m);
+        } else out.put("lead", null);
         return ResponseEntity.ok(out);
     }
+
+    // NUOVO: import del file dei lead (la pagina manda gia' solo le due colonne che servono)
+    @PostMapping("/lead")
+    public synchronized ResponseEntity<?> importaLead(@RequestBody Map<String, Object> body, HttpSession session) {
+        ResponseEntity<?> no = controlla(session);
+        if (no != null) return no;
+        if (!puoImportare(session)) return ResponseEntity.status(403).body(Map.of("error", "Per importare i lead serve il permesso Completo sul Commerciale"));
+        Object rows = body.get("rows");
+        if (!(rows instanceof List<?> lista) || lista.isEmpty())
+            return ResponseEntity.badRequest().body(Map.of("error", "Il file non contiene lead con una trattativa"));
+        List<List<String>> pulite = new ArrayList<>();
+        for (Object o : lista) {
+            if (!(o instanceof List<?> r) || r.size() < 2) continue;
+            String id = txt(r.get(0)), data = txt(r.get(1));
+            if (id.isBlank() || !data.matches("\\d{4}-\\d{2}-\\d{2}")) continue;
+            pulite.add(List.of(id.trim(), data));
+        }
+        if (pulite.isEmpty()) return ResponseEntity.badRequest().body(Map.of("error", "Il file non contiene lead con una trattativa"));
+        try {
+            Map<String, Object> c = new LinkedHashMap<>();
+            c.put("rows", pulite);
+            c.put("file", body.get("file"));
+            c.put("righeFile", body.get("righeFile"));
+            c.put("conTrattativa", pulite.size());
+            c.put("dal", body.get("dal"));
+            c.put("al", body.get("al"));
+            ConsegneDataset d = repository.findById(CHIAVE_LEAD).orElseGet(() -> { ConsegneDataset n = new ConsegneDataset(); n.setTipo(CHIAVE_LEAD); return n; });
+            d.setContenuto(objectMapper.writeValueAsString(c));
+            d.setRighe(pulite.size());
+            d.setAggiornatoAt(LocalDateTime.now(ITALY));
+            d.setAggiornatoDa(nome(session));
+            repository.save(d);
+            return data(session);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Salvataggio lead non riuscito: " + e.getMessage()));
+        }
+    }
+
+    private static String txt(Object o) { return o == null ? "" : o.toString(); }
 
     @PostMapping("/trattative")
     public synchronized ResponseEntity<?> importa(@RequestBody Map<String, Object> body, HttpSession session) {

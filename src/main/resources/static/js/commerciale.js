@@ -94,6 +94,8 @@
     let rootEl = null, loaded = false, loading = false, info = null, msgErr = '', msgOk = '';
     let TR = [], AF = [], PT = [], vend = [], anni = [];
     let TRall = [], AFall = [], PTall = [];      // tutto, prima della scelta fissata
+    // NUOVO: data del lead per ogni trattativa generata da un lead (file dei lead del gestionale)
+    let LEAD = new Map();
 
     /* ---------- 📌 scelta fissata: origine / tipo / marca scelti in un elenco valgono per
        tutto il Commerciale (KPI, grafici, classifiche, report) finche' non si preme
@@ -221,6 +223,7 @@
             const cli = `${t.nome || ''} ${t.cognome || ''}`.replace(/\s+/g, ' ').trim() || String(t.rag || '').trim();
             const r = {
                 i: TR.length, dataT: dtT, yT: dtT.getFullYear(), mT: dtT.getMonth() + 1, rec: !!t.rec, vend: v, sede: sedeRec(v, sedeDaCsv(t.sede)),
+                idT: String(t.id || '').trim(), hasDT: !!pd(t.dataTratt),
                 noleggio: /noleggio/i.test(t.sede || ''), tipo: tipoOf(t.tipo), origine: orig(t.origine), origineRaw: t.origine || '',
                 stato, motivo: stato === 'Fallita' ? (String(t.motivo || '').trim() || 'Non indicato') : '', etichetta: t.etichetta || '',
                 marca: marcaOf(t.marca), veicolo: `${t.marca || ''} ${t.modello || ''}`.replace(/\s+/g, ' ').trim(),
@@ -326,6 +329,12 @@
             const d = await A().carica(rows);
             info = d;
             info.comm = cm.trattative; info.storico = cm.storico || []; info.puoImportare = !!cm.puoImportare;
+            info.lead = cm.lead || null;
+            LEAD = new Map();
+            ((cm.lead && cm.lead.rows) || []).forEach(x => {
+                const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(x[1] || ''));
+                if (x[0] && m) LEAD.set(String(x[0]), new Date(+m[1], +m[2] - 1, +m[3]));
+            });
             build(d);
             let list = [];
             try {
@@ -405,6 +414,7 @@
               <button type="button" data-act="reload">Aggiorna</button>
               <button type="button" data-act="export" class="cm-btn-gold">Esporta</button>
               <label class="cm-btn-imp" id="cmImpLbl" style="display:none">Importa trattative (CSV)<input type="file" accept=".csv,text/csv" id="cmFile" hidden></label>
+              <label class="cm-btn-imp" id="cmLeadLbl" style="display:none" title="File dei lead del gestionale: serve solo per i tempi da lead a trattativa e a contratto">Importa lead (CSV)<input type="file" accept=".csv,text/csv" id="cmLeadFile" hidden></label>
             </div>
           </div>
           <div class="cm-src" id="cmSrc"></div>
@@ -412,6 +422,7 @@
         <div class="cm-wrap"><div class="cm-layout"><aside class="cm-side" id="cmSide"></aside><main id="cmMain"><div class="cm-card cm-empty">Caricamento dati…</div></main></div></div>`;
         rootEl.addEventListener('click', onClick);
         rootEl.querySelector('#cmFile').addEventListener('change', e => importa(e.target));
+        rootEl.querySelector('#cmLeadFile').addEventListener('change', e => importaLead(e.target));
         rootEl.querySelector('#cmB2b').addEventListener('change', e => { b2bOn = e.target.checked; try { localStorage.setItem(LS_B2B, b2bOn ? '1' : '0'); } catch (x) { /* */ } render(); });
         rootEl.querySelector('#cmRec').addEventListener('change', e => { recOn = e.target.checked; try { localStorage.setItem(LS_REC, recOn ? '1' : '0'); } catch (x) { /* */ } shellSrc(); render(); });
         rootEl.querySelector('#cmAnno').addEventListener('change', e => { anno = +e.target.value; const n = new Date(); a = anno === n.getFullYear() ? n.getMonth() + 1 : 12; da = 1; render(); });
@@ -425,12 +436,15 @@
         const vecchio = info && info.trattAll.length && !info.trattAll.some(r => !r.rec && 'origine' in r);
         const soloChiuse = info && info.soloChiuse;
         const imp = rootEl.querySelector('#cmImpLbl'); if (imp) imp.style.display = info && info.puoImportare ? '' : 'none';
+        const impL = rootEl.querySelector('#cmLeadLbl'); if (impL) impL.style.display = info && info.puoImportare ? '' : 'none';
+        const ld = info && info.lead;
         const nRec = TR.filter(r => r.rec).length;
         const recL = rootEl.querySelector('#cmRecLbl'); if (recL) recL.style.display = nRec ? '' : 'none';
         const st = (info && info.storico) || [];
         s.innerHTML = `Ultimo import trattative: <b>${t ? nf(t.righe || 0) + ' righe · ' + when(t.aggiornatoAt) + (t.aggiornatoDa ? ' da ' + esc(t.aggiornatoDa) : '') : 'nessuno'}</b>` +
             ` <button type="button" class="cm-link" data-act="storico">Storico import (${st.length})</button>` +
             ` &nbsp;|&nbsp; Foglio AVANZAMENTO: <b>${d ? nf(d.righe || 0) + ' righe · ' + when(d.aggiornatoAt) : 'non ancora letto'}</b> &nbsp;|&nbsp; Preventivi telefonici: <b>${info && info.ptErr ? 'non disponibili (' + esc(info.ptErr) + ')' : nf(PT.length)}</b>` +
+            ` &nbsp;|&nbsp; Lead: <b>${ld ? nf(ld.righeFile || 0) + ' (' + nf(ld.conTrattativa || 0) + ' con trattativa) · ' + when(ld.aggiornatoAt) : 'non ancora importati'}</b>` +
             (msgOk ? `<div class="cm-msg">${esc(msgOk)}</div>` : '') +
             (fissa ? `<div class="cm-msg cm-fissa"><span>📌 Stai vedendo solo: <b>${esc(fissaLbl(fissa))}</b> · ${nf(TR.length)} trattative su ${nf(TRall.length)}</span><button type="button" class="cm-link" data-act="fissa-reset">Mostra tutto</button></div>` : '') +
             (nRec ? `<div class="cm-msg">${nf(nRec)} contratti chiusi sono nel CSV delle Consegne ma non in quello del Commerciale (trattative aperte prima del periodo esportato): ${recOn ? 'sono <b>contati</b>' : 'per ora <b>non sono contati</b>'}, con il bollino "Recuperata da Consegne". <button type="button" class="cm-link" data-list='${esc(JSON.stringify({ t: 'Contratti recuperati dalle Consegne', vw: { k: 'any' }, w: 'recAll' }))}'>Vedi elenco</button></div>` : '') +
@@ -875,6 +889,7 @@
           ${kpi('🤝', 'var(--cm-tel-soft)', 'Contratti da prev. telefonico', isB ? '–' : nf(TEL), isB ? '' : pct(TEL, C.length) + ' dei contratti', isB ? null : { t: 'Contratti da preventivo telefonico · ' + title(), vw: view, w: 'tel' })}
           ${kpi('🏦', 'var(--cm-grey-soft)', 'Finanziati', pct(FIN, CF.length), FIN + ' su ' + CF.length + ' contratti nel foglio')}
         </div>
+        ${tempiHtml(R, C, group, isB)}
         ${rank}
         <div class="cm-sec">Andamento</div>
         <div class="cm-grid">${ccCard({ id: id('and'), title: 'Andamento mensile', hint: C.length ? `Picco di contratti a ${MESIL[ms[iMax]]} (${cvm[iMax]}) · clicca una barra per l'elenco` : 'Nessun contratto nel periodo', wide: 1, h: 300, def: 'bar', types: ['bar', 'line', 'doughnut'],
@@ -1075,6 +1090,110 @@
           <p class="cm-hint" style="margin-top:10px">Ogni import sostituisce il precedente per tutti, solo nel Commerciale (le Consegne hanno il loro import). Nuove/Tolte = trattative presenti solo nel nuovo file / solo nel file precedente.</p>`
             : '<p class="cm-empty">Nessun import registrato finora: lo storico parte dal prossimo import.</p>', true, st.length ? { titolo: 'Commerciale · Storico import trattative' } : null);
     }
+    // NUOVO: import del file dei lead. Si tengono SOLO: ID Trattativa Generata e data del lead
+    // (Data inserimento, altrimenti Data lead), per i tempi lead -> trattativa -> contratto.
+    function leggiLead(text) {
+        text = String(text).replace(/^[\s\uFEFF]+/, '');
+        let i = 0, n = text.length, idx = null, righe = 0;
+        const out = new Map();
+        const dataIso = s => { const m = /(\d{1,2})\/(\d{1,2})\/(\d{2,4})/.exec(s || ''); if (!m) return null; let y = +m[3]; if (y < 100) y += 2000; return `${y}-${String(+m[2]).padStart(2, '0')}-${String(+m[1]).padStart(2, '0')}`; };
+        let row = [], f = '', q = false;
+        const fine = () => {
+            row.push(f); f = '';
+            if (row.some(x => x.trim() !== '')) {
+                if (!idx) {
+                    const h = row.map(x => x.replace(/^\uFEFF/, '').trim());
+                    idx = { t: h.indexOf('ID Trattativa Generata'), d: h.indexOf('Data inserimento'), d2: h.indexOf('Data lead') };
+                    if (idx.t < 0 || (idx.d < 0 && idx.d2 < 0)) throw new Error('Nel file mancano le colonne "ID Trattativa Generata" e "Data inserimento": serve l\'export dei lead');
+                } else {
+                    righe++;
+                    const id = String(row[idx.t] || '').trim();
+                    const d = dataIso(idx.d >= 0 ? row[idx.d] : '') || dataIso(idx.d2 >= 0 ? row[idx.d2] : '');
+                    if (id && id !== '0' && d && (!out.has(id) || d < out.get(id))) out.set(id, d);
+                }
+            }
+            row = [];
+        };
+        for (; i < n; i++) {
+            const c = text[i];
+            if (q) { if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+            else if (c === '"') q = true;
+            else if (c === ';') { row.push(f); f = ''; }
+            else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; fine(); }
+            else f += c;
+        }
+        fine();
+        if (!idx) throw new Error('File vuoto');
+        return { rows: [...out.entries()], righe };
+    }
+    function importaLead(input) {
+        const file = input.files && input.files[0]; if (!file) return;
+        const lbl = rootEl.querySelector('#cmLeadLbl');
+        const r = new FileReader();
+        r.onload = async () => {
+            lbl.classList.add('cm-busy'); msgErr = ''; msgOk = '';
+            try {
+                const L = leggiLead(r.result);
+                if (!L.rows.length) throw new Error('Nel file non c\'è nessun lead con una trattativa generata');
+                const dd = L.rows.map(x => x[1]).sort();
+                const body = { rows: L.rows, file: file.name, righeFile: L.righe, conTrattativa: L.rows.length, dal: dd[0], al: dd[dd.length - 1] };
+                const res = await fetch('/api/commerciale/lead', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                if (!res.ok) { let m = 'Errore ' + res.status; try { m = (await res.json()).error || m; } catch (x) { /* */ } throw new Error(m); }
+                loaded = false; await load(true);
+                msgOk = `Lead importati: ${nf(L.righe)} righe, ${nf(L.rows.length)} con una trattativa. Servono solo per i tempi (sezione "Tempi"): il resto del Commerciale non cambia.`; shellSrc();
+            } catch (e) { msgErr = 'Import lead non riuscito: ' + e.message; shellSrc(); }
+            finally { lbl.classList.remove('cm-busy'); input.value = ''; }
+        };
+        r.readAsText(file, 'utf-8');
+    }
+
+    // NUOVO: tempi medi. lt = lead -> trattativa, tc = trattativa -> contratto, lc = lead -> contratto
+    // (giorni di calendario; si scartano i casi con date al contrario, es. lead caricato dopo)
+    const giorni = (x, y) => Math.round((Date.UTC(y.getFullYear(), y.getMonth(), y.getDate()) - Date.UTC(x.getFullYear(), x.getMonth(), x.getDate())) / 864e5);
+    function stat(v) {
+        const l = v.filter(x => x >= 0).sort((p, q) => p - q);
+        if (!l.length) return { n: 0, neg: v.length };
+        const med = l.length % 2 ? l[(l.length - 1) / 2] : (l[l.length / 2 - 1] + l[l.length / 2]) / 2;
+        return { n: l.length, media: l.reduce((p, q) => p + q, 0) / l.length, med, zero: l.filter(x => x === 0).length, neg: v.length - l.length };
+    }
+    function tempi(R, C) {
+        const lt = [], tc = [], lc = [];
+        R.forEach(r => { const d = LEAD.get(r.idT); if (d && r.hasDT) lt.push(giorni(d, r.dataT)); });
+        C.forEach(c => {
+            if (c.hasDT) tc.push(giorni(c.dataT, c.data));
+            const d = LEAD.get(c.idT); if (d) lc.push(giorni(d, c.data));
+        });
+        return { lt: stat(lt), tc: stat(tc), lc: stat(lc) };
+    }
+    const gg = x => x == null ? '–' : x.toLocaleString('it-IT', { maximumFractionDigits: 1 }) + (x === 1 ? ' giorno' : ' giorni');
+    const ggC = s => s.n ? `<b>${s.media.toLocaleString('it-IT', { maximumFractionDigits: 1 })}</b><small class="cm-pc">mediana ${s.med.toLocaleString('it-IT', { maximumFractionDigits: 1 })} · ${nf(s.n)}</small>` : '–';
+    function tempiHtml(R, C, group, isB) {
+        const T = tempi(R, C), haLead = LEAD.size > 0;
+        const noLead = 'importa il file dei lead (pulsante "Importa lead")';
+        const kp = (icon, lab, s, extra, perLead) => kpi(icon, 'var(--cm-grey-soft)', lab, perLead && !haLead ? '–' : s.n ? gg(s.media) : '–',
+            perLead && !haLead ? noLead : s.n ? `mediana ${gg(s.med)} · su ${nf(s.n)}${extra ? ' · ' + extra(s) : ''}` : 'nessun caso nel periodo');
+        const perK = (keyFn) => {
+            const mr = by(R, keyFn), mc = by(C, keyFn);
+            return [...new Set([...mr.keys(), ...mc.keys()])].map(k => ({ k, t: tempi(mr.get(k) || [], mc.get(k) || []) }))
+                .filter(x => x.t.lt.n || x.t.tc.n || x.t.lc.n).sort((x, y) => (y.t.tc.n + y.t.lt.n) - (x.t.tc.n + x.t.lt.n));
+        };
+        const tab = (head, list, link) => list.length ? `<div class="cm-scroll"><table class="cm-t cm-sort"><tr><th>${head}</th><th>Lead → trattativa</th><th>Trattativa → contratto</th><th>Lead → contratto</th></tr>
+            ${list.map(x => `<tr ${link ? `data-vw='${esc(JSON.stringify(link(x.k)))}'` : ''}><td>${esc(x.k)}</td><td>${ggC(x.t.lt)}</td><td>${ggC(x.t.tc)}</td><td>${ggC(x.t.lc)}</td></tr>`).join('')}
+            <tr class="tot"><td>Totale</td><td>${ggC(T.lt)}</td><td>${ggC(T.tc)}</td><td>${ggC(T.lc)}</td></tr></table></div>` : '<p class="cm-empty">Nessun dato nel periodo.</p>';
+        const scart = [T.lt.neg, T.tc.neg, T.lc.neg].reduce((p, q) => p + q, 0);
+        return `<div class="cm-sec">Tempi</div>
+        <div class="cm-kpis">
+          ${kp('⏱️', 'Da lead a trattativa', T.lt, null, true)}
+          ${kp('⏱️', 'Da trattativa a contratto', T.tc, s => pct(s.zero, s.n) + ' lo stesso giorno')}
+          ${kp('⏱️', 'Da lead a contratto', T.lc, null, true)}
+          ${kpi('🔗', 'var(--cm-grey-soft)', 'Trattative nate da un lead', haLead ? nf(R.filter(r => LEAD.has(r.idT)).length) : '–', haLead ? pct(R.filter(r => LEAD.has(r.idT)).length, R.length) + ' delle trattative del periodo' + (scart ? ' · ' + nf(scart) + ' casi con date al contrario non contati' : '') : noLead)}
+        </div>
+        <div class="cm-grid">
+          ${group && !(isB && view.v) ? `<div class="cm-card"><h2>Tempi per consulente</h2><p class="cm-hint">Media in giorni · sotto: mediana e numero di casi · clicca un nome per il suo report</p>${tab('Consulente', perK(r => r.vend), k => isB ? { k: 'b2b', v: k } : { k: 'v', v: k })}</div>` : ''}
+          <div class="cm-card ${group && !(isB && view.v) ? '' : 'cm-wide'}"><h2>Tempi per origine</h2><p class="cm-hint">Media in giorni · sotto: mediana e numero di casi · lead → trattativa per data della trattativa, gli altri per data del contratto</p>${tab('Origine', perK(r => r.origine))}</div>
+        </div>`;
+    }
+
     function importa(input) {
         const file = input.files && input.files[0]; if (!file) return;
         const lbl = rootEl.querySelector('#cmImpLbl');
