@@ -1188,7 +1188,7 @@
           ${kp('⏱️', 'Da lead a contratto', T.lc, null, true)}
           ${kpi('🔗', 'var(--cm-grey-soft)', 'Trattative nate da un lead', haLead ? nf(R.filter(r => LEAD.has(r.idT)).length) : '–', haLead ? pct(R.filter(r => LEAD.has(r.idT)).length, R.length) + ' delle trattative del periodo' + (scart ? ' · ' + nf(scart) + ' casi con date al contrario non contati' : '') : noLead)}
         </div>
-        <div class="cm-grid">
+        <div class="cm-grid" style="margin-top:16px">
           ${group && !(isB && view.v) ? `<div class="cm-card"><h2>Tempi per consulente</h2><p class="cm-hint">Media in giorni · sotto: mediana e numero di casi · clicca un nome per il suo report</p>${tab('Consulente', perK(r => r.vend), k => isB ? { k: 'b2b', v: k } : { k: 'v', v: k })}</div>` : ''}
           <div class="cm-card ${group && !(isB && view.v) ? '' : 'cm-wide'}"><h2>Tempi per origine</h2><p class="cm-hint">Media in giorni · sotto: mediana e numero di casi · lead → trattativa per data della trattativa, gli altri per data del contratto</p>${tab('Origine', perK(r => r.origine))}</div>
         </div>`;
