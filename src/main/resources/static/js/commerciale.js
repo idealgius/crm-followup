@@ -729,6 +729,7 @@
             : [['vend', 'Consulente', r => r.vend], ['sede', 'Sede', r => SEDI[r.sede]], ['origine', 'Origine', r => r.origine], ['esito', 'Esito', esito], ['tipo', 'Tipo', r => r.tipo], ['marca', 'Marca', r => r.marca]];
         if (kind === 'tr' && recs.some(r => r.ann)) F.push(['fonte', 'Fonte annullamento', fonteAnn]);
         if (kind === 'tr' && recs.some(r => r.rec || r.prima)) F.push(['prov', 'Provenienza contratto', provC]);
+        const conLead = kind === 'tr' && recs.length && recs.every(r => LEAD.has(r.idT));   // NUOVO: elenco "nate da un lead"
         const st = { q: '' }; F.forEach(f => { st[f[0]] = ''; });
         box.innerHTML = `<div class="cm-tools"><input type="search" placeholder="Cerca cliente, consulente, veicolo, targa…" data-q>
           ${F.map(([k, l, fn]) => `<select data-f="${k}"><option value="">${l}: tutti</option>${[...new Set(recs.map(fn))].filter(Boolean).sort((x, y) => String(x).localeCompare(String(y), 'it')).map(v => `<option>${esc(v)}</option>`).join('')}</select>`).join('')}
@@ -749,8 +750,8 @@
             box.querySelector('.cm-rl').innerHTML = !S.length ? '<p class="cm-empty">Nessuna riga</p>' : kind === 'pt'
                 ? `<div class="cm-scroll"><table class="cm-t cm-sort"><tr><th>Data</th><th class="l">Cliente</th><th class="l">Consulente</th><th class="l">Operatore</th><th class="l">Veicolo</th><th class="l">Stato</th><th class="l">Contratto</th></tr>
                    ${S.map(p => `<tr><td style="text-align:left">${dd(p.data)}</td><td class="l">${esc(p.cliente)}</td><td class="l">${esc(p.vend)}</td><td class="l">${esc(p.op)}</td><td class="l">${esc(p.marca + ' ' + p.modello)}</td><td class="l"><span class="cm-es" style="--c:${STC[p.st]}">${STL[p.st]}</span></td><td class="l">${p.contr ? '✓ ' + dd(p.contr.data) : ''}</td></tr>`).join('')}</table></div>`
-                : `<div class="cm-scroll"><table class="cm-t cm-sort"><tr><th>Data</th><th class="l">Cliente</th><th class="l">Consulente</th><th class="l">Veicolo</th><th class="l">Tipo</th><th class="l">Origine</th><th class="l">Esito</th></tr>
-                   ${S.map(r => `<tr><td style="text-align:left">${dd(r.data)}</td><td class="l">${esc(r.cliente)} ${r.b2b ? '<span class="cm-b2b">B2B</span>' : ''}${r.noleggio ? ' <span class="cm-csv">Noleggio</span>' : ''}${provBadge(r)}</td><td class="l">${esc(r.vend)}</td><td class="l">${esc(r.veicolo)}</td><td class="l">${r.tipo}</td>
+                : `<div class="cm-scroll"><table class="cm-t cm-sort"><tr><th>Data</th>${conLead ? '<th>Data lead</th><th>Giorni dal lead</th>' : ''}<th class="l">Cliente</th><th class="l">Consulente</th><th class="l">Veicolo</th><th class="l">Tipo</th><th class="l">Origine</th><th class="l">Esito</th></tr>
+                   ${S.map(r => `<tr><td style="text-align:left">${dd(r.data)}</td>${conLead ? `<td style="text-align:left">${dd(LEAD.get(r.idT))}</td><td>${r.hasDT ? nf(giorni(LEAD.get(r.idT), r.dataT)) : '–'}</td>` : ''}<td class="l">${esc(r.cliente)} ${r.b2b ? '<span class="cm-b2b">B2B</span>' : ''}${r.noleggio ? ' <span class="cm-csv">Noleggio</span>' : ''}${provBadge(r)}</td><td class="l">${esc(r.vend)}</td><td class="l">${esc(r.veicolo)}</td><td class="l">${r.tipo}</td>
                      <td class="l">${esc(r.origine)}${r.tel ? ` <span class="cm-tel" title="Preventivo telefonico del ${dd(r.tel.data)} · ${esc(r.tel.op)}">📞 Da preventivo telefonico</span>` : ''}</td><td class="l">${esitoBadge(r)}</td></tr>`).join('')}</table></div>`;
             if (L.length > S.length) box.querySelector('.cm-rl').insertAdjacentHTML('beforeend', '<p class="cm-hint">Mostrate le prime 500 righe: usa la ricerca o i filtri per restringere</p>');
         };
@@ -1060,6 +1061,7 @@
         if (o.w === 'tel') L = cIn(o.vw).filter(r => r.tel);
         if (o.w === 'annAll') L = TR.filter(c => c.ann && annBase(c) && (!o.s || o.s === 'all' || c.sede === o.s)).concat(AF.filter(c => annBase(c) && (!o.s || o.s === 'all' || c.sede === o.s)));
         if (o.w === 'recAll') L = TR.filter(r => r.rec && r.stato === 'Chiusa');   // tutte le recuperate, qualsiasi periodo
+        if (o.w === 'lead') L = L.filter(r => LEAD.has(r.idT));              // NUOVO: trattative nate da un lead
         if (o.marca) L = L.filter(r => r.marca === o.marca);
         openRecs(o.t, L, 'tr');
     }
@@ -1198,13 +1200,13 @@
             <tr class="tot"><td>Totale</td>${cel(T.lt, 'lt', 1)}${cel(T.tc, 'tc', 1)}${cel(T.lc, 'lc', 1)}</tr></table></div>
             ${list.length > 8 ? `<button type="button" class="cm-tm-more" data-tmall>${tmAll ? 'Mostra meno' : `Mostra tutti (${nf(list.length)})`}</button>` : ''}`;
         };
-        const scart = [T.lt.neg, T.tc.neg, T.lc.neg].reduce((p, q) => p + q, 0);
         return `<div class="cm-sec">Tempi</div>
         <div class="cm-kpis">
           ${kp('⏱️', 'Da lead a trattativa', T.lt, null, true)}
           ${kp('⏱️', 'Da trattativa a contratto', T.tc, s => pct(s.zero, s.n) + ' lo stesso giorno')}
           ${kp('⏱️', 'Da lead a contratto', T.lc, null, true)}
-          ${kpi('🔗', 'var(--cm-grey-soft)', 'Trattative nate da un lead', haLead ? nf(R.filter(r => LEAD.has(r.idT)).length) : '–', haLead ? pct(R.filter(r => LEAD.has(r.idT)).length, R.length) + ' delle trattative del periodo' + (scart ? ' · ' + nf(scart) + ' casi con date al contrario non contati' : '') : noLead)}
+          ${(() => { const NL = R.filter(r => LEAD.has(r.idT)).length;
+            return kpi('🔗', 'var(--cm-grey-soft)', 'Trattative nate da un lead', haLead ? pct(NL, R.length) : '–', haLead ? `${nf(NL)} su ${nf(R.length)} trattative del periodo · clicca per vederle` : noLead, haLead && NL ? { t: 'Trattative nate da un lead · ' + title(), vw: view, w: 'lead' } : null); })()}
         </div>
         ${(() => {
             const conV = group && !(isB && view.v), sw = conV ? tmSw : 'o';
