@@ -267,3 +267,31 @@ html[data-bi="commerciale"] .cm-band { border-top:0; }
 .cm-sedi:hover { border-color:var(--cm-acc, #2a9d8f); }
 .cm-t tr.cm-subr td { font-size:12.5px; color:var(--cm-ink-2); background:var(--cm-grey-soft, rgba(127,127,127,.06)); }
 .cm-t tr.cm-subr td:first-child { padding-left:22px; font-weight:700; }
+/* NUOVO: Tempi per consulente / origine - tabella compatta con barre */
+.cm-tm-card .cm-cc-h { margin-bottom:2px; }
+#commercialeRoot .cm-tm-sw button { width:auto; padding:0 12px; font-size:12px; }
+.cm-tmt td { padding:7px 12px; vertical-align:middle; }
+.cm-tmt th:not(:first-child) { width:24%; }
+.cm-tmt td:first-child { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:260px; }
+.cm-tmt tr[data-vw] { cursor:pointer; }
+.cm-tmt tr[data-vw]:hover td { background:var(--cm-grey-soft); }
+.cm-tmt:not(.all) tr:nth-child(n+10):not(.tot) { display:none; }
+.cm-tm { display:flex; align-items:center; gap:10px; }
+.cm-tm b { flex:none; min-width:52px; text-align:right; font-size:13.5px; font-weight:800; }
+.cm-tm b::after { content:' gg'; font-size:10.5px; font-weight:700; color:var(--cm-ink-2); }
+.cm-tm-bar { flex:1; height:7px; border-radius:4px; background:var(--cm-grey-soft); overflow:hidden; }
+.cm-tm-bar i { display:block; height:100%; border-radius:4px; background:var(--cm-acc); opacity:.55; }
+.cm-tm.rapido .cm-tm-bar i { background:#2e9e6b; opacity:.9; }
+.cm-tm.lento .cm-tm-bar i { background:#e0913a; opacity:.9; }
+.cm-tm.tot .cm-tm-bar i { background:var(--cm-acc); opacity:1; }
+.cm-tm-s { display:block; margin:2px 0 0 62px; text-align:left; font-size:10.5px; font-weight:600; color:var(--cm-ink-2); white-space:nowrap; }
+.cm-tm-na { color:var(--cm-ink-2); }
+.cm-tm-k { font-weight:800; }
+.cm-tm-k.rapido { color:#2e9e6b; }
+.cm-tm-k.lento { color:#e0913a; }
+.cm-tm-more { display:block; margin:10px auto 0; padding:7px 16px; border-radius:10px; border:1px solid var(--cm-line); background:var(--cm-grey-soft); color:var(--cm-ink); font:inherit; font-size:12.5px; font-weight:800; cursor:pointer; }
+.cm-tm-more:hover { border-color:var(--cm-acc); }
+@media (max-width:760px) {
+  .cm-tmt th:not(:first-child) { width:auto; min-width:150px; }
+  .cm-tmt td:first-child { max-width:130px; }
+}

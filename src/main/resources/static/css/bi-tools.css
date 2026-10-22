@@ -158,3 +158,9 @@ html.bi-fs-on, html.bi-fs-on body { overflow:hidden; }
     #biPage .bh-side { flex:none; width:min(1120px, 100%); max-height:60vh; order:2; }
     #biPage .bh-frame { flex:none; width:min(1120px, 100%); }
 }
+/* NUOVO: ▴ Riduci / ▾ Espandi di ogni riquadro (bi-tools.js) */
+.bi-rid:not(.bi-focus):not(.bi-fs) > :not([data-bi-keep]) { display:none !important; }
+.bi-rid:not(.bi-focus):not(.bi-fs) { align-self:start; }
+.bi-rid:not(.bi-focus):not(.bi-fs) .cg-hint, .bi-rid:not(.bi-focus):not(.bi-fs) .cm-hint { margin-bottom:0; }
+.bi-tools-card .bi-t-rid .bi-i { font-size:13px; }
+.bi-focus .bi-t-rid, .bi-fs .bi-t-rid { display:none !important; }

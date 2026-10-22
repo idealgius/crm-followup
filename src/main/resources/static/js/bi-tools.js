@@ -289,6 +289,7 @@
             if (gruppo) gruppo.appendChild(bar);
             else if (testa) testa.appendChild(bar);
             else { bar.classList.add('bi-tools-float'); card.insertBefore(bar, card.firstChild); }
+            riducibile(card, bar, sez);
         });
         // la pagina si e' ridisegnata mentre un riquadro era a schermo intero: si rimette
         if (fsKey && !document.querySelector('.bi-fs')) {
@@ -300,6 +301,45 @@
             const c = [...root.querySelectorAll('[data-bi-ok]')].find(x => chiaveDi(x) === focusKey && ctxDi(x) === focusCtx);
             if (c) focus(c, true, true); else { esciFocus(); }
         }
+    }
+
+    /* ---------- ▴ Riduci / ▾ Espandi ----------
+       Ogni riquadro si puo' chiudere lasciando solo il titolo (come "Giacenza per marchio"
+       dello Stock). La scelta resta ricordata in questo browser. */
+    const LS_RID = 'biRiquadriRidotti';
+    let ridotti = null;
+    const leggiRid = () => { if (!ridotti) { try { ridotti = new Set(JSON.parse(localStorage.getItem(LS_RID) || '[]')); } catch (e) { ridotti = new Set(); } } return ridotti; };
+    const salvaRid = () => { try { localStorage.setItem(LS_RID, JSON.stringify([...leggiRid()].slice(-300))); } catch (e) { /* */ } };
+    function segnaTesta(card, bar) {
+        // restano visibili solo intestazione (titolo, spiegazione, pulsanti)
+        [...card.children].forEach(c => {
+            const tiene = c === bar || c.contains(bar) || c.matches('h2, h3, .cg-hint, .cm-hint') || (c.querySelector('h2, h3') && !c.querySelector('table, canvas'));
+            if (tiene) c.setAttribute('data-bi-keep', ''); else c.removeAttribute('data-bi-keep');
+        });
+    }
+    function impostaRid(card, btn, on) {
+        card.classList.toggle('bi-rid', on);
+        btn.innerHTML = on ? '<span class="bi-i">▾</span><span class="bi-l">Espandi</span>' : '<span class="bi-i">▴</span><span class="bi-l">Riduci</span>';
+        btn.title = on ? 'Espandi il riquadro' : 'Riduci il riquadro (resta solo il titolo)';
+        btn.setAttribute('aria-expanded', String(!on));
+    }
+    function riducibile(card, bar, sez) {
+        if (card.querySelector('[data-gmrid]')) return;           // ha gia' il suo (Stock: Giacenza per marchio)
+        const btn = document.createElement('button');
+        btn.type = 'button'; btn.className = 'bi-t-rid';
+        bar.appendChild(btn);
+        const chiave = () => sez + '|' + chiaveDi(card);
+        segnaTesta(card, bar);
+        impostaRid(card, btn, leggiRid().has(chiave()));
+        btn.addEventListener('click', e => {
+            e.stopPropagation();
+            const on = !card.classList.contains('bi-rid');
+            segnaTesta(card, bar);
+            impostaRid(card, btn, on);
+            if (on) leggiRid().add(chiave()); else leggiRid().delete(chiave());
+            salvaRid();
+            if (!on) setTimeout(() => window.dispatchEvent(new Event('resize')), 30);   // i grafici riprendono la loro misura
+        });
     }
 
     /* ---------- ◎ SOLO QUESTO RIQUADRO ----------

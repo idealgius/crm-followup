@@ -492,6 +492,11 @@
             sedi.closest('table').querySelectorAll('tr.cm-subr').forEach(tr => { if (tr.dataset.par === sedi.dataset.sedi) tr.hidden = !apri; });
             return;
         }
+        const tsw = e.target.closest('[data-tmsw]');
+        if (tsw) { if (tmSw !== tsw.dataset.tmsw) { tmSw = tsw.dataset.tmsw; tmAll = false; render(); } return; }
+        const tma = e.target.closest('[data-tmall]');
+        if (tma) { tmAll = !tmAll; const t = tma.parentElement.querySelector('table.cm-tmt'); if (t) t.classList.toggle('all', tmAll);
+            const n = t ? t.querySelectorAll('tr').length - 2 : 0; tma.textContent = tmAll ? 'Mostra meno' : `Mostra tutti (${nf(n)})`; return; }
         const vw = e.target.closest('[data-vw]');
         if (vw) { go(JSON.parse(vw.dataset.vw)); return; }
         const lst = e.target.closest('[data-list]');
@@ -1165,6 +1170,7 @@
         });
         return { lt: stat(lt), tc: stat(tc), lc: stat(lc) };
     }
+    let tmSw = 'c', tmAll = false;   // NUOVO: Tempi - consulente/origine, tutte le righe
     const gg = x => x == null ? '–' : x.toLocaleString('it-IT', { maximumFractionDigits: 1 }) + (x === 1 ? ' giorno' : ' giorni');
     const ggC = s => s.n ? `<b>${s.media.toLocaleString('it-IT', { maximumFractionDigits: 1 })}</b><small class="cm-pc">mediana ${s.med.toLocaleString('it-IT', { maximumFractionDigits: 1 })} · ${nf(s.n)}</small>` : '–';
     function tempiHtml(R, C, group, isB) {
@@ -1177,9 +1183,21 @@
             return [...new Set([...mr.keys(), ...mc.keys()])].map(k => ({ k, t: tempi(mr.get(k) || [], mc.get(k) || []) }))
                 .filter(x => x.t.lt.n || x.t.tc.n || x.t.lc.n).sort((x, y) => (y.t.tc.n + y.t.lt.n) - (x.t.tc.n + x.t.lt.n));
         };
-        const tab = (head, list, link) => list.length ? `<div class="cm-scroll"><table class="cm-t cm-sort"><tr><th>${head}</th><th>Lead → trattativa</th><th>Trattativa → contratto</th><th>Lead → contratto</th></tr>
-            ${list.map(x => `<tr ${link ? `data-vw='${esc(JSON.stringify(link(x.k)))}'` : ''}><td>${esc(x.k)}</td><td>${ggC(x.t.lt)}</td><td>${ggC(x.t.tc)}</td><td>${ggC(x.t.lc)}</td></tr>`).join('')}
-            <tr class="tot"><td>Totale</td><td>${ggC(T.lt)}</td><td>${ggC(T.tc)}</td><td>${ggC(T.lc)}</td></tr></table></div>` : '<p class="cm-empty">Nessun dato nel periodo.</p>';
+        // NUOVO: tabella compatta con barre (piu' corta = piu' veloce); prime 8 righe, poi "Mostra tutti"
+        const f1 = x => x.toLocaleString('it-IT', { maximumFractionDigits: 1 });
+        const tab = (head, list, link, key) => {
+            if (!list.length) return '<p class="cm-empty">Nessun dato nel periodo.</p>';
+            const M = {}; ['lt', 'tc', 'lc'].forEach(f => { M[f] = Math.max(1, ...list.map(x => x.t[f].n ? x.t[f].media : 0), T[f].n ? T[f].media : 0); });
+            const cel = (s, f, tot) => {
+                if (!s.n) return '<td class="cm-tm-na">–</td>';
+                const w = Math.max(3, Math.min(100, s.media / M[f] * 100)), cl = tot ? 'tot' : T[f].n && s.media > T[f].media * 1.1 ? 'lento' : T[f].n && s.media < T[f].media * 0.9 ? 'rapido' : '';
+                return `<td><div class="cm-tm ${cl}"><b>${f1(s.media)}</b><span class="cm-tm-bar"><i style="width:${w.toFixed(1)}%"></i></span></div><small class="cm-tm-s">mediana ${f1(s.med)} · ${nf(s.n)} casi</small></td>`;
+            };
+            return `<div class="cm-scroll"><table class="cm-t cm-sort cm-tmt ${tmAll ? 'all' : ''}" data-tm="${key}"><tr><th>${head}</th><th>Lead → trattativa</th><th>Trattativa → contratto</th><th>Lead → contratto</th></tr>
+            ${list.map(x => `<tr ${link ? `data-vw='${esc(JSON.stringify(link(x.k)))}'` : ''}><td>${esc(x.k)}</td>${cel(x.t.lt, 'lt')}${cel(x.t.tc, 'tc')}${cel(x.t.lc, 'lc')}</tr>`).join('')}
+            <tr class="tot"><td>Totale</td>${cel(T.lt, 'lt', 1)}${cel(T.tc, 'tc', 1)}${cel(T.lc, 'lc', 1)}</tr></table></div>
+            ${list.length > 8 ? `<button type="button" class="cm-tm-more" data-tmall>${tmAll ? 'Mostra meno' : `Mostra tutti (${nf(list.length)})`}</button>` : ''}`;
+        };
         const scart = [T.lt.neg, T.tc.neg, T.lc.neg].reduce((p, q) => p + q, 0);
         return `<div class="cm-sec">Tempi</div>
         <div class="cm-kpis">
@@ -1188,10 +1206,14 @@
           ${kp('⏱️', 'Da lead a contratto', T.lc, null, true)}
           ${kpi('🔗', 'var(--cm-grey-soft)', 'Trattative nate da un lead', haLead ? nf(R.filter(r => LEAD.has(r.idT)).length) : '–', haLead ? pct(R.filter(r => LEAD.has(r.idT)).length, R.length) + ' delle trattative del periodo' + (scart ? ' · ' + nf(scart) + ' casi con date al contrario non contati' : '') : noLead)}
         </div>
-        <div class="cm-grid" style="margin-top:16px">
-          ${group && !(isB && view.v) ? `<div class="cm-card"><h2>Tempi per consulente</h2><p class="cm-hint">Media in giorni · sotto: mediana e numero di casi · clicca un nome per il suo report</p>${tab('Consulente', perK(r => r.vend), k => isB ? { k: 'b2b', v: k } : { k: 'v', v: k })}</div>` : ''}
-          <div class="cm-card ${group && !(isB && view.v) ? '' : 'cm-wide'}"><h2>Tempi per origine</h2><p class="cm-hint">Media in giorni · sotto: mediana e numero di casi · lead → trattativa per data della trattativa, gli altri per data del contratto</p>${tab('Origine', perK(r => r.origine))}</div>
+        ${(() => {
+            const conV = group && !(isB && view.v), sw = conV ? tmSw : 'o';
+            return `<div class="cm-card cm-tm-card" data-cat="tempi" style="margin-top:16px">
+          <div class="cm-cc-h"><div><h2>Tempi per ${sw === 'c' ? 'consulente' : 'origine'}</h2><p class="cm-hint">Media in giorni (sotto: mediana e casi) · barra <b class="cm-tm-k rapido">più veloce</b> o <b class="cm-tm-k lento">più lenta</b> della media${sw === 'c' ? ' · clicca un nome per il suo report' : ' · lead → trattativa per data della trattativa, gli altri per data del contratto'}</p></div>
+            <div class="cm-cc-btns">${conV ? `<span class="cm-cc-seg cm-tm-sw"><button type="button" data-tmsw="c" class="${sw === 'c' ? 'on' : ''}">Consulente</button><button type="button" data-tmsw="o" class="${sw === 'o' ? 'on' : ''}">Origine</button></span>` : ''}</div></div>
+          ${sw === 'c' ? tab('Consulente', perK(r => r.vend), k => isB ? { k: 'b2b', v: k } : { k: 'v', v: k }, 'c') : tab('Origine', perK(r => r.origine), null, 'o')}
         </div>`;
+        })()}`;
     }
 
     function importa(input) {
