@@ -497,6 +497,8 @@
         const tma = e.target.closest('[data-tmall]');
         if (tma) { tmAll = !tmAll; const t = tma.parentElement.querySelector('table.cm-tmt'); if (t) t.classList.toggle('all', tmAll);
             const n = t ? t.querySelectorAll('tr').length - 2 : 0; tma.textContent = tmAll ? 'Mostra meno' : `Mostra tutti (${nf(n)})`; return; }
+        const tpm = e.target.closest('[data-tipm]');
+        if (tpm && !e.target.closest('th')) { openTipMarche(tpm.dataset.tipm); return; }
         const vw = e.target.closest('[data-vw]');
         if (vw) { go(JSON.parse(vw.dataset.vw)); return; }
         const lst = e.target.closest('[data-list]');
@@ -810,8 +812,8 @@
 
     /* ---- tabelle di supporto ---- */
     const convTable = (rows, totP, totC, extra) => `<div class="cm-scroll"><table class="cm-t cm-sort"><tr><th>${rows.head}</th><th>Preventivi</th><th>Contratti</th><th>Conv.</th>${extra ? '<th>di cui 📞</th>' : ''}</tr>
-        ${rows.list.map(r => `<tr><td>${esc(r.k)}</td><td>${nf(r.p)}</td><td>${r.c || '–'}</td><td>${r.c ? pct(r.c, r.p) : '–'}</td>${extra ? `<td>${r.tel || '–'}</td>` : ''}</tr>`).join('')}
-        <tr class="tot"><td>Totale</td><td>${nf(totP)}</td><td>${nf(totC)}</td><td>${pct(totC, totP)}</td>${extra ? `<td>${rows.tel}</td>` : ''}</tr></table></div>`;
+        ${rows.list.map(r => `<tr ${rows.attr ? rows.attr(r.k) : ''}><td>${esc(r.k)}</td><td>${nf(r.p)}</td><td>${r.c || '–'}</td><td>${r.c ? pct(r.c, r.p) : '–'}</td>${extra ? `<td>${r.tel || '–'}</td>` : ''}</tr>`).join('')}
+        <tr class="tot" ${rows.attr ? rows.attr('') : ''}><td>Totale</td><td>${nf(totP)}</td><td>${nf(totC)}</td><td>${pct(totC, totP)}</td>${extra ? `<td>${rows.tel}</td>` : ''}</tr></table></div>`;
     // preventivi (R, per data trattativa) e contratti (C, per data chiusura) divisi per voce
     function perVoce(R, C, keyFn, order) {
         const mp = by(R, keyFn), mc = by(C, keyFn);
@@ -911,7 +913,7 @@
         <div class="cm-sec">Tipologia, pagamento e marche</div>
         <div class="cm-grid">
           ${ccCard({ id: id('tip'), title: 'Tipologia dei contratti', hint: tip[0] ? 'Preventivi e conversione nella tabella accanto' : '', recs: C, key: r => r.tipo, order: ['Usato', 'Km0', 'Nuovo', 'Non indicata'], def: 'doughnut' })}
-          <div class="cm-card"><h2>Tipologia veicolo</h2><p class="cm-hint">${tip[0] ? `${[...tip].sort((x, y) => y.p - x.p)[0].k} vale il ${pct([...tip].sort((x, y) => y.p - x.p)[0].p, P)} dei preventivi` : ''}</p>${convTable({ head: 'Tipologia', list: tip }, P, C.length)}</div>
+          <div class="cm-card"><h2>Tipologia veicolo</h2><p class="cm-hint">${tip[0] ? `${[...tip].sort((x, y) => y.p - x.p)[0].k} vale il ${pct([...tip].sort((x, y) => y.p - x.p)[0].p, P)} dei preventivi · clicca una riga per vedere i marchi` : ''}</p>${convTable({ head: 'Tipologia', list: tip, attr: k => `data-tipm="${esc(k)}" title="Vedi i marchi${k ? ' · ' + esc(k) : ' di tutte le tipologie'}"` }, P, C.length)}</div>
           ${ccCard({ id: id('pag'), title: 'Pagamento', hint: 'Contratti per modalità (colonna PAGAMENTO del foglio)', recs: C, key: r => r.pag, order: ['Finanziamento', 'PC (contanti)', 'Non indicato'], colors: { 'Finanziamento': '#0f5662', 'PC (contanti)': '#9fcbd2', 'Non indicato': '#aab6b9' }, def: 'doughnut' })}
           ${ccCard({ id: id('mar'), title: 'Marche dei contratti', hint: '<button type="button" class="cm-link" data-vw=\'{"k":"marche"}\'>Performance marchi completa →</button>', recs: C, key: r => r.marca, def: 'bar', horiz: true })}
         </div>
@@ -1064,6 +1066,108 @@
         if (o.w === 'lead') L = L.filter(r => LEAD.has(r.idT));              // NUOVO: trattative nate da un lead
         if (o.marca) L = L.filter(r => r.marca === o.marca);
         openRecs(o.t, L, 'tr');
+    }
+
+    /* ================= NUOVO: marchi per tipologia (dal riquadro "Tipologia veicolo") =================
+       Finestra con i loghi dei marchi e, sotto ognuno, i preventivi (e i contratti) della tipologia
+       scelta. In alto: Usato / Km0 / Nuovo / Tutte e ricerca. Clic sul marchio -> elenco dei suoi
+       preventivi. Excel: di tutto o di quello che si vede (tipologia + ricerca). */
+    const TIPI_V = ['Usato', 'Km0', 'Nuovo', 'Non indicata'];
+    const slugM = m => String(m).normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    const logoM = m => m === 'Non indicata' ? '<span class="cm-bm-lt">?</span>'
+        : `<img src="/img/marchi/${slugM(m)}.png" alt="${esc(m)}" loading="lazy" data-s="${slugM(m).replace(/-/g, '')}" onerror="if(!this.dataset.a){this.dataset.a=1;this.src='/img/marchi/'+this.dataset.s+'.png';}else{var s=document.createElement('span');s.className='cm-bm-lt';s.textContent=this.alt.split(/[\\s-]+/).map(function(w){return w.charAt(0);}).join('').slice(0,3).toUpperCase();this.replaceWith(s);}">`;
+    function openTipMarche(tipo0) {
+        const R = trIn(view), C = cIn(view);
+        const st = { t: tipo0 || '', q: '' };
+        const tipi = TIPI_V.filter(k => R.some(r => r.tipo === k) || C.some(c => c.tipo === k));
+        const labT = () => st.t || 'Tutte le tipologie';
+        const ov = modal('Marchi', `<div class="cm-bm">
+            <div class="cm-bm-top"><span class="cm-cc-seg cm-bm-seg">${tipi.map(k => `<button type="button" data-bmt="${esc(k)}">${esc(k)} <b>${nf(R.filter(r => r.tipo === k).length)}</b></button>`).join('')}<button type="button" data-bmt="">Tutte <b>${nf(R.length)}</b></button></span>
+              <input type="search" placeholder="Cerca marchio…" data-bmq aria-label="Cerca marchio">
+              <button type="button" class="cm-bm-xls" data-bmx title="Scarica in Excel quello che vedi: marchi, consulenti ed elenco dei clienti">⬇ Excel</button></div>
+            <p class="cm-hint" data-bmsum></p><div class="cm-bm-grid" data-bmg></div></div>`, true);
+        const dati = () => {
+            const okT = r => !st.t || r.tipo === st.t, q = st.q.trim().toLowerCase();
+            const Rt = R.filter(okT), Ct = C.filter(okT);
+            const mp = by(Rt, r => r.marca), mc = by(Ct, r => r.marca);
+            let M = [...new Set([...mp.keys(), ...mc.keys()])].map(k => ({ k, R: mp.get(k) || [], C: mc.get(k) || [] }));
+            if (q) M = M.filter(x => String(x.k).toLowerCase().includes(q));
+            M.sort((a, b) => (a.k === 'Non indicata') - (b.k === 'Non indicata') || b.R.length - a.R.length || b.C.length - a.C.length || String(a.k).localeCompare(String(b.k), 'it'));
+            const keep = new Set(M.map(x => x.k));
+            return { M, Rt: Rt.filter(r => keep.has(r.marca)), Ct: Ct.filter(c => keep.has(c.marca)) };
+        };
+        const draw = () => {
+            const { M, Rt, Ct } = dati();
+            ov.querySelector('header h3').textContent = `Marchi · ${labT()} · ${title()}`;
+            ov.querySelectorAll('[data-bmt]').forEach(b => b.classList.toggle('on', b.dataset.bmt === st.t));
+            ov.querySelector('[data-bmsum]').innerHTML = `<b>${nf(M.length)}</b> marchi · <b>${nf(Rt.length)}</b> preventivi · <b>${nf(Ct.length)}</b> contratti · conversione ${pct(Ct.length, Rt.length)} · periodo ${per()} · clicca un marchio per l'elenco dei preventivi`;
+            ov.querySelector('[data-bmx]').disabled = !M.length;
+            ov.querySelector('[data-bmg]').innerHTML = M.length ? M.map(x => `<button type="button" class="cm-bm-t" data-bmm="${esc(x.k)}" ${x.R.length ? '' : 'disabled'} title="${x.R.length ? 'Elenco dei preventivi ' + esc(x.k) : 'Nessun preventivo nel periodo'}">
+                <span class="cm-bm-logo">${logoM(x.k)}</span><span class="cm-bm-n">${esc(x.k)}</span>
+                <span class="cm-bm-p"><b>${nf(x.R.length)}</b> preventivi</span>
+                <span class="cm-bm-c">${x.C.length ? `${nf(x.C.length)} contratti · ${pct(x.C.length, x.R.length)}` : 'nessun contratto'}</span></button>`).join('')
+                : '<p class="cm-empty">Nessun marchio</p>';
+        };
+        ov.addEventListener('click', e => {
+            const t = e.target.closest('[data-bmt]');
+            if (t) { st.t = t.dataset.bmt; draw(); return; }
+            const m = e.target.closest('[data-bmm]');
+            if (m && !m.disabled) { const k = m.dataset.bmm; openRecs(`Preventivi ${st.t || 'tutte le tipologie'} · ${k}`, R.filter(r => (!st.t || r.tipo === st.t) && r.marca === k), 'tr'); return; }
+            const x = e.target.closest('[data-bmx]');
+            if (x && !x.disabled) excelTipMarche(x, dati(), st, labT());
+        });
+        let tq = null;
+        ov.querySelector('[data-bmq]').addEventListener('input', e => { clearTimeout(tq); tq = setTimeout(() => { st.q = e.target.value; draw(); }, 150); });
+        draw();
+    }
+    async function excelTipMarche(btn, D, st, labT) {
+        const lab0 = btn.innerHTML; btn.disabled = true; btn.innerHTML = '⏳ Preparazione…';
+        try {
+            const T = (t, w) => ({ t, tipo: 'text', w: w || 24 }), I = (t, w) => ({ t, tipo: 'int', w: w || 12 }), Q = (t, w) => ({ t, tipo: 'pct', w: w || 11 });
+            const r4 = (a, b) => b ? Math.round(a / b * 10000) / 10000 : null;
+            const tipiX = st.t ? [] : TIPI_V.filter(k => D.Rt.some(r => r.tipo === k) || D.Ct.some(c => c.tipo === k));
+            const splitCol = tipiX.flatMap(k => [I(k + ' prev.', 10), I(k + ' contr.', 10)]);
+            const split = (Rl, Cl) => tipiX.flatMap(k => [Rl.filter(r => r.tipo === k).length, Cl.filter(c => c.tipo === k).length]);
+            const tot = ['Totale', D.Rt.length, D.Ct.length, r4(D.Ct.length, D.Rt.length)].concat(split(D.Rt, D.Ct));
+            // per marca
+            const marche = D.M.map(x => [x.k, x.R.length, x.C.length, r4(x.C.length, x.R.length)].concat(split(x.R, x.C)));
+            // per consulente
+            const mp = by(D.Rt, r => r.vend), mc = by(D.Ct, r => r.vend);
+            const cons = [...new Set([...mp.keys(), ...mc.keys()])].map(k => ({ k, R: mp.get(k) || [], C: mc.get(k) || [] }))
+                .sort((a, b) => b.R.length - a.R.length || b.C.length - a.C.length);
+            const sedeV = l => { const x = (l.R[0] || l.C[0]); return x ? SEDI[x.sede] || '' : ''; };
+            const consR = cons.map(x => [x.k, sedeV(x), x.R.length, x.C.length, r4(x.C.length, x.R.length)].concat(split(x.R, x.C)));
+            const totC = ['Totale', '', D.Rt.length, D.Ct.length, r4(D.Ct.length, D.Rt.length)].concat(split(D.Rt, D.Ct));
+            // consulente x marca (chi ha fatto cosa)
+            const cm = [];
+            cons.forEach(x => {
+                const a = by(x.R, r => r.marca), b = by(x.C, r => r.marca);
+                [...new Set([...a.keys(), ...b.keys()])].map(m => [x.k, m, (a.get(m) || []).length, (b.get(m) || []).length])
+                    .sort((p, q) => q[2] - p[2] || q[3] - p[3]).forEach(r => cm.push(r.concat(r4(r[3], r[2]))));
+            });
+            const fogli = [
+                { nome: 'Per marca', tabelle: [{ titolo: 'Preventivi e contratti per marca · ' + labT, nota: 'Preventivi = trattative create nel periodo · Contratti = trattative chiuse nel periodo · Conversione = contratti / preventivi',
+                    colonne: [T('Marca', 22), I('Preventivi'), I('Contratti'), Q('Conversione')].concat(splitCol), righe: marche, totale: tot }] },
+                { nome: 'Per consulente', tabelle: [{ titolo: 'Preventivi e contratti per consulente · ' + labT,
+                    colonne: [T('Consulente', 24), T('Sede', 26), I('Preventivi'), I('Contratti'), Q('Conversione')].concat(splitCol), righe: consR, totale: totC },
+                    { titolo: 'Consulente per marca (chi ha fatto cosa)', colonne: [T('Consulente', 24), T('Marca', 20), I('Preventivi'), I('Contratti'), Q('Conversione')], righe: cm }] }
+            ];
+            // elenco dei clienti: un foglio per tipologia
+            const riga = r => [dd(r.data), r.cliente, r.vend, SEDI[r.sede] || '', r.marca, r.veicolo, r.tipo, r.origine, esito(r), r.b2b ? 'Sì' : ''];
+            const colL = [T('Data', 11), T('Cliente', 28), T('Consulente', 22), T('Sede', 26), T('Marca', 16), T('Veicolo', 34), T('Tipologia', 11), T('Origine', 22), T('Esito', 12), T('B2B', 6)];
+            (st.t ? [st.t] : TIPI_V).forEach(k => {
+                const L = D.Rt.filter(r => r.tipo === k).sort((a, b) => String(a.marca).localeCompare(String(b.marca), 'it') || String(a.vend).localeCompare(String(b.vend), 'it') || b.data - a.data);
+                if (L.length) fogli.push({ nome: 'Clienti ' + k, tabelle: [{ titolo: `Clienti · preventivi ${k} (${nf(L.length)})`, colonne: colL, righe: L.map(riga) }] });
+            });
+            const body = { titolo: 'Marchi per tipologia · ' + labT, sottotitolo: [title(), 'Periodo ' + per(), labT, st.q.trim() ? 'marchi che contengono "' + st.q.trim() + '"' : '', view.k !== 'b2b' ? (b2bOn ? 'B2B incluso' : 'B2B escluso') : ''].filter(Boolean).join(' · '),
+                file: ('commerciale_marchi_' + (st.t || 'tutte') + '_' + title()).replace(/[^A-Za-z0-9]+/g, '_') + '.xlsx', fogli };
+            const res = await fetch('/api/commerciale/export/excel', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            if (!res.ok) { let m = 'Errore ' + res.status; try { m = (await res.json()).error || m; } catch (e) { /* */ } throw new Error(m); }
+            const blob = await res.blob(), url = URL.createObjectURL(blob), aEl = document.createElement('a');
+            aEl.href = url; aEl.download = body.file; document.body.appendChild(aEl); aEl.click(); aEl.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 4000);
+        } catch (e) { alert('Excel non creato: ' + e.message); }
+        finally { btn.innerHTML = lab0; btn.disabled = false; }
     }
 
     /* ================= finestre: storico import ================= */

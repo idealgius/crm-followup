@@ -247,7 +247,7 @@ function renderPreventiviList(tipo, containerId, countId) {
 
     const cardClass = tipo === 'VENDITA' ? 'vendita' : 'noleggio';
 
-    container.innerHTML = items.map(p => {
+    const cardHtml = p => {
         const isTerminal = TERMINAL_STATUSES.includes(p.status);
         const initials = preventivoInitials(p.clienteNome, p.clienteCognome);
         const metaLine1 = `🚘 ${p.marca} — ${p.modello}${p.targaTelaio ? ' — ' + p.targaTelaio : ''}`;
@@ -350,7 +350,118 @@ function renderPreventiviList(tipo, containerId, countId) {
             <div id="preventivoDetail-${p.id}" class="preventivo-detail" style="display:none">${historyHtml}</div>
             ${rentBadgeHtml}
         </div>`;
+    };
+    container.innerHTML = pvGruppiHtml(tipo, items, cardHtml);
+}
+
+// ============================================================
+// NUOVO: preventivi raggruppati in schede per consulente (ordine alfabetico),
+// ogni scheda si apre/chiude; dentro, i preventivi per data (crescente o
+// decrescente). Schede aperte e ordine restano ricordati in questo browser.
+const PVG_LS = 'pvGruppi';
+let pvgStato = null;
+function pvgLeggi() {
+    if (pvgStato) return pvgStato;
+    let o = {};
+    try { o = JSON.parse(localStorage.getItem(PVG_LS) || '{}') || {}; } catch (e) { o = {}; }
+    pvgStato = { aperti: new Set(Array.isArray(o.aperti) ? o.aperti : []), ordine: o.ordine && typeof o.ordine === 'object' ? o.ordine : {} };
+    return pvgStato;
+}
+function pvgSalva() {
+    const st = pvgLeggi();
+    try { localStorage.setItem(PVG_LS, JSON.stringify({ aperti: [...st.aperti].slice(-200), ordine: st.ordine })); } catch (e) { /* */ }
+}
+function pvgEsc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function pvgStile() {
+    if (document.getElementById('pvgStyle')) return;
+    const st = document.createElement('style'); st.id = 'pvgStyle';
+    st.textContent = `
+.pvg-bar { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin:0 0 12px; font-size:12.5px; color:var(--text-secondary); }
+.pvg-seg { display:inline-flex; padding:3px; border-radius:10px; background:var(--bg-card); border:1px solid var(--border); gap:2px; }
+.pvg-seg button, .pvg-btn { border:0; background:none; color:var(--text-secondary); font:inherit; font-size:12px; font-weight:700; padding:6px 12px; border-radius:8px; cursor:pointer; white-space:nowrap; }
+.pvg-seg button.on { background:var(--bg-card2); color:var(--text-primary); box-shadow:0 1px 4px rgba(0,0,0,.25); }
+.pvg-btn { border:1px solid var(--border); background:var(--bg-card); }
+.pvg-btn:hover, .pvg-seg button:hover { color:var(--text-primary); }
+.pvg-bar-r { display:flex; gap:6px; flex-wrap:wrap; }
+.pvg { border:1px solid var(--border); border-radius:14px; background:var(--bg-card); margin-bottom:10px; overflow:hidden; }
+.pvg-h { display:flex; align-items:center; gap:12px; width:100%; padding:12px 16px; border:0; background:none; color:var(--text-primary); font:inherit; text-align:left; cursor:pointer; }
+.pvg-h:hover { background:rgba(127,127,127,.07); }
+.pvg-av { flex:none; width:34px; height:34px; border-radius:50%; display:grid; place-items:center; font-size:12px; font-weight:800; background:rgba(127,127,127,.15); }
+.pvg.vendita .pvg-av { background:rgba(255,61,61,.15); color:#ff8a8a; }
+.pvg.noleggio .pvg-av { background:rgba(0,200,83,.15); color:#5fe396; }
+.pvg-n { font-size:14.5px; font-weight:800; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pvg-tot { flex:none; font-size:12px; font-weight:800; padding:2px 9px; border-radius:999px; background:rgba(127,127,127,.15); }
+.pvg-tags { display:flex; gap:6px; flex-wrap:wrap; margin-left:auto; justify-content:flex-end; }
+.pvg-t { font-size:11px; font-weight:700; padding:3px 8px; border-radius:999px; white-space:nowrap; background:rgba(127,127,127,.12); color:var(--text-secondary); }
+.pvg-t.sosp { background:rgba(240,160,48,.16); color:#f0a030; }
+.pvg-t.sosp.alto { background:rgba(255,90,95,.16); color:#ff6b6f; }
+.pvg-t.tratt { background:rgba(255,152,0,.12); color:#ff9800; }
+.pvg-t.ok { background:rgba(0,200,83,.12); color:#3fcf7f; }
+.pvg-ch { flex:none; font-size:12px; color:var(--text-secondary); transition:transform .2s; }
+.pvg.open .pvg-ch { transform:rotate(180deg); }
+.pvg-b { display:none; padding:4px 14px 2px; border-top:1px solid var(--border); }
+.pvg.open .pvg-b { display:block; }
+.pvg-b .preventivo-card { margin:10px 0; }
+@media (max-width:640px) {
+  .pvg-h { flex-wrap:wrap; padding:11px 12px; gap:8px 10px; }
+  .pvg-tags { margin-left:44px; width:100%; justify-content:flex-start; order:5; }
+  .pvg-ch { margin-left:auto; }
+  .pvg-b { padding:2px 8px; }
+}`;
+    document.head.appendChild(st);
+}
+function pvGruppiHtml(tipo, items, cardHtml) {
+    pvgStile();
+    const st = pvgLeggi(), ord = st.ordine[tipo] === 'asc' ? 'asc' : 'desc';
+    const cls = tipo === 'VENDITA' ? 'vendita' : 'noleggio';
+    const t = p => p.createdAt ? new Date(p.createdAt).getTime() : 0;
+    const G = new Map();
+    items.forEach(p => { const k = (p.consultantName || '').trim() || 'Senza consulente'; if (!G.has(k)) G.set(k, []); G.get(k).push(p); });
+    const nomi = [...G.keys()].sort((a, b) => a === 'Senza consulente' ? 1 : b === 'Senza consulente' ? -1 : a.localeCompare(b, 'it', { sensitivity: 'base' }));
+    const bar = `<div class="pvg-bar" data-pvg-tipo="${tipo}">
+        <span>${nomi.length} ${nomi.length === 1 ? 'consulente' : 'consulenti'} · data:</span>
+        <span class="pvg-seg"><button type="button" class="${ord === 'desc' ? 'on' : ''}" onclick="pvgOrdina('${tipo}','desc')" title="Prima i preventivi più recenti">↓ Più recenti</button><button type="button" class="${ord === 'asc' ? 'on' : ''}" onclick="pvgOrdina('${tipo}','asc')" title="Prima i preventivi più vecchi">↑ Più vecchi</button></span>
+        <span class="pvg-bar-r"><button type="button" class="pvg-btn" onclick="pvgTutti('${tipo}',true)">Apri tutti</button><button type="button" class="pvg-btn" onclick="pvgTutti('${tipo}',false)">Chiudi tutti</button></span>
+    </div>`;
+    return bar + nomi.map(n => {
+        const L = G.get(n).slice().sort((a, b) => ord === 'asc' ? t(a) - t(b) : t(b) - t(a));
+        const key = tipo + '|' + n, aperto = st.aperti.has(key);
+        const sosp = L.map(preventivoGiorniSospeso).filter(g => g > 0), alto = sosp.some(g => g >= 3);
+        const nT = L.filter(p => p.status === 'TRATTATIVA_GENERATA').length, nC = L.filter(p => p.status === 'CHIUSA').length;
+        const nG = L.filter(p => p.status === 'GENERATO').length - sosp.length;
+        const nN = L.filter(p => p.status === 'NON_INTERESSATO').length, nF = L.filter(p => p.status === 'FALLITA').length;
+        const tags = [
+            sosp.length ? `<span class="pvg-t sosp ${alto ? 'alto' : ''}">⏰ ${sosp.length} in sospeso</span>` : '',
+            nG > 0 ? `<span class="pvg-t">${nG} da gestire</span>` : '',
+            nT ? `<span class="pvg-t tratt">➡️ ${nT} in trattativa</span>` : '',
+            nC ? `<span class="pvg-t ok">✅ ${nC} ${nC === 1 ? 'chiuso' : 'chiusi'}</span>` : '',
+            nN ? `<span class="pvg-t">🙅 ${nN} non interessat${nN === 1 ? 'o' : 'i'}</span>` : '',
+            nF ? `<span class="pvg-t">❌ ${nF} fallit${nF === 1 ? 'o' : 'i'}</span>` : ''
+        ].join('');
+        const ini = n.split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0]).join('').toUpperCase() || '?';
+        return `<div class="pvg ${cls} ${aperto ? 'open' : ''}" data-pvg="${pvgEsc(key)}">
+            <button type="button" class="pvg-h" onclick="pvgApri(this.parentElement)" aria-expanded="${aperto}">
+                <span class="pvg-av">${pvgEsc(ini)}</span><span class="pvg-n">${pvgEsc(n)}</span><span class="pvg-tot">${L.length}</span>
+                <span class="pvg-tags">${tags}</span><span class="pvg-ch">▾</span>
+            </button>
+            <div class="pvg-b">${L.map(cardHtml).join('')}</div>
+        </div>`;
     }).join('');
+}
+function pvgApri(el, forza) {
+    const st = pvgLeggi(), key = el.dataset.pvg;
+    const on = forza === undefined ? !el.classList.contains('open') : !!forza;
+    el.classList.toggle('open', on);
+    const h = el.querySelector('.pvg-h'); if (h) h.setAttribute('aria-expanded', String(on));
+    if (on) st.aperti.add(key); else st.aperti.delete(key);
+    pvgSalva();
+}
+function pvgTutti(tipo, on) {
+    document.querySelectorAll('.pvg').forEach(el => { if ((el.dataset.pvg || '').startsWith(tipo + '|')) pvgApri(el, on); });
+}
+function pvgOrdina(tipo, ord) {
+    const st = pvgLeggi(); st.ordine[tipo] = ord; pvgSalva();
+    renderPreventiviList(tipo, tipo === 'VENDITA' ? 'preventiviVenditaList' : 'preventiviNoleggioList', tipo === 'VENDITA' ? 'preventiviVenditaCount' : 'preventiviNoleggioCount');
 }
 
 function togglePreventivoDetail(id) {
@@ -745,6 +856,7 @@ function jumpToPreventivoCard(id) {
     setTimeout(() => {
         const card = document.querySelector(`[data-preventivo-id="${id}"]`);
         if (!card) return;
+        const g = card.closest('.pvg'); if (g && !g.classList.contains('open')) pvgApri(g, true);   // NUOVO: apre la scheda del consulente
         card.scrollIntoView({ behavior: 'smooth', block: 'center' });
         card.classList.add('preventivo-card-highlight');
         setTimeout(() => card.classList.remove('preventivo-card-highlight'), 2500);
