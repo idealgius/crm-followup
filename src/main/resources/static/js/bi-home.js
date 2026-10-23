@@ -192,6 +192,101 @@
         </div>`;
     }
 
+    // COMMERCIALE: plancia notturna. Coordinate del palco 750 x 580.
+    // Parabrezza (strada, citta', auto davanti), display curvo con due quadranti (vendite e
+    // noleggio del mese: numeri veri) e al centro l'andamento degli ultimi 6 mesi; bocchette,
+    // luce ambiente, tunnel con cambio e start, volante.
+    function cockpitScene() {
+        let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+        // skyline con finestre accese
+        let city = '', win = '';
+        for (let x = 70; x < 690; ) {
+            const w = 10 + Math.round(rnd() * 22), h = 8 + Math.round(rnd() * (Math.abs(x - 375) < 120 ? 34 : 20));
+            city += `<rect x="${x}" y="${158 - h}" width="${w}" height="${h}"/>`;
+            for (let wy = 158 - h + 3; wy < 155; wy += 4) for (let wx = x + 2; wx < x + w - 2; wx += 4) if (rnd() < .22) win += `<rect x="${wx}" y="${wy}" width="1.6" height="1.6" opacity="${(.35 + rnd() * .6).toFixed(2)}"/>`;
+            x += w + Math.round(rnd() * 3);
+        }
+        let stars = ''; for (let k = 0; k < 26; k++) stars += `<circle cx="${(80 + rnd() * 590).toFixed(0)}" cy="${(20 + rnd() * 90).toFixed(0)}" r="${(.5 + rnd() * .8).toFixed(1)}" opacity="${(.25 + rnd() * .5).toFixed(2)}"/>`;
+        // quadrante: 270 gradi, tacche
+        const dial = (id, lab, col1, col2) => {
+            let t = '';
+            for (let k = 0; k <= 40; k++) {
+                const a = (135 + k * 270 / 40) * Math.PI / 180, big = k % 5 === 0, r1 = big ? 64 : 68, r2 = 74;
+                t += `<line x1="${(100 + r1 * Math.cos(a)).toFixed(1)}" y1="${(100 + r1 * Math.sin(a)).toFixed(1)}" x2="${(100 + r2 * Math.cos(a)).toFixed(1)}" y2="${(100 + r2 * Math.sin(a)).toFixed(1)}" class="${big ? 'bh-ck-tb' : ''}"/>`;
+            }
+            return `<div class="bh-ck-dial" data-ck="${id}">
+              <svg viewBox="0 0 200 200"><defs><linearGradient id="bh-ckd-${id}" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="${col1}"/><stop offset="1" stop-color="${col2}"/></linearGradient>
+                <radialGradient id="bh-ckf-${id}"><stop offset=".55" stop-color="${col2}" stop-opacity=".10"/><stop offset="1" stop-color="${col2}" stop-opacity="0"/></radialGradient></defs>
+                <circle cx="100" cy="100" r="96" fill="url(#bh-ckf-${id})"/>
+                <circle cx="100" cy="100" r="84" class="bh-ck-trk"/>
+                <circle cx="100" cy="100" r="84" class="bh-ck-arc" stroke="url(#bh-ckd-${id})"/>
+                <g class="bh-ck-tk">${t}</g>
+                <g class="bh-ck-nd"><circle cx="184" cy="100" r="5.5" fill="#fff"/><circle cx="184" cy="100" r="11" fill="${col2}" opacity=".35"/></g>
+                <text x="60" y="181" class="bh-ck-mm">0</text><text x="140" y="181" class="bh-ck-mm" data-ck-max>–</text></svg>
+              <div class="bh-ck-dv"><small>${lab}</small><b data-ck-val>–</b><em>contratti</em><span data-ck-mese>mese in corso</span></div>
+              <div class="bh-ck-best" data-ck-best>&nbsp;</div>
+            </div>`;
+        };
+        return `<div class="bh-ck" id="bh-ck">
+          <svg class="bh-ck-wind" viewBox="0 0 750 232" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="bh-cks" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#070a18"/><stop offset=".5" stop-color="#151a36"/><stop offset=".8" stop-color="#352947"/><stop offset="1" stop-color="#5d3540"/></linearGradient>
+              <radialGradient id="bh-ckh" cx=".5" cy="1" r=".6"><stop offset="0" stop-color="#ff8a4a" stop-opacity=".45"/><stop offset="1" stop-color="#ff8a4a" stop-opacity="0"/></radialGradient>
+              <linearGradient id="bh-ckr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1a1b22"/><stop offset="1" stop-color="#08090c"/></linearGradient>
+              <radialGradient id="bh-ckt"><stop offset="0" stop-color="#ff3b2f" stop-opacity=".9"/><stop offset="1" stop-color="#ff3b2f" stop-opacity="0"/></radialGradient>
+              <radialGradient id="bh-ckl"><stop offset="0" stop-color="#ffc070" stop-opacity=".55"/><stop offset="1" stop-color="#ffc070" stop-opacity="0"/></radialGradient>
+              <linearGradient id="bh-ckm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2c34"/><stop offset="1" stop-color="#101116"/></linearGradient>
+            </defs>
+            <rect width="750" height="160" fill="url(#bh-cks)"/>
+            <g fill="#fff">${stars}</g>
+            <ellipse cx="375" cy="160" rx="380" ry="46" fill="url(#bh-ckh)"/>
+            <g fill="#0b0d1a">${city}</g><g fill="#ffcf7a">${win}</g>
+            <polygon points="0,232 340,158 410,158 750,232" fill="url(#bh-ckr)"/>
+            <line x1="342" y1="158" x2="40" y2="232" class="bh-ck-edge"/><line x1="408" y1="158" x2="710" y2="232" class="bh-ck-edge"/>
+            ${[0.18, 0.34, 0.55, 0.82].map(q => { const y = 158 + q * 74, h = 6 + q * 70, xl = 340 - q * 300 - 14 * q, xr = 410 + q * 300 + 14 * q, r = 1.2 + q * 3; return [[xl, -1], [xr, 1]].map(([x, d]) => `<line x1="${x.toFixed(1)}" y1="${y.toFixed(1)}" x2="${x.toFixed(1)}" y2="${(y - h).toFixed(1)}" class="bh-ck-pole" stroke-width="${(.6 + q * 1.6).toFixed(1)}"/><line x1="${x.toFixed(1)}" y1="${(y - h).toFixed(1)}" x2="${(x - d * (3 + q * 14)).toFixed(1)}" y2="${(y - h).toFixed(1)}" class="bh-ck-pole" stroke-width="${(.6 + q * 1.4).toFixed(1)}"/><circle cx="${(x - d * (3 + q * 14)).toFixed(1)}" cy="${(y - h + 1).toFixed(1)}" r="${(r * 3).toFixed(1)}" fill="url(#bh-ckl)"/><circle cx="${(x - d * (3 + q * 14)).toFixed(1)}" cy="${(y - h + 1).toFixed(1)}" r="${(r * .55).toFixed(1)}" fill="#ffe3b0"/>`).join(''); }).join('')}
+            <line x1="362" y1="158" x2="250" y2="232" class="bh-ck-lane"/><line x1="388" y1="158" x2="500" y2="232" class="bh-ck-lane"/>
+            <g class="bh-ck-car"><ellipse cx="381" cy="176" rx="30" ry="9" fill="url(#bh-ckt)" opacity=".5"/>
+              <path d="M364,174 L366,166 Q368,162 373,162 L389,162 Q394,162 396,166 L398,174 Z" fill="#0a0b0f"/>
+              <rect x="362" y="170" width="38" height="7" rx="2" fill="#111218"/>
+              <rect x="364" y="171" width="7" height="2.4" rx="1" fill="#ff4a3a"/><rect x="391" y="171" width="7" height="2.4" rx="1" fill="#ff4a3a"/>
+              <circle cx="367.5" cy="172.2" r="6" fill="url(#bh-ckt)"/><circle cx="394.5" cy="172.2" r="6" fill="url(#bh-ckt)"/></g>
+            <path d="M0,0 L96,0 L18,232 L0,232 Z" fill="#06070a"/><path d="M750,0 L654,0 L732,232 L750,232 Z" fill="#06070a"/>
+            <rect width="750" height="12" fill="#06070a"/>
+            <rect x="371" y="10" width="8" height="12" fill="#0b0c10"/>
+            <rect x="318" y="18" width="114" height="34" rx="12" fill="url(#bh-ckm)" stroke="rgba(255,255,255,.08)"/>
+            <rect x="326" y="24" width="98" height="22" rx="8" fill="#0d1222"/><path d="M330,40 L352,26 L366,26 L344,40 Z" fill="rgba(255,255,255,.06)"/>
+          </svg>
+          <div class="bh-ck-dash">
+            <div class="bh-ck-disp">
+              ${dial('v', 'VENDITE · MESE', '#ff6a1a', '#ffb36b')}
+              <div class="bh-ck-mid">
+                <div class="bh-ck-sb"><b data-ck-ora>--:--</b><span data-ck-data></span><span class="bh-ck-ic"><i class="bh-ck-sig"><i></i><i></i><i></i></i>18°</span></div>
+                <div class="bh-ck-ch"><div class="bh-ck-cht"><small>CONTRATTI · ULTIMI 6 MESI</small><span><i class="v"></i>Vendita<i class="n"></i>Noleggio</span></div>
+                  <div class="bh-ck-bars" data-ck-bars>${'<div><i class="v"></i><i class="n"></i><em></em></div>'.repeat(6)}</div></div>
+                <div class="bh-ck-ind">
+                  <div><small>LEAD · OGGI</small><b data-n="38">0</b><em class="bh-up">▲ 12%</em></div>
+                  <div><small>OBIETTIVO</small><b><span data-n="78">0</span>%</b><span class="bh-ck-pb"><i></i></span></div>
+                </div>
+              </div>
+              ${dial('n', 'NOLEGGIO · MESE', '#2f7de0', '#8fd0ff')}
+            </div>
+            <div class="bh-ck-vent bh-l"></div><div class="bh-ck-vent bh-r"></div>
+            <div class="bh-ck-strip"></div>
+          </div>
+          <div class="bh-ck-console">
+            <div class="bh-ck-gear"><span>P</span><span>R</span><span>N</span><span class="on">D</span></div>
+            <div class="bh-ck-start"><b>ENGINE</b><small>START · STOP</small></div>
+            <div class="bh-ck-clim"><span>21,5°</span><small>AUTO</small></div>
+          </div>
+          <svg class="bh-ck-wheel" viewBox="0 0 360 360"><defs><linearGradient id="bh-ckw" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2b31"/><stop offset=".25" stop-color="#121317"/><stop offset="1" stop-color="#08090b"/></linearGradient></defs>
+            <circle cx="180" cy="180" r="150" fill="none" stroke="url(#bh-ckw)" stroke-width="34"/>
+            <circle cx="180" cy="180" r="150" fill="none" stroke="rgba(255,140,60,.55)" stroke-width="1.2" stroke-dasharray="3 4"/>
+            <path d="M42,196 C90,170 270,170 318,196 L304,232 C250,212 110,212 56,232 Z" fill="#101115"/>
+            <circle cx="180" cy="214" r="46" fill="#121318" stroke="rgba(255,255,255,.07)"/><circle cx="180" cy="214" r="18" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="2"/>
+            <rect x="78" y="186" width="26" height="12" rx="4" fill="#1d1f25"/><rect x="256" y="186" width="26" height="12" rx="4" fill="#1d1f25"/></svg>
+        </div>`;
+    }
+
     function template() {
         return `
 <div class="bh-page">
@@ -275,49 +370,12 @@
         <div class="bh-turn"><div class="bh-ring" id="bh-ring"></div></div>
         <div class="bh-chip"><i></i>Vetture in stock</div>
       </div>
-      <!-- COMMERCIALE (grafica provvisoria, da definire) -->
+      <!-- COMMERCIALE: plancia di un'auto di notte (cockpitScene). Vendite e noleggio del mese sono
+           veri (dal Commerciale), lead e obiettivo restano indicativi -->
       <div class="bh-scene" data-s="2">
         <div class="bh-cap"><i></i>Lead, vendite e noleggio</div>
-        <div class="bh-ck" id="bh-ck">
-          <!-- parabrezza notturno -->
-          <div class="bh-ck-sky"><svg viewBox="0 0 750 140" preserveAspectRatio="none"><path d="M0,110 L60,92 L120,100 L190,78 L260,96 L330,84 L410,102 L480,86 L560,98 L640,80 L750,96 L750,140 L0,140 Z" fill="#1b1e2a"/></svg></div>
-          <!-- plancia con display curvo -->
-          <div class="bh-ck-dash">
-            <div class="bh-ck-disp">
-              <div class="bh-ck-p">
-                <small>LEAD · OGGI</small><b data-n="38">0</b><em class="bh-up">▲ 12% vs ieri</em>
-                <svg class="bh-ck-spark" viewBox="0 0 160 40"><path d="M0,32 L20,28 L40,30 L60,20 L80,24 L100,14 L120,18 L140,8 L160,10" /></svg>
-              </div>
-              <div class="bh-ck-g">
-                <svg viewBox="0 0 220 130"><defs><linearGradient id="bh-ckg" x1="0" x2="1"><stop offset="0" stop-color="#ff7a1a"/><stop offset="1" stop-color="#ffd27a"/></linearGradient></defs>
-                  <path d="M20,118 A90,90 0 0 1 200,118" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="12" stroke-linecap="round"/>
-                  <path class="bh-ck-arc" d="M20,118 A90,90 0 0 1 200,118" fill="none" stroke="url(#bh-ckg)" stroke-width="12" stroke-linecap="round"/>
-                  <g class="bh-ck-ticks"></g>
-                  <line class="bh-ck-needle" x1="110" y1="118" x2="110" y2="40" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
-                  <circle cx="110" cy="118" r="7" fill="#ff7a1a"/></svg>
-                <div class="bh-ck-gv"><b data-n="78">0</b><span>%</span></div><small>OBIETTIVO DEL MESE</small>
-              </div>
-              <div class="bh-ck-r">
-                <div class="bh-ck-p2"><small>VENDITE · MESE</small><b data-n="142">0</b>
-                  <div class="bh-ck-bars"><i style="--h:40%"></i><i style="--h:62%"></i><i style="--h:55%"></i><i style="--h:80%"></i><i style="--h:100%"></i></div></div>
-                <div class="bh-ck-p2"><small>NOLEGGIO · MESE</small><b data-n="27">0</b>
-                  <div class="bh-ck-bars bh-rent"><i style="--h:30%"></i><i style="--h:45%"></i><i style="--h:70%"></i><i style="--h:60%"></i><i style="--h:90%"></i></div></div>
-              </div>
-            </div>
-            <div class="bh-ck-strip"></div>
-          </div>
-          <!-- tunnel centrale con tasti e manopola -->
-          <div class="bh-ck-console">
-            <div class="bh-ck-keys"></div>
-            <div class="bh-ck-knob"><span></span></div>
-          </div>
-          <!-- volante -->
-          <svg class="bh-ck-wheel" viewBox="0 0 300 300"><circle cx="150" cy="150" r="128" fill="none" stroke="#0c0d10" stroke-width="26"/><circle cx="150" cy="150" r="128" fill="none" stroke="rgba(255,122,26,.35)" stroke-width="1.5"/>
-            <path d="M40,170 C80,150 220,150 260,170 L250,200 C210,182 90,182 50,200 Z" fill="#0f1014"/><circle cx="150" cy="168" r="34" fill="#111216" stroke="rgba(255,255,255,.08)"/></svg>
-          <!-- luci ambiente sui sedili -->
-          <span class="bh-ck-seat bh-l"></span><span class="bh-ck-seat bh-r"></span>
-        </div>
-              </div>
+        ${cockpitScene()}
+      </div>
       <!-- SERVICE: officina connessa (in arrivo), disegnata da serviceScene() -->
       <div class="bh-scene" data-s="3">
         <div class="bh-cap"><i></i>Officina · ricambi · ordini di lavoro · prossimamente</div>
@@ -551,9 +609,42 @@
   }
   // COMMERCIALE: la sequenza riparte ogni 7 secondi mentre il capitolo e' attivo
   const cm = $('bh-ck');
-  // tasti della console che si accendono a turno
-  const keys = cm.querySelector('.bh-ck-keys'); for (let i = 0; i < 12; i++) keys.appendChild(document.createElement('i'));
-  setInterval(() => { if (!active || cur !== 2) return; const k = keys.children; [...k].forEach(x => x.classList.remove('bh-lit')); for (let j = 0; j < 3; j++) k[Math.floor(Math.random() * k.length)].classList.add('bh-lit'); }, 900);
+  // NUOVO: orologio della plancia e numeri veri (vendite e noleggio del mese, dal Commerciale)
+  const MES = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+  const MESL = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
+  const GG = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+  const ora = () => { const d = new Date(), o = cm.querySelector('[data-ck-ora]'), g = cm.querySelector('[data-ck-data]');
+    if (o) o.textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+    if (g) g.textContent = GG[d.getDay()] + ' ' + d.getDate() + ' ' + MES[d.getMonth()]; };
+  ora(); setInterval(ora, 20000);
+  let ckDati = null, ckQuando = 0;
+  function ckMostra() {
+    const M = ckDati && ckDati.mesi, cur = M && M[M.length - 1];
+    [['v', 'v'], ['n', 'n']].forEach(([id, f]) => {
+      const el = cm.querySelector(`[data-ck="${id}"]`); if (!el) return;
+      const val = el.querySelector('[data-ck-val]'), mx = el.querySelector('[data-ck-max]'), best = el.querySelector('[data-ck-best]'), mese = el.querySelector('[data-ck-mese]');
+      if (!cur) { val.textContent = '–'; delete val.dataset.n; mx.textContent = '–'; best.innerHTML = 'dati non disponibili'; el.style.setProperty('--p', 0); el.style.setProperty('--a', '135deg'); return; }
+      const top = M.reduce((b, x) => x[f] > b[f] ? x : b, M[0]), max = Math.max(1, top[f]), p = Math.min(1, cur[f] / max);
+      val.dataset.n = cur[f]; if (!cm.classList.contains('bh-run')) val.textContent = cur[f];
+      mx.textContent = max; mese.textContent = MESL[cur.m - 1] + ' · in corso';
+      best.innerHTML = top === cur ? 'mese migliore degli ultimi 6' : `mese migliore: <b>${top[f]}</b> a ${MESL[top.m - 1]}`;
+      el.style.setProperty('--p', p.toFixed(3)); el.style.setProperty('--a', (135 + 270 * p).toFixed(1) + 'deg');
+    });
+    const bars = cm.querySelector('[data-ck-bars]'); if (!bars) return;
+    const mx = M ? Math.max(1, ...M.map(x => Math.max(x.v, x.n))) : 1;
+    [...bars.children].forEach((b, i) => { const x = M && M[i];
+      b.children[0].style.setProperty('--h', x ? Math.max(3, x.v / mx * 100) + '%' : '3%'); b.children[0].title = x ? x.v + ' vendite' : '';
+      b.children[1].style.setProperty('--h', x ? Math.max(3, x.n / mx * 100) + '%' : '3%'); b.children[1].title = x ? x.n + ' noleggi' : '';
+      b.children[2].textContent = x ? MES[x.m - 1] : ''; b.classList.toggle('cur', !!x && i === M.length - 1); });
+  }
+  async function ckCarica() {
+    if (Date.now() - ckQuando < 5 * 60 * 1000 && ckDati) return;
+    ckQuando = Date.now();
+    const M = window.MacroHome, C = window.CommercialeBI;
+    try { ckDati = (M && M.canCommerciale && M.canCommerciale() && C && C.riepilogoMesi) ? await C.riepilogoMesi() : null; } catch (e) { ckDati = null; }
+    ckMostra();
+  }
+  ckMostra();
   const count = () => cm.querySelectorAll('[data-n]').forEach(el => { const n = +el.dataset.n; let v = 0; const st = Math.max(1, Math.round(n / 40));
     const iv = setInterval(() => { v = Math.min(n, v + st); el.textContent = v; if (v >= n) clearInterval(iv); }, 30); });
   const cmRun = () => { cm.classList.remove('bh-run'); void cm.offsetWidth; cm.classList.add('bh-run'); count(); };
@@ -568,6 +659,7 @@
   // Avvio/arresto: tutto gira solo mentre la pagina BI e' visibile
   function start() {
     permessi(); chiudi(); setTimeout(posTog, 0);
+    ckCarica();
     scale(); active = true; paused = false; settle();
     if (cur < 0) go(0, true); else if (cur === 2) cmRun(); else if (cur === 1) stockSpin(); else if (cur === 3) svRun();
     restart();
