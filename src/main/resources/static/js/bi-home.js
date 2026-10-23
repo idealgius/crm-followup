@@ -229,8 +229,29 @@
             </div>`;
         };
         // lampioni che vengono incontro (disegnati a grandezza piena nell'origine, la CSS li sposta e li ingrandisce)
-        const lamp = (side, k) => `<g class="bh-ck-lamp bh-${side}" style="animation-delay:${(-k * .8).toFixed(2)}s"><line x1="0" y1="0" x2="0" y2="-92" class="bh-ck-pole" stroke-width="3"/><line x1="0" y1="-92" x2="${side === 'l' ? 16 : -16}" y2="-92" class="bh-ck-pole" stroke-width="2.6"/><circle cx="${side === 'l' ? 16 : -16}" cy="-89" r="22" fill="url(#bh-ckl)"/><circle cx="${side === 'l' ? 16 : -16}" cy="-89.5" r="3.4" fill="#ffe7b8"/></g>`;
+        // Halloween: su alcuni lampioni un rampicante sale lungo il palo e in cima c'e' una zucca intagliata
+        const hwd = side => `<g class="bh-ck-hwd"><path d="M0,0 C5,-8 -5,-14 0,-22 C5,-30 -5,-36 0,-44 C5,-52 -5,-58 0,-66 C5,-74 -5,-80 0,-88" class="bh-ck-vine"/>
+            ${[[-3, -8, -30], [3, -19, 30], [-3, -31, -30], [3, -41, 30], [-3, -53, -30], [3, -63, 30], [-3, -75, -30], [3, -84, 30]].map(([x, y, r]) => `<ellipse cx="${x}" cy="${y}" rx="3.2" ry="1.6" transform="rotate(${r} ${x} ${y})" class="bh-ck-leaf"/>`).join('')}
+            <circle cx="0" cy="-99" r="16" fill="url(#bh-ckpg)"/><ellipse cx="-4" cy="-98" rx="5" ry="6.5" fill="url(#bh-ckpu)"/><ellipse cx="4" cy="-98" rx="5" ry="6.5" fill="url(#bh-ckpu)"/><ellipse cx="0" cy="-98" rx="5.5" ry="7" fill="url(#bh-ckpu)"/>
+            <path d="M-.6,-104.5 Q-1,-108 1.6,-108.6 Q1.6,-106.4 .9,-104.6 Z" fill="#4f7a2a"/>
+            <g class="bh-ck-pface"><path d="M-4,-100 L-2,-102.5 L-1,-99.5 Z"/><path d="M4,-100 L2,-102.5 L1,-99.5 Z"/><path d="M-4.5,-96.5 L-2.5,-95.4 L-1,-96.5 L0,-95 L1,-96.5 L2.5,-95.4 L4.5,-96.5 Q3,-92.6 0,-92.6 Q-3,-92.6 -4.5,-96.5 Z"/></g></g>`;
+        // lampioni che vengono incontro (disegnati a grandezza piena nell'origine, la CSS li sposta e li ingrandisce)
+        const lamp = (side, k) => `<g class="bh-ck-lamp bh-${side}" style="animation-delay:${(-k * .8).toFixed(2)}s"><line x1="0" y1="0" x2="0" y2="-92" class="bh-ck-pole" stroke-width="3"/><line x1="0" y1="-92" x2="${side === 'l' ? 16 : -16}" y2="-92" class="bh-ck-pole" stroke-width="2.6"/><circle cx="${side === 'l' ? 16 : -16}" cy="-89" r="22" fill="url(#bh-ckl)"/><circle cx="${side === 'l' ? 16 : -16}" cy="-89.5" r="3.4" fill="#ffe7b8"/>${(k + (side === 'l' ? 0 : 1)) % 2 === 0 ? hwd(side) : ''}</g>`;
         const lamps = [0, 1, 2, 3].map(k => lamp('l', k) + lamp('r', k)).join('');
+        // ragnatela che si forma sull'angolo sinistro del cruscotto (evento Halloween)
+        const O = [64, 60], ANC = [[14, 6], [92, 4], [150, 22], [168, 64], [146, 118], [64, 128], [8, 112], [4, 52]];
+        let webR = '', webS = '';
+        ANC.forEach(([x, y], i) => { webR += `<path d="M${O[0]},${O[1]} L${x},${y}" style="--l:${Math.hypot(x - O[0], y - O[1]).toFixed(0)};--w:${(i * .07).toFixed(2)}s"/>`; });
+        [.22, .4, .58, .76, .93].forEach((f, r) => {
+            let d = '';
+            ANC.concat([ANC[0]]).forEach(([x, y], i) => { const px = O[0] + (x - O[0]) * f, py = O[1] + (y - O[1]) * f;
+                if (!i) d = `M${px.toFixed(1)},${py.toFixed(1)}`;
+                else { const [x0, y0] = ANC[i - 1], qx = O[0] + ((x0 + x) / 2 - O[0]) * f * .82, qy = O[1] + ((y0 + y) / 2 - O[1]) * f * .82; d += ` Q${qx.toFixed(1)},${qy.toFixed(1)} ${px.toFixed(1)},${py.toFixed(1)}`; } });
+            webS += `<path d="${d}" style="--l:${(f * 520).toFixed(0)};--w:${(.6 + r * .22).toFixed(2)}s"/>`;
+        });
+        const dweb = `<svg class="bh-ck-dweb" viewBox="0 0 170 132"><g class="bh-ck-wr">${webR}</g><g class="bh-ck-ws">${webS}</g>
+            <g class="bh-ck-spider"><line x1="64" y1="60" x2="64" y2="94" class="bh-ck-thr"/><g class="bh-ck-spb"><ellipse cx="64" cy="62" rx="2.6" ry="3.2"/><circle cx="64" cy="58.2" r="1.8"/>
+            <path d="M62,60 l-5,-3 M62,61.5 l-5.5,0 M62,63 l-5,3 M62,64.5 l-4,4.5 M66,60 l5,-3 M66,61.5 l5.5,0 M66,63 l5,3 M66,64.5 l4,4.5"/></g></g></svg>`;
         // NUOVO: addobbi stagionali (eventi "halloween" in ottobre e "natale" in dicembre)
         const bat = (k, y, sc, d) => `<g class="bh-ck-bat" style="--y:${y}px;--s:${sc};animation-delay:${d}s"><g class="bh-ck-batw"><path d="M0,2 C-3,-1 -6,-4 -13,-3 C-10,-1 -10,2 -8,3.5 C-6,1.5 -3.5,2.5 -2,4.5 L0,3.4 L2,4.5 C3.5,2.5 6,1.5 8,3.5 C10,2 10,-1 13,-3 C6,-4 3,-1 0,2 Z"/><circle cx="0" cy="0.6" r="1.6"/></g></g>`;
         const bats = [[0, 52, 1.2, 0], [1, 78, .8, .5], [2, 40, .9, 1.1], [3, 95, 1.4, 1.8], [4, 64, .7, 2.4], [5, 30, 1, 3.1]].map(a => bat(...a)).join('');
@@ -244,11 +265,6 @@
             [.2, .4, .6, .8].forEach(t => { const x = (1 - t) * (1 - t) * x0 + 2 * (1 - t) * t * cx + t * t * x1, y = (1 - t) * (1 - t) * 14 + 2 * (1 - t) * t * 32 + t * t * 14;
                 bulbs += `<circle cx="${x.toFixed(1)}" cy="${(y + 2.5).toFixed(1)}" r="2.6" fill="${COLS[n % 4]}" class="bh-ck-bulb ${n % 2 ? 'bh-b' : ''}"/>`; n++; });
         }
-        const pumpkin = side => `<svg class="bh-ck-pump bh-${side}" viewBox="0 0 80 64"><defs><radialGradient id="bh-ckpu-${side}" cx=".45" cy=".4"><stop offset="0" stop-color="#ffa53d"/><stop offset=".7" stop-color="#e8661b"/><stop offset="1" stop-color="#a8400e"/></radialGradient></defs>
-            <ellipse cx="40" cy="60" rx="34" ry="4" fill="#000" opacity=".5"/>
-            <path d="M38,12 Q36,4 42,2 Q44,6 42,13 Z" fill="#4f7a2a"/>
-            <ellipse cx="22" cy="36" rx="16" ry="22" fill="url(#bh-ckpu-${side})"/><ellipse cx="58" cy="36" rx="16" ry="22" fill="url(#bh-ckpu-${side})"/><ellipse cx="40" cy="36" rx="20" ry="24" fill="url(#bh-ckpu-${side})"/>
-            <g class="bh-ck-pface"><path d="M26,30 L33,22 L36,32 Z"/><path d="M54,30 L47,22 L44,32 Z"/><path d="M38,36 L40,32 L42,36 Z"/><path d="M24,42 L30,46 L34,42 L40,47 L46,42 L50,46 L56,42 Q52,54 40,54 Q28,54 24,42 Z"/></g></svg>`;
         return `<div class="bh-ck" id="bh-ck">
           <svg class="bh-ck-wind" viewBox="0 0 750 232" preserveAspectRatio="none">
             <defs>
@@ -266,6 +282,8 @@
               <clipPath id="bh-ckclip"><rect x="326" y="24" width="98" height="22" rx="8"/></clipPath>
               <clipPath id="bh-ckwclip"><path d="M96,12 L654,12 L732,232 L18,232 Z"/></clipPath>
               <radialGradient id="bh-ckmoon"><stop offset=".45" stop-color="#ffe9b8" stop-opacity=".35"/><stop offset="1" stop-color="#ffe9b8" stop-opacity="0"/></radialGradient>
+              <radialGradient id="bh-ckpu" cx=".45" cy=".4"><stop offset="0" stop-color="#ffa53d"/><stop offset=".7" stop-color="#e8661b"/><stop offset="1" stop-color="#a8400e"/></radialGradient>
+              <radialGradient id="bh-ckpg"><stop offset="0" stop-color="#ff9a2e" stop-opacity=".45"/><stop offset="1" stop-color="#ff9a2e" stop-opacity="0"/></radialGradient>
               <radialGradient id="bh-ckl"><stop offset="0" stop-color="#ffc070" stop-opacity=".55"/><stop offset="1" stop-color="#ffc070" stop-opacity="0"/></radialGradient>
               <linearGradient id="bh-ckm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2c34"/><stop offset="1" stop-color="#101116"/></linearGradient>
             </defs>
@@ -337,7 +355,7 @@
             <div class="bh-ck-vent bh-l"></div><div class="bh-ck-vent bh-r"></div>
             <div class="bh-ck-strip"></div>
           </div>
-          <div class="bh-ck-pumps">${pumpkin('l')}${pumpkin('r')}</div>
+          ${dweb}
           <div class="bh-ck-console">
             <div class="bh-ck-gear"><span>P</span><span>R</span><span>N</span><span class="on">D</span></div>
             <div class="bh-ck-start"><b>ENGINE</b><small>START · STOP</small></div>
@@ -715,29 +733,33 @@
     const m = h >= 6 && h < 8 ? 'alba' : h >= 8 && h < 17 ? 'giorno' : h >= 17 && h < 19.5 ? 'tramonto' : 'notte';
     ['alba', 'giorno', 'tramonto', 'notte'].forEach(x => cm.classList.toggle('bh-m-' + x, x === m)); };
   modo(); setInterval(modo, 60000);
-  // NUOVO: ogni tanto succede UNA cosa, a caso: pioggia con tergicristalli, un'auto che sorpassa, una
-  // curva; in ottobre anche gli addobbi di Halloween, in dicembre quelli di Natale. Il capitolo resta
-  // in primo piano solo 9 secondi (i capitoli girano da soli): l'evento parte appena si arriva sul
-  // Commerciale (8 volte su 10) e, se ci si ferma sul capitolo, ogni tanto ne parte un altro.
-  const EV = { pioggia: 8000, sorpasso: 6500, curva: 7500, halloween: 8500, natale: 9000 };
-  let evUlt = '', evOn = false;
+  // NUOVO: eventi a rotazione, uno alla volta e a caso (circa ogni 8 secondi finche' si resta sul
+  // capitolo Commerciale): pioggia con tergicristalli, un'auto che sorpassa, una curva; in ottobre ogni
+  // tanto Halloween, in dicembre ogni tanto Natale. In ottobre i pipistrelli passano anche da soli.
+  const EV = { pioggia: 7500, sorpasso: 6500, curva: 7000, halloween: 8000, natale: 8500 };
+  let evUlt = '', evOn = false, evProx = null;
   const evScelte = () => { const m = new Date().getMonth();
-    return ['pioggia', 'sorpasso', 'curva'].concat(m === 9 ? ['halloween', 'halloween'] : [], m === 11 ? ['natale', 'natale'] : []); };
+    return ['pioggia', 'sorpasso', 'curva'].concat(m === 9 ? ['halloween'] : [], m === 11 ? ['natale'] : []); };
   function lancia(e) {
     if (!EV[e]) return;
     Object.keys(EV).forEach(x => cm.classList.remove('bh-ev-' + x)); void cm.offsetWidth;
     cm.classList.add('bh-ev-' + e); evUlt = e; evOn = true;
-    clearTimeout(lancia.t); lancia.t = setTimeout(() => { cm.classList.remove('bh-ev-' + e); evOn = false; }, EV[e]);
+    clearTimeout(lancia.t); lancia.t = setTimeout(() => { cm.classList.remove('bh-ev-' + e); evOn = false;
+      clearTimeout(evProx); evProx = setTimeout(evento, 900 + Math.random() * 1200); }, EV[e]);
   }
   function evento() {
     if (!active || cur !== 2 || reduce || document.hidden || evOn) return;
     const sc = evScelte().filter(e => e !== evUlt);
     lancia(sc[Math.floor(Math.random() * sc.length)]);
   }
-  const evArrivo = () => setTimeout(() => { if (Math.random() < .8) evento(); }, 1100);
-  setInterval(() => { if (Math.random() < .6) evento(); }, 14000);
+  const evArrivo = () => { clearTimeout(evProx); evProx = setTimeout(evento, 1100); };
+  // pipistrelli di ottobre, anche fuori dall'evento Halloween
+  setInterval(() => {
+    if (new Date().getMonth() !== 9 || !active || cur !== 2 || reduce || document.hidden || cm.classList.contains('bh-bats') || Math.random() < .45) return;
+    cm.classList.add('bh-bats'); setTimeout(() => cm.classList.remove('bh-bats'), 7600);
+  }, 5000);
   // per le prove: __bhCk.evento('pioggia' | 'sorpasso' | 'curva' | 'halloween' | 'natale'), __bhCk.modo('giorno' | ...)
-  window.__bhCk = { evento: lancia, modo: m => ['alba', 'giorno', 'tramonto', 'notte'].forEach(x => cm.classList.toggle('bh-m-' + x, x === m)) };
+  window.__bhCk = { pip: () => { cm.classList.remove('bh-bats'); void cm.offsetWidth; cm.classList.add('bh-bats'); setTimeout(() => cm.classList.remove('bh-bats'), 7600); }, evento: lancia, modo: m => ['alba', 'giorno', 'tramonto', 'notte'].forEach(x => cm.classList.toggle('bh-m-' + x, x === m)) };
   const count = () => cm.querySelectorAll('[data-n]').forEach(el => { const n = +el.dataset.n; let v = 0; const st = Math.max(1, Math.round(n / 40));
     const iv = setInterval(() => { v = Math.min(n, v + st); el.textContent = v; if (v >= n) clearInterval(iv); }, 30); });
   const cmRun = () => { cm.classList.remove('bh-run'); void cm.offsetWidth; cm.classList.add('bh-run'); count(); };
