@@ -294,15 +294,15 @@
             <ellipse class="bh-ck-hz" cx="375" cy="160" rx="380" ry="46" fill="url(#bh-ckh)"/>
             <g class="bh-ck-cityg"><g class="bh-ck-city">${city}</g><g class="bh-ck-win" fill="#ffcf7a">${win}</g></g>
             <g class="bh-ck-roadg">
-              <polygon class="bh-ck-road" points="0,232 340,158 410,158 750,232"/>
-              <line x1="342" y1="158" x2="40" y2="232" class="bh-ck-edge"/><line x1="408" y1="158" x2="710" y2="232" class="bh-ck-edge"/>
-              ${lamps}
-              <line x1="362" y1="158" x2="250" y2="232" class="bh-ck-lane"/><line x1="388" y1="158" x2="500" y2="232" class="bh-ck-lane"/>
-              <g class="bh-ck-car"><ellipse cx="381" cy="176" rx="30" ry="9" fill="url(#bh-ckt)" opacity=".5" class="bh-ck-tlg"/>
+              <path class="bh-ck-road bh-ck-rd" d="M0,232 Q170,195 340,158 L410,158 Q580,195 750,232 Z"/>
+              <path d="M40,232 Q191,195 342,158" class="bh-ck-edge bh-e1"/><path d="M710,232 Q559,195 408,158" class="bh-ck-edge bh-e2"/>
+              <g class="bh-ck-lampsg">${lamps}</g>
+              <path d="M250,232 Q306,195 362,158" class="bh-ck-lane bh-l1"/><path d="M500,232 Q444,195 388,158" class="bh-ck-lane bh-l2"/>
+              <g class="bh-ck-carg"><g class="bh-ck-car"><ellipse cx="381" cy="176" rx="30" ry="9" fill="url(#bh-ckt)" opacity=".5" class="bh-ck-tlg"/>
                 <path d="M364,174 L366,166 Q368,162 373,162 L389,162 Q394,162 396,166 L398,174 Z" class="bh-ck-body"/>
                 <rect x="362" y="170" width="38" height="7" rx="2" class="bh-ck-body2"/>
                 <rect x="364" y="171" width="7" height="2.4" rx="1" fill="#ff4a3a"/><rect x="391" y="171" width="7" height="2.4" rx="1" fill="#ff4a3a"/>
-                <circle cx="367.5" cy="172.2" r="6" fill="url(#bh-ckt)" class="bh-ck-brk"/><circle cx="394.5" cy="172.2" r="6" fill="url(#bh-ckt)" class="bh-ck-brk"/></g>
+                <circle cx="367.5" cy="172.2" r="6" fill="url(#bh-ckt)" class="bh-ck-brk"/><circle cx="394.5" cy="172.2" r="6" fill="url(#bh-ckt)" class="bh-ck-brk"/></g></g>
               <!-- auto che sorpassa nella corsia di sinistra (disegnata nell'origine, la CSS la sposta) -->
               <g class="bh-ck-ovt"><ellipse cx="0" cy="2" rx="46" ry="8" fill="#000" opacity=".45"/>
                 <path d="M-34,0 L-31,-17 Q-28,-26 -18,-27 L18,-27 Q28,-26 31,-17 L34,0 Z" class="bh-ck-body"/>
@@ -755,9 +755,9 @@
   const evArrivo = () => { clearTimeout(evProx); evProx = setTimeout(evento, 1100); };
   // pipistrelli di ottobre, anche fuori dall'evento Halloween
   setInterval(() => {
-    if (new Date().getMonth() !== 9 || !active || cur !== 2 || reduce || document.hidden || cm.classList.contains('bh-bats') || Math.random() < .45) return;
+    if (new Date().getMonth() !== 9 || !active || cur !== 2 || reduce || document.hidden || cm.classList.contains('bh-bats') || Math.random() < .55) return;
     cm.classList.add('bh-bats'); setTimeout(() => cm.classList.remove('bh-bats'), 7600);
-  }, 5000);
+  }, 5500);
   // per le prove: __bhCk.evento('pioggia' | 'sorpasso' | 'curva' | 'halloween' | 'natale'), __bhCk.modo('giorno' | ...)
   window.__bhCk = { pip: () => { cm.classList.remove('bh-bats'); void cm.offsetWidth; cm.classList.add('bh-bats'); setTimeout(() => cm.classList.remove('bh-bats'), 7600); }, evento: lancia, modo: m => ['alba', 'giorno', 'tramonto', 'notte'].forEach(x => cm.classList.toggle('bh-m-' + x, x === m)) };
   const count = () => cm.querySelectorAll('[data-n]').forEach(el => { const n = +el.dataset.n; let v = 0; const st = Math.max(1, Math.round(n / 40));

@@ -177,12 +177,25 @@
 @keyframes bh-ck-movt{0%{transform:translate(371px,33px) scale(.25);opacity:0}15%{opacity:1}100%{transform:translate(334px,46px) scale(2.4);opacity:1}}
 .bh-ev-sorpasso .bh-ck-ovt{animation:bh-ck-ovt 4.6s 1.5s cubic-bezier(.1,.6,.3,1) forwards}
 @keyframes bh-ck-ovt{0%{transform:translate(185px,258px) scale(1.55);opacity:1}25%{transform:translate(268px,210px) scale(.8);opacity:1}100%{transform:translate(360px,161px) scale(.1);opacity:0}}
-/* evento CURVA: la strada piega dolcemente a destra e torna dritta */
-.bh-ck-roadg{transform-origin:375px 232px}
-.bh-ev-curva .bh-ck-roadg{animation:bh-ck-curva 9.5s ease-in-out forwards}
-@keyframes bh-ck-curva{0%,100%{transform:skewX(0)}30%,70%{transform:skewX(-11deg)}}
-.bh-ev-curva .bh-ck-cityg{animation:bh-ck-pan 9.5s ease-in-out forwards}
-@keyframes bh-ck-pan{0%,100%{transform:translateX(0)}30%,70%{transform:translateX(-14px)}}
+/* evento CURVA: la strada si piega a destra (bordi e strisce curvi, il punto di fuga si sposta), l'auto
+   davanti la segue, i lampioni e la citta' scorrono di lato; poi torna dritta */
+.bh-ck-edge{fill:none}.bh-ck-lane{fill:none}
+.bh-ev-curva .bh-ck-rd{animation:bh-cv-rd 7s ease-in-out forwards}
+@keyframes bh-cv-rd{0%,100%{d:path("M0,232 Q170,195 340,158 L410,158 Q580,195 750,232 Z")}32%,68%{d:path("M0,232 Q350,216 468,158 L524,158 Q706,204 750,232 Z")}}
+.bh-ev-curva .bh-e1{animation:bh-cv-e1 7s ease-in-out forwards}
+@keyframes bh-cv-e1{0%,100%{d:path("M40,232 Q191,195 342,158")}32%,68%{d:path("M40,232 Q376,216 470,158")}}
+.bh-ev-curva .bh-e2{animation:bh-cv-e2 7s ease-in-out forwards}
+@keyframes bh-cv-e2{0%,100%{d:path("M710,232 Q559,195 408,158")}32%,68%{d:path("M710,232 Q694,204 522,158")}}
+.bh-ev-curva .bh-l1{animation:bh-cv-l1 7s ease-in-out forwards,bh-ck-lane .9s linear infinite}
+@keyframes bh-cv-l1{0%,100%{d:path("M250,232 Q306,195 362,158")}32%,68%{d:path("M250,232 Q452,214 488,158")}}
+.bh-ev-curva .bh-l2{animation:bh-cv-l2 7s ease-in-out forwards,bh-ck-lane .9s linear infinite}
+@keyframes bh-cv-l2{0%,100%{d:path("M500,232 Q444,195 388,158")}32%,68%{d:path("M500,232 Q600,206 504,158")}}
+.bh-ev-curva .bh-ck-carg{animation:bh-cv-car 7s ease-in-out forwards}
+@keyframes bh-cv-car{0%,100%{transform:translateX(0)}32%,68%{transform:translateX(116px)}}
+.bh-ev-curva .bh-ck-lampsg{animation:bh-cv-lmp 7s ease-in-out forwards}
+@keyframes bh-cv-lmp{0%,100%{transform:translateX(0)}32%,68%{transform:translateX(48px)}}
+.bh-ev-curva .bh-ck-cityg{animation:bh-ck-pan 7s ease-in-out forwards}
+@keyframes bh-ck-pan{0%,100%{transform:translateX(0)}32%,68%{transform:translateX(-26px)}}
 /* evento HALLOWEEN (ottobre): pipistrelli, zucche, luna, ragnatela, luce viola */
 .bh-ck-bats,.bh-ck-web,.bh-ck-moon,.bh-ck-dweb,.bh-ck-snow,.bh-ck-xmas,.bh-ck-tree,.bh-ck-sleigh,.bh-ck-fest{opacity:0;transition:opacity 1.2s}
 .bh-ck-fest{display:none;font-size:10px;font-weight:800;letter-spacing:.3px}
@@ -249,7 +262,7 @@
 .bh-m-giorno .bh-ck-moon{opacity:0!important}
 /* fuori dal capitolo o con "riduci animazioni": tutto fermo */
 .bh-scene:not(.bh-on) .bh-ck *,.bh-scene:not(.bh-on) .bh-ck-dash::after{animation-play-state:paused!important}
-@media (prefers-reduced-motion:reduce){.bh-ck-bats,.bh-ck-snow,.bh-ck-sleigh,.bh-ck-rain,.bh-ck-wipers,.bh-ck-ovt,.bh-ck-movt{display:none}.bh-ck-roadg,.bh-ck-cityg,.bh-ck-lamp,.bh-ck-lane,.bh-ck-mlane,.bh-ck-mlamp,.bh-ck-car,.bh-ck-mcar,.bh-ck-brk,.bh-ck-dash::after{animation:none!important}.bh-ck-lamp{opacity:0}}
+@media (prefers-reduced-motion:reduce){.bh-ck-bats,.bh-ck-snow,.bh-ck-sleigh,.bh-ck-rain,.bh-ck-wipers,.bh-ck-ovt,.bh-ck-movt{display:none}.bh-ck-rd,.bh-ck-edge,.bh-ck-carg,.bh-ck-lampsg,.bh-ck-cityg,.bh-ck-lamp,.bh-ck-lane,.bh-ck-mlane,.bh-ck-mlamp,.bh-ck-car,.bh-ck-mcar,.bh-ck-brk,.bh-ck-dash::after{animation:none!important}.bh-ck-lamp{opacity:0}}
 .bh-ck-mm{font-size:9px;font-weight:700;fill:#6f7a8c;text-anchor:middle}
 .bh-ck-dv{position:absolute;left:0;right:0;top:38px;text-align:center}
 .bh-ck-dv small{color:#ffb37a}
