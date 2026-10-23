@@ -342,7 +342,7 @@
             <div class="bh-ck-disp">
               ${dial('v', 'VENDITE · MESE', '#ff6a1a', '#ffb36b')}
               <div class="bh-ck-mid">
-                <div class="bh-ck-sb"><b data-ck-ora>--:--</b><span data-ck-data></span><span class="bh-ck-fest bh-hw">Happy Halloween 🎃</span><span class="bh-ck-fest bh-xm">Buone feste 🎄</span><span class="bh-ck-ic"><i class="bh-ck-sig"><i></i><i></i><i></i></i>18°</span></div>
+                <div class="bh-ck-sb"><b data-ck-ora>--:--</b><span data-ck-data></span><span class="bh-ck-fest bh-hw">Happy Halloween 🎃</span><span class="bh-ck-fest bh-xm">Buone feste 🎄</span><span class="bh-ck-ic" title="Temperatura adesso a Napoli · dati meteo Open-Meteo.com (CC BY 4.0)"><i class="bh-ck-sig"><i></i><i></i><i></i></i><span data-ck-temp>–°</span></span></div>
                 <div class="bh-ck-ch"><div class="bh-ck-cht"><small>CONTRATTI · ULTIMI 6 MESI</small><span><i class="v"></i>Vendita<i class="n"></i>Noleggio</span></div>
                   <div class="bh-ck-bars" data-ck-bars>${'<div><i class="v"></i><i class="n"></i><em></em></div>'.repeat(6)}</div></div>
                 <div class="bh-ck-ind">
@@ -700,6 +700,20 @@
     if (o) o.textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
     if (g) g.textContent = GG[d.getDay()] + ' ' + d.getDate() + ' ' + MES[d.getMonth()]; };
   ora(); setInterval(ora, 20000);
+  // NUOVO: temperatura vera a Napoli (Open-Meteo.com, dati CC BY 4.0), aggiornata ogni 15 minuti
+  // mentre la pagina BI e' aperta; l'ultima lettura resta in memoria per la sessione
+  const T_KEY = 'bhMeteo', T_MS = 15 * 60 * 1000;
+  const tMostra = v => { const el = cm.querySelector('[data-ck-temp]'); if (el) el.textContent = v == null ? '–°' : Math.round(v) + '°'; };
+  async function meteo() {
+    try { const c = JSON.parse(sessionStorage.getItem(T_KEY) || 'null'); if (c && Date.now() - c.t < T_MS) { tMostra(c.v); return; } } catch (e) { /* */ }
+    const ac = new AbortController(), to = setTimeout(() => ac.abort(), 8000);
+    try {
+      const r = await fetch('https://api.open-meteo.com/v1/forecast?latitude=40.83&longitude=14.17&current=temperature_2m&timezone=Europe%2FRome', { signal: ac.signal });
+      const d = r.ok ? await r.json() : null, v = d && d.current ? d.current.temperature_2m : null;
+      if (typeof v === 'number') { tMostra(v); try { sessionStorage.setItem(T_KEY, JSON.stringify({ t: Date.now(), v })); } catch (e) { /* */ } }
+    } catch (e) { /* senza rete: resta l'ultimo valore */ } finally { clearTimeout(to); }
+  }
+  setInterval(() => { if (active) meteo(); }, T_MS);
   let ckDati = null, ckQuando = 0;
   function ckMostra() {
     const M = ckDati && ckDati.mesi, cur = M && M[M.length - 1];
@@ -773,7 +787,7 @@
   // Avvio/arresto: tutto gira solo mentre la pagina BI e' visibile
   function start() {
     permessi(); chiudi(); setTimeout(posTog, 0);
-    ckCarica();
+    ckCarica(); meteo();
     scale(); active = true; paused = false; settle();
     if (cur < 0) go(0, true); else if (cur === 2) cmRun(); else if (cur === 1) stockSpin(); else if (cur === 3) svRun();
     restart();
