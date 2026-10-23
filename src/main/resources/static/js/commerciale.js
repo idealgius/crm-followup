@@ -1076,15 +1076,18 @@
     const slugM = m => String(m).normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
     const logoM = m => m === 'Non indicata' ? '<span class="cm-bm-lt">?</span>'
         : `<img src="/img/marchi/${slugM(m)}.png" alt="${esc(m)}" loading="lazy" data-s="${slugM(m).replace(/-/g, '')}" onerror="if(!this.dataset.a){this.dataset.a=1;this.src='/img/marchi/'+this.dataset.s+'.png';}else{var s=document.createElement('span');s.className='cm-bm-lt';s.textContent=this.alt.split(/[\\s-]+/).map(function(w){return w.charAt(0);}).join('').slice(0,3).toUpperCase();this.replaceWith(s);}">`;
+    let bmOrd = 'desc';   // ordine dei marchi, ricordato finche' la pagina resta aperta
     function openTipMarche(tipo0) {
         const R = trIn(view), C = cIn(view);
-        const st = { t: tipo0 || '', q: '' };
+        const st = { t: tipo0 || '', q: '', o: bmOrd };
         const tipi = TIPI_V.filter(k => R.some(r => r.tipo === k) || C.some(c => c.tipo === k));
         const labT = () => st.t || 'Tutte le tipologie';
         const ov = modal('Marchi', `<div class="cm-bm">
             <div class="cm-bm-top"><span class="cm-cc-seg cm-bm-seg">${tipi.map(k => `<button type="button" data-bmt="${esc(k)}">${esc(k)} <b>${nf(R.filter(r => r.tipo === k).length)}</b></button>`).join('')}<button type="button" data-bmt="">Tutte <b>${nf(R.length)}</b></button></span>
               <input type="search" placeholder="Cerca marchio…" data-bmq aria-label="Cerca marchio">
-              <button type="button" class="cm-bm-xls" data-bmx title="Scarica in Excel quello che vedi: marchi, consulenti ed elenco dei clienti">⬇ Excel</button></div>
+              <span class="cm-cc-seg cm-bm-seg cm-bm-ord" title="Ordine dei marchi"><button type="button" data-bmo="desc" title="Prima i marchi con più preventivi">↓ Più preventivi</button><button type="button" data-bmo="asc" title="Prima i marchi con meno preventivi">↑ Meno</button><button type="button" data-bmo="az" title="In ordine alfabetico">A–Z</button></span>
+              <span class="cm-bm-act"><button type="button" class="cm-bm-all" data-bma title="Elenco di tutti i preventivi della tipologia scelta, senza passare dai marchi">📋 Vedi tutti</button>
+              <button type="button" class="cm-bm-xls" data-bmx title="Scarica in Excel quello che vedi: marchi, consulenti ed elenco dei clienti">⬇ Excel</button></span></div>
             <p class="cm-hint" data-bmsum></p><div class="cm-bm-grid" data-bmg></div></div>`, true);
         const dati = () => {
             const okT = r => !st.t || r.tipo === st.t, q = st.q.trim().toLowerCase();
@@ -1092,7 +1095,8 @@
             const mp = by(Rt, r => r.marca), mc = by(Ct, r => r.marca);
             let M = [...new Set([...mp.keys(), ...mc.keys()])].map(k => ({ k, R: mp.get(k) || [], C: mc.get(k) || [] }));
             if (q) M = M.filter(x => String(x.k).toLowerCase().includes(q));
-            M.sort((a, b) => (a.k === 'Non indicata') - (b.k === 'Non indicata') || b.R.length - a.R.length || b.C.length - a.C.length || String(a.k).localeCompare(String(b.k), 'it'));
+            const az = (a, b) => String(a.k).localeCompare(String(b.k), 'it', { sensitivity: 'base' });
+            M.sort((a, b) => (a.k === 'Non indicata') - (b.k === 'Non indicata') || (st.o === 'az' ? az(a, b) : st.o === 'asc' ? a.R.length - b.R.length || a.C.length - b.C.length || az(a, b) : b.R.length - a.R.length || b.C.length - a.C.length || az(a, b)));
             const keep = new Set(M.map(x => x.k));
             return { M, Rt: Rt.filter(r => keep.has(r.marca)), Ct: Ct.filter(c => keep.has(c.marca)) };
         };
@@ -1100,17 +1104,23 @@
             const { M, Rt, Ct } = dati();
             ov.querySelector('header h3').textContent = `Marchi · ${labT()} · ${title()}`;
             ov.querySelectorAll('[data-bmt]').forEach(b => b.classList.toggle('on', b.dataset.bmt === st.t));
+            ov.querySelectorAll('[data-bmo]').forEach(b => b.classList.toggle('on', b.dataset.bmo === st.o));
+            const ba = ov.querySelector('[data-bma]'); ba.disabled = !Rt.length; ba.textContent = `📋 Vedi tutti (${nf(Rt.length)})`;
             ov.querySelector('[data-bmsum]').innerHTML = `<b>${nf(M.length)}</b> marchi · <b>${nf(Rt.length)}</b> preventivi · <b>${nf(Ct.length)}</b> contratti · conversione ${pct(Ct.length, Rt.length)} · periodo ${per()} · clicca un marchio per l'elenco dei preventivi`;
             ov.querySelector('[data-bmx]').disabled = !M.length;
             ov.querySelector('[data-bmg]').innerHTML = M.length ? M.map(x => `<button type="button" class="cm-bm-t" data-bmm="${esc(x.k)}" ${x.R.length ? '' : 'disabled'} title="${x.R.length ? 'Elenco dei preventivi ' + esc(x.k) : 'Nessun preventivo nel periodo'}">
                 <span class="cm-bm-logo">${logoM(x.k)}</span><span class="cm-bm-n">${esc(x.k)}</span>
                 <span class="cm-bm-p"><b>${nf(x.R.length)}</b> preventivi</span>
-                <span class="cm-bm-c">${x.C.length ? `${nf(x.C.length)} contratti · ${pct(x.C.length, x.R.length)}` : 'nessun contratto'}</span></button>`).join('')
+                <span class="cm-bm-c">${x.C.length ? `${nf(x.C.length)} ${x.C.length === 1 ? 'contratto' : 'contratti'} · ${pct(x.C.length, x.R.length)}` : 'nessun contratto'}</span></button>`).join('')
                 : '<p class="cm-empty">Nessun marchio</p>';
         };
         ov.addEventListener('click', e => {
             const t = e.target.closest('[data-bmt]');
             if (t) { st.t = t.dataset.bmt; draw(); return; }
+            const o = e.target.closest('[data-bmo]');
+            if (o) { st.o = bmOrd = o.dataset.bmo; draw(); return; }
+            const al = e.target.closest('[data-bma]');
+            if (al && !al.disabled) { const { Rt } = dati(); openRecs(`Preventivi ${st.t || 'tutte le tipologie'}${st.q.trim() ? ' · marchi "' + st.q.trim() + '"' : ''}`, Rt, 'tr'); return; }
             const m = e.target.closest('[data-bmm]');
             if (m && !m.disabled) { const k = m.dataset.bmm; openRecs(`Preventivi ${st.t || 'tutte le tipologie'} · ${k}`, R.filter(r => (!st.t || r.tipo === st.t) && r.marca === k), 'tr'); return; }
             const x = e.target.closest('[data-bmx]');
