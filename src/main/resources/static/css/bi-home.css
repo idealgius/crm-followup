@@ -120,6 +120,72 @@
 .bh-ck-tk line.bh-ck-tb{stroke:rgba(255,255,255,.5);stroke-width:1.6}
 .bh-ck-nd{transform:rotate(135deg);transform-origin:100px 100px}
 .bh-ck-pole{stroke:#05060a}
+/* lampioni che vengono incontro: partono dall'orizzonte e si ingrandiscono (prospettiva) */
+.bh-ck-lamp{opacity:0;animation:bh-ck-lampL 3.2s cubic-bezier(.72,0,1,.75) infinite}
+.bh-ck-lamp.bh-r{animation-name:bh-ck-lampR}
+@keyframes bh-ck-lampL{0%{transform:translate(338px,158px) scale(.03);opacity:0}8%{opacity:1}100%{transform:translate(-60px,268px) scale(1.35);opacity:1}}
+@keyframes bh-ck-lampR{0%{transform:translate(412px,158px) scale(.03);opacity:0}8%{opacity:1}100%{transform:translate(810px,268px) scale(1.35);opacity:1}}
+/* auto davanti: ogni tanto frena */
+.bh-ck-brk{transform-box:fill-box;transform-origin:center;animation:bh-ck-brk 9s ease-in-out infinite}
+@keyframes bh-ck-brk{0%,62%,78%,100%{opacity:.75;transform:scale(1)}66%,74%{opacity:1;transform:scale(1.35)}}
+/* specchietto: la strada che si allontana dietro */
+.bh-ck-mlane{stroke:rgba(255,236,200,.5);stroke-width:.8;stroke-dasharray:2 3;animation:bh-ck-mlane .45s linear infinite}
+@keyframes bh-ck-mlane{to{stroke-dashoffset:5}}
+.bh-ck-mlamp{animation:bh-ck-mlamp 1.6s cubic-bezier(0,.3,.3,1) infinite}
+.bh-ck-mlamp.bh-b{animation-name:bh-ck-mlampR;animation-delay:-.8s}
+@keyframes bh-ck-mlamp{0%{transform:translate(330px,30px) scale(2.2);opacity:1}100%{transform:translate(371px,32px) scale(.2);opacity:.2}}
+@keyframes bh-ck-mlampR{0%{transform:translate(420px,30px) scale(2.2);opacity:1}100%{transform:translate(379px,32px) scale(.2);opacity:.2}}
+.bh-ck-mcar{animation:bh-ck-mcar 7s ease-in-out infinite}
+@keyframes bh-ck-mcar{50%{transform:translate(.8px,.3px)}}
+/* luce dei lampioni che passa sulla plancia */
+.bh-ck-dash::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:linear-gradient(100deg,transparent 42%,rgba(255,190,120,.05) 50%,transparent 58%);background-size:260% 100%;animation:bh-ck-sweep .8s linear infinite}
+@keyframes bh-ck-sweep{from{background-position:120% 0}to{background-position:-20% 0}}
+/* cielo secondo l'ora vera (bi-home.js: modo) */
+.bh-ck-sky{fill:url(#bh-cks-notte)}
+.bh-m-alba .bh-ck-sky{fill:url(#bh-cks-alba)}.bh-m-giorno .bh-ck-sky{fill:url(#bh-cks-giorno)}.bh-m-tramonto .bh-ck-sky{fill:url(#bh-cks-tramonto)}
+.bh-ck-city{fill:#0b0d1a}
+.bh-m-giorno .bh-ck-city{fill:#7c8aa0}.bh-m-alba .bh-ck-city,.bh-m-tramonto .bh-ck-city{fill:#2a2238}
+.bh-ck-stars,.bh-ck-win,.bh-ck-hz{transition:opacity 2s}
+.bh-m-alba .bh-ck-stars{opacity:.25}.bh-m-giorno .bh-ck-stars,.bh-m-tramonto .bh-ck-stars{opacity:0}
+.bh-m-alba .bh-ck-win{opacity:.25}.bh-m-giorno .bh-ck-win{opacity:.04}.bh-m-tramonto .bh-ck-win{opacity:.6}
+.bh-m-giorno .bh-ck-hz{opacity:0}.bh-m-alba .bh-ck-hz{opacity:.6}
+.bh-ck-road{fill:url(#bh-ckr)}.bh-m-giorno .bh-ck-road{fill:url(#bh-ckr-giorno)}
+.bh-ck-body{fill:#0a0b0f}.bh-ck-body2{fill:#111218}
+.bh-m-giorno .bh-ck-body{fill:#2c3038}.bh-m-giorno .bh-ck-body2{fill:#3a3e47}
+.bh-m-giorno .bh-ck-lamp circle{opacity:0}.bh-m-giorno .bh-ck-pole{stroke:#3a3f4a}
+.bh-m-giorno .bh-ck-dash::after{opacity:0}
+.bh-m-giorno .bh-ck-mlamp{display:none}.bh-m-giorno .bh-ck-brk,.bh-m-giorno .bh-ck-tlg{opacity:.35}
+/* evento PIOGGIA: gocce che si formano, tergicristalli che le puliscono */
+.bh-ck-rain{opacity:0;transition:opacity 1.5s}
+.bh-ck-rainfog{fill:#8a96b0;opacity:.12}
+.bh-ck-wipers{opacity:0;transition:opacity .6s}
+.bh-ck-wip{transform:translate(170px,236px) rotate(-3deg)}
+.bh-ck-wip.bh-2{transform:translate(400px,236px) rotate(-3deg)}
+.bh-ck-wip line{stroke:#050607;stroke-width:4;stroke-linecap:round}
+.bh-ck-wip line.bh-ck-wipb{stroke:#14161a;stroke-width:2.5}
+.bh-ev-pioggia .bh-ck-rain{opacity:1}
+.bh-ev-pioggia .bh-ck-wipers{opacity:1}
+.bh-ev-pioggia .bh-ck-drops{animation:bh-ck-drops 3.6s linear infinite}
+@keyframes bh-ck-drops{0%{opacity:0}70%,80%{opacity:1}88%,100%{opacity:0}}
+.bh-ev-pioggia .bh-ck-wip{animation:bh-ck-wip 3.6s ease-in-out infinite}
+.bh-ev-pioggia .bh-ck-wip.bh-2{animation-name:bh-ck-wip2}
+@keyframes bh-ck-wip{0%,76%{transform:translate(170px,236px) rotate(-3deg)}84%{transform:translate(170px,236px) rotate(-118deg)}92%,100%{transform:translate(170px,236px) rotate(-3deg)}}
+@keyframes bh-ck-wip2{0%,76%{transform:translate(400px,236px) rotate(-3deg)}84%{transform:translate(400px,236px) rotate(-112deg)}92%,100%{transform:translate(400px,236px) rotate(-3deg)}}
+/* evento SORPASSO: prima i fari nello specchietto, poi l'auto passa a sinistra e si allontana */
+.bh-ck-ovt,.bh-ck-movt{opacity:0}
+.bh-ev-sorpasso .bh-ck-movt{animation:bh-ck-movt 1.8s cubic-bezier(.6,0,1,1) forwards}
+@keyframes bh-ck-movt{0%{transform:translate(371px,33px) scale(.25);opacity:0}15%{opacity:1}100%{transform:translate(334px,46px) scale(2.4);opacity:1}}
+.bh-ev-sorpasso .bh-ck-ovt{animation:bh-ck-ovt 4.6s 1.5s cubic-bezier(.1,.6,.3,1) forwards}
+@keyframes bh-ck-ovt{0%{transform:translate(185px,258px) scale(1.55);opacity:1}25%{transform:translate(268px,210px) scale(.8);opacity:1}100%{transform:translate(360px,161px) scale(.1);opacity:0}}
+/* evento CURVA: la strada piega dolcemente a destra e torna dritta */
+.bh-ck-roadg{transform-origin:375px 232px}
+.bh-ev-curva .bh-ck-roadg{animation:bh-ck-curva 9.5s ease-in-out forwards}
+@keyframes bh-ck-curva{0%,100%{transform:skewX(0)}30%,70%{transform:skewX(-11deg)}}
+.bh-ev-curva .bh-ck-cityg{animation:bh-ck-pan 9.5s ease-in-out forwards}
+@keyframes bh-ck-pan{0%,100%{transform:translateX(0)}30%,70%{transform:translateX(-14px)}}
+/* fuori dal capitolo o con "riduci animazioni": tutto fermo */
+.bh-scene:not(.bh-on) .bh-ck *,.bh-scene:not(.bh-on) .bh-ck-dash::after{animation-play-state:paused!important}
+@media (prefers-reduced-motion:reduce){.bh-ck-rain,.bh-ck-wipers,.bh-ck-ovt,.bh-ck-movt{display:none}.bh-ck-roadg,.bh-ck-cityg,.bh-ck-lamp,.bh-ck-lane,.bh-ck-mlane,.bh-ck-mlamp,.bh-ck-car,.bh-ck-mcar,.bh-ck-brk,.bh-ck-dash::after{animation:none!important}.bh-ck-lamp{opacity:0}}
 .bh-ck-mm{font-size:9px;font-weight:700;fill:#6f7a8c;text-anchor:middle}
 .bh-ck-dv{position:absolute;left:0;right:0;top:38px;text-align:center}
 .bh-ck-dv small{color:#ffb37a}

@@ -206,6 +206,7 @@
             for (let wy = 158 - h + 3; wy < 155; wy += 4) for (let wx = x + 2; wx < x + w - 2; wx += 4) if (rnd() < .22) win += `<rect x="${wx}" y="${wy}" width="1.6" height="1.6" opacity="${(.35 + rnd() * .6).toFixed(2)}"/>`;
             x += w + Math.round(rnd() * 3);
         }
+        let drops = ''; for (let k = 0; k < 90; k++) { const x = 70 + rnd() * 610, y = 16 + rnd() * 210, r = .9 + rnd() * 2.4; drops += `<ellipse cx="${x.toFixed(0)}" cy="${y.toFixed(0)}" rx="${r.toFixed(1)}" ry="${(r * (1 + rnd() * .5)).toFixed(1)}" fill="url(#bh-ckdrop)"/>`; }
         let stars = ''; for (let k = 0; k < 26; k++) stars += `<circle cx="${(80 + rnd() * 590).toFixed(0)}" cy="${(20 + rnd() * 90).toFixed(0)}" r="${(.5 + rnd() * .8).toFixed(1)}" opacity="${(.25 + rnd() * .5).toFixed(2)}"/>`;
         // quadrante: 270 gradi, tacche
         const dial = (id, lab, col1, col2) => {
@@ -227,34 +228,71 @@
               <div class="bh-ck-best" data-ck-best>&nbsp;</div>
             </div>`;
         };
+        // lampioni che vengono incontro (disegnati a grandezza piena nell'origine, la CSS li sposta e li ingrandisce)
+        const lamp = (side, k) => `<g class="bh-ck-lamp bh-${side}" style="animation-delay:${(-k * .8).toFixed(2)}s"><line x1="0" y1="0" x2="0" y2="-92" class="bh-ck-pole" stroke-width="3"/><line x1="0" y1="-92" x2="${side === 'l' ? 16 : -16}" y2="-92" class="bh-ck-pole" stroke-width="2.6"/><circle cx="${side === 'l' ? 16 : -16}" cy="-89" r="22" fill="url(#bh-ckl)"/><circle cx="${side === 'l' ? 16 : -16}" cy="-89.5" r="3.4" fill="#ffe7b8"/></g>`;
+        const lamps = [0, 1, 2, 3].map(k => lamp('l', k) + lamp('r', k)).join('');
         return `<div class="bh-ck" id="bh-ck">
           <svg class="bh-ck-wind" viewBox="0 0 750 232" preserveAspectRatio="none">
             <defs>
-              <linearGradient id="bh-cks" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#070a18"/><stop offset=".5" stop-color="#151a36"/><stop offset=".8" stop-color="#352947"/><stop offset="1" stop-color="#5d3540"/></linearGradient>
+              <linearGradient id="bh-cks-notte" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#070a18"/><stop offset=".5" stop-color="#151a36"/><stop offset=".8" stop-color="#352947"/><stop offset="1" stop-color="#5d3540"/></linearGradient>
+              <linearGradient id="bh-cks-alba" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b3a66"/><stop offset=".55" stop-color="#8a6f9a"/><stop offset=".85" stop-color="#e7a27f"/><stop offset="1" stop-color="#f6c78e"/></linearGradient>
+              <linearGradient id="bh-cks-giorno" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3f7fc9"/><stop offset=".6" stop-color="#8fbde6"/><stop offset="1" stop-color="#d9e7f2"/></linearGradient>
+              <linearGradient id="bh-cks-tramonto" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#23264f"/><stop offset=".45" stop-color="#7a3f6a"/><stop offset=".8" stop-color="#e2683f"/><stop offset="1" stop-color="#f7a64a"/></linearGradient>
               <radialGradient id="bh-ckh" cx=".5" cy="1" r=".6"><stop offset="0" stop-color="#ff8a4a" stop-opacity=".45"/><stop offset="1" stop-color="#ff8a4a" stop-opacity="0"/></radialGradient>
               <linearGradient id="bh-ckr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1a1b22"/><stop offset="1" stop-color="#08090c"/></linearGradient>
+              <linearGradient id="bh-ckr-giorno" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5a5e68"/><stop offset="1" stop-color="#2a2c32"/></linearGradient>
               <radialGradient id="bh-ckt"><stop offset="0" stop-color="#ff3b2f" stop-opacity=".9"/><stop offset="1" stop-color="#ff3b2f" stop-opacity="0"/></radialGradient>
+              <radialGradient id="bh-ckhl"><stop offset="0" stop-color="#fff8e6" stop-opacity=".95"/><stop offset="1" stop-color="#fff8e6" stop-opacity="0"/></radialGradient>
+              <linearGradient id="bh-ckg2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff8a4a" stop-opacity="0"/><stop offset="1" stop-color="#ff8a4a" stop-opacity=".07"/></linearGradient>
+              <radialGradient id="bh-ckdrop" cx=".4" cy=".35"><stop offset="0" stop-color="#ffffff" stop-opacity=".75"/><stop offset=".45" stop-color="#cfe0ff" stop-opacity=".25"/><stop offset="1" stop-color="#9fb6e0" stop-opacity=".12"/></radialGradient>
+              <clipPath id="bh-ckclip"><rect x="326" y="24" width="98" height="22" rx="8"/></clipPath>
+              <clipPath id="bh-ckwclip"><path d="M96,12 L654,12 L732,232 L18,232 Z"/></clipPath>
               <radialGradient id="bh-ckl"><stop offset="0" stop-color="#ffc070" stop-opacity=".55"/><stop offset="1" stop-color="#ffc070" stop-opacity="0"/></radialGradient>
               <linearGradient id="bh-ckm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2c34"/><stop offset="1" stop-color="#101116"/></linearGradient>
             </defs>
-            <rect width="750" height="160" fill="url(#bh-cks)"/>
-            <g fill="#fff">${stars}</g>
-            <ellipse cx="375" cy="160" rx="380" ry="46" fill="url(#bh-ckh)"/>
-            <g fill="#0b0d1a">${city}</g><g fill="#ffcf7a">${win}</g>
-            <polygon points="0,232 340,158 410,158 750,232" fill="url(#bh-ckr)"/>
-            <line x1="342" y1="158" x2="40" y2="232" class="bh-ck-edge"/><line x1="408" y1="158" x2="710" y2="232" class="bh-ck-edge"/>
-            ${[0.18, 0.34, 0.55, 0.82].map(q => { const y = 158 + q * 74, h = 6 + q * 70, xl = 340 - q * 300 - 14 * q, xr = 410 + q * 300 + 14 * q, r = 1.2 + q * 3; return [[xl, -1], [xr, 1]].map(([x, d]) => `<line x1="${x.toFixed(1)}" y1="${y.toFixed(1)}" x2="${x.toFixed(1)}" y2="${(y - h).toFixed(1)}" class="bh-ck-pole" stroke-width="${(.6 + q * 1.6).toFixed(1)}"/><line x1="${x.toFixed(1)}" y1="${(y - h).toFixed(1)}" x2="${(x - d * (3 + q * 14)).toFixed(1)}" y2="${(y - h).toFixed(1)}" class="bh-ck-pole" stroke-width="${(.6 + q * 1.4).toFixed(1)}"/><circle cx="${(x - d * (3 + q * 14)).toFixed(1)}" cy="${(y - h + 1).toFixed(1)}" r="${(r * 3).toFixed(1)}" fill="url(#bh-ckl)"/><circle cx="${(x - d * (3 + q * 14)).toFixed(1)}" cy="${(y - h + 1).toFixed(1)}" r="${(r * .55).toFixed(1)}" fill="#ffe3b0"/>`).join(''); }).join('')}
-            <line x1="362" y1="158" x2="250" y2="232" class="bh-ck-lane"/><line x1="388" y1="158" x2="500" y2="232" class="bh-ck-lane"/>
-            <g class="bh-ck-car"><ellipse cx="381" cy="176" rx="30" ry="9" fill="url(#bh-ckt)" opacity=".5"/>
-              <path d="M364,174 L366,166 Q368,162 373,162 L389,162 Q394,162 396,166 L398,174 Z" fill="#0a0b0f"/>
-              <rect x="362" y="170" width="38" height="7" rx="2" fill="#111218"/>
-              <rect x="364" y="171" width="7" height="2.4" rx="1" fill="#ff4a3a"/><rect x="391" y="171" width="7" height="2.4" rx="1" fill="#ff4a3a"/>
-              <circle cx="367.5" cy="172.2" r="6" fill="url(#bh-ckt)"/><circle cx="394.5" cy="172.2" r="6" fill="url(#bh-ckt)"/></g>
+            <rect class="bh-ck-sky" width="750" height="160"/>
+            <g class="bh-ck-stars" fill="#fff">${stars}</g>
+            <ellipse class="bh-ck-hz" cx="375" cy="160" rx="380" ry="46" fill="url(#bh-ckh)"/>
+            <g class="bh-ck-cityg"><g class="bh-ck-city">${city}</g><g class="bh-ck-win" fill="#ffcf7a">${win}</g></g>
+            <g class="bh-ck-roadg">
+              <polygon class="bh-ck-road" points="0,232 340,158 410,158 750,232"/>
+              <line x1="342" y1="158" x2="40" y2="232" class="bh-ck-edge"/><line x1="408" y1="158" x2="710" y2="232" class="bh-ck-edge"/>
+              ${lamps}
+              <line x1="362" y1="158" x2="250" y2="232" class="bh-ck-lane"/><line x1="388" y1="158" x2="500" y2="232" class="bh-ck-lane"/>
+              <g class="bh-ck-car"><ellipse cx="381" cy="176" rx="30" ry="9" fill="url(#bh-ckt)" opacity=".5" class="bh-ck-tlg"/>
+                <path d="M364,174 L366,166 Q368,162 373,162 L389,162 Q394,162 396,166 L398,174 Z" class="bh-ck-body"/>
+                <rect x="362" y="170" width="38" height="7" rx="2" class="bh-ck-body2"/>
+                <rect x="364" y="171" width="7" height="2.4" rx="1" fill="#ff4a3a"/><rect x="391" y="171" width="7" height="2.4" rx="1" fill="#ff4a3a"/>
+                <circle cx="367.5" cy="172.2" r="6" fill="url(#bh-ckt)" class="bh-ck-brk"/><circle cx="394.5" cy="172.2" r="6" fill="url(#bh-ckt)" class="bh-ck-brk"/></g>
+              <!-- auto che sorpassa nella corsia di sinistra (disegnata nell'origine, la CSS la sposta) -->
+              <g class="bh-ck-ovt"><ellipse cx="0" cy="2" rx="46" ry="8" fill="#000" opacity=".45"/>
+                <path d="M-34,0 L-31,-17 Q-28,-26 -18,-27 L18,-27 Q28,-26 31,-17 L34,0 Z" class="bh-ck-body"/>
+                <path d="M-24,-18 Q-21,-24 -14,-24 L14,-24 Q21,-24 24,-18 Z" fill="#1d2a3a" opacity=".9"/>
+                <rect x="-37" y="-10" width="74" height="12" rx="3" class="bh-ck-body2"/>
+                <rect x="-34" y="-8" width="13" height="4" rx="1.5" fill="#ff4a3a"/><rect x="21" y="-8" width="13" height="4" rx="1.5" fill="#ff4a3a"/>
+                <circle cx="-27.5" cy="-6" r="11" fill="url(#bh-ckt)"/><circle cx="27.5" cy="-6" r="11" fill="url(#bh-ckt)"/>
+                <rect x="-9" y="-6" width="18" height="5" rx="1" fill="#d8dce4" opacity=".7"/></g>
+            </g>
+            <rect y="196" width="750" height="36" fill="url(#bh-ckg2)"/>
+            <!-- pioggia sul vetro e tergicristalli (solo durante l'evento "pioggia") -->
+            <g class="bh-ck-rain" clip-path="url(#bh-ckwclip)"><rect class="bh-ck-rainfog" width="750" height="232"/><g class="bh-ck-drops">${drops}</g></g>
+            <g class="bh-ck-wipers"><g class="bh-ck-wip"><line x1="0" y1="0" x2="300" y2="0"/><line x1="40" y1="3" x2="300" y2="3" class="bh-ck-wipb"/></g><g class="bh-ck-wip bh-2"><line x1="0" y1="0" x2="270" y2="0"/><line x1="36" y1="3" x2="270" y2="3" class="bh-ck-wipb"/></g></g>
             <path d="M0,0 L96,0 L18,232 L0,232 Z" fill="#06070a"/><path d="M750,0 L654,0 L732,232 L750,232 Z" fill="#06070a"/>
             <rect width="750" height="12" fill="#06070a"/>
             <rect x="371" y="10" width="8" height="12" fill="#0b0c10"/>
             <rect x="318" y="18" width="114" height="34" rx="12" fill="url(#bh-ckm)" stroke="rgba(255,255,255,.08)"/>
-            <rect x="326" y="24" width="98" height="22" rx="8" fill="#0d1222"/><path d="M330,40 L352,26 L366,26 L344,40 Z" fill="rgba(255,255,255,.06)"/>
+            <g clip-path="url(#bh-ckclip)">
+              <rect class="bh-ck-sky bh-ck-msky" x="326" y="24" width="98" height="22"/>
+              <g class="bh-ck-city"><rect x="336" y="29" width="5" height="4"/><rect x="342" y="27" width="4" height="6"/><rect x="401" y="28" width="6" height="5"/><rect x="408" y="30" width="4" height="3"/></g>
+              <polygon class="bh-ck-road" points="326,46 424,46 380,33 370,33"/>
+              <line x1="375" y1="33" x2="375" y2="46" class="bh-ck-mlane"/>
+              <circle class="bh-ck-mlamp" cx="0" cy="0" r="3" fill="url(#bh-ckl)"/><circle class="bh-ck-mlamp bh-b" cx="0" cy="0" r="3" fill="url(#bh-ckl)"/>
+              <g class="bh-ck-mcar"><circle cx="372.4" cy="37.4" r="2.4" fill="url(#bh-ckhl)"/><circle cx="377.6" cy="37.4" r="2.4" fill="url(#bh-ckhl)"/><circle cx="372.4" cy="37.4" r=".7" fill="#fff"/><circle cx="377.6" cy="37.4" r=".7" fill="#fff"/></g>
+              <!-- l'auto che sta per sorpassare, prima vista nello specchietto -->
+              <g class="bh-ck-movt"><circle cx="-3" cy="0" r="3" fill="url(#bh-ckhl)"/><circle cx="3" cy="0" r="3" fill="url(#bh-ckhl)"/><circle cx="-3" cy="0" r=".9" fill="#fff"/><circle cx="3" cy="0" r=".9" fill="#fff"/></g>
+            </g>
+            <rect x="326" y="24" width="98" height="22" rx="8" fill="none" stroke="rgba(0,0,0,.6)" stroke-width="1.5"/>
+            <path d="M330,42 L350,26 L362,26 L342,42 Z" fill="rgba(255,255,255,.07)"/>
           </svg>
           <div class="bh-ck-dash">
             <div class="bh-ck-disp">
@@ -626,15 +664,15 @@
       if (!cur) { val.textContent = '–'; delete val.dataset.n; mx.textContent = '–'; best.innerHTML = 'dati non disponibili'; el.style.setProperty('--p', 0); el.style.setProperty('--a', '135deg'); return; }
       const top = M.reduce((b, x) => x[f] > b[f] ? x : b, M[0]), max = Math.max(1, top[f]), p = Math.min(1, cur[f] / max);
       val.dataset.n = cur[f]; if (!cm.classList.contains('bh-run')) val.textContent = cur[f];
-      mx.textContent = max; mese.textContent = MESL[cur.m - 1] + ' · in corso';
-      best.innerHTML = top === cur ? 'mese migliore degli ultimi 6' : `mese migliore: <b>${top[f]}</b> a ${MESL[top.m - 1]}`;
+      mx.textContent = max; mese.textContent = MES[cur.m - 1] + ' ' + cur.y + ' · in corso';
+      best.innerHTML = top === cur ? 'mese migliore degli ultimi 6' : `mese migliore: <b>${top[f]}</b> a ${MESL[top.m - 1]} ${top.y}`;
       el.style.setProperty('--p', p.toFixed(3)); el.style.setProperty('--a', (135 + 270 * p).toFixed(1) + 'deg');
     });
     const bars = cm.querySelector('[data-ck-bars]'); if (!bars) return;
     const mx = M ? Math.max(1, ...M.map(x => Math.max(x.v, x.n))) : 1;
     [...bars.children].forEach((b, i) => { const x = M && M[i];
-      b.children[0].style.setProperty('--h', x ? Math.max(3, x.v / mx * 100) + '%' : '3%'); b.children[0].title = x ? x.v + ' vendite' : '';
-      b.children[1].style.setProperty('--h', x ? Math.max(3, x.n / mx * 100) + '%' : '3%'); b.children[1].title = x ? x.n + ' noleggi' : '';
+      b.children[0].style.setProperty('--h', x ? Math.max(3, x.v / mx * 100) + '%' : '3%'); b.children[0].title = x ? `${x.v} vendite · ${MESL[x.m - 1]} ${x.y}` : '';
+      b.children[1].style.setProperty('--h', x ? Math.max(3, x.n / mx * 100) + '%' : '3%'); b.children[1].title = x ? `${x.n} noleggi · ${MESL[x.m - 1]} ${x.y}` : '';
       b.children[2].textContent = x ? MES[x.m - 1] : ''; b.classList.toggle('cur', !!x && i === M.length - 1); });
   }
   async function ckCarica() {
@@ -645,6 +683,26 @@
     ckMostra();
   }
   ckMostra();
+  // NUOVO: cielo secondo l'ora vera (alba, giorno, tramonto, notte), ricontrollato ogni minuto
+  const modo = () => { const d = new Date(), h = d.getHours() + d.getMinutes() / 60;
+    const m = h >= 6 && h < 8 ? 'alba' : h >= 8 && h < 17 ? 'giorno' : h >= 17 && h < 19.5 ? 'tramonto' : 'notte';
+    ['alba', 'giorno', 'tramonto', 'notte'].forEach(x => cm.classList.toggle('bh-m-' + x, x === m)); };
+  modo(); setInterval(modo, 60000);
+  // NUOVO: ogni tanto succede UNA cosa, a caso: pioggia con tergicristalli, un'auto che sorpassa, una curva
+  const EV = { pioggia: 15000, sorpasso: 6500, curva: 9500 };
+  let evUlt = '';
+  function evento() {
+    if (!active || cur !== 2 || reduce || document.hidden) { setTimeout(evento, 4000); return; }
+    const scelte = Object.keys(EV).filter(e => e !== evUlt), e = scelte[Math.floor(Math.random() * scelte.length)];
+    evUlt = e;
+    cm.classList.remove('bh-ev-' + e); void cm.offsetWidth; cm.classList.add('bh-ev-' + e);
+    setTimeout(() => cm.classList.remove('bh-ev-' + e), EV[e]);
+    setTimeout(evento, EV[e] + 6000 + Math.random() * 8000);
+  }
+  setTimeout(evento, 6000);
+  // per le prove: BIHome.evento('pioggia' | 'sorpasso' | 'curva'), BIHome.modo('giorno' | ...)
+  window.__bhCk = { evento: e => { cm.classList.remove('bh-ev-' + e); void cm.offsetWidth; cm.classList.add('bh-ev-' + e); setTimeout(() => cm.classList.remove('bh-ev-' + e), EV[e]); },
+    modo: m => ['alba', 'giorno', 'tramonto', 'notte'].forEach(x => cm.classList.toggle('bh-m-' + x, x === m)) };
   const count = () => cm.querySelectorAll('[data-n]').forEach(el => { const n = +el.dataset.n; let v = 0; const st = Math.max(1, Math.round(n / 40));
     const iv = setInterval(() => { v = Math.min(n, v + st); el.textContent = v; if (v >= n) clearInterval(iv); }, 30); });
   const cmRun = () => { cm.classList.remove('bh-run'); void cm.offsetWidth; cm.classList.add('bh-run'); count(); };

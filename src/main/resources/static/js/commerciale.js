@@ -1727,8 +1727,8 @@
     // link precisi dalla pagina BI (bi-home.js): apre il Commerciale direttamente su una vista
     // ({k:'all'} panoramica, {k:'sede',s:'Agnano'}, {k:'b2b'}, {k:'marche'}, {k:'pt'}, {k:'ann'}, {k:'list'})
     function vista(vw) { view = vw || { k: 'all' }; }
-    // NUOVO: numeri veri per la plancia della pagina BI (bi-home.js): contratti di VENDITA (come la
-    // Panoramica) e di NOLEGGIO (sede Noleggio) del mese in corso e dei 5 mesi prima, per data di chiusura
+    // NUOVO: numeri veri per la plancia della pagina BI (bi-home.js): contratti di VENDITA (tutte le sedi
+    // tranne il Noleggio) e di NOLEGGIO del mese in corso e dei 5 mesi prima, per data di chiusura, B2B compresi
     async function riepilogoMesi() {
         if (!loaded && !loading) await load(false);
         for (let i = 0; loading && i < 240; i++) await new Promise(r => setTimeout(r, 250));
@@ -1737,7 +1737,8 @@
         for (let i = 5; i >= 0; i--) {
             const d = new Date(now.getFullYear(), now.getMonth() - i, 1), y = d.getFullYear(), m = d.getMonth() + 1;
             const C = TR.filter(r => isC(r) && r.y === y && r.m === m);
-            mesi.push({ y, m, v: C.filter(r => okC(r, { k: 'all' })).length, n: C.filter(r => okC(r, { k: 'sede', s: 'Noleggio' })).length });
+            // B2B sempre compresi (come nel CSV); gli annullati no (isC li esclude)
+            mesi.push({ y, m, v: C.filter(r => r.sede !== 'Noleggio').length, n: C.filter(r => r.sede === 'Noleggio').length });
         }
         return { mesi, b2b: b2bOn };
     }
