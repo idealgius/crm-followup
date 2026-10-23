@@ -1,7 +1,11 @@
 package com.gruppoautoscala.followup.controller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.gruppoautoscala.followup.model.ConsegneDataset;
 import com.gruppoautoscala.followup.model.User;
 import com.gruppoautoscala.followup.model.UserPermission;
+import com.gruppoautoscala.followup.repository.ConsegneDatasetRepository;
 import com.gruppoautoscala.followup.repository.UserPermissionRepository;
 import com.gruppoautoscala.followup.repository.UserRepository;
 import com.gruppoautoscala.followup.service.AuthService;
@@ -28,7 +32,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.util.HashMap;
@@ -57,6 +64,39 @@ public class AuthController {
 
     @Autowired
     private PlatformTransactionManager transactionManager;
+
+    // NUOVO: utenti NASCOSTI nella lista Utenti. Salvati nell'archivio delle impostazioni
+    // (consegne_dataset, chiave UTENTI_NASCOSTI) come { "<id utente>": { "ruoli": [...], "utenti": [id, ...] } }:
+    // chi ha uno di quei ruoli, o e' uno di quegli utenti, non vede l'utente nella lista e non puo' modificarlo.
+    // Solo l'ADMIN decide; l'ADMIN vede sempre tutti; ognuno vede sempre se stesso.
+    private static final String CHIAVE_NASCOSTI = "UTENTI_NASCOSTI";
+    @Autowired private ConsegneDatasetRepository datasetRepository;
+    @Autowired private ObjectMapper objectMapper;
+
+    private Map<Long, Map<String, Object>> nascosti() {
+        Map<Long, Map<String, Object>> out = new HashMap<>();
+        try {
+            Optional<ConsegneDataset> d = datasetRepository.findById(CHIAVE_NASCOSTI);
+            if (d.isEmpty() || d.get().getContenuto() == null || d.get().getContenuto().isBlank()) return out;
+            Map<String, Map<String, Object>> m = objectMapper.readValue(d.get().getContenuto(), new TypeReference<Map<String, Map<String, Object>>>() {});
+            m.forEach((k, v) -> { try { out.put(Long.valueOf(k), v); } catch (NumberFormatException ignored) { } });
+        } catch (Exception ignored) { }
+        return out;
+    }
+
+    private static List<String> lista(Object o) {
+        List<String> l = new ArrayList<>();
+        if (o instanceof Collection<?> c) for (Object x : c) if (x != null) l.add(String.valueOf(x));
+        return l;
+    }
+
+    /** true se l'utente {@code targetId} e' nascosto a chi guarda (ruolo + id di chi guarda) */
+    private static boolean nascostoA(Map<Long, Map<String, Object>> n, Long targetId, Long viewerId, String viewerRole) {
+        if ("ADMIN".equals(viewerRole) || targetId == null || targetId.equals(viewerId)) return false;
+        Map<String, Object> v = n.get(targetId);
+        if (v == null) return false;
+        return lista(v.get("ruoli")).contains(viewerRole) || (viewerId != null && lista(v.get("utenti")).contains(String.valueOf(viewerId)));
+    }
 
     @PersistenceContext
     private EntityManager em;
@@ -313,11 +353,25 @@ public class AuthController {
         if (role == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
         if (!"ADMIN".equals(role) && !"GESTORE".equals(role))
             return ResponseEntity.status(403).body(Map.of("error", "Non autorizzato"));
-        List<Map<String, Object>> users = userRepository.findAll().stream().map(u -> {
+        Long viewerId = (Long) session.getAttribute("userId");
+        Map<Long, Map<String, Object>> nasc = nascosti();
+        List<User> tutti = userRepository.findAll();
+        Map<String, String> nomi = new HashMap<>();
+        tutti.forEach(x -> nomi.put(String.valueOf(x.getId()), x.getFullName()));
+        List<Map<String, Object>> users = tutti.stream().filter(u -> !nascostoA(nasc, u.getId(), viewerId, role)).map(u -> {
             Map<String, Object> m = new HashMap<>();
             m.put("id", u.getId());
             m.put("fullName", u.getFullName());
             m.put("email", u.getEmail());
+            // NUOVO: solo l'ADMIN vede a chi e' nascosto l'utente
+            if ("ADMIN".equals(role) && nasc.containsKey(u.getId())) {
+                Map<String, Object> v = nasc.get(u.getId()), na = new LinkedHashMap<>();
+                na.put("ruoli", lista(v.get("ruoli")));
+                List<Map<String, Object>> ut = new ArrayList<>();
+                for (String uid : lista(v.get("utenti"))) if (nomi.containsKey(uid)) { Map<String, Object> x = new HashMap<>(); x.put("id", Long.valueOf(uid)); x.put("fullName", nomi.get(uid)); ut.add(x); }
+                na.put("utenti", ut);
+                m.put("nascostoA", na);
+            }
             // NUOVO: per i disattivati si mostra il ruolo che avevano
             m.put("role", ruoloPrima(u));
             m.put("disattivato", disattivato(u));
@@ -357,6 +411,7 @@ public class AuthController {
         if (!"ADMIN".equals(sessionRole) && !"GESTORE".equals(sessionRole))
             return ResponseEntity.status(403).body(Map.of("error", "Non autorizzato"));
 
+        if (nascostoA(nascosti(), id, (Long) session.getAttribute("userId"), sessionRole)) return ResponseEntity.notFound().build();   // NUOVO: utente nascosto a chi chiede
         Optional<User> userOpt = userRepository.findById(id);
         if (userOpt.isEmpty()) return ResponseEntity.notFound().build();
 
@@ -395,6 +450,7 @@ public class AuthController {
         if (!"ADMIN".equals(sessionRole) && !"GESTORE".equals(sessionRole))
             return ResponseEntity.status(403).body(Map.of("error", "Non autorizzato"));
 
+        if (nascostoA(nascosti(), id, (Long) session.getAttribute("userId"), sessionRole)) return ResponseEntity.notFound().build();   // NUOVO: utente nascosto a chi chiede
         Optional<User> userOpt = userRepository.findById(id);
         if (userOpt.isEmpty()) return ResponseEntity.notFound().build();
         User target = userOpt.get();
@@ -422,6 +478,7 @@ public class AuthController {
             return ResponseEntity.status(403).body(Map.of("error", "Non autorizzato"));
         if (sessionUserId.equals(id))
             return ResponseEntity.badRequest().body(Map.of("error", "Non puoi disattivare te stesso"));
+        if (nascostoA(nascosti(), id, (Long) session.getAttribute("userId"), role)) return ResponseEntity.notFound().build();   // NUOVO: utente nascosto a chi chiede
         Optional<User> userOpt = userRepository.findById(id);
         if (userOpt.isEmpty()) return ResponseEntity.notFound().build();
         User u = userOpt.get();
@@ -456,6 +513,7 @@ public class AuthController {
         if (sessionUserId.equals(id))
             return ResponseEntity.badRequest().body(Map.of("error", "Non puoi eliminare te stesso"));
 
+        if (nascostoA(nascosti(), id, (Long) session.getAttribute("userId"), role)) return ResponseEntity.notFound().build();   // NUOVO: utente nascosto a chi chiede
         Optional<User> userOpt = userRepository.findById(id);
         if (userOpt.isEmpty()) return ResponseEntity.notFound().build();
 
@@ -481,7 +539,52 @@ public class AuthController {
             throw e;
         }
         BLOCCATI.add(id);   // se aveva il CRM aperto, esce alla prossima azione
+        try { Map<Long, Map<String, Object>> n = nascosti(); if (n.remove(id) != null) salvaNascosti(n, session); } catch (Exception ignored) { }
         return ResponseEntity.ok(Map.of("message", "Utente eliminato"));
+    }
+
+
+    private void salvaNascosti(Map<Long, Map<String, Object>> n, HttpSession session) throws Exception {
+        Map<String, Object> out = new LinkedHashMap<>();
+        n.forEach((k, v) -> out.put(String.valueOf(k), v));
+        ConsegneDataset d = datasetRepository.findById(CHIAVE_NASCOSTI).orElseGet(() -> { ConsegneDataset x = new ConsegneDataset(); x.setTipo(CHIAVE_NASCOSTI); return x; });
+        d.setContenuto(objectMapper.writeValueAsString(out));
+        d.setRighe(out.size());
+        d.setAggiornatoAt(java.time.LocalDateTime.now(java.time.ZoneId.of("Europe/Rome")));
+        Long uid = (Long) session.getAttribute("userId");
+        d.setAggiornatoDa(uid == null ? null : userRepository.findById(uid).map(User::getFullName).orElse(null));
+        datasetRepository.save(d);
+    }
+
+    /** NUOVO: a chi e' nascosto un utente. Body { "ruoli": ["GESTORE", ...], "utenti": [id, ...] }; liste vuote = visibile a tutti. Solo ADMIN. */
+    @PutMapping("/users/{id}/visibilita")
+    public ResponseEntity<?> setVisibilita(@PathVariable Long id, @RequestBody Map<String, Object> body, HttpSession session) {
+        String role = (String) session.getAttribute("userRole");
+        if (role == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        if (!"ADMIN".equals(role)) return ResponseEntity.status(403).body(Map.of("error", "Solo l'Admin puo' nascondere gli utenti"));
+        Optional<User> target = userRepository.findById(id);
+        if (target.isEmpty()) return ResponseEntity.notFound().build();
+        if ("ADMIN".equals(ruoloPrima(target.get())))
+            return ResponseEntity.badRequest().body(Map.of("error", "Un Admin non si puo' nascondere"));
+        List<String> ruoli = lista(body.get("ruoli")).stream().filter(r -> VALID_ROLES.contains(r) && !"ADMIN".equals(r)).distinct().collect(Collectors.toList());
+        List<Long> utenti = new ArrayList<>();
+        for (String x : lista(body.get("utenti"))) {
+            try {
+                Long uid = Long.valueOf(x);
+                if (uid.equals(id) || utenti.contains(uid)) continue;
+                Optional<User> u = userRepository.findById(uid);
+                if (u.isPresent() && !"ADMIN".equals(ruoloPrima(u.get()))) utenti.add(uid);
+            } catch (NumberFormatException ignored) { }
+        }
+        try {
+            Map<Long, Map<String, Object>> n = nascosti();
+            if (ruoli.isEmpty() && utenti.isEmpty()) n.remove(id);
+            else { Map<String, Object> v = new LinkedHashMap<>(); v.put("ruoli", ruoli); v.put("utenti", utenti); n.put(id, v); }
+            salvaNascosti(n, session);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Non salvato: " + e.getMessage()));
+        }
+        return ResponseEntity.ok(Map.of("ruoli", ruoli, "utenti", utenti));
     }
 
     /** dal messaggio del database ("... on table \"follow_ups\"") ricava cosa blocca l'eliminazione */

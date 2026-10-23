@@ -70,9 +70,11 @@ function renderUsers(users) {
                     ` : `
                         <span class="status-badge status-${u.role}">${formatRole(u.role)}</span>
                     `}
+                    ${isAdmin ? visEtichetta(u) : ''}
                 </div>
             </div>
             <div class="waiting-actions">
+                ${isAdmin && !targetIsAdmin && !isCurrentUser ? `<button class="btn-small btn-secondary" onclick="apriVisibilitaUtente(${u.id})" title="Scegli a quali ruoli o utenti nascondere questo utente nella lista Utenti">👁 Visibilità</button>` : ''}
                 ${canDelete ? `<button class="btn-small btn-secondary" onclick="setUserActive(${u.id}, false)" title="Non potrà più accedere, ma i suoi dati restano">⏸ Disattiva</button>
                 <button class="btn-small btn-red" onclick="deleteUser(${u.id})">🗑️ Elimina</button>` : ''}
             </div>
@@ -98,6 +100,57 @@ function renderUsers(users) {
         </div>`;
     }).join('') : '');
     if (isAdmin) Presenze.avvia();
+}
+
+/* ===== NUOVO: VISIBILITA' DEGLI UTENTI (solo Admin) =====
+   L'Admin sceglie a quali ruoli e/o a quali utenti nascondere un utente nella lista Utenti.
+   Il filtro lo fa il server (/api/auth/users): chi non deve vederlo non lo riceve proprio
+   e non puo' modificarlo. L'Admin vede sempre tutti; ognuno vede sempre se stesso. */
+const VIS_RUOLI = ['GESTORE', 'MODERATORE', 'BACK_OFFICE', 'UTENTE', 'NOLEGGIO', 'SERVICE', 'FRONT_OFFICE', 'CONSULENZA'];
+function visEsc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function visEtichetta(u) {
+    const n = u.nascostoA; if (!n) return '';
+    const voci = (n.ruoli || []).map(r => 'ruolo ' + formatRole(r)).concat((n.utenti || []).map(x => x.fullName));
+    if (!voci.length) return '';
+    return `<span title="Questi ruoli/utenti non lo vedono nella lista Utenti" style="font-size:11.5px;font-weight:700;padding:3px 9px;border-radius:999px;background:rgba(240,160,48,.14);color:#e0962e">🙈 Nascosto a: ${visEsc(voci.join(', '))}</span>`;
+}
+function apriVisibilitaUtente(id) {
+    const u = usersCache.find(x => x.id === id); if (!u) return;
+    const n = u.nascostoA || { ruoli: [], utenti: [] };
+    const selR = new Set(n.ruoli || []), selU = new Set((n.utenti || []).map(x => x.id));
+    const altri = usersCache.filter(x => x.id !== id && x.role !== 'ADMIN' && !x.disattivato).sort((a, b) => String(a.fullName).localeCompare(String(b.fullName), 'it'));
+    let ov = document.getElementById('visUtenteModal');
+    if (ov) ov.remove();
+    ov = document.createElement('div'); ov.id = 'visUtenteModal'; ov.className = 'modal-overlay';
+    ov.innerHTML = `<div class="modal-box" style="width:min(560px,100%)" role="dialog" aria-modal="true">
+        <div class="modal-header"><h3>👁 VISIBILITÀ · ${visEsc(u.fullName)}</h3><button type="button" class="modal-close" data-x aria-label="Chiudi">✕</button></div>
+        <div style="padding:16px 22px;overflow:auto">
+          <p style="margin:0 0 12px;font-size:13px;color:var(--text-secondary)">Chi scegli qui <b>non vedrà ${visEsc(u.fullName)}</b> nella lista Utenti e non potrà modificarlo. L'Admin lo vede sempre. Oggi la lista Utenti la vedono Admin e Gestore.</p>
+          <div style="font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--text-secondary);margin:6px 0 8px">Nascondi a tutto il ruolo</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">${VIS_RUOLI.map(r => `<label style="display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--border);border-radius:10px;cursor:pointer;font-size:13px"><input type="checkbox" data-r="${r}" ${selR.has(r) ? 'checked' : ''}>${formatRole(r)}</label>`).join('')}</div>
+          <div style="font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--text-secondary);margin:16px 0 8px">Nascondi a utenti specifici</div>
+          <input type="search" class="input-dark" placeholder="Cerca utente…" data-q style="width:100%;margin-bottom:8px">
+          <div data-lu style="display:flex;flex-direction:column;gap:2px;max-height:260px;overflow:auto">${altri.map(x => `<label data-n="${visEsc(String(x.fullName).toLowerCase())}" style="display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:8px;cursor:pointer;font-size:13.5px"><input type="checkbox" data-u="${x.id}" ${selU.has(x.id) ? 'checked' : ''}><span style="flex:1">${visEsc(x.fullName)}</span><span class="status-badge status-${x.role}" style="font-size:10.5px">${formatRole(x.role)}</span></label>`).join('') || '<p style="font-size:13px;color:var(--text-secondary)">Nessun altro utente</p>'}</div>
+        </div>
+        <div style="display:flex;justify-content:space-between;gap:10px;padding:14px 22px;border-top:1px solid var(--border);flex-wrap:wrap">
+          <button type="button" class="btn-small btn-secondary" data-tutti>Visibile a tutti</button>
+          <span style="display:flex;gap:8px"><button type="button" class="btn-small btn-secondary" data-x>Annulla</button><button type="button" class="btn-small btn-green" data-ok>✓ Salva</button></span>
+        </div></div>`;
+    document.body.appendChild(ov);
+    const chiudi = () => { ov.remove(); document.removeEventListener('keydown', esc); };
+    const esc = e => { if (e.key === 'Escape') chiudi(); };
+    document.addEventListener('keydown', esc);
+    ov.addEventListener('click', e => { if (e.target === ov || e.target.closest('[data-x]')) chiudi(); });
+    ov.querySelector('[data-q]').addEventListener('input', e => { const q = e.target.value.trim().toLowerCase(); ov.querySelectorAll('[data-lu] label').forEach(l => { l.style.display = !q || l.dataset.n.includes(q) ? '' : 'none'; }); });
+    ov.querySelector('[data-tutti]').addEventListener('click', () => ov.querySelectorAll('input[type=checkbox]').forEach(c => { c.checked = false; }));
+    ov.querySelector('[data-ok]').addEventListener('click', async () => {
+        const ruoli = [...ov.querySelectorAll('[data-r]:checked')].map(c => c.dataset.r), utenti = [...ov.querySelectorAll('[data-u]:checked')].map(c => +c.dataset.u);
+        try {
+            const res = await fetch(`/api/auth/users/${id}/visibilita`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ruoli, utenti }) });
+            if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || 'Errore nel salvataggio'); return; }
+            chiudi(); loadUsers();
+        } catch (err) { alert('Errore di rete'); }
+    });
 }
 
 /* ===== NUOVO: CHI E' ONLINE (solo Admin, pagina Utenti) =====
