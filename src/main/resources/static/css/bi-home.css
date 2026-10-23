@@ -183,9 +183,55 @@
 @keyframes bh-ck-curva{0%,100%{transform:skewX(0)}30%,70%{transform:skewX(-11deg)}}
 .bh-ev-curva .bh-ck-cityg{animation:bh-ck-pan 9.5s ease-in-out forwards}
 @keyframes bh-ck-pan{0%,100%{transform:translateX(0)}30%,70%{transform:translateX(-14px)}}
+/* evento HALLOWEEN (ottobre): pipistrelli, zucche, luna, ragnatela, luce viola */
+.bh-ck-bats,.bh-ck-web,.bh-ck-moon,.bh-ck-pumps,.bh-ck-snow,.bh-ck-xmas,.bh-ck-tree,.bh-ck-sleigh,.bh-ck-fest{opacity:0;transition:opacity 1.2s}
+.bh-ck-fest{display:none;font-size:10px;font-weight:800;letter-spacing:.3px}
+.bh-ck-fest.bh-hw{color:#ffa53d}.bh-ck-fest.bh-xm{color:#ff6b6b}
+.bh-ck-bat{fill:#06070b;transform:translate(780px,var(--y)) scale(var(--s))}
+.bh-ck-batw{transform-box:fill-box;transform-origin:center}
+.bh-ck-web path{fill:none;stroke:rgba(220,225,235,.35);stroke-width:.7}
+.bh-ck-moonc{fill:#f6e7c1}
+.bh-ck-moon circle[opacity]{fill:#b89c63}
+.bh-ck-pumps{position:absolute;left:0;right:0;top:0;height:0;pointer-events:none}
+.bh-ck-pump{position:absolute;top:150px;width:58px;height:46px;filter:drop-shadow(0 4px 6px rgba(0,0,0,.7))}
+.bh-ck-pump.bh-l{left:118px}.bh-ck-pump.bh-r{right:118px;transform:scaleX(-1)}
+.bh-ck-pface path{fill:#ffd65a}
+.bh-ev-halloween .bh-ck-bats,.bh-ev-halloween .bh-ck-web,.bh-ev-halloween .bh-ck-moon,.bh-ev-halloween .bh-ck-pumps{opacity:1}
+.bh-ev-halloween .bh-ck-fest.bh-hw{display:inline;opacity:1}
+.bh-ev-halloween .bh-ck-moonc{fill:#ffcf8a}
+.bh-ev-halloween .bh-ck-bat{animation:bh-ck-bat 4.2s linear infinite}
+.bh-ev-halloween .bh-ck-batw{animation:bh-ck-flap .16s ease-in-out infinite alternate}
+@keyframes bh-ck-bat{0%{transform:translate(780px,var(--y)) scale(var(--s))}35%{transform:translate(520px,calc(var(--y) - 14px)) scale(var(--s))}70%{transform:translate(260px,calc(var(--y) + 10px)) scale(var(--s))}100%{transform:translate(-40px,calc(var(--y) - 6px)) scale(var(--s))}}
+@keyframes bh-ck-flap{to{transform:scaleY(.35)}}
+.bh-ev-halloween .bh-ck-pump{animation:bh-ck-pop .6s cubic-bezier(.3,1.6,.5,1) both}
+.bh-ev-halloween .bh-ck-pump.bh-r{animation-name:bh-ck-popR}
+@keyframes bh-ck-pop{from{transform:translateY(16px) scale(.6);opacity:0}to{transform:none;opacity:1}}
+@keyframes bh-ck-popR{from{transform:scaleX(-1) translateY(16px) scale(.6);opacity:0}to{transform:scaleX(-1);opacity:1}}
+.bh-ev-halloween .bh-ck-pface{animation:bh-ck-flick 1.1s steps(2) infinite}
+@keyframes bh-ck-flick{0%{opacity:1}50%{opacity:.75}}
+.bh-ev-halloween .bh-ck-pface path{filter:drop-shadow(0 0 3px #ffb030)}
+.bh-ev-halloween .bh-ck-strip{background:linear-gradient(90deg,transparent,#8a3cff 15%,#ff7a1a 50%,#8a3cff 85%,transparent);box-shadow:0 0 16px 4px rgba(138,60,255,.5)}
+/* evento NATALE (dicembre): neve, lucine, alberello allo specchietto, slitta, luce rossa e verde */
+.bh-ck-flk{fill:#fff;opacity:.9}
+.bh-ck-tree{transform:translate(360px,52px)}
+.bh-ck-sleigh{fill:#05060a;transform:translate(800px,58px) scale(1.1)}
+.bh-ev-natale .bh-ck-snow,.bh-ev-natale .bh-ck-xmas,.bh-ev-natale .bh-ck-tree,.bh-ev-natale .bh-ck-sleigh,.bh-ev-natale .bh-ck-moon{opacity:1}
+.bh-ev-natale .bh-ck-fest.bh-xm{display:inline;opacity:1}
+.bh-ev-natale .bh-ck-flk{animation:bh-ck-snow var(--d) linear infinite;animation-delay:var(--dl)}
+@keyframes bh-ck-snow{from{transform:translate(0,0)}to{transform:translate(var(--dx),250px)}}
+.bh-ck-bulb{filter:drop-shadow(0 0 2.5px rgba(255,255,255,.55))}
+.bh-ev-natale .bh-ck-bulb{animation:bh-ck-bulb 1.2s steps(1) infinite}
+.bh-ev-natale .bh-ck-bulb.bh-b{animation-delay:-.6s}
+@keyframes bh-ck-bulb{0%{opacity:1}50%{opacity:.25}}
+.bh-ev-natale .bh-ck-tree{animation:bh-ck-swing 2.4s ease-in-out infinite}
+@keyframes bh-ck-swing{0%,100%{transform:translate(360px,52px) rotate(7deg)}50%{transform:translate(360px,52px) rotate(-7deg)}}
+.bh-ev-natale .bh-ck-sleigh{animation:bh-ck-sleigh 8s linear forwards}
+@keyframes bh-ck-sleigh{from{transform:translate(800px,64px) scale(1.1)}to{transform:translate(-90px,30px) scale(1.1)}}
+.bh-ev-natale .bh-ck-strip{background:repeating-linear-gradient(90deg,#ff3b3b 0 60px,#2fd17a 60px 120px);box-shadow:0 0 16px 4px rgba(255,80,80,.35)}
+.bh-m-giorno .bh-ck-moon{opacity:0!important}
 /* fuori dal capitolo o con "riduci animazioni": tutto fermo */
 .bh-scene:not(.bh-on) .bh-ck *,.bh-scene:not(.bh-on) .bh-ck-dash::after{animation-play-state:paused!important}
-@media (prefers-reduced-motion:reduce){.bh-ck-rain,.bh-ck-wipers,.bh-ck-ovt,.bh-ck-movt{display:none}.bh-ck-roadg,.bh-ck-cityg,.bh-ck-lamp,.bh-ck-lane,.bh-ck-mlane,.bh-ck-mlamp,.bh-ck-car,.bh-ck-mcar,.bh-ck-brk,.bh-ck-dash::after{animation:none!important}.bh-ck-lamp{opacity:0}}
+@media (prefers-reduced-motion:reduce){.bh-ck-bats,.bh-ck-snow,.bh-ck-sleigh,.bh-ck-rain,.bh-ck-wipers,.bh-ck-ovt,.bh-ck-movt{display:none}.bh-ck-roadg,.bh-ck-cityg,.bh-ck-lamp,.bh-ck-lane,.bh-ck-mlane,.bh-ck-mlamp,.bh-ck-car,.bh-ck-mcar,.bh-ck-brk,.bh-ck-dash::after{animation:none!important}.bh-ck-lamp{opacity:0}}
 .bh-ck-mm{font-size:9px;font-weight:700;fill:#6f7a8c;text-anchor:middle}
 .bh-ck-dv{position:absolute;left:0;right:0;top:38px;text-align:center}
 .bh-ck-dv small{color:#ffb37a}

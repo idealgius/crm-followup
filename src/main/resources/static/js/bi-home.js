@@ -231,6 +231,24 @@
         // lampioni che vengono incontro (disegnati a grandezza piena nell'origine, la CSS li sposta e li ingrandisce)
         const lamp = (side, k) => `<g class="bh-ck-lamp bh-${side}" style="animation-delay:${(-k * .8).toFixed(2)}s"><line x1="0" y1="0" x2="0" y2="-92" class="bh-ck-pole" stroke-width="3"/><line x1="0" y1="-92" x2="${side === 'l' ? 16 : -16}" y2="-92" class="bh-ck-pole" stroke-width="2.6"/><circle cx="${side === 'l' ? 16 : -16}" cy="-89" r="22" fill="url(#bh-ckl)"/><circle cx="${side === 'l' ? 16 : -16}" cy="-89.5" r="3.4" fill="#ffe7b8"/></g>`;
         const lamps = [0, 1, 2, 3].map(k => lamp('l', k) + lamp('r', k)).join('');
+        // NUOVO: addobbi stagionali (eventi "halloween" in ottobre e "natale" in dicembre)
+        const bat = (k, y, sc, d) => `<g class="bh-ck-bat" style="--y:${y}px;--s:${sc};animation-delay:${d}s"><g class="bh-ck-batw"><path d="M0,2 C-3,-1 -6,-4 -13,-3 C-10,-1 -10,2 -8,3.5 C-6,1.5 -3.5,2.5 -2,4.5 L0,3.4 L2,4.5 C3.5,2.5 6,1.5 8,3.5 C10,2 10,-1 13,-3 C6,-4 3,-1 0,2 Z"/><circle cx="0" cy="0.6" r="1.6"/></g></g>`;
+        const bats = [[0, 52, 1.2, 0], [1, 78, .8, .5], [2, 40, .9, 1.1], [3, 95, 1.4, 1.8], [4, 64, .7, 2.4], [5, 30, 1, 3.1]].map(a => bat(...a)).join('');
+        let flakes = ''; for (let k = 0; k < 70; k++) flakes += `<circle class="bh-ck-flk" cx="${(80 + rnd() * 590).toFixed(0)}" cy="-6" r="${(.8 + rnd() * 1.8).toFixed(1)}" style="--d:${(2.6 + rnd() * 2.6).toFixed(2)}s;--dl:${(-rnd() * 5).toFixed(2)}s;--dx:${(-14 + rnd() * 28).toFixed(0)}px"/>`;
+        // lucine di Natale lungo il bordo alto del parabrezza
+        let bulbs = '', wire = 'M104,14';
+        const COLS = ['#ff4b4b', '#3fd17a', '#ffd34d', '#5aa8ff'];
+        for (let x0 = 104, n = 0; x0 < 646; x0 += 90) {
+            const x1 = Math.min(646, x0 + 90), cx = (x0 + x1) / 2;
+            wire += ` Q${cx},32 ${x1},14`;
+            [.2, .4, .6, .8].forEach(t => { const x = (1 - t) * (1 - t) * x0 + 2 * (1 - t) * t * cx + t * t * x1, y = (1 - t) * (1 - t) * 14 + 2 * (1 - t) * t * 32 + t * t * 14;
+                bulbs += `<circle cx="${x.toFixed(1)}" cy="${(y + 2.5).toFixed(1)}" r="2.6" fill="${COLS[n % 4]}" class="bh-ck-bulb ${n % 2 ? 'bh-b' : ''}"/>`; n++; });
+        }
+        const pumpkin = side => `<svg class="bh-ck-pump bh-${side}" viewBox="0 0 80 64"><defs><radialGradient id="bh-ckpu-${side}" cx=".45" cy=".4"><stop offset="0" stop-color="#ffa53d"/><stop offset=".7" stop-color="#e8661b"/><stop offset="1" stop-color="#a8400e"/></radialGradient></defs>
+            <ellipse cx="40" cy="60" rx="34" ry="4" fill="#000" opacity=".5"/>
+            <path d="M38,12 Q36,4 42,2 Q44,6 42,13 Z" fill="#4f7a2a"/>
+            <ellipse cx="22" cy="36" rx="16" ry="22" fill="url(#bh-ckpu-${side})"/><ellipse cx="58" cy="36" rx="16" ry="22" fill="url(#bh-ckpu-${side})"/><ellipse cx="40" cy="36" rx="20" ry="24" fill="url(#bh-ckpu-${side})"/>
+            <g class="bh-ck-pface"><path d="M26,30 L33,22 L36,32 Z"/><path d="M54,30 L47,22 L44,32 Z"/><path d="M38,36 L40,32 L42,36 Z"/><path d="M24,42 L30,46 L34,42 L40,47 L46,42 L50,46 L56,42 Q52,54 40,54 Q28,54 24,42 Z"/></g></svg>`;
         return `<div class="bh-ck" id="bh-ck">
           <svg class="bh-ck-wind" viewBox="0 0 750 232" preserveAspectRatio="none">
             <defs>
@@ -247,11 +265,14 @@
               <radialGradient id="bh-ckdrop" cx=".4" cy=".35"><stop offset="0" stop-color="#ffffff" stop-opacity=".75"/><stop offset=".45" stop-color="#cfe0ff" stop-opacity=".25"/><stop offset="1" stop-color="#9fb6e0" stop-opacity=".12"/></radialGradient>
               <clipPath id="bh-ckclip"><rect x="326" y="24" width="98" height="22" rx="8"/></clipPath>
               <clipPath id="bh-ckwclip"><path d="M96,12 L654,12 L732,232 L18,232 Z"/></clipPath>
+              <radialGradient id="bh-ckmoon"><stop offset=".45" stop-color="#ffe9b8" stop-opacity=".35"/><stop offset="1" stop-color="#ffe9b8" stop-opacity="0"/></radialGradient>
               <radialGradient id="bh-ckl"><stop offset="0" stop-color="#ffc070" stop-opacity=".55"/><stop offset="1" stop-color="#ffc070" stop-opacity="0"/></radialGradient>
               <linearGradient id="bh-ckm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2a2c34"/><stop offset="1" stop-color="#101116"/></linearGradient>
             </defs>
             <rect class="bh-ck-sky" width="750" height="160"/>
             <g class="bh-ck-stars" fill="#fff">${stars}</g>
+            <g class="bh-ck-moon"><circle cx="642" cy="44" r="30" fill="url(#bh-ckmoon)"/><circle cx="642" cy="44" r="14" class="bh-ck-moonc"/><circle cx="637" cy="40" r="2.6" opacity=".12"/><circle cx="647" cy="49" r="1.8" opacity=".12"/></g>
+            <g class="bh-ck-sleigh"><path d="M0,0 C4,4 14,4 18,0 L16,-4 L4,-4 Z M2,2 L20,2"/><path d="M24,-3 l3,-3 l2,2 l3,-4 l1,5 l3,1 l-3,1 l-5,0 Z M36,-4 l3,-3 l2,2 l3,-4 l1,5 l3,1 l-3,1 l-5,0 Z M48,-5 l3,-3 l2,2 l3,-4 l1,5 l3,1 l-3,1 l-5,0 Z"/><line x1="18" y1="-2" x2="50" y2="-3" stroke="#05060a" stroke-width=".8"/><circle cx="59" cy="-5" r="1.2" fill="#ff4b4b"/></g>
             <ellipse class="bh-ck-hz" cx="375" cy="160" rx="380" ry="46" fill="url(#bh-ckh)"/>
             <g class="bh-ck-cityg"><g class="bh-ck-city">${city}</g><g class="bh-ck-win" fill="#ffcf7a">${win}</g></g>
             <g class="bh-ck-roadg">
@@ -274,11 +295,15 @@
                 <rect x="-9" y="-6" width="18" height="5" rx="1" fill="#d8dce4" opacity=".7"/></g>
             </g>
             <rect y="196" width="750" height="36" fill="url(#bh-ckg2)"/>
+            <g class="bh-ck-bats">${bats}</g>
+            <g class="bh-ck-web"><path d="M96,12 L170,12 M96,12 L150,40 M96,12 L120,62 M96,12 L104,74"/><path d="M118,12 Q116,20 108,22 Q104,26 104,30 M140,12 Q136,26 122,30 Q112,40 106,46 M162,12 Q156,32 136,38 Q120,52 110,62"/></g>
+            <g class="bh-ck-snow" clip-path="url(#bh-ckwclip)">${flakes}</g>
             <!-- pioggia sul vetro e tergicristalli (solo durante l'evento "pioggia") -->
             <g class="bh-ck-rain" clip-path="url(#bh-ckwclip)"><rect class="bh-ck-rainfog" width="750" height="232"/><g class="bh-ck-drops">${drops}</g></g>
             <g class="bh-ck-wipers"><g class="bh-ck-wip"><line x1="0" y1="0" x2="300" y2="0"/><line x1="40" y1="3" x2="300" y2="3" class="bh-ck-wipb"/></g><g class="bh-ck-wip bh-2"><line x1="0" y1="0" x2="270" y2="0"/><line x1="36" y1="3" x2="270" y2="3" class="bh-ck-wipb"/></g></g>
             <path d="M0,0 L96,0 L18,232 L0,232 Z" fill="#06070a"/><path d="M750,0 L654,0 L732,232 L750,232 Z" fill="#06070a"/>
             <rect width="750" height="12" fill="#06070a"/>
+            <g class="bh-ck-xmas"><path d="${wire}" fill="none" stroke="#1b1d22" stroke-width="1.2"/>${bulbs}</g>
             <rect x="371" y="10" width="8" height="12" fill="#0b0c10"/>
             <rect x="318" y="18" width="114" height="34" rx="12" fill="url(#bh-ckm)" stroke="rgba(255,255,255,.08)"/>
             <g clip-path="url(#bh-ckclip)">
@@ -293,12 +318,13 @@
             </g>
             <rect x="326" y="24" width="98" height="22" rx="8" fill="none" stroke="rgba(0,0,0,.6)" stroke-width="1.5"/>
             <path d="M330,42 L350,26 L362,26 L342,42 Z" fill="rgba(255,255,255,.07)"/>
+            <g class="bh-ck-tree"><line x1="0" y1="0" x2="0" y2="26" stroke="#d8d2c4" stroke-width=".8"/><path d="M0,24 L-9,40 L-4,40 L-11,52 L-5,52 L-13,64 L13,64 L5,52 L11,52 L4,40 L9,40 Z" fill="#2f8f4e"/><rect x="-2" y="64" width="4" height="4" fill="#7a4a24"/><circle cx="-4" cy="46" r="1.4" fill="#ff4b4b"/><circle cx="4" cy="56" r="1.4" fill="#ffd34d"/><circle cx="-6" cy="60" r="1.4" fill="#5aa8ff"/><path d="M0,20 l1.6,3.4 3.6,.4 -2.7,2.4 .8,3.6 -3.3,-1.9 -3.3,1.9 .8,-3.6 -2.7,-2.4 3.6,-.4 Z" fill="#ffd34d"/></g>
           </svg>
           <div class="bh-ck-dash">
             <div class="bh-ck-disp">
               ${dial('v', 'VENDITE · MESE', '#ff6a1a', '#ffb36b')}
               <div class="bh-ck-mid">
-                <div class="bh-ck-sb"><b data-ck-ora>--:--</b><span data-ck-data></span><span class="bh-ck-ic"><i class="bh-ck-sig"><i></i><i></i><i></i></i>18°</span></div>
+                <div class="bh-ck-sb"><b data-ck-ora>--:--</b><span data-ck-data></span><span class="bh-ck-fest bh-hw">Happy Halloween 🎃</span><span class="bh-ck-fest bh-xm">Buone feste 🎄</span><span class="bh-ck-ic"><i class="bh-ck-sig"><i></i><i></i><i></i></i>18°</span></div>
                 <div class="bh-ck-ch"><div class="bh-ck-cht"><small>CONTRATTI · ULTIMI 6 MESI</small><span><i class="v"></i>Vendita<i class="n"></i>Noleggio</span></div>
                   <div class="bh-ck-bars" data-ck-bars>${'<div><i class="v"></i><i class="n"></i><em></em></div>'.repeat(6)}</div></div>
                 <div class="bh-ck-ind">
@@ -311,6 +337,7 @@
             <div class="bh-ck-vent bh-l"></div><div class="bh-ck-vent bh-r"></div>
             <div class="bh-ck-strip"></div>
           </div>
+          <div class="bh-ck-pumps">${pumpkin('l')}${pumpkin('r')}</div>
           <div class="bh-ck-console">
             <div class="bh-ck-gear"><span>P</span><span>R</span><span>N</span><span class="on">D</span></div>
             <div class="bh-ck-start"><b>ENGINE</b><small>START · STOP</small></div>
@@ -688,21 +715,29 @@
     const m = h >= 6 && h < 8 ? 'alba' : h >= 8 && h < 17 ? 'giorno' : h >= 17 && h < 19.5 ? 'tramonto' : 'notte';
     ['alba', 'giorno', 'tramonto', 'notte'].forEach(x => cm.classList.toggle('bh-m-' + x, x === m)); };
   modo(); setInterval(modo, 60000);
-  // NUOVO: ogni tanto succede UNA cosa, a caso: pioggia con tergicristalli, un'auto che sorpassa, una curva
-  const EV = { pioggia: 15000, sorpasso: 6500, curva: 9500 };
-  let evUlt = '';
-  function evento() {
-    if (!active || cur !== 2 || reduce || document.hidden) { setTimeout(evento, 4000); return; }
-    const scelte = Object.keys(EV).filter(e => e !== evUlt), e = scelte[Math.floor(Math.random() * scelte.length)];
-    evUlt = e;
-    cm.classList.remove('bh-ev-' + e); void cm.offsetWidth; cm.classList.add('bh-ev-' + e);
-    setTimeout(() => cm.classList.remove('bh-ev-' + e), EV[e]);
-    setTimeout(evento, EV[e] + 6000 + Math.random() * 8000);
+  // NUOVO: ogni tanto succede UNA cosa, a caso: pioggia con tergicristalli, un'auto che sorpassa, una
+  // curva; in ottobre anche gli addobbi di Halloween, in dicembre quelli di Natale. Il capitolo resta
+  // in primo piano solo 9 secondi (i capitoli girano da soli): l'evento parte appena si arriva sul
+  // Commerciale (8 volte su 10) e, se ci si ferma sul capitolo, ogni tanto ne parte un altro.
+  const EV = { pioggia: 8000, sorpasso: 6500, curva: 7500, halloween: 8500, natale: 9000 };
+  let evUlt = '', evOn = false;
+  const evScelte = () => { const m = new Date().getMonth();
+    return ['pioggia', 'sorpasso', 'curva'].concat(m === 9 ? ['halloween', 'halloween'] : [], m === 11 ? ['natale', 'natale'] : []); };
+  function lancia(e) {
+    if (!EV[e]) return;
+    Object.keys(EV).forEach(x => cm.classList.remove('bh-ev-' + x)); void cm.offsetWidth;
+    cm.classList.add('bh-ev-' + e); evUlt = e; evOn = true;
+    clearTimeout(lancia.t); lancia.t = setTimeout(() => { cm.classList.remove('bh-ev-' + e); evOn = false; }, EV[e]);
   }
-  setTimeout(evento, 6000);
-  // per le prove: BIHome.evento('pioggia' | 'sorpasso' | 'curva'), BIHome.modo('giorno' | ...)
-  window.__bhCk = { evento: e => { cm.classList.remove('bh-ev-' + e); void cm.offsetWidth; cm.classList.add('bh-ev-' + e); setTimeout(() => cm.classList.remove('bh-ev-' + e), EV[e]); },
-    modo: m => ['alba', 'giorno', 'tramonto', 'notte'].forEach(x => cm.classList.toggle('bh-m-' + x, x === m)) };
+  function evento() {
+    if (!active || cur !== 2 || reduce || document.hidden || evOn) return;
+    const sc = evScelte().filter(e => e !== evUlt);
+    lancia(sc[Math.floor(Math.random() * sc.length)]);
+  }
+  const evArrivo = () => setTimeout(() => { if (Math.random() < .8) evento(); }, 1100);
+  setInterval(() => { if (Math.random() < .6) evento(); }, 14000);
+  // per le prove: __bhCk.evento('pioggia' | 'sorpasso' | 'curva' | 'halloween' | 'natale'), __bhCk.modo('giorno' | ...)
+  window.__bhCk = { evento: lancia, modo: m => ['alba', 'giorno', 'tramonto', 'notte'].forEach(x => cm.classList.toggle('bh-m-' + x, x === m)) };
   const count = () => cm.querySelectorAll('[data-n]').forEach(el => { const n = +el.dataset.n; let v = 0; const st = Math.max(1, Math.round(n / 40));
     const iv = setInterval(() => { v = Math.min(n, v + st); el.textContent = v; if (v >= n) clearInterval(iv); }, 30); });
   const cmRun = () => { cm.classList.remove('bh-run'); void cm.offsetWidth; cm.classList.add('bh-run'); count(); };
@@ -713,7 +748,7 @@
   const svRun = () => { if (!sv || reduce) return; sv.classList.remove('sv-run'); void sv.offsetWidth; sv.classList.add('sv-run'); svT0 = performance.now(); };
   setInterval(() => { if (active && cur === 3) svRun(); }, 10500);
   setInterval(() => { if (!active || cur !== 3 || !svPct) return; const s = (performance.now() - svT0) / 1000; svPct.textContent = Math.max(0, Math.min(100, Math.round((s - 1.2) / 3.8 * 100))); }, 80);
-  const go0 = go; go = function (i, f) { go0(i, f); posTog(); if (i === 2) cmRun(); else if (i === 1) stockSpin(); else if (i === 3) svRun(); };
+  const go0 = go; go = function (i, f) { go0(i, f); posTog(); if (i === 2) { cmRun(); evArrivo(); } else if (i === 1) stockSpin(); else if (i === 3) svRun(); };
   // Avvio/arresto: tutto gira solo mentre la pagina BI e' visibile
   function start() {
     permessi(); chiudi(); setTimeout(posTog, 0);
