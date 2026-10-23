@@ -733,33 +733,32 @@
     const m = h >= 6 && h < 8 ? 'alba' : h >= 8 && h < 17 ? 'giorno' : h >= 17 && h < 19.5 ? 'tramonto' : 'notte';
     ['alba', 'giorno', 'tramonto', 'notte'].forEach(x => cm.classList.toggle('bh-m-' + x, x === m)); };
   modo(); setInterval(modo, 60000);
-  // NUOVO: eventi a rotazione, uno alla volta e a caso (circa ogni 8 secondi finche' si resta sul
-  // capitolo Commerciale): pioggia con tergicristalli, un'auto che sorpassa, una curva; in ottobre ogni
-  // tanto Halloween, in dicembre ogni tanto Natale. In ottobre i pipistrelli passano anche da soli.
-  const EV = { pioggia: 7500, sorpasso: 6500, curva: 7000, halloween: 8000, natale: 8500 };
-  let evUlt = '', evOn = false, evProx = null;
-  const evScelte = () => { const m = new Date().getMonth();
-    return ['pioggia', 'sorpasso', 'curva'].concat(m === 9 ? ['halloween'] : [], m === 11 ? ['natale'] : []); };
+  // NUOVO: eventi a SCALETTA FISSA, uno ogni 11 secondi finche' si resta sul capitolo Commerciale
+  // (all'arrivo parte subito il successivo; la scaletta riprende da dove era rimasta).
+  // Ottobre: Halloween e pipistrelli piu' spesso; dicembre: Natale; curve una per lato.
+  const EV = { pioggia: 7500, sorpasso: 6500, curva: 7000, halloween: 9000, natale: 9000, pipistrelli: 7600 };
+  const SLOT = 11000;
+  const scaletta = () => { const m = new Date().getMonth();
+    if (m === 9) return ['halloween', 'pipistrelli', 'sorpasso', 'curva', 'halloween', 'pioggia', 'pipistrelli', 'curva'];
+    if (m === 11) return ['natale', 'sorpasso', 'curva', 'natale', 'pioggia', 'curva'];
+    return ['pioggia', 'sorpasso', 'curva', 'sorpasso', 'pioggia', 'curva']; };
+  let evI = 0, evProx = null, curvaSx = true;
   function lancia(e) {
     if (!EV[e]) return;
     Object.keys(EV).forEach(x => cm.classList.remove('bh-ev-' + x)); void cm.offsetWidth;
-    cm.classList.add('bh-ev-' + e); evUlt = e; evOn = true;
-    clearTimeout(lancia.t); lancia.t = setTimeout(() => { cm.classList.remove('bh-ev-' + e); evOn = false;
-      clearTimeout(evProx); evProx = setTimeout(evento, 900 + Math.random() * 1200); }, EV[e]);
+    if (e === 'curva') { curvaSx = !curvaSx; cm.classList.toggle('bh-cv-sx', curvaSx); }
+    cm.classList.add('bh-ev-' + e);
+    clearTimeout(lancia.t); lancia.t = setTimeout(() => cm.classList.remove('bh-ev-' + e), EV[e]);
   }
   function evento() {
-    if (!active || cur !== 2 || reduce || document.hidden || evOn) return;
-    const sc = evScelte().filter(e => e !== evUlt);
-    lancia(sc[Math.floor(Math.random() * sc.length)]);
+    clearTimeout(evProx);
+    if (!active || cur !== 2 || reduce || document.hidden) return;
+    const L = scaletta(); lancia(L[evI % L.length]); evI++;
+    evProx = setTimeout(evento, SLOT);
   }
   const evArrivo = () => { clearTimeout(evProx); evProx = setTimeout(evento, 1100); };
-  // pipistrelli di ottobre, anche fuori dall'evento Halloween
-  setInterval(() => {
-    if (new Date().getMonth() !== 9 || !active || cur !== 2 || reduce || document.hidden || cm.classList.contains('bh-bats') || Math.random() < .55) return;
-    cm.classList.add('bh-bats'); setTimeout(() => cm.classList.remove('bh-bats'), 7600);
-  }, 5500);
   // per le prove: __bhCk.evento('pioggia' | 'sorpasso' | 'curva' | 'halloween' | 'natale'), __bhCk.modo('giorno' | ...)
-  window.__bhCk = { pip: () => { cm.classList.remove('bh-bats'); void cm.offsetWidth; cm.classList.add('bh-bats'); setTimeout(() => cm.classList.remove('bh-bats'), 7600); }, evento: lancia, modo: m => ['alba', 'giorno', 'tramonto', 'notte'].forEach(x => cm.classList.toggle('bh-m-' + x, x === m)) };
+  window.__bhCk = { pip: () => lancia('pipistrelli'), evento: lancia, modo: m => ['alba', 'giorno', 'tramonto', 'notte'].forEach(x => cm.classList.toggle('bh-m-' + x, x === m)) };
   const count = () => cm.querySelectorAll('[data-n]').forEach(el => { const n = +el.dataset.n; let v = 0; const st = Math.max(1, Math.round(n / 40));
     const iv = setInterval(() => { v = Math.min(n, v + st); el.textContent = v; if (v >= n) clearInterval(iv); }, 30); });
   const cmRun = () => { cm.classList.remove('bh-run'); void cm.offsetWidth; cm.classList.add('bh-run'); count(); };
