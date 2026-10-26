@@ -20,7 +20,9 @@
     <link rel="stylesheet" href="/css/stock-home.css?v=20261017a">
     <link rel="stylesheet" href="/css/commerciale.css?v=20261023a">
     <link rel="stylesheet" href="/css/bi-tools.css?v=20261022a">
-    <link rel="stylesheet" href="/css/salone.css?v=20261016i">
+    <link rel="stylesheet" href="/css/salone.css?v=20261026d">
+    <link rel="stylesheet" href="/css/chat-bdc.css?v=20261026c">
+    <link rel="stylesheet" href="/css/allert-bo.css?v=20261026b">
     <link rel="stylesheet" href="/css/permessi.css?v=20261017a">
     <!-- NUOVO: correzioni per il telefono (solo schermi piccoli), sempre per ultimo -->
     <link rel="stylesheet" href="/css/mobile.css?v=20261022a">
@@ -95,6 +97,7 @@
             <a href="#followups" class="nav-link" id="navFollowups" onclick="showPage('followups');return false"><span class="nav-link-icon">📋</span><span class="nav-link-label">FOLLOW-UP</span></a>
             <a href="#waiting" class="nav-link" id="navWaiting" onclick="showPage('waiting');return false"><span class="nav-link-icon">🔔</span><span class="nav-link-label">RECALL</span></a>
             <a href="#contacts" class="nav-link" id="navContacts" onclick="showPage('contacts');return false"><span class="nav-link-icon">📞</span><span class="nav-link-label">REGISTRO CONTATTI</span></a>
+            <a href="#allert" class="nav-link" id="navAllert" style="display:none" onclick="showPage('allert');return false"><span class="nav-link-icon">🚨</span><span class="nav-link-label">ALLERT</span></a>
             <a href="#preventivi" class="nav-link" id="navPreventivi" style="display:none" onclick="showPage('preventivi');return false"><span class="nav-link-icon">📝</span><span class="nav-link-label">PREVENTIVI TELEFONICI</span></a>
             <a href="#promo" class="nav-link" id="navPromo" style="display:none" onclick="showPage('promo');return false"><span class="nav-link-icon">🎯</span><span class="nav-link-label">PROMO</span></a>
             <a href="#rent" class="nav-link" id="navRent" style="display:none" onclick="showPage('rent');return false"><span class="nav-link-icon">🚗</span><span class="nav-link-label">RENT</span></a>
@@ -200,6 +203,8 @@
          (vedi /js/macro-home.js); il contenuto lo costruisce /js/commerciale.js. -->
     <!-- NUOVO: Appuntamenti e ingressi (Walk-in / Appuntamenti + chat), costruita da /js/salone.js -->
     <div id="salonePage" style="display:none"><div id="saloneRoot"></div></div>
+    <!-- NUOVO: pagina Allert del Back Office (da gestire / in gestione / gestite), costruita da /js/allert-bo.js -->
+    <div id="allertPage" class="page page-wide" style="display:none"><div id="allertRoot"></div></div>
     <div id="commercialePage" class="page" style="display:none">
         <div id="commercialeRoot"></div>
     </div>
@@ -2673,16 +2678,17 @@
 <script src="/js/charts.js"></script>
 <script src="/js/dashboard-fu.js"></script>
 <script src="/js/contact.js?v=20261023a"></script>
+<script src="/js/allert-bo.js?v=20261026c"></script>
 <script src="/js/promo.js"></script>
-<script src="/js/admin.js?v=20261023a"></script>
+<script src="/js/admin.js?v=20261026b"></script>
 <script src="/js/rent.js?v=20261014a"></script>
 <script src="/js/rent-import.js?v=20261022b"></script>
 <script src="/js/service.js"></script>
 <script src="/js/veicoli.js"></script>
 <script src="/js/preventivi.js?v=20261022b"></script>
-<script src="/js/preventivi-sospesi.js?v=20261022c"></script>
+<script src="/js/preventivi-sospesi.js?v=20261026a"></script>
 <script src="/js/quotazioni-rent.js?v=20261020h"></script>
-<script src="/js/app.js?v=20261020a"></script>
+<script src="/js/app.js?v=20261026b"></script>
 <script src="/js/macro-home.js?v=20261014b"></script>
 <script src="/js/bi-home.js?v=20261023g"></script>
 <script src="/js/bi-tools.js?v=20261022a"></script>
@@ -2690,7 +2696,8 @@
 <script src="/js/consegne-analisi.js?v=20261021a"></script>
 <script src="/js/stock-home.js?v=20261021a"></script>
 <script src="/js/commerciale.js?v=20261023c"></script>
-<script src="/js/salone.js?v=20261026a"></script>
+<script src="/js/salone.js?v=20261026e"></script>
+<script src="/js/chat-bdc.js?v=20261026c"></script>
 <!-- NUOVO: presenza di tutti gli utenti (Admin -> Utenti) e ricarica automatica dopo un deploy -->
 <script src="/js/installa.js?v=20261016a"></script>
 <script src="/js/presenza.js?v=20261016b"></script>

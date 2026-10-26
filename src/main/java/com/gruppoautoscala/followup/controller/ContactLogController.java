@@ -735,6 +735,50 @@ public class ContactLogController {
         return ResponseEntity.ok(result);
     }
 
+    // NUOVO: pagina ALLERT (Back Office) — gli allert che riguardano l'utente:
+    //   - dal Moderatore in su: tutti;
+    //   - gli altri: quelli segnalati "a tutti" e quelli mandati proprio a lui
+    //     (stessa regola del popup "Da Gestire" nel Registro contatti).
+    // Da gestire e in gestione tutti; gestiti solo degli ultimi <gestiteGiorni> giorni (0 = tutti).
+    // Vedi /js/allert-bo.js.
+    @GetMapping("/allert-pagina")
+    public ResponseEntity<?> getAllertPagina(
+            @RequestParam(required = false, defaultValue = "30") int gestiteGiorni,
+            HttpSession session) {
+        Long userId = (Long) session.getAttribute("userId");
+        if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
+        String role = (String) session.getAttribute("userRole");
+        String acc = alertAccess(userId, role);
+        if (!rolePermissionService.hasAtLeast(acc, "READ_ONLY")) {
+            return ResponseEntity.status(403).body(Map.of("error", "Non hai il permesso per vedere gli Allert"));
+        }
+        boolean vedeTutti = "MODERATORE".equals(role) || "GESTORE".equals(role) || "ADMIN".equals(role);
+        LocalDateTime limite = gestiteGiorni > 0 ? LocalDateTime.now().minusDays(gestiteGiorni) : null;
+        long[] gestiteNascoste = {0};
+        List<Map<String, Object>> allert = contactLogService.getAll().stream()
+            .filter(l -> Boolean.TRUE.equals(l.getAcquistoAlert()) && ALERT_CATEGORIES.contains(l.getCategory()))
+            .filter(l -> vedeTutti || !Boolean.FALSE.equals(l.getAlertNotifyAll())
+                    || (l.getAlertRecipients() != null && l.getAlertRecipients().stream().anyMatch(u -> u != null && userId.equals(u.getId()))))
+            .filter(l -> {
+                if (limite == null || !"GESTITA".equals(l.getAcquistoAlertStatus())) return true;
+                LocalDateTime q = l.getAcquistoAlertGestitaAt() != null ? l.getAcquistoAlertGestitaAt()
+                        : l.getAcquistoAlertSegnalatoAt() != null ? l.getAcquistoAlertSegnalatoAt() : l.getContactDate();
+                boolean ok = q == null || !q.isBefore(limite);
+                if (!ok) gestiteNascoste[0]++;
+                return ok;
+            })
+            .map(this::toMap)
+            .collect(Collectors.toList());
+        Map<String, Object> out = new HashMap<>();
+        out.put("allert", allert);
+        out.put("gestiteGiorni", gestiteGiorni);
+        out.put("gestiteNascoste", gestiteNascoste[0]);
+        out.put("vedeTutti", vedeTutti);
+        out.put("puoGestire", rolePermissionService.hasAtLeast(acc, "FULL"));
+        out.put("puoRiaprire", rolePermissionService.hasAtLeast(acc, "ADMIN_FULL"));
+        return ResponseEntity.ok(out);
+    }
+
     @GetMapping("/by-category-storico")
     public ResponseEntity<?> getByCategoryStorico(@RequestParam String category, HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");

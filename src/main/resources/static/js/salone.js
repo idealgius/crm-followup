@@ -2033,7 +2033,7 @@
     const usaRecente = x => { try { const r = [x].concat(recenti().filter(y => y !== x)).slice(0, 27); localStorage.setItem(RECENTI_K, JSON.stringify(r)); } catch (e) { /* */ } };
     const RAPIDE = ['❤️', '😂', '😮', '😢', '🙏', '👍', '🔥', '🎉'];
     const Chat = (function () {
-        let el = null, aperto = false, conv = null, dopo = 0, timer = null, io = null, utenti = [], risposta = null, caricata = false, vietata = false;
+        let el = null, aperto = false, conv = null, cercaConv = '', filtroConv = 'tutte', compatta = (() => { try { return localStorage.getItem('saChatCompatta') === '1'; } catch (e) { return false; } })(), dopo = 0, timer = null, io = null, utenti = [], risposta = null, caricata = false, vietata = false;
         const msgs = {}, nonLetti = {};
         const nomeConv = k => k === 'GRUPPO' ? '👥 Gruppo salone' : (() => { const [, a, b] = k.split('_').map(Number); const altro = io && a === io.id ? b : a; const u = utenti.find(x => x.id === altro); return u ? u.nome : 'Chat privata'; })();
         const convCon = id => 'P_' + Math.min(io.id, id) + '_' + Math.max(io.id, id);
@@ -2043,20 +2043,35 @@
             el.className = 'sa-chat';
             el.innerHTML = `<button type="button" class="sa-chat-fab" aria-label="Apri la chat">💬 <span>Chat</span><i class="sa-badge" hidden></i></button>
               <div class="sa-chat-p" hidden>
-                <header><button type="button" class="sa-chat-back" hidden aria-label="Torna alle chat">‹</button><b class="sa-chat-tit">Chat</b><button type="button" class="sa-chat-min" aria-label="Riduci">—</button></header>
-                <div class="sa-chat-list"></div>
-                <div class="sa-chat-conv" hidden><div class="sa-chat-msgs"></div>
+                <div class="sa-chat-side">
+                  <div class="sa-chat-side-h"><b>Chat del salone</b></div>
+                  <div class="sa-chat-tabs" role="tablist" aria-label="Quali chat"><button type="button" data-fc="tutte" class="on">Tutte</button><button type="button" data-fc="gruppi">Gruppi</button><button type="button" data-fc="singole">Singole</button></div>
+                  <label class="sa-chat-cerca"><span aria-hidden="true">🔍</span><input type="search" placeholder="Cerca…" aria-label="Cerca chat"></label>
+                  <div class="sa-chat-list"></div>
+                </div>
+                <div class="sa-chat-main">
+                <div class="sa-chat-vuoto"><span>💬</span><b>Scegli una chat</b><em>Il gruppo del salone o una chat singola con un collega</em></div>
+                <div class="sa-chat-conv" hidden>
+                  <header><button type="button" class="sa-chat-back" hidden aria-label="Torna alle chat">‹</button><span class="sa-av sa-chat-hav"></span><span class="sa-chat-ht"><b class="sa-chat-tit">Chat</b><em class="sa-chat-sub"></em></span></header>
+                  <div class="sa-chat-msgs"></div>
                   <div class="sa-chat-reply" hidden></div>
                   <div class="sa-chat-in"><button type="button" class="sa-emo-b" title="Emoji">😊</button><textarea rows="1" placeholder="Scrivi un messaggio…"></textarea><button type="button" class="sa-send" title="Invia">➤</button></div>
                   <div class="sa-emo" hidden><div class="sa-emo-cerca"><input type="search" placeholder="🔍 Cerca emoji (es. ridere, auto, cuore)" autocomplete="off"><span class="sa-emo-per" hidden></span></div><div class="sa-emo-tabs"></div><div class="sa-emo-g"></div></div>
                   <div class="sa-ment" hidden></div>
                 </div>
+                </div>
+                <button type="button" class="sa-chat-comp" aria-label="Riduci la chat" title="Riduci: solo la chat"></button>
+                <button type="button" class="sa-chat-min" aria-label="Chiudi la chat" title="Chiudi">×</button>
               </div>`;
             document.body.appendChild(el);
             el.querySelector('.sa-chat-fab').addEventListener('click', () => apri(true));
             el.querySelector('.sa-chat-min').addEventListener('click', () => apri(false));
             el.querySelector('.sa-chat-back').addEventListener('click', () => { conv = null; vista(); });
             el.querySelector('.sa-chat-list').addEventListener('click', e => { const b = e.target.closest('[data-conv]'); if (b) entra(b.dataset.conv); });
+            el.querySelector('.sa-chat-cerca input').addEventListener('input', e => { cercaConv = e.target.value.trim().toLowerCase(); disegnaLista(); });
+            el.querySelector('.sa-chat-tabs').addEventListener('click', e => { const b = e.target.closest('[data-fc]'); if (!b) return; filtroConv = b.dataset.fc; el.querySelectorAll('.sa-chat-tabs button').forEach(x => x.classList.toggle('on', x === b)); disegnaLista(); });
+            el.querySelector('.sa-chat-comp').addEventListener('click', () => { compatta = !compatta; try { localStorage.setItem('saChatCompatta', compatta ? '1' : '0'); } catch (e) { /* */ } comp(); });
+            comp();
             const ta = el.querySelector('textarea');
             ta.addEventListener('keydown', e => {
                 if (Ment.tasto(e)) return;                       // menu delle @menzioni aperto: frecce / Invio / Esc
@@ -2244,7 +2259,7 @@
                 if (daAvvisare.length) Avviso.messaggio(daAvvisare, k => { if (!aperta) open(); apri(true); entra(k); });   // clic sulla notifica: si va nel salone con la chat aperta
                 caricata = true;
                 badge();
-                if (aperto) { if (conv) { if (cambiato) disegnaMsgs(); if (nonLetti[conv] === 0 && cambiato) segnaLetto(conv); } else vista(); }
+                if (aperto) { disegnaLista(); if (conv) { if (cambiato) disegnaMsgs(); if (nonLetti[conv] === 0 && cambiato) segnaLetto(conv); } }
             } catch (e) { /* rete: si riprova */ }
         }
         function badge() {
@@ -2252,25 +2267,47 @@
             b.hidden = !n; b.textContent = n > 99 ? '99+' : n;
             Avviso.titolo(n);                    // "(2) 💬 ..." nel titolo della scheda del browser
         }
+        // ridotta: una colonna sola (elenco oppure conversazione), come la chat di prima
+        const IC_RID = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="M14 10l7-7"/><path d="M3 21l7-7"/></svg>';
+        const IC_ALL = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>';
+        function comp() {
+            const b = el.querySelector('.sa-chat-comp');
+            el.querySelector('.sa-chat-p').classList.toggle('sa-compatta', compatta);
+            b.innerHTML = compatta ? IC_ALL : IC_RID;
+            b.title = compatta ? 'Allarga: elenco e chat insieme' : 'Riduci: solo la chat';
+            b.setAttribute('aria-label', compatta ? 'Allarga la chat' : 'Riduci la chat');
+        }
+        /* a sinistra l'elenco delle chat (sempre visibile sul computer), a destra la conversazione */
         function vista() {
-            const lista = el.querySelector('.sa-chat-list'), cv = el.querySelector('.sa-chat-conv');
+            const cv = el.querySelector('.sa-chat-conv');
             el.querySelector('.sa-chat-back').hidden = !conv;
-            el.querySelector('.sa-chat-tit').textContent = conv ? nomeConv(conv) : 'Chat del salone';
-            lista.hidden = !!conv; cv.hidden = !conv;
-            if (conv) { disegnaMsgs(); return; }
+            el.querySelector('.sa-chat-p').classList.toggle('sa-dentro', !!conv);
+            cv.hidden = !conv; el.querySelector('.sa-chat-vuoto').hidden = !!conv;
+            disegnaLista();
+            if (!conv) return;
+            const gr = conv === 'GRUPPO', u = gr ? null : utenti.find(x => convCon(x.id) === conv);
+            el.querySelector('.sa-chat-tit').textContent = gr ? 'Gruppo salone' : nomeConv(conv);
+            el.querySelector('.sa-chat-sub').textContent = gr ? 'Gruppo · ' + (utenti.length + 1) + ' persone' : (u ? ruolo(u.role) : '');
+            const av = el.querySelector('.sa-chat-hav'); av.textContent = gr ? '👥' : iniziali(nomeConv(conv));
+            disegnaMsgs();
+        }
+        function disegnaLista() {
+            const lista = el && el.querySelector('.sa-chat-list'); if (!lista) return;
             const ultimo = k => { const L = msgs[k] || []; return L[L.length - 1]; };
-            const righe = [{ k: 'GRUPPO', nome: '👥 Gruppo salone', sub: 'Tutti' }].concat(utenti.map(u => ({ k: convCon(u.id), nome: u.nome, sub: ruolo(u.role) })));
+            let righe = [{ k: 'GRUPPO', nome: '👥 Gruppo salone', sub: 'Tutti' }].concat(utenti.map(u => ({ k: convCon(u.id), nome: u.nome, sub: ruolo(u.role) })));
             righe.sort((a, b) => ((ultimo(b.k) || {}).ts || (b.k === 'GRUPPO' ? 1 : 0)) - ((ultimo(a.k) || {}).ts || (a.k === 'GRUPPO' ? 1 : 0)));
-            lista.innerHTML = righe.map(r => { const u = ultimo(r.k), n = nonLetti[r.k] || 0; return `<button type="button" class="sa-cl ${n ? 'nl' : ''}" data-conv="${r.k}">
+            if (filtroConv !== 'tutte') righe = righe.filter(r => (r.k === 'GRUPPO') === (filtroConv === 'gruppi'));
+            if (cercaConv) righe = righe.filter(r => r.nome.toLowerCase().includes(cercaConv));
+            lista.innerHTML = righe.map(r => { const u = ultimo(r.k), n = nonLetti[r.k] || 0; return `<button type="button" class="sa-cl ${n ? 'nl' : ''}${r.k === conv ? ' on' : ''}" data-conv="${r.k}">
                 <span class="sa-av">${r.k === 'GRUPPO' ? '👥' : esc(iniziali(r.nome))}</span>
                 <span class="sa-cl-t"><b>${esc(r.nome.replace('👥 ', ''))}</b><em>${u ? esc((u.da === io.id ? 'Tu: ' : r.k === 'GRUPPO' ? u.nome.split(' ')[0] + ': ' : '') + testoMsg(u).slice(0, 60)) : esc(r.sub)}</em></span>
                 ${u ? `<small>${ora(u.ts)}</small>` : ''}${menzNonLette[r.k] && n ? '<i class="sa-badge sa-badge-at" title="Ti hanno menzionato">@</i>' : ''}${n ? `<i class="sa-badge">${n}</i>` : ''}</button>`; }).join('')
-                + (utenti.length ? '' : '<p class="sa-hint" style="padding:10px 14px">Nessun altro utente con accesso al salone, per ora.</p>');
+                + (!righe.length ? '<p class="sa-hint" style="padding:10px 14px">Nessuna chat</p>' : utenti.length ? '' : '<p class="sa-hint" style="padding:10px 14px">Nessun altro utente con accesso al salone, per ora.</p>');
         }
         const ruolo = r => ({ FRONT_OFFICE: 'Front Office', CONSULENZA: 'Consulenza', ADMIN: 'Admin', UTENTE: 'Servizio Clienti', BACK_OFFICE: 'Back Office', MODERATORE: 'Moderatore', GESTORE: 'Gestore', NOLEGGIO: 'Noleggio', SERVICE: 'Service' }[r] || r || '');
         const iniziali = n => String(n || '').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
         function entra(k) { conv = k; risposta = null; barraRisposta(); vista(); segnaLetto(k); el.querySelector('textarea').focus(); }
-        async function segnaLetto(k) { nonLetti[k] = 0; delete menzNonLette[k]; badge(); try { await post('/chat/letto', { conv: k }); } catch (e) { /* */ } }
+        async function segnaLetto(k) { nonLetti[k] = 0; delete menzNonLette[k]; badge(); if (aperto) disegnaLista(); try { await post('/chat/letto', { conv: k }); } catch (e) { /* */ } }
         function disegnaMsgs() {
             const box = el.querySelector('.sa-chat-msgs'), L = msgs[conv] || [];
             const inFondo = box.scrollHeight - box.scrollTop - box.clientHeight < 60;

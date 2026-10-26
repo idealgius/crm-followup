@@ -21,7 +21,7 @@
 // pagine BI (Consegne, Stock).
 window.InboundAvvisi = window.InboundAvvisi || (function () {
     const INBOUND = ['dashboardPage', 'followupsPage', 'waitingPage', 'contactsPage', 'promoPage',
-        'adminPage', 'rentPage', 'servicePage', 'veicoliPage', 'preventiviPage', 'allChartsPage'];
+        'adminPage', 'rentPage', 'servicePage', 'veicoliPage', 'preventiviPage', 'allChartsPage', 'allertPage'];
     let el = null;
     function inInbound() {
         if (document.body.classList.contains('mh-home-on')) return false;

@@ -19,8 +19,20 @@ const PAGE_TO_SECTION = {
     contacts: 'CONTACTS', promo: 'PROMO', admin: 'ADMIN',
     rent: 'RENT', service: 'SERVICE', veicoli: 'VEICOLI',
     preventivi: 'PREVENTIVI',
-    quotazioni: 'QUOTAZIONI_RENT'   // NUOVO: Quotazioni Rent (vedi /js/quotazioni-rent.js)
+    quotazioni: 'QUOTAZIONI_RENT',  // NUOVO: Quotazioni Rent (vedi /js/quotazioni-rent.js)
+    allert: 'ALLERT'                // NUOVO: pagina Allert del Back Office (vedi /js/allert-bo.js)
 };
+
+// NUOVO: pagina Allert (AllertPage.puo, /js/allert-bo.js). Per il Back Office sostituisce il
+// Registro contatti (voce ALLERT nel menu); dal Moderatore in su ci si arriva dal Registro
+// (pulsante 🔔 ALLERT -> "Vedi finestra allert"), senza voce nel menu.
+function puoPaginaAllert() { return !!(window.AllertPage && AllertPage.puo()); }
+function backOfficeSenzaRegistro(role) { return role === 'BACK_OFFICE' && puoPaginaAllert(); }
+function puoAprirePagina(page, role) {
+    if (page === 'allert') return puoPaginaAllert();
+    if (page === 'contacts' && backOfficeSenzaRegistro(role)) return false;
+    return hasAccess(PAGE_TO_SECTION[page], role);
+}
 
 // FIX: se il caricamento della matrice permessi fallisce (endpoint non
 // ancora deployato sul server, problema di rete temporaneo, ecc.),
@@ -230,7 +242,7 @@ function refreshChartsOnThemeChange() {
 
 // Pagine valide riconosciute dal router — usato per validare l'hash dell'URL
 // (evita che un hash sporco o obsoleto mandi l'app in uno stato indefinito)
-const VALID_PAGES = ['dashboard', 'followups', 'waiting', 'contacts', 'promo', 'admin', 'rent', 'service', 'veicoli', 'preventivi', 'quotazioni'];
+const VALID_PAGES = ['dashboard', 'followups', 'waiting', 'contacts', 'promo', 'admin', 'rent', 'service', 'veicoli', 'preventivi', 'quotazioni', 'allert'];
 
 // FIX: prima qui c'erano RENT_ROLES/SERVICE_ROLES (array fissi di nomi
 // ruolo) e un blocco di if/else per ogni singolo link di navbar — ora la
@@ -256,6 +268,10 @@ function applyRolePermissions(role) {
         if (!el) return;
         el.style.display = hasAccess(section, role) ? 'inline-block' : 'none';
     });
+    // NUOVO: voce ALLERT (Back Office e Admin); il Back Office non vede piu' il Registro contatti
+    const navAllert = document.getElementById('navAllert');
+    if (navAllert) navAllert.style.display = backOfficeSenzaRegistro(role) ? 'inline-block' : 'none';
+    if (backOfficeSenzaRegistro(role)) { const nc = document.getElementById('navContacts'); if (nc) nc.style.display = 'none'; }
 
     // NUOVO: menu ☰ (per ora solo "Mostra Grafici") — visibile solo a chi ha
     // accesso alla sezione GRAFICI (default: Moderatore in su, personalizzabile
@@ -304,7 +320,8 @@ function applyPageTheme(page, role) {
         if (badge) badge.textContent = 'RENT';
     } else {
         body.removeAttribute('data-role-theme');
-        if (badge) badge.textContent = 'BDC';
+        // NUOVO: nella pagina Allert (e per il Back Office) la scritta e' BO, non BDC
+        if (badge) badge.textContent = (page === 'allert' || role === 'BACK_OFFICE') ? 'BO' : 'BDC';
     }
 }
 
@@ -315,6 +332,7 @@ function applyPageTheme(page, role) {
 const DEFAULT_PAGE_PRIORITY = ['dashboard', 'contacts', 'preventivi', 'followups', 'waiting', 'promo', 'rent', 'service', 'veicoli', 'admin'];
 
 function getDefaultPageForRole(role) {
+    if (backOfficeSenzaRegistro(role)) return 'allert';
     if (role === 'NOLEGGIO' && hasAccess('RENT', role)) return 'rent';
     if (role === 'SERVICE' && hasAccess('SERVICE', role)) return 'service';
     for (const page of DEFAULT_PAGE_PRIORITY) {
@@ -359,12 +377,12 @@ async function showPage(page, updateHash = true) {
     // canSeeAll — ora è la matrice permessi (personalizzabile dall'admin) a
     // decidere se il ruolo può vedere la pagina richiesta. Se non può, va
     // alla prima pagina accessibile secondo l'ordine di priorità.
-    if (!hasAccess(PAGE_TO_SECTION[page], role)) {
+    if (!puoAprirePagina(page, role)) {
         page = getDefaultPageForRole(role);
     }
     // NUOVO: chi non ha nessuna pagina di In bound ma ha Appuntamenti e ingressi (es. Front
     // Office, Consulenza) va li' invece che in una pagina che non puo' vedere
-    if (!hasAccess(PAGE_TO_SECTION[page], role) && window.Salone && Salone.can()) {
+    if (!puoAprirePagina(page, role) && window.Salone && Salone.can()) {
         hideLoadingOverlay();
         Salone.open();
         return;
@@ -411,6 +429,8 @@ async function showPage(page, updateHash = true) {
     if (preventiviPageEl) preventiviPageEl.style.display = 'none';
     const quotazioniPageEl = document.getElementById('quotazioniPage');
     if (quotazioniPageEl) quotazioniPageEl.style.display = 'none';
+    const allertPageEl = document.getElementById('allertPage');
+    if (allertPageEl) allertPageEl.style.display = 'none';
 
     document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
 
@@ -492,6 +512,13 @@ async function showPage(page, updateHash = true) {
         // NUOVO: Quotazioni Rent
         if (quotazioniPageEl) quotazioniPageEl.style.display = 'block';
         if (window.QuotazioniRent) loadPromise = Promise.resolve(QuotazioniRent.apri());
+    } else if (page === 'allert') {
+        // NUOVO: pagina Allert (Back Office)
+        if (allertPageEl) allertPageEl.style.display = 'block';
+        // Back Office: voce ALLERT; gli altri ci arrivano dal Registro, che resta evidenziato
+        const navAllert = document.getElementById(backOfficeSenzaRegistro(role) ? 'navAllert' : 'navContacts');
+        if (navAllert) navAllert.classList.add('active');
+        if (window.AllertPage) loadPromise = Promise.resolve(AllertPage.apri());
     }
 
     applyPageTheme(page, role);
