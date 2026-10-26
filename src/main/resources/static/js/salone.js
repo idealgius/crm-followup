@@ -2014,7 +2014,10 @@
         ecceccis: ['🏷️', 'Sticker', '/img/sticker/ecceccis.png'],
         bravoimg: ['🏷️', 'Sticker', '/img/sticker/bravo.png'],
         gesucri: ['🏷️', 'Sticker', '/img/sticker/gesu-cri.png'],
-        ciaogioia: ['🏷️', 'Sticker', '/img/sticker/ciao-gioia.png']
+        ciaogioia: ['🏷️', 'Sticker', '/img/sticker/ciao-gioia.png'],
+        scinnie: ['🏷️', 'Sticker', '/img/sticker/scinnie.png'],
+        giorgiovoj: ['🏷️', 'Sticker', '/img/sticker/giorgio-se-ne-vo-j.png'],
+        vescovo: ['🏷️', 'Sticker', '/img/sticker/vescovo-vo-manna.png']
     };
     // NUOVO: due schede nel pannello. "Sticker" = quelli da immagine; "Salone" = quelli disegnati.
     // Il 10 di denari compare in tutte e due.
