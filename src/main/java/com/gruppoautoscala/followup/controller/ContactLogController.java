@@ -45,13 +45,24 @@ public class ContactLogController {
     }
 
     // ===== NUOVO: allert al FRONT OFFICE =====
-    // "Al Front Office" (Registro contatti) = allert mandato a persone precise: tutti i Front Office
-    // attivi in quel momento (piu' le eventuali persone spuntate). Nessuna colonna nuova: lo
-    // vedono nella scheda "Allert" di Appuntamenti e ingressi (salone-fo.js) e lo gestiscono loro.
-    private static final String FRONT_OFFICE = "FRONT_OFFICE";
+    // "Al Front Office" (Registro contatti) = allert mandato a persone precise: tutti quelli che in
+    // quel momento hanno il permesso "Allert Front Office" (ALLERT_FO) = Completo — di partenza i
+    // Front Office — piu' le eventuali persone spuntate. Nessuna colonna nuova: lo vedono nella
+    // scheda "Allert" di Appuntamenti e ingressi (salone-fo.js) e lo gestiscono loro.
+    // ALLERT_FO = Accesso Admin (di partenza dal Moderatore in su): vede e gestisce tutti quelli
+    // mandati al Front Office e riapre i gestiti.
+    private static final String SEZ_FO = "ALLERT_FO";
+
+    private String accessoFo(Long userId, String role) {
+        return rolePermissionService.getEffectiveAccess(userId, role, SEZ_FO);
+    }
+    /** riceve gli allert "Al Front Office" */
+    private boolean riceveFo(User u) {
+        return u != null && u.getRole() != null && "FULL".equals(accessoFo(u.getId(), u.getRole()));
+    }
 
     private List<User> utentiFrontOffice() {
-        return userRepository.findAll().stream().filter(u -> FRONT_OFFICE.equals(u.getRole())).collect(Collectors.toList());
+        return userRepository.findAll().stream().filter(this::riceveFo).collect(Collectors.toList());
     }
 
     private static boolean destinatario(ContactLog l, Long userId) {
@@ -59,9 +70,9 @@ public class ContactLogController {
                 && l.getAlertRecipients().stream().anyMatch(u -> u != null && userId.equals(u.getId()));
     }
 
-    private static boolean perFrontOffice(ContactLog l) {
+    private boolean perFrontOffice(ContactLog l) {
         return Boolean.FALSE.equals(l.getAlertNotifyAll()) && l.getAlertRecipients() != null
-                && l.getAlertRecipients().stream().anyMatch(u -> u != null && FRONT_OFFICE.equals(u.getRole()));
+                && l.getAlertRecipients().stream().anyMatch(this::riceveFo);
     }
 
     /** aggiunge tutti i Front Office ai destinatari (senza doppioni) */
@@ -465,16 +476,20 @@ public class ContactLogController {
                 || (!body.isEmpty() && ALERT_MGMT_KEYS.containsAll(body.keySet()));
         if (isTouchingAlertManagement) {
             String acc = alertAccess(userId, role);
-            // NUOVO: il Front Office gestisce gli allert mandati a lui (scheda Allert del salone)
-            boolean frontOfficeSuo = FRONT_OFFICE.equals(role) && destinatario(log, userId);
-            if (!rolePermissionService.hasAtLeast(acc, "FULL") && !frontOfficeSuo) {
+            // NUOVO: allert del Front Office (scheda Allert del salone): con "Allert Front Office" =
+            // Completo si gestiscono quelli mandati a se', con Accesso Admin tutti quelli del Front Office
+            String accFo = accessoFo(userId, role);
+            boolean delFo = rolePermissionService.hasAtLeast(accFo, "FULL") && perFrontOffice(log);
+            boolean foOk = delFo && (destinatario(log, userId) || rolePermissionService.hasAtLeast(accFo, "ADMIN_FULL"));
+            boolean riapreFo = delFo && rolePermissionService.hasAtLeast(accFo, "ADMIN_FULL");
+            if (!rolePermissionService.hasAtLeast(acc, "FULL") && !foOk) {
                 return ResponseEntity.status(403).body(Map.of("error", "Non hai il permesso per gestire gli Allert"));
             }
             // Un allert GESTITO si puo' riaprire (rimetterlo in gestione o togliere
             // la gestione) solo con il permesso Allert = Admin (di default dal Moderatore in su).
             if (body.containsKey("acquistoAlertStatus") && "GESTITA".equals(log.getAcquistoAlertStatus())
                     && !"GESTITA".equals(body.get("acquistoAlertStatus"))
-                    && !rolePermissionService.hasAtLeast(acc, "ADMIN_FULL")) {
+                    && !rolePermissionService.hasAtLeast(acc, "ADMIN_FULL") && !riapreFo) {
                 return ResponseEntity.status(403).body(Map.of("error", "Questo Allert è già gestito: può riaprirlo solo un Moderatore o superiore"));
             }
         } else {
@@ -784,11 +799,12 @@ public class ContactLogController {
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
         String role = (String) session.getAttribute("userRole");
         String acc = alertAccess(userId, role);
-        boolean vedeTutti = "MODERATORE".equals(role) || "GESTORE".equals(role) || "ADMIN".equals(role);
-        boolean frontOffice = FRONT_OFFICE.equals(role);
-        // fo=1: scheda Allert del Front Office (il Front Office vede i suoi, dal Moderatore in su
-        // quelli mandati al Front Office); senza: pagina Allert del Back Office
-        if (fo ? !(frontOffice || vedeTutti) : !rolePermissionService.hasAtLeast(acc, "READ_ONLY")) {
+        // fo=1: scheda Allert del Front Office, permesso ALLERT_FO (Completo/Solo lettura = i propri,
+        // Accesso Admin = tutti quelli mandati al Front Office); senza: pagina Allert del Back Office,
+        // permesso ALLERT (Accesso Admin = tutti gli allert, gli altri: "a tutti" e quelli mandati a se')
+        if (fo) acc = accessoFo(userId, role);
+        boolean vedeTutti = rolePermissionService.hasAtLeast(acc, "ADMIN_FULL");
+        if (!rolePermissionService.hasAtLeast(acc, "READ_ONLY")) {
             return ResponseEntity.status(403).body(Map.of("error", "Non hai il permesso per vedere gli Allert"));
         }
         LocalDateTime limite = gestiteGiorni > 0 ? LocalDateTime.now().minusDays(gestiteGiorni) : null;
@@ -812,7 +828,7 @@ public class ContactLogController {
         out.put("gestiteGiorni", gestiteGiorni);
         out.put("gestiteNascoste", gestiteNascoste[0]);
         out.put("vedeTutti", vedeTutti);
-        out.put("puoGestire", rolePermissionService.hasAtLeast(acc, "FULL") || (fo && frontOffice));
+        out.put("puoGestire", rolePermissionService.hasAtLeast(acc, "FULL"));
         out.put("puoRiaprire", rolePermissionService.hasAtLeast(acc, "ADMIN_FULL"));
         return ResponseEntity.ok(out);
     }

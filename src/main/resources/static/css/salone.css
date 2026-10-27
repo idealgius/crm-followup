@@ -609,3 +609,11 @@ details.sa-in-note div { margin-top:6px; white-space:pre-wrap; line-height:1.5; 
   .sa-m { max-width:88%; }
   .sa-chat-in { padding-bottom:calc(10px + env(safe-area-inset-bottom, 0px)); }
 }
+
+/* ===== NUOVO: macro sezioni SALONE / FRONT OFFICE (salone.js, disegnaMacro) ===== */
+.sa-macro-nav .nav-link { position:relative; }
+.sa-mn { display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; margin-left:6px; padding:0 5px; border-radius:999px; background:#e91e63; color:#fff; font-style:normal; font-size:10.5px; font-weight:900; letter-spacing:0; }
+.sa-macro { max-width:1500px; margin:16px auto 0; display:flex; gap:6px; flex-wrap:wrap; }
+.sa-macro[hidden] { display:none; }
+.sa-macro button { height:34px; padding:0 14px; border-radius:999px; border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.06); color:#dfe7ee; font:inherit; font-size:12px; font-weight:800; letter-spacing:1px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+.sa-macro button.on { background:#f0c040; border-color:#f0c040; color:#1a1400; }

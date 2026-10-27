@@ -23,14 +23,14 @@ const PAGE_TO_SECTION = {
     allert: 'ALLERT'                // NUOVO: pagina Allert del Back Office (vedi /js/allert-bo.js)
 };
 
-// NUOVO: pagina Allert (AllertPage.puo, /js/allert-bo.js). Per il Back Office sostituisce il
-// Registro contatti (voce ALLERT nel menu); dal Moderatore in su ci si arriva dal Registro
+// NUOVO: pagina Allert (AllertPage.puo = permesso Allert, /js/allert-bo.js). Decidono i permessi:
+// chi ha "Allert" ma NON "Registro Contatti" (di partenza il Back Office) la trova come voce
+// ALLERT nel menu, al posto del Registro; chi ha anche il Registro ci arriva da li'
 // (pulsante 🔔 ALLERT -> "Vedi finestra allert"), senza voce nel menu.
 function puoPaginaAllert() { return !!(window.AllertPage && AllertPage.puo()); }
-function backOfficeSenzaRegistro(role) { return role === 'BACK_OFFICE' && puoPaginaAllert(); }
+function backOfficeSenzaRegistro(role) { return puoPaginaAllert() && !hasAccess('CONTACTS', role); }
 function puoAprirePagina(page, role) {
     if (page === 'allert') return puoPaginaAllert();
-    if (page === 'contacts' && backOfficeSenzaRegistro(role)) return false;
     return hasAccess(PAGE_TO_SECTION[page], role);
 }
 
@@ -43,11 +43,12 @@ function puoAprirePagina(page, role) {
 // di permessi — così un problema di rete/deploy non blocca mai la
 // navigazione, nel peggiore dei casi si torna al comportamento di sempre.
 const PERMISSION_MATRIX_FALLBACK = {
-    UTENTE: { CONTACTS: 'FULL' },
-    BACK_OFFICE: { CONTACTS: 'FULL' },
-    MODERATORE: { DASHBOARD: 'FULL', FOLLOWUPS: 'FULL', WAITING: 'FULL', CONTACTS: 'FULL', PROMO: 'FULL', RENT: 'FULL', SERVICE: 'FULL', GRAFICI: 'FULL', PREVENTIVI: 'FULL', QUOTAZIONI_RENT: 'FULL' },
-    GESTORE: { DASHBOARD: 'ADMIN_FULL', FOLLOWUPS: 'ADMIN_FULL', WAITING: 'ADMIN_FULL', CONTACTS: 'ADMIN_FULL', PROMO: 'ADMIN_FULL', RENT: 'ADMIN_FULL', SERVICE: 'ADMIN_FULL', GRAFICI: 'ADMIN_FULL', ADMIN: 'ADMIN_FULL', PREVENTIVI: 'ADMIN_FULL', QUOTAZIONI_RENT: 'ADMIN_FULL' },
-    ADMIN: { DASHBOARD: 'ADMIN_FULL', FOLLOWUPS: 'ADMIN_FULL', WAITING: 'ADMIN_FULL', CONTACTS: 'ADMIN_FULL', PROMO: 'ADMIN_FULL', RENT: 'ADMIN_FULL', SERVICE: 'ADMIN_FULL', GRAFICI: 'ADMIN_FULL', ADMIN: 'ADMIN_FULL', VEICOLI: 'ADMIN_FULL', PREVENTIVI: 'ADMIN_FULL', QUOTAZIONI_RENT: 'ADMIN_FULL' },
+    UTENTE: { CONTACTS: 'FULL', CHAT: 'FULL' },
+    BACK_OFFICE: { ALLERT: 'FULL', CHAT: 'FULL' },
+    FRONT_OFFICE: { ALLERT_FO: 'FULL', DOPPIE_CHIAVI: 'FULL' },
+    MODERATORE: { DASHBOARD: 'FULL', FOLLOWUPS: 'FULL', WAITING: 'FULL', CONTACTS: 'FULL', PROMO: 'FULL', RENT: 'FULL', SERVICE: 'FULL', GRAFICI: 'FULL', PREVENTIVI: 'FULL', QUOTAZIONI_RENT: 'FULL', ALLERT: 'ADMIN_FULL', ALLERT_FO: 'ADMIN_FULL', DOPPIE_CHIAVI: 'ADMIN_FULL' },
+    GESTORE: { DASHBOARD: 'ADMIN_FULL', FOLLOWUPS: 'ADMIN_FULL', WAITING: 'ADMIN_FULL', CONTACTS: 'ADMIN_FULL', PROMO: 'ADMIN_FULL', RENT: 'ADMIN_FULL', SERVICE: 'ADMIN_FULL', GRAFICI: 'ADMIN_FULL', ADMIN: 'ADMIN_FULL', PREVENTIVI: 'ADMIN_FULL', QUOTAZIONI_RENT: 'ADMIN_FULL', ALLERT: 'ADMIN_FULL', ALLERT_FO: 'ADMIN_FULL', DOPPIE_CHIAVI: 'ADMIN_FULL' },
+    ADMIN: { DASHBOARD: 'ADMIN_FULL', FOLLOWUPS: 'ADMIN_FULL', WAITING: 'ADMIN_FULL', CONTACTS: 'ADMIN_FULL', PROMO: 'ADMIN_FULL', RENT: 'ADMIN_FULL', SERVICE: 'ADMIN_FULL', GRAFICI: 'ADMIN_FULL', ADMIN: 'ADMIN_FULL', VEICOLI: 'ADMIN_FULL', PREVENTIVI: 'ADMIN_FULL', QUOTAZIONI_RENT: 'ADMIN_FULL', ALLERT: 'ADMIN_FULL', ALLERT_FO: 'ADMIN_FULL', DOPPIE_CHIAVI: 'ADMIN_FULL', CHAT: 'FULL' },
     NOLEGGIO: { RENT: 'FULL', QUOTAZIONI_RENT: 'FULL' },
     SERVICE: { SERVICE: 'FULL' }
 };
@@ -268,10 +269,9 @@ function applyRolePermissions(role) {
         if (!el) return;
         el.style.display = hasAccess(section, role) ? 'inline-block' : 'none';
     });
-    // NUOVO: voce ALLERT (Back Office e Admin); il Back Office non vede piu' il Registro contatti
+    // NUOVO: voce ALLERT per chi ha gli Allert ma non il Registro contatti (di partenza il Back Office)
     const navAllert = document.getElementById('navAllert');
     if (navAllert) navAllert.style.display = backOfficeSenzaRegistro(role) ? 'inline-block' : 'none';
-    if (backOfficeSenzaRegistro(role)) { const nc = document.getElementById('navContacts'); if (nc) nc.style.display = 'none'; }
 
     // NUOVO: menu ☰ (per ora solo "Mostra Grafici") — visibile solo a chi ha
     // accesso alla sezione GRAFICI (default: Moderatore in su, personalizzabile
@@ -513,9 +513,9 @@ async function showPage(page, updateHash = true) {
         if (quotazioniPageEl) quotazioniPageEl.style.display = 'block';
         if (window.QuotazioniRent) loadPromise = Promise.resolve(QuotazioniRent.apri());
     } else if (page === 'allert') {
-        // NUOVO: pagina Allert (Back Office)
+        // NUOVO: pagina Allert
         if (allertPageEl) allertPageEl.style.display = 'block';
-        // Back Office: voce ALLERT; gli altri ci arrivano dal Registro, che resta evidenziato
+        // senza Registro: voce ALLERT; gli altri ci arrivano dal Registro, che resta evidenziato
         const navAllert = document.getElementById(backOfficeSenzaRegistro(role) ? 'navAllert' : 'navContacts');
         if (navAllert) navAllert.classList.add('active');
         if (window.AllertPage) loadPromise = Promise.resolve(AllertPage.apri());

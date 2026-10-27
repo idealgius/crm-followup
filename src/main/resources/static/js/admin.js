@@ -360,6 +360,8 @@ const PERMISSION_SECTIONS = [
     { key: 'SERVICE', icon: '🔧', label: 'Service', group: 'In bound' },
     { key: 'VEICOLI', icon: '🚙', label: 'Vetture in Consegna', group: 'In bound' },
     { key: 'GRAFICI', icon: '☰', label: 'Menu Grafici', group: 'In bound' },
+    // NUOVO: la chat rossa in basso a sinistra (Registro contatti e pagina Allert)
+    { key: 'CHAT', icon: '💬', label: 'Chat', group: 'In bound' },
     // BI: la selezione area e la pagina BI le vede chi ha almeno una delle tre sezioni BI;
     // chi non ne ha nessuna entra direttamente in In bound.
     { key: 'CONSEGNE', icon: '🔑', label: 'Consegne', group: 'BI' },
@@ -368,6 +370,9 @@ const PERMISSION_SECTIONS = [
     // Salone: Appuntamenti e ingressi (Front Office e Consulenza entrano direttamente qui)
     // Profili con un nome (Consulenza, Solo visione, Front office, Visione + report, Completo)
     { key: 'SALONE', icon: '🚶', label: 'Appuntamenti e ingressi', group: 'Salone' },
+    // NUOVO: le due schede del Front Office in Appuntamenti e ingressi
+    { key: 'ALLERT_FO', icon: '🏪', label: 'Allert Front Office', group: 'Salone' },
+    { key: 'DOPPIE_CHIAVI', icon: '🔑', label: 'Doppie chiavi', group: 'Salone' },
     { key: 'ADMIN', icon: '⚙️', label: 'Utenti/Permessi', group: 'Gestione' },
     { key: 'ALLERT', icon: '🔔', label: 'Allert', group: 'Gestione' }
 ];
@@ -424,7 +429,10 @@ const SECTION_INFO = {
     STOCK: { intro: 'BI · Stock: giacenza, marchi, motorizzazioni, vetture in stock.', READ_ONLY: 'Vede tutti i grafici e gli elenchi dello stock e scarica gli Excel. Non importa il file.', FULL: 'Come Solo lettura, in più importa il file dello stock.', ADMIN_FULL: 'Come Completo.' },
     COMMERCIALE: { intro: 'BI · Commerciale: contratti, origini, preventivi, consulenti.', READ_ONLY: 'Vede tutte le viste e i grafici del Commerciale e scarica gli Excel. Non importa le trattative.', FULL: 'Come Solo lettura, in più importa il CSV delle trattative del Commerciale.', ADMIN_FULL: 'Come Completo.' },
     ADMIN: { intro: 'Gestione utenti e permessi (questa pagina).', READ_ONLY: 'Vede gli utenti e i permessi, senza cambiare niente.', FULL: 'Crea utenti, cambia ruoli e permessi (non degli utenti Admin).', ADMIN_FULL: 'Come Completo, anche sugli utenti Admin.' },
-    ALLERT: { intro: 'Gli allert (avvisi da gestire).', READ_ONLY: 'Vede gli allert, senza gestirli.', FULL: 'Gestisce gli allert (li prende e li chiude).', ADMIN_FULL: 'Come Completo, in più riapre gli allert già gestiti.' }
+    ALLERT: { intro: 'Gli allert (avvisi da gestire), nella pagina Allert e nel Registro contatti. Chi ha gli Allert ma non il Registro contatti trova la voce ALLERT nel menu al posto del Registro.', READ_ONLY: 'Vede gli allert segnalati a tutti e quelli mandati a lui, senza gestirli.', FULL: 'Gestisce gli allert segnalati a tutti e quelli mandati a lui (li prende e li chiude).', ADMIN_FULL: 'Vede e gestisce tutti gli allert, anche quelli mandati ad altri, e riapre quelli già gestiti.' },
+    CHAT: { intro: 'La chat rossa in basso a sinistra (Registro contatti e pagina Allert): gruppo con tutti, gruppi e chat singole. Nell\'elenco compare chi ha la chat.', READ_ONLY: 'Legge i messaggi, senza scrivere.', FULL: 'Legge e scrive, risponde, mette le reazioni, manda gli allert in chat.', ADMIN_FULL: 'Come Completo, in più crea, modifica ed elimina i gruppi e li vede tutti.' },
+    ALLERT_FO: { intro: 'La scheda Allert di Appuntamenti e ingressi: gli allert mandati "Al Front Office" dal Registro contatti.', READ_ONLY: 'Vede gli allert mandati a lui, senza gestirli.', FULL: 'Riceve gli allert mandati "Al Front Office" e li gestisce (li prende e li chiude).', ADMIN_FULL: 'Vede e gestisce tutti gli allert mandati al Front Office e riapre quelli già gestiti.' },
+    DOPPIE_CHIAVI: { intro: 'La scheda Doppie chiavi di Appuntamenti e ingressi: vetture consegnate senza la seconda chiave.', READ_ONLY: 'Vede il registro e l\'archivio, senza modificarli.', FULL: 'Registra le chiavi mancanti, segna chiave in sede, chiamate e messaggi, chiave consegnata.', ADMIN_FULL: 'Come Completo, in più elimina le vetture, le rimette in sede e toglie i tentativi di chiunque.' }
 };
 // Appuntamenti e ingressi: cosa fa ogni profilo (✓ / ✗ / testo)
 const SALONE_CAPS = [

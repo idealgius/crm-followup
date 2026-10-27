@@ -4,14 +4,18 @@
                        stessa gestione della pagina Allert del Back Office (allert-bo.js), colori del salone
      🔑 Doppie chiavi  registro delle vetture consegnate senza la seconda chiave
                        MANCA -> "Doppia chiave in sede" -> chiamate / messaggi al cliente -> "Chiave consegnata" (archivio)
-   Le vedono Front Office e dal Moderatore in su. Dati: /api/contacts/allert-pagina?fo=1 e /api/doppie-chiavi
-   (DoppieChiaviController.java).
+   Chi le vede lo decidono i permessi (pagina Permessi, per ruolo o per operatore):
+     "Allert Front Office" (ALLERT_FO)  e  "Doppie chiavi" (DOPPIE_CHIAVI)
+   di partenza: Front Office Completo, dal Moderatore in su Accesso Admin.
+   Dati: /api/contacts/allert-pagina?fo=1 e /api/doppie-chiavi (DoppieChiaviController.java).
    ===================================================================== */
 (function () {
-    const RUOLI = ['FRONT_OFFICE', 'MODERATORE', 'GESTORE', 'ADMIN'];
-    const CAPI = ['MODERATORE', 'GESTORE', 'ADMIN'];
-    const ruolo = () => (typeof currentUser !== 'undefined' && currentUser && currentUser.role) || '';
-    const puo = () => RUOLI.includes(ruolo());
+    const permessiPronti = () => typeof currentUser !== 'undefined' && !!currentUser
+        && ((typeof myEffectivePermissions !== 'undefined' && myEffectivePermissions && Object.keys(myEffectivePermissions).length > 0)
+            || (typeof permissionMatrix !== 'undefined' && permissionMatrix && Object.keys(permissionMatrix).length > 0));
+    const liv = sez => permessiPronti() && typeof getAccess === 'function' ? getAccess(sez) : 'NONE';
+    const puoAllert = () => liv('ALLERT_FO') !== 'NONE', puoChiavi = () => liv('DOPPIE_CHIAVI') !== 'NONE';
+    const puo = () => puoAllert() || puoChiavi();
     const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const vis = id => { const e = document.getElementById(id); return !!e && e.offsetParent !== null; };
     const n = { allert: 0, chiavi: 0 };
@@ -27,8 +31,8 @@
             visibile: () => vis('foAllertRoot'),
             fo: true,
             titolo: 'ALLERT DEL FRONT OFFICE',
-            sottotitolo: () => CAPI.includes(ruolo()) ? 'Tutti gli allert mandati al Front Office' : 'Gli allert mandati al Front Office e quelli mandati a te',
-            sfondo: () => ruolo() === 'FRONT_OFFICE',
+            sottotitolo: i => i.vedeTutti ? 'Tutti gli allert mandati al Front Office' : 'Gli allert mandati al Front Office e quelli mandati a te',
+            sfondo: () => liv('ALLERT_FO') === 'FULL',
             onDati: d => { const k = d.filter(l => !l.acquistoAlertStatus || l.acquistoAlertStatus === 'DA_GESTIRE').length; if (k !== n.allert) { n.allert = k; aggiornaSchede(); } },
             azioniExtra: l => l.category === 'Info Acquisto effettuato' && /seconda chiave/i.test(l.otherNote || '')
                 ? '<button type="button" class="ap-btn ap-btn-chiave" data-alregistro>Metti nel registro doppie chiavi</button>' : '',
@@ -85,23 +89,25 @@
             const riga = v.stato === 'MANCA' ? `Registrata il ${giorno(v.registrataAt)} da ${esc(v.registrataDa || '—')}`
                 : v.stato === 'SEDE' ? `Chiave in sede dal ${giorno(v.inSedeAt)} · registrata il ${giorno(v.registrataAt)}`
                 : `Consegnata il ${giorno(v.consegnataAt)} da ${esc(v.consegnataDa || '—')} · ${T.length} ${T.length === 1 ? 'tentativo' : 'tentativi'}`;
-            const puoEliminare = info.puoEliminare || (v.stato === 'MANCA' && !T.length && currentUser && v.registrataDa === currentUser.fullName);
+            const scrive = info.puoModificare !== false, capo = !!info.puoEliminare;
+            const puoEliminare = scrive && (capo || (v.stato === 'MANCA' && !T.length && currentUser && v.registrataDa === currentUser.fullName));
             return `<article class="fo-k ${v.stato}" data-v="${esc(v.id)}">
               <div class="fo-k-h"><div><b>${esc(nome(v))}</b><span>${esc([v.marca, v.modello].filter(Boolean).join(' '))}${v.targa ? ` · <strong>${esc(v.targa)}</strong>` : ''}</span></div>
                 <span class="fo-pill ${v.stato}">${STATI[v.stato]}</span></div>
               <em class="fo-k-r">${riga}</em>
               ${v.note ? `<p class="fo-k-n">${esc(v.note).replace(/\n/g, '<br>')}</p>` : ''}
               ${v.allertId ? `<button type="button" class="fo-link" data-apriallert="${v.allertId}">Allert n. ${v.allertId}</button>` : ''}
-              ${v.stato === 'MANCA' ? '<button type="button" class="fo-big" data-az="sede">Doppia chiave in sede</button>' : ''}
-              ${v.stato === 'SEDE' ? `<div class="fo-tent">
+              ${v.stato === 'MANCA' && scrive ? '<button type="button" class="fo-big" data-az="sede">Doppia chiave in sede</button>' : ''}
+              ${v.stato === 'SEDE' && !scrive ? `<p class="fo-mut">${nc} ${nc === 1 ? 'chiamata' : 'chiamate'} · ${nm} ${nm === 1 ? 'messaggio' : 'messaggi'}</p>` : ''}
+              ${v.stato === 'SEDE' && scrive ? `<div class="fo-tent">
                   <button type="button" data-az="chiamata" aria-label="Segna una chiamata al cliente">${ICO_TEL}Chiamato <i class="c">${nc}</i></button>
                   <button type="button" data-az="messaggio" aria-label="Segna un messaggio al cliente">${ICO_MSG}Messaggio <i class="m">${nm}</i></button></div>` : ''}
               ${T.length && v.stato !== 'MANCA' ? `<ol class="fo-log">${T.slice().reverse().map(x => `<li><i class="${x.tipo === 'C' ? 'c' : 'm'}"></i><b>${x.tipo === 'C' ? 'Chiamata' : 'Messaggio'}</b> · ${esc(ora(x.at))} · ${esc(x.da || '')}</li>`).join('')}</ol>` : ''}
-              ${v.stato === 'SEDE' && (mioUlt || (CAPI.includes(ruolo()) && T.length)) ? '<button type="button" class="fo-link" data-az="annullaTentativo">Togli l’ultimo tentativo</button>' : ''}
-              ${v.stato === 'SEDE' ? '<button type="button" class="fo-big ok" data-az="consegnata">Chiave consegnata</button>' : ''}
+              ${v.stato === 'SEDE' && scrive && (mioUlt || (capo && T.length)) ? '<button type="button" class="fo-link" data-az="annullaTentativo">Togli l’ultimo tentativo</button>' : ''}
+              ${v.stato === 'SEDE' && scrive ? '<button type="button" class="fo-big ok" data-az="consegnata">Chiave consegnata</button>' : ''}
               <div class="fo-k-a">
-                ${v.stato !== 'CONSEGNATA' ? '<button type="button" class="fo-link" data-modifica>Modifica</button>' : ''}
-                ${v.stato === 'CONSEGNATA' && CAPI.includes(ruolo()) ? '<button type="button" class="fo-link" data-az="rimettiInSede">Rimetti in sede</button>' : ''}
+                ${v.stato !== 'CONSEGNATA' && scrive ? '<button type="button" class="fo-link" data-modifica>Modifica</button>' : ''}
+                ${v.stato === 'CONSEGNATA' && capo && scrive ? '<button type="button" class="fo-link" data-az="rimettiInSede">Rimetti in sede</button>' : ''}
                 ${puoEliminare ? '<button type="button" class="fo-link rosso" data-az="elimina">Elimina</button>' : ''}
               </div>
             </article>`;
@@ -126,8 +132,10 @@
             const att = document.activeElement, inForm = att && r.contains(att) && att.closest('[data-form]');
             const c = k => voci.filter(v => v.stato === k).length;
             const L = elenco(), vis = L.slice(0, quante);
-            const head = `<div class="fo-top"><div><h2>REGISTRO DOPPIE CHIAVI</h2><p>Vetture consegnate senza la seconda chiave: quando arriva si avvisa il cliente e si segna la consegna</p></div>
-                <button type="button" class="fo-big fo-nuova" data-nuova><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Registra chiave mancante</button></div>
+            const scrive = info.puoModificare !== false;
+            const NUOVA = '<button type="button" class="fo-big fo-nuova" data-nuova><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Registra chiave mancante</button>';
+            const head = `<div class="fo-top"><div><h2>REGISTRO DOPPIE CHIAVI</h2><p>Vetture consegnate senza la seconda chiave: quando arriva si avvisa il cliente e si segna la consegna${scrive ? '' : ' · <b>solo lettura</b>'}</p></div>
+                ${scrive ? NUOVA : ''}</div>
               ${err ? `<p class="fo-err">${esc(err)}</p>` : ''}
               <div class="fo-f" role="tablist" aria-label="Stato della chiave">
                 ${[['MANCA', 'Manca la chiave'], ['SEDE', 'In sede · da avvisare'], ['CONSEGNATA', 'Consegnate (archivio)']].map(([k, l]) => `<button type="button" role="tab" aria-selected="${filtro === k}" class="fo-t ${k} ${filtro === k ? 'on' : ''}" data-filtro="${k}"><i></i>${l}<b>${c(k)}</b></button>`).join('')}
@@ -143,7 +151,8 @@
             r.querySelector('.fo-head').innerHTML = head;
             if (cercaFoc) { const x = r.querySelector('[data-cerca]'); x.focus(); try { x.setSelectionRange(pos, pos); } catch (e) { /* */ } }
             r.querySelector('.fo-list-box').innerHTML = lista;
-            if (!inForm) r.querySelector('.fo-form-box').innerHTML = modulo();
+            r.querySelector('.fo-main').classList.toggle('fo-sola', !scrive);
+            if (!inForm) r.querySelector('.fo-form-box').innerHTML = scrive ? modulo() : '';
         }
         function leggiForm(f) { const d = {}; new FormData(f).forEach((v, k) => { d[k] = String(v).trim(); }); return d; }
         function ascolta(r) {
@@ -202,7 +211,7 @@
             vai('chiavi');
             setTimeout(() => { const f = box() && box().querySelector('.fo-form'); if (f) f.scrollIntoView({ block: 'start', behavior: 'smooth' }); }, 80);
         }
-        function apri() { carica(); if (!timer) timer = setInterval(() => { if (visibile() || ruolo() === 'FRONT_OFFICE') carica(); }, 30 * 1000); }
+        function apri() { carica(); if (!timer) timer = setInterval(() => { if (visibile() || liv('DOPPIE_CHIAVI') === 'FULL') carica(); }, 30 * 1000); }
         return { disegna, carica, apri, daAllert };
     })();
 
@@ -220,8 +229,9 @@
     const badge = k => n[k] ? `<i class="fo-n">${n[k] > 99 ? '99+' : n[k]}</i>` : '';
     window.SaloneFO = {
         schede: puo,
-        voci: () => puo() ? [['allert', '🔔 Allert' + badge('allert')], ['chiavi', '🔑 Doppie chiavi' + badge('chiavi')]] : [],
+        voci: () => [].concat(puoAllert() ? [['allert', '🔔 Allert' + badge('allert')]] : [], puoChiavi() ? [['chiavi', '🔑 Doppie chiavi' + badge('chiavi')]] : []),
         mia: tab => tab === 'allert' || tab === 'chiavi',
+        numeri: () => (puoAllert() ? n.allert : 0) + (puoChiavi() ? n.chiavi : 0),   // sulla voce FRONT OFFICE in alto
         render(tab, body) {
             tabCorrente = tab;
             if (tab === 'allert') {
@@ -235,11 +245,12 @@
         }
     };
     // il Front Office vede subito i numeri sulle schede e riceve gli avvisi dei nuovi allert
+    // (chi ha "Completo": di partenza il Front Office)
     const attesa = setInterval(() => {
-        if (typeof currentUser === 'undefined' || !currentUser) return;
+        if (!permessiPronti()) return;
         clearInterval(attesa);
-        if (ruolo() !== 'FRONT_OFFICE') return;
-        Chiavi.apri();
-        const a = istanzaAllert(); if (a) { a.collega(); a.carica(); a.avviaGiro(); }
+        if (liv('DOPPIE_CHIAVI') === 'FULL') Chiavi.apri();
+        if (liv('ALLERT_FO') === 'FULL') { const a = istanzaAllert(); if (a) { a.collega(); a.carica(); a.avviaGiro(); } }
+        aggiornaSchede();
     }, 1500);
 })();

@@ -106,8 +106,8 @@
 .cb-rz { display:flex; flex-wrap:wrap; gap:4px; margin-top:-6px; padding:0 6px; position:relative; z-index:1; }
 .cb-rz button { border:1px solid var(--cb-bd); border-radius:999px; padding:1px 7px; background:var(--cb-card); font-size:11.5px !important; cursor:pointer; }
 .cb-rz button.mia { border-color:var(--cb-acc); background:rgba(226,56,77,.16); }
-.cb-rapide { position:absolute; top:-40px; right:0; display:flex; gap:2px; padding:4px; border-radius:999px; background:var(--cb-card); border:1px solid var(--cb-bd); box-shadow:0 10px 24px -8px rgba(0,0,0,.6); z-index:4; }
-.cb-m.mio .cb-rapide { right:auto; left:0; }
+.cb-rapide { position:absolute; top:-40px; left:0; display:flex; gap:2px; padding:4px; border-radius:999px; background:var(--cb-card); border:1px solid var(--cb-bd); box-shadow:0 10px 24px -8px rgba(0,0,0,.6); z-index:4; }
+.cb-m.mio .cb-rapide { left:auto; right:0; }
 .cb-rapide button { width:30px; height:30px; border:0; border-radius:50%; background:transparent; font-size:17px !important; cursor:pointer; }
 .cb-rapide button:hover { background:rgba(255,255,255,.08); }
 
@@ -124,9 +124,28 @@
 .cb-emo-b:hover { background:rgba(255,255,255,.06); }
 .cb-send { background:var(--cb-acc); color:#fff !important; }
 .cb-send:hover { background:#f04a5e; }
-.cb-emo { position:absolute; left:10px; bottom:60px; width:268px; display:grid; grid-template-columns:repeat(8, 1fr); gap:2px; padding:8px; border-radius:14px; background:var(--cb-card); border:1px solid var(--cb-bd); box-shadow:0 18px 40px -12px rgba(0,0,0,.65); z-index:5; }
-.cb-emo button { border:0; background:transparent; height:30px; border-radius:8px; font-size:17px !important; cursor:pointer; }
-.cb-emo button:hover { background:rgba(255,255,255,.08); }
+/* pannello emoji: come la chat del salone (categorie, ricerca, usate di recente), senza sticker */
+.cb-emo { position:absolute; left:10px; right:10px; bottom:62px; max-width:420px; max-height:300px; display:flex; flex-direction:column; border-radius:14px; background:var(--cb-card); border:1px solid var(--cb-bd); box-shadow:0 18px 40px -12px rgba(0,0,0,.65); z-index:6; overflow:hidden; }
+.cb-emo.rz { border-color:var(--cb-acc); }
+.cb-emo-cerca { display:flex; align-items:center; gap:8px; padding:8px 8px 0; flex:none; }
+.cb-emo-cerca input { flex:1; min-width:0; padding:7px 11px; border-radius:10px; border:1.5px solid var(--cb-bd); background:var(--cb-bg); color:var(--cb-tx); font:inherit; font-size:12.5px; }
+.cb-emo-cerca input:focus { outline:none; border-color:var(--cb-acc); }
+.cb-emo-per { flex:none; font-size:11px; font-weight:800; padding:4px 9px; border-radius:999px; background:rgba(226,56,77,.16); color:#ff8f9c; }
+.cb-emo-tabs { display:flex; gap:2px; padding:6px 6px 0; border-bottom:1px solid var(--cb-bd); overflow-x:auto; scrollbar-width:none; flex:none; }
+.cb-emo .cb-emo-tabs button { flex:none; font-size:18px !important; height:auto; padding:5px 8px 7px; border-radius:10px 10px 0 0; border:0; border-bottom:2px solid transparent; background:transparent; cursor:pointer; }
+.cb-emo .cb-emo-tabs button.on { border-bottom-color:var(--cb-acc); background:rgba(226,56,77,.1); }
+.cb-emo-g { flex:1; overflow:auto; display:grid; grid-template-columns:repeat(8, 1fr); gap:2px; padding:8px; align-content:start; }
+.cb-emo-g button { border:0; background:transparent; height:34px; border-radius:8px; font-size:20px !important; cursor:pointer; }
+.cb-emo-g button:hover, .cb-emo .cb-emo-tabs button:hover { background:rgba(255,255,255,.08); }
+.cb-emo-vuoto { grid-column:1 / -1; margin:0; padding:18px 0; text-align:center; font-size:12.5px; color:var(--cb-tx2); }
+.cb-m-t.emo-big { font-size:34px; line-height:1.15; }
+.cb-rapide button.piu { font-size:15px !important; }
+[data-theme="light"] .cb-emo-per { color:#b91f33; }
+
+/* permesso Chat = Solo lettura */
+.cb-sola { margin:0; padding:12px 14px; border-top:1px solid var(--cb-bd); text-align:center; font-size:12.5px; color:var(--cb-tx2); }
+.cb-p.cb-ro .cb-m-a, .cb-p.cb-ro .cb-rz button { pointer-events:none; }
+.cb-p.cb-ro .cb-m-a { display:none !important; }
 
 /* finestrelle (nuova chat, gruppo) */
 .cb-dlg { position:fixed; inset:0; z-index:10040; background:rgba(4,7,14,.55); display:flex; align-items:center; justify-content:center; padding:16px; }

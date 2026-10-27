@@ -6,6 +6,7 @@ import com.gruppoautoscala.followup.model.ConsegneDataset;
 import com.gruppoautoscala.followup.model.User;
 import com.gruppoautoscala.followup.repository.ConsegneDatasetRepository;
 import com.gruppoautoscala.followup.repository.UserRepository;
+import com.gruppoautoscala.followup.service.RolePermissionService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -18,19 +19,23 @@ import java.util.*;
 /**
  * CHAT del BDC (sezione In bound) — usata da /js/chat-bdc.js
  *
- * Chi la usa: ruoli BDC (UTENTE), BACK_OFFICE e ADMIN (account attivi).
+ * Chi la usa: lo decide il permesso "CHAT" (pagina Permessi, per ruolo o per operatore):
+ *   Nessuno = niente chat · Solo lettura = legge · Completo = scrive · Accesso Admin = crea e gestisce i gruppi
+ *   (di partenza: BDC e Back Office Completo, Admin Accesso Admin; vedi RolePermissionService).
  * Conversazioni:
  *   TUTTI      gruppo con tutti
  *   P_a_b      chat singola tra l'utente a e l'utente b (a < b)
- *   G_<id>     gruppi creati dall'ADMIN (nome + membri; l'Admin li vede tutti)
+ *   G_bdcgruppo  gruppo fisso "BDC" (sotto Tutti): Giuseppe Palladino, Davide Scognamiglio, Mattia Zuppa,
+ *                Emanuele Amendola — cercati per nome; chi ne fa parte ha la chat anche senza il permesso
+ *   G_<id>     gruppi creati da chi ha Chat = Accesso Admin (nome + membri; chi li gestisce li vede tutti)
  *
  *  GET  /api/chat/stato                     -> io, colleghi della chat, gruppi miei, se posso creare gruppi
  *  GET  /api/chat/aggiornamenti?dopo=<ms>   -> per ogni mia conversazione: messaggi nuovi/modificati e non letti
  *  POST /api/chat/messaggi                  -> {conv, testo, rispostaA?, allert?:{id, cliente, tipo, stato}}
  *  POST /api/chat/reazione                  -> {conv, id, emoji}
  *  POST /api/chat/letto                     -> {conv}
- *  POST /api/chat/gruppi                    -> {nome, membri:[id]}                     (solo ADMIN)
- *  POST /api/chat/gruppi/{id}               -> {nome?, membri?, elimina?:true}         (solo ADMIN)
+ *  POST /api/chat/gruppi                    -> {nome, membri:[id]}                     (Chat = Accesso Admin)
+ *  POST /api/chat/gruppi/{id}               -> {nome?, membri?, elimina?:true}         (Chat = Accesso Admin)
  *
  * Dati nella tabella consegne_dataset (nessuna tabella nuova):
  *   CHAT_MSG_<conv>   messaggi (ultimi 1500)     CHAT_INDICE   chat singole create
@@ -42,28 +47,68 @@ import java.util.*;
 public class ChatController {
 
     private static final ZoneId ITALY = ZoneId.of("Europe/Rome");
-    /** ruoli che hanno la chat */
-    public static final Set<String> RUOLI = Set.of("UTENTE", "BACK_OFFICE", "ADMIN");
+    private static final String SEZIONE = "CHAT";
+    /* ===== gruppo fisso "BDC" ===== */
+    private static final String BDC = "bdcgruppo";
+    private static final Set<String> BDC_NOMI = Set.of("giuseppe palladino", "davide scognamiglio", "mattia zuppa", "emanuele amendola");
+    /** nome senza accenti e maiuscole, parole in ordine alfabetico ("Scognamiglio Davide" = "Davide Scognamiglio") */
+    private static String chiaveNome(String n) {
+        String t = java.text.Normalizer.normalize(n == null ? "" : n, java.text.Normalizer.Form.NFD).replaceAll("\\p{M}", "").toLowerCase(Locale.ROOT).trim();
+        List<String> p = new ArrayList<>(Arrays.asList(t.split("\\s+"))); Collections.sort(p);
+        return String.join(" ", p);
+    }
+    private static final Set<String> BDC_CHIAVI = new HashSet<>();
+    static { for (String n : BDC_NOMI) BDC_CHIAVI.add(chiaveNome(n)); }
+    private static boolean nelBdc(User u) {
+        return u != null && u.getRole() != null && !u.getRole().startsWith("X:") && BDC_CHIAVI.contains(chiaveNome(u.getFullName()));
+    }
+    // chi c'e' nel gruppo BDC: ricalcolato al massimo ogni minuto (le pagine chiedono aggiornamenti ogni pochi secondi)
+    private volatile List<Long> bdcMembri = null;
+    private volatile long bdcAt = 0;
+    private Map<String, Object> gruppoBdc() {
+        List<Long> m = bdcMembri;
+        if (m == null || System.currentTimeMillis() - bdcAt > 60_000) {
+            m = new ArrayList<>();
+            for (User u : userRepository.findAll()) if (nelBdc(u)) m.add(u.getId());
+            bdcMembri = m; bdcAt = System.currentTimeMillis();
+        }
+        Map<String, Object> g = new LinkedHashMap<>();
+        g.put("id", BDC); g.put("nome", "BDC"); g.put("membri", m); g.put("fisso", true);
+        return g;
+    }
     private static final int MAX_MSG = 1500, PRIMA_VOLTA = 200;
     private static final Object LOCK = new Object();
 
     @Autowired private ConsegneDatasetRepository repository;
     @Autowired private UserRepository userRepository;
     @Autowired private ObjectMapper objectMapper;
+    @Autowired private RolePermissionService permessi;
 
     /* ================= chi sono ================= */
-    private record Chi(Long id, String role, String nome) { }
+    /** gestore = puo' creare, modificare ed eliminare i gruppi (e li vede tutti); scrive = puo' mandare messaggi */
+    private record Chi(Long id, String role, String nome, boolean gestore, boolean scrive) { }
     private Chi chi(HttpSession s) {
         Long id = (Long) s.getAttribute("userId");
         String role = (String) s.getAttribute("userRole");
-        if (id == null || role == null || !RUOLI.contains(role)) return null;
-        return new Chi(id, role, userRepository.findById(id).map(User::getFullName).orElse(""));
+        if (id == null || role == null) return null;
+        String acc = permessi.getEffectiveAccess(id, role, SEZIONE);
+        User u = userRepository.findById(id).orElse(null);
+        boolean bdc = nelBdc(u);                                   // chi e' nel gruppo BDC ha sempre la chat
+        if (!permessi.hasAtLeast(acc, "READ_ONLY") && !bdc) return null;
+        return new Chi(id, role, u == null ? "" : str(u.getFullName()),
+                permessi.hasAtLeast(acc, "ADMIN_FULL"), permessi.hasAtLeast(acc, "FULL") || bdc);
+    }
+    private static ResponseEntity<?> soloLettura() {
+        return ResponseEntity.status(403).body(Map.of("error", "Puoi leggere la chat ma non scrivere (permesso Chat)"));
     }
     private static ResponseEntity<?> no(HttpSession s) {
         return s.getAttribute("userId") == null ? ResponseEntity.status(401).body(Map.of("error", "Non autenticato"))
                 : ResponseEntity.status(403).body(Map.of("error", "La chat non e' attiva per il tuo ruolo"));
     }
-    private static boolean attivo(User u) { return u != null && u.getRole() != null && RUOLI.contains(u.getRole()); }
+    /** il collega ha la chat (permesso Chat almeno Solo lettura; un account disattivato no) */
+    private boolean attivo(User u) {
+        return u != null && u.getRole() != null && (nelBdc(u) || permessi.hasAtLeast(permessi.getEffectiveAccess(u.getId(), u.getRole(), SEZIONE), "READ_ONLY"));
+    }
     private static String str(Object o) { return o == null ? "" : String.valueOf(o).trim(); }
     private static long num(Object o) { return o instanceof Number n ? n.longValue() : 0; }
 
@@ -103,7 +148,10 @@ public class ChatController {
         if (g.get("membri") instanceof List<?> l) for (Object o : l) { try { out.add(Long.valueOf(String.valueOf(o))); } catch (NumberFormatException ignored) { } }
         return out;
     }
-    private Map<String, Object> gruppo(String id) { return gruppi().stream().filter(g -> id.equals(str(g.get("id")))).findFirst().orElse(null); }
+    private Map<String, Object> gruppo(String id) {
+        if (BDC.equals(id)) return gruppoBdc();
+        return gruppi().stream().filter(g -> id.equals(str(g.get("id")))).findFirst().orElse(null);
+    }
     /** la conversazione se l'utente ne fa parte, altrimenti null */
     private String convValida(String conv, Chi c) {
         if ("TUTTI".equals(conv)) return conv;
@@ -115,13 +163,15 @@ public class ChatController {
         }
         if (conv.matches("G_[a-z0-9]{4,20}")) {
             Map<String, Object> g = gruppo(conv.substring(2));
-            return g != null && ("ADMIN".equals(c.role()) || membri(g).contains(c.id())) ? conv : null;
+            return g != null && (c.gestore() || membri(g).contains(c.id())) ? conv : null;
         }
         return null;
     }
     private List<String> mieConv(Chi c) {
         List<String> out = new ArrayList<>(List.of("TUTTI"));
-        for (Map<String, Object> g : gruppi()) if ("ADMIN".equals(c.role()) || membri(g).contains(c.id())) out.add("G_" + str(g.get("id")));
+        Map<String, Object> bdc = gruppoBdc();
+        if (c.gestore() || membri(bdc).contains(c.id())) out.add("G_" + BDC);
+        for (Map<String, Object> g : gruppi()) if (c.gestore() || membri(g).contains(c.id())) out.add("G_" + str(g.get("id")));
         for (String k : indice()) if (convValida(k, c) != null) out.add(k);
         return out;
     }
@@ -134,13 +184,16 @@ public class ChatController {
             if (attivo(u) && !c.id().equals(u.getId())) ut.add(Map.of("id", u.getId(), "nome", str(u.getFullName()), "role", u.getRole()));
         ut.sort(Comparator.comparing(m -> String.valueOf(m.get("nome")), String.CASE_INSENSITIVE_ORDER));
         List<Map<String, Object>> gr = new ArrayList<>();
-        for (Map<String, Object> g : gruppi()) if ("ADMIN".equals(c.role()) || membri(g).contains(c.id()))
+        Map<String, Object> bdc = gruppoBdc();
+        if (c.gestore() || membri(bdc).contains(c.id())) gr.add(Map.of("id", "G_" + BDC, "nome", "BDC", "membri", membri(bdc), "fisso", true));
+        for (Map<String, Object> g : gruppi()) if (c.gestore() || membri(g).contains(c.id()))
             gr.add(Map.of("id", "G_" + str(g.get("id")), "nome", str(g.get("nome")), "membri", membri(g)));
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("io", Map.of("id", c.id(), "nome", c.nome(), "role", c.role()));
         out.put("utenti", ut);
         out.put("gruppi", gr);
-        out.put("puoCreareGruppi", "ADMIN".equals(c.role()));
+        out.put("puoCreareGruppi", c.gestore());
+        out.put("puoScrivere", c.scrive());
         return ResponseEntity.ok(out);
     }
 
@@ -169,6 +222,7 @@ public class ChatController {
     @PostMapping("/messaggi")
     public ResponseEntity<?> invia(@RequestBody Map<String, Object> b, HttpSession s) {
         Chi c = chi(s); if (c == null) return no(s);
+        if (!c.scrive()) return soloLettura();
         String conv = convValida(str(b.get("conv")), c);
         if (conv == null) return ResponseEntity.badRequest().body(Map.of("error", "Conversazione non valida"));
         if (conv.startsWith("P_")) {
@@ -212,6 +266,7 @@ public class ChatController {
     @PostMapping("/reazione")
     public ResponseEntity<?> reazione(@RequestBody Map<String, Object> b, HttpSession s) {
         Chi c = chi(s); if (c == null) return no(s);
+        if (!c.scrive()) return soloLettura();
         String conv = convValida(str(b.get("conv")), c), id = str(b.get("id")), emoji = str(b.get("emoji"));
         if (conv == null || emoji.isEmpty() || emoji.length() > 16) return ResponseEntity.badRequest().body(Map.of("error", "Reazione non valida"));
         synchronized (LOCK) {
@@ -247,7 +302,7 @@ public class ChatController {
         scrivi("CHAT_LETTI", l, l.size(), null);
     }
 
-    /* ================= gruppi (solo ADMIN) ================= */
+    /* ================= gruppi (permesso Chat = Accesso Admin) ================= */
     private List<Long> membriValidi(Object o, Long admin) {
         Set<Long> out = new LinkedHashSet<>();
         if (o instanceof List<?> l) for (Object x : l) {
@@ -260,7 +315,7 @@ public class ChatController {
     @PostMapping("/gruppi")
     public ResponseEntity<?> creaGruppo(@RequestBody Map<String, Object> b, HttpSession s) {
         Chi c = chi(s); if (c == null) return no(s);
-        if (!"ADMIN".equals(c.role())) return ResponseEntity.status(403).body(Map.of("error", "Solo l'Admin crea i gruppi"));
+        if (!c.gestore()) return ResponseEntity.status(403).body(Map.of("error", "Non puoi creare gruppi (permesso Chat: serve Accesso Admin)"));
         String nome = str(b.get("nome"));
         if (nome.isEmpty() || nome.length() > 60) return ResponseEntity.badRequest().body(Map.of("error", "Scrivi il nome del gruppo (massimo 60 caratteri)"));
         List<Long> m = membriValidi(b.get("membri"), c.id());
@@ -279,8 +334,9 @@ public class ChatController {
     @PostMapping("/gruppi/{id}")
     public ResponseEntity<?> modificaGruppo(@PathVariable String id, @RequestBody Map<String, Object> b, HttpSession s) {
         Chi c = chi(s); if (c == null) return no(s);
-        if (!"ADMIN".equals(c.role())) return ResponseEntity.status(403).body(Map.of("error", "Solo l'Admin modifica i gruppi"));
+        if (!c.gestore()) return ResponseEntity.status(403).body(Map.of("error", "Non puoi modificare i gruppi (permesso Chat: serve Accesso Admin)"));
         String gid = id.startsWith("G_") ? id.substring(2) : id;
+        if (BDC.equals(gid)) return ResponseEntity.badRequest().body(Map.of("error", "Il gruppo BDC e' fisso"));
         synchronized (LOCK) {
             List<Map<String, Object>> l = gruppi();
             Map<String, Object> g = l.stream().filter(x -> gid.equals(str(x.get("id")))).findFirst().orElse(null);

@@ -325,7 +325,9 @@
         const page = document.getElementById('salonePage'); if (!page) return;
         page.style.display = 'block';
         aperta = true;
+        const giaFatta = !!root;
         build();
+        if (giaFatta) disegnaSchede();          // NUOVO: barra delle macro sezioni (Salone / Front office) e scritta gialla
         history.replaceState(null, '', window.location.pathname + '#salone');
         sessionStorage.setItem('currentPage', 'salone');
         window.scrollTo(0, 0);
@@ -335,7 +337,8 @@
     }
     function hide() {
         const page = document.getElementById('salonePage'); if (page) page.style.display = 'none';
-        if (aperta) { const links = document.querySelector('.nav-links'); if (links) links.style.visibility = ''; }
+        if (aperta) { const links = document.querySelector('.nav-links'); if (links) { links.style.visibility = ''; links.style.display = ''; } }
+        const mn = document.getElementById('saMacroNav'); if (mn) mn.style.display = 'none';
         Scheda.attiva(false);
         aperta = false;
         Menu.esci();
@@ -349,22 +352,28 @@
         root.innerHTML = `
           <div class="sa-band">
             <div class="sa-band-in">
-              <div><small>SALONE · AGNANO</small><h1>Appuntamenti e ingressi</h1><p>Clienti in salone, consulenti e appuntamenti della giornata</p></div>
+              <div><small class="sa-b-k">SALONE · AGNANO</small><h1 class="sa-b-t">Appuntamenti e ingressi</h1><p class="sa-b-p">Clienti in salone, consulenti e appuntamenti della giornata</p></div>
               <div class="sa-clock" id="saClock"></div>
             </div>
+            <div class="sa-macro" role="tablist" aria-label="Sezione" hidden></div>
             <div class="sa-tabs" role="tablist"></div>
           </div>
           <div class="sa-wrap" id="saBody"></div>`;
         disegnaSchede();
+        root.querySelector('.sa-macro').addEventListener('click', e => { const b = e.target.closest('[data-macro]'); if (b) vaiMacro(b.dataset.macro); });
         root.querySelector('.sa-tabs').addEventListener('click', e => {
             const b = e.target.closest('[data-tab]'); if (!b) return;
-            st.tab = b.dataset.tab;
+            apriScheda(b.dataset.tab);
+        });
+        function apriScheda(tab) {
+            st.tab = tab;
             disegnaSchede();
             if (st.tab === 'app') { if (!st.app.caricato) caricaApp(st.app.giorno); else { render(); caricaApp(st.app.giorno); } }
             else if (window.SaloneFO && SaloneFO.mia(st.tab)) render();          // NUOVO: Allert e Doppie chiavi del Front Office (salone-fo.js)
             else if (st.tab === 'report' && !st.rep.dati) caricaReport();
             else { render(); if (st.tab === 'walkin') caricaGiorno(st.giorno, true); }   // dati sempre freschi cambiando scheda
-        });
+        }
+        apriSchedaFn = apriScheda;
         root.addEventListener('click', onClick);
         root.addEventListener('change', onChange);
         const tick = () => { const c = document.getElementById('saClock'); if (c) { const d = new Date(); c.innerHTML = `<b>${F_ORA.format(d)}</b><span>${d.toLocaleDateString('it-IT', { timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long' })}</span>`; } };
@@ -376,11 +385,62 @@
         setInterval(() => { if (aperta) caricaStati(); }, 5000);
         setInterval(() => { if (aperta) disegnaStati(); }, 30000);   // "da 12 min" sempre aggiornato
     }
+    /* ===== NUOVO: due macro sezioni, come le voci dell'In bound =====
+         SALONE        Walk-in, Appuntamenti, Report (per chi lo vede)
+         FRONT OFFICE  Allert, Doppie chiavi (salone-fo.js, per chi ha i permessi)
+       Le voci stanno in alto nella barra (al posto di quelle dell'In bound) e la scritta gialla accanto
+       al logo diventa FRONT OFFICE. Chi non ha le schede del Front Office vede solo il Salone, come prima. */
+    let apriSchedaFn = null;
+    const ultimaDi = { salone: 'walkin', fo: null };
+    const macroDi = tab => (window.SaloneFO && SaloneFO.mia(tab)) ? 'fo' : 'salone';
+    function schedeDi(m) {
+        if (m === 'fo') return window.SaloneFO ? SaloneFO.voci() : [];
+        return [['walkin', '🚶 Walk-in'], ['app', '📅 Appuntamenti']].concat(st.vedeReport ? [['report', '📊 Report']] : []);
+    }
+    const haFo = () => schedeDi('fo').length > 0;
+    function vaiMacro(m) {
+        if (m === 'fo' && !haFo()) return;
+        const L = schedeDi(m), t = L.some(x => x[0] === ultimaDi[m]) ? ultimaDi[m] : (L[0] || ['walkin'])[0];
+        if (apriSchedaFn) apriSchedaFn(t); else { st.tab = t; disegnaSchede(); render(); }
+    }
+    function disegnaMacro() {
+        const fo = st.macro === 'fo', due = haFo();
+        const nFo = window.SaloneFO && SaloneFO.numeri ? SaloneFO.numeri() : 0;
+        const voce = (m, ic, n, x) => ({ m, ic, n, x });
+        const V = [voce('salone', '🚘', 'SALONE', 0), voce('fo', '🏪', 'FRONT OFFICE', nFo)];
+        // testata della pagina
+        if (root) {
+            root.querySelector('.sa-b-k').textContent = fo ? 'FRONT OFFICE · AGNANO' : 'SALONE · AGNANO';
+            root.querySelector('.sa-b-t').textContent = fo ? 'Front office' : 'Appuntamenti e ingressi';
+            root.querySelector('.sa-b-p').textContent = fo ? 'Allert del Front Office e registro delle doppie chiavi' : 'Clienti in salone, consulenti e appuntamenti della giornata';
+            const mb = root.querySelector('.sa-macro');
+            mb.hidden = !(due && scheda);                // pagina aperta come scheda della barra: le macro sezioni stanno qui
+            if (!mb.hidden) mb.innerHTML = V.map(v => `<button type="button" role="tab" class="${st.macro === v.m ? 'on' : ''}" aria-selected="${st.macro === v.m}" data-macro="${v.m}">${v.ic} ${v.n}${v.x ? `<i class="sa-mn">${v.x}</i>` : ''}</button>`).join('');
+        }
+        if (!aperta || scheda) return;
+        const badge = document.getElementById('navBrandBadge'); if (badge) badge.textContent = fo ? 'FRONT OFFICE' : 'SALONE';
+        // barra in alto: le due voci al posto di quelle dell'In bound
+        const links = document.querySelector('.nav-links:not(#saMacroNav)');
+        let nav = document.getElementById('saMacroNav');
+        if (!due) { if (nav) nav.style.display = 'none'; if (links) links.style.display = ''; return; }
+        if (!nav && links) {
+            nav = document.createElement('div'); nav.id = 'saMacroNav'; nav.className = 'nav-links sa-macro-nav';
+            nav.addEventListener('click', e => { const a = e.target.closest('[data-macro]'); if (!a) return; e.preventDefault(); vaiMacro(a.dataset.macro); });
+            links.after(nav);
+        }
+        if (!nav) return;
+        if (links) links.style.display = 'none';
+        nav.style.display = '';
+        nav.innerHTML = V.map(v => `<a href="#salone" class="nav-link ${st.macro === v.m ? 'active' : ''}" data-macro="${v.m}"><span class="nav-link-icon">${v.ic}</span><span class="nav-link-label">${v.n}</span>${v.x ? `<i class="sa-mn">${v.x > 99 ? '99+' : v.x}</i>` : ''}</a>`).join('');
+    }
     function disegnaSchede() {
         const t = root.querySelector('.sa-tabs');
-        const L = [['walkin', '🚶 Walk-in'], ['app', '📅 Appuntamenti']].concat(window.SaloneFO ? SaloneFO.voci() : [], st.vedeReport ? [['report', '📊 Report']] : []);
-        if (!L.some(x => x[0] === st.tab)) st.tab = 'walkin';
+        let m = macroDi(st.tab); if (m === 'fo' && !haFo()) m = 'salone';
+        const L = schedeDi(m);
+        if (!L.some(x => x[0] === st.tab)) st.tab = (L[0] || ['walkin'])[0];
+        st.macro = macroDi(st.tab); ultimaDi[st.macro] = st.tab;
         t.innerHTML = L.map(([k, n]) => `<button type="button" class="sa-tab ${st.tab === k ? 'on' : ''}" data-tab="${k}" role="tab" aria-selected="${st.tab === k}">${n}</button>`).join('');
+        disegnaMacro();
     }
 
     async function caricaGiorno(g, silenzioso) {
@@ -2036,6 +2096,8 @@
     const recenti = () => { try { return JSON.parse(localStorage.getItem(RECENTI_K) || '[]').filter(x => typeof x === 'string').slice(0, 27); } catch (e) { return []; } };
     const usaRecente = x => { try { const r = [x].concat(recenti().filter(y => y !== x)).slice(0, 27); localStorage.setItem(RECENTI_K, JSON.stringify(r)); } catch (e) { /* */ } };
     const RAPIDE = ['❤️', '😂', '😮', '😢', '🙏', '👍', '🔥', '🎉'];
+    // NUOVO: le stesse emoji (categorie, ricerca, usate di recente) anche nella Chat rossa (chat-bdc.js)
+    window.SaloneEmoji = { EMO_CAT, NOMI_EMO, cercaEmoji, recenti, usaRecente, RAPIDE };
     const Chat = (function () {
         let el = null, aperto = false, conv = null, cercaConv = '', filtroConv = 'tutte', compatta = (() => { try { return localStorage.getItem('saChatCompatta') === '1'; } catch (e) { return false; } })(), dopo = 0, timer = null, io = null, utenti = [], risposta = null, caricata = false, vietata = false;
         const msgs = {}, nonLetti = {};

@@ -10,10 +10,13 @@
    Niente sticker. Si aggiorna ogni 4 secondi (15 se la scheda del browser e' nascosta).
    ===================================================================== */
 (function () {
-    const RUOLI = ['UTENTE', 'BACK_OFFICE', 'ADMIN'];
     const RUOLO_LBL = { UTENTE: 'BDC', BACK_OFFICE: 'Back Office', ADMIN: 'Admin' };
-    const RAPIDE = ['👍', '❤️', '😂', '😮', '🙏', '✅'];
-    const EMOJI = ['😀', '😂', '😊', '😉', '😍', '🤔', '😅', '😮', '😢', '😡', '👍', '👎', '👏', '🙏', '💪', '🔥', '✅', '❌', '⚠️', '📞', '🚗', '🔑', '📄', '⏰'];
+    // emoji: le stesse della chat del salone (salone.js: categorie, ricerca, usate di recente), senza sticker
+    const EMO_RISERVA = [['😀', 'Emoji', ['😀', '😂', '😊', '😉', '😍', '🤔', '😅', '😮', '😢', '😡', '👍', '👎', '👏', '🙏', '💪', '🔥', '✅', '❌', '⚠️', '📞', '🚗', '🔑', '📄', '⏰']]];
+    const EM = () => window.SaloneEmoji || { EMO_CAT: EMO_RISERVA, NOMI_EMO: {}, cercaEmoji: () => [], recenti: () => [], usaRecente: () => {}, RAPIDE: ['❤️', '😂', '😮', '😢', '🙏', '👍', '🔥', '🎉'] };
+    // messaggio fatto solo di 1-3 emoji: si mostra piu' grande (come nella chat del salone)
+    const soloEmoji = t => { const x = String(t || '').trim(); if (!x || x.length > 24) return false;
+        try { return /^(?:\p{Extended_Pictographic}|\p{Emoji_Component}|\u200d|\ufe0f|\s)+$/u.test(x) && /\p{Extended_Pictographic}/u.test(x) && (x.match(/\p{Extended_Pictographic}/gu) || []).length <= 3 && !/^[\d#*\s]+$/.test(x); } catch (e) { return false; } };
     let compatta = false; try { compatta = localStorage.getItem('cbCompatta') === '1'; } catch (e) { /* */ }
     let el = null, aperto = false, conv = null, dopo = 0, timer = null, stato = null, filtro = 'tutte', cerca = '', risposta = null, primo = true;
     const msgs = {}, nonLetti = {};
@@ -49,7 +52,8 @@
         if (k.startsWith('G_')) { const g = gruppo(k); return 'Gruppo · ' + (g ? g.membri.length : 0) + ' persone'; }
         const u = utente(altroDi(k)); return u ? RUOLO_LBL[u.role] || u.role : '';
     }
-    const avatar = k => k === 'TUTTI' ? 'TUTTI' : iniziali(nomeConv(k));
+    const BDC = 'G_bdcgruppo';                       // gruppo fisso "BDC", sempre subito sotto "Tutti"
+    const avatar = k => k === 'TUTTI' ? 'TUTTI' : k === BDC ? 'BDC' : iniziali(nomeConv(k));
     const tipoConv = k => k.startsWith('P_') ? 'singole' : 'gruppi';
 
     async function api(path, body) {
@@ -60,7 +64,13 @@
     }
 
     /* ---------- visibilita': solo pagine In bound, solo ruoli della chat ---------- */
-    function puo() { return typeof currentUser !== 'undefined' && currentUser && RUOLI.includes(currentUser.role); }
+    // chi ha la chat lo decide il permesso "Chat" (pagina Permessi, per ruolo o per operatore)
+    const permessiPronti = () => typeof currentUser !== 'undefined' && !!currentUser
+        && ((typeof myEffectivePermissions !== 'undefined' && myEffectivePermissions && Object.keys(myEffectivePermissions).length > 0)
+            || (typeof permissionMatrix !== 'undefined' && permissionMatrix && Object.keys(permissionMatrix).length > 0));
+    // chi e' nel gruppo fisso BDC ha la chat anche senza il permesso: lo dice il server (/stato risponde)
+    let serverOk = false;
+    function puo() { return serverOk || (permessiPronti() && typeof getAccess === 'function' && getAccess('CHAT') !== 'NONE'); }
     const PAGINE = ['contactsPage', 'allertPage'];
     function inPagina() {
         if (document.body.classList.contains('mh-home-on')) return false;
@@ -94,8 +104,9 @@
                   <button type="button" class="cb-gest" hidden>Modifica</button><button type="button" class="cb-min" aria-label="Riduci la chat">–</button></header>
                 <div class="cb-msgs" aria-live="polite"></div>
                 <div class="cb-reply" hidden></div>
+                <p class="cb-sola" hidden>Puoi leggere la chat ma non scrivere</p>
                 <div class="cb-in"><button type="button" class="cb-emo-b" aria-label="Emoji">${ICO.emo}</button><textarea rows="1" placeholder="Scrivi un messaggio…" aria-label="Scrivi un messaggio"></textarea><button type="button" class="cb-send" aria-label="Invia">${ICO.invia}</button></div>
-                <div class="cb-emo" hidden>${EMOJI.map(e => `<button type="button" data-emo="${e}">${e}</button>`).join('')}</div>
+                <div class="cb-emo" hidden><div class="cb-emo-cerca"><input type="search" placeholder="Cerca emoji (es. ridere, auto, cuore)" autocomplete="off" aria-label="Cerca emoji"><span class="cb-emo-per" hidden>Reazione</span></div><div class="cb-emo-tabs" role="tablist" aria-label="Categorie di emoji"></div><div class="cb-emo-g"></div></div>
               </div>
             </div>
             <button type="button" class="cb-comp" aria-label="Riduci la chat" title="Riduci: solo la chat">${ICO.riduci}</button>
@@ -118,8 +129,22 @@
         ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); invia(); } if (e.key === 'Escape') apri(false); });
         ta.addEventListener('input', () => { ta.style.height = 'auto'; ta.style.height = Math.min(120, ta.scrollHeight) + 'px'; });
         el.querySelector('.cb-send').addEventListener('click', invia);
-        el.querySelector('.cb-emo-b').addEventListener('click', () => { const p = el.querySelector('.cb-emo'); p.hidden = !p.hidden; });
-        el.querySelector('.cb-emo').addEventListener('click', e => { const b = e.target.closest('[data-emo]'); if (!b) return; ta.value += b.dataset.emo; ta.focus(); el.querySelector('.cb-emo').hidden = true; });
+        el.querySelector('.cb-emo-b').addEventListener('click', () => { const p = el.querySelector('.cb-emo'); if (!p.hidden && !perReazione) { p.hidden = true; return; } apriPannello(null); });
+        const cercaE = el.querySelector('.cb-emo-cerca input');
+        cercaE.addEventListener('input', () => pannello());
+        cercaE.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); el.querySelector('.cb-emo').hidden = true; } if (e.key === 'Enter') { e.preventDefault(); const f = el.querySelector('.cb-emo-g [data-emo]'); if (f) f.click(); } });
+        el.querySelector('.cb-emo').addEventListener('click', e => {
+            const t = e.target.closest('[data-tabemo]'); if (t) { tabEmo = t.dataset.tabemo; pannello(); return; }
+            const b = e.target.closest('[data-emo]'); if (!b) return;
+            EM().usaRecente(b.dataset.emo);
+            if (perReazione) { const id = perReazione; perReazione = null; el.querySelector('.cb-emo').hidden = true; reagisci(id, b.dataset.emo); return; }
+            // l'emoji va dove c'e' il cursore, non sempre in fondo; il pannello resta aperto per metterne altre
+            const a = ta.selectionStart ?? ta.value.length, z = ta.selectionEnd ?? a;
+            ta.value = ta.value.slice(0, a) + b.dataset.emo + ta.value.slice(z);
+            ta.focus(); ta.selectionStart = ta.selectionEnd = a + b.dataset.emo.length;
+        });
+        // clic fuori dal pannello: si chiude
+        document.addEventListener('click', e => { const p = el && el.querySelector('.cb-emo'); if (p && !p.hidden && e.target.isConnected && !p.contains(e.target) && !e.target.closest('.cb-emo-b') && !e.target.closest('.cb-rapide')) p.hidden = true; });
         el.querySelector('.cb-msgs').addEventListener('click', clicMessaggio);
         el.querySelector('.cb-reply').addEventListener('click', e => { if (e.target.closest('[data-x]')) { risposta = null; disegnaRisposta(); } });
         el.querySelector('.cb-dlg').addEventListener('click', e => { if (e.target === e.currentTarget || e.target.closest('[data-chiudi]')) chiudiDialogo(); });
@@ -135,6 +160,34 @@
         b.title = compatta ? 'Allarga: elenco e chat insieme' : 'Riduci: solo la chat';
         b.setAttribute('aria-label', compatta ? 'Allarga la chat' : 'Riduci la chat');
     }
+    /* ---------- pannello emoji (come la chat del salone, senza sticker) ---------- */
+    let tabEmo = null, perReazione = null;            // perReazione = id del messaggio a cui si sta reagendo
+    function apriPannello(idReazione) {
+        const p = el.querySelector('.cb-emo');
+        perReazione = idReazione || null;
+        const q = p.querySelector('.cb-emo-cerca input'); q.value = '';
+        p.querySelector('.cb-emo-per').hidden = !perReazione;
+        p.classList.toggle('rz', !!perReazione);
+        p.hidden = false; pannello();
+        if (matchMedia('(pointer:fine)').matches) q.focus();
+    }
+    function pannello() {
+        const p = el.querySelector('.cb-emo'), E = EM(), R = E.recenti();
+        if (!tabEmo || (tabEmo === 'rec' && !R.length)) tabEmo = R.length ? 'rec' : '0';
+        const q = p.querySelector('.cb-emo-cerca input').value.trim();
+        const tabs = (R.length ? [['rec', '🕘', 'Usate di recente']] : []).concat(E.EMO_CAT.map((c, i) => [String(i), c[0], c[1]]));
+        p.querySelector('.cb-emo-tabs').innerHTML = tabs.map(([k, ic, t]) => `<button type="button" role="tab" aria-selected="${!q && k === tabEmo}" class="${!q && k === tabEmo ? 'on' : ''}" data-tabemo="${k}" title="${esc(t)}" aria-label="${esc(t)}">${ic}</button>`).join('');
+        const g = p.querySelector('.cb-emo-g');
+        if (q) {
+            const T = E.cercaEmoji(q);
+            g.innerHTML = T.length ? T.map(x => `<button type="button" data-emo="${x}" title="${esc(((E.NOMI_EMO || {})[x] || '').split(' ').slice(0, 5).join(' '))}">${x}</button>`).join('') : `<p class="cb-emo-vuoto">Nessuna emoji per “${esc(q)}”</p>`;
+            return;
+        }
+        const L = tabEmo === 'rec' ? R : (E.EMO_CAT[Number(tabEmo)] || E.EMO_CAT[0])[2];
+        g.innerHTML = L.map(x => `<button type="button" data-emo="${x}">${x}</button>`).join('');
+        g.scrollTop = 0;
+    }
+
     function apri(on) {
         crea();
         aperto = on;
@@ -159,7 +212,8 @@
         const box = el.querySelector('.cb-list');
         let L = conversazioni().filter(k => filtro === 'tutte' || tipoConv(k) === filtro);
         if (cerca) L = L.filter(k => nomeConv(k).toLowerCase().includes(cerca));
-        L.sort((a, b) => (a === 'TUTTI' ? -1 : b === 'TUTTI' ? 1 : 0) || ((ultimo(b) || {}).ts || 0) - ((ultimo(a) || {}).ts || 0) || nomeConv(a).localeCompare(nomeConv(b), 'it'));
+        const fisso = k => k === 'TUTTI' ? 0 : k === BDC ? 1 : 2;
+        L.sort((a, b) => fisso(a) - fisso(b) || ((ultimo(b) || {}).ts || 0) - ((ultimo(a) || {}).ts || 0) || nomeConv(a).localeCompare(nomeConv(b), 'it'));
         box.innerHTML = L.map(k => {
             const u = ultimo(k), n = nonLetti[k] || 0;
             const prev = u ? (k !== 'TUTTI' && !k.startsWith('G_') ? '' : (u.da === io().id ? 'Tu: ' : String(u.nome || '').split(' ')[0] + ': ')) + (u.allert && !u.testo ? 'Allert · ' + u.allert.cliente : u.testo) : sottoConv(k);
@@ -188,6 +242,9 @@
         el.querySelector('.cb-h-t b').textContent = nomeConv(conv);
         el.querySelector('.cb-h-t em').textContent = sottoConv(conv);
         el.querySelector('.cb-gest').hidden = !(conv.startsWith('G_') && stato.puoCreareGruppi);
+        const ro = stato.puoScrivere === false;          // permesso Chat = Solo lettura
+        el.querySelector('.cb-in').hidden = ro; el.querySelector('.cb-sola').hidden = !ro;
+        el.querySelector('.cb-p').classList.toggle('cb-ro', ro);
         messaggi(true);
     }
     function entra(k) { conv = k; risposta = null; disegnaRisposta(); vista(); segnaLetto(k); const t = el.querySelector('textarea'); if (t) t.focus(); }
@@ -205,7 +262,7 @@
               ${gr && !mio ? `<span class="cb-m-n">${esc(m.nome)}</span>` : ''}
               <div class="cb-bub">
                 ${rif ? `<button type="button" class="cb-quote" data-vai="${esc(rif.id)}"><b>${esc(rif.nome)}</b><span>${esc(testoMsg(rif).slice(0, 90))}</span></button>` : ''}
-                ${m.testo ? `<span class="cb-m-t">${esc(m.testo).replace(/\n/g, '<br>')}</span>` : ''}
+                ${m.testo ? `<span class="cb-m-t${soloEmoji(m.testo) ? ' emo-big' : ''}">${esc(m.testo).replace(/\n/g, '<br>')}</span>` : ''}
                 ${m.allert ? `<button type="button" class="cb-all" data-allert="${esc(m.allert.id)}"><span class="cb-all-i">${ICO.campana}</span><span class="cb-all-t"><b>Allert n. ${esc(m.allert.id)} · ${esc(m.allert.cliente)}</b><em>${esc([m.allert.tipo, m.allert.stato].filter(Boolean).join(' · '))}</em></span><span class="cb-all-a">Apri</span></button>` : ''}
                 <span class="cb-m-o">${ora(m.ts)}</span>
                 <span class="cb-m-a"><button type="button" data-rispondi="${esc(m.id)}" title="Rispondi" aria-label="Rispondi">↩</button><button type="button" data-reagisci="${esc(m.id)}" title="Reazione" aria-label="Reazione">☺</button></span>
@@ -222,6 +279,8 @@
         if (q) { rapide(q); return; }
         const z = e.target.closest('[data-rz]');
         if (z) { reagisci(z.dataset.rz, z.dataset.e); return; }
+        const piu = e.target.closest('[data-piu]');
+        if (piu) { const id = piu.dataset.piu; el.querySelectorAll('.cb-rapide').forEach(x => x.remove()); apriPannello(id); return; }
         const p = e.target.closest('[data-pick]');
         if (p) { reagisci(p.dataset.pick, p.dataset.e); return; }
         const v = e.target.closest('[data-vai]');
@@ -233,7 +292,8 @@
     function rapide(btn) {
         el.querySelectorAll('.cb-rapide').forEach(x => x.remove());
         const d = document.createElement('div'); d.className = 'cb-rapide';
-        d.innerHTML = RAPIDE.map(x => `<button type="button" data-pick="${esc(btn.dataset.reagisci)}" data-e="${x}">${x}</button>`).join('');
+        d.innerHTML = EM().RAPIDE.map(x => `<button type="button" data-pick="${esc(btn.dataset.reagisci)}" data-e="${x}">${x}</button>`).join('')
+            + `<button type="button" class="piu" data-piu="${esc(btn.dataset.reagisci)}" title="Altre emoji" aria-label="Altre emoji">➕</button>`;
         btn.closest('.cb-bub').appendChild(d);
     }
     async function reagisci(id, emoji) {
@@ -332,7 +392,8 @@
             primo = false;
         } catch (e) { /* riprova al prossimo giro */ }
     }
-    function avvia() {
+    async function avvia() {
+        if (!puo()) { try { stato = await api('/stato'); serverOk = true; } catch (e) { return; } }
         aggiornaVisibile();
         if (!puo()) return;
         aggiorna();
@@ -352,13 +413,14 @@
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', osserva); else osserva();
     setInterval(() => { osserva(); aggiornaVisibile(); }, 800);
-    const attesa = setInterval(() => { if (typeof currentUser !== 'undefined' && currentUser) { clearInterval(attesa); avvia(); } }, 1200);
+    const attesa = setInterval(() => { if (permessiPronti()) { clearInterval(attesa); avvia(); } }, 1200);
 
     // per le altre pagine (es. Allert del Back Office): manda un allert in una chat
     window.ChatBdc = {
         apri: () => apri(true),
         condividiAllert(allert) {
             if (!puo() || !stato) return;
+            if (stato.puoScrivere === false) { alert('Puoi leggere la chat ma non scrivere'); return; }
             apri(true);
             const d = dialogo(`<header><b>Invia l'allert in chat</b><button type="button" data-chiudi aria-label="Chiudi">×</button></header>
               <p class="cb-dlg-p">Allert n. ${esc(allert.id)} · ${esc(allert.cliente)}${allert.tipo ? ' · ' + esc(allert.tipo) : ''}</p>

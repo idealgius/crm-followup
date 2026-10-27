@@ -12,13 +12,18 @@
    "Scheda completa" apre la finestra allert di sempre (contact.js: anagrafica, destinatari, mail).
    ===================================================================== */
 (function () {
-    const RUOLI_PAGINA = ['BACK_OFFICE', 'MODERATORE', 'GESTORE', 'ADMIN'];
-    const VEDONO_TUTTO = ['MODERATORE', 'GESTORE', 'ADMIN'];
     const STATI = { DA_GESTIRE: 'Da gestire', IN_GESTIONE: 'In gestione', GESTITA: 'Gestita' };
     const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const io = () => (typeof currentUser !== 'undefined' && currentUser) || null;
     const ruolo = () => (io() || {}).role || '';
-    const puo = () => RUOLI_PAGINA.includes(ruolo());
+    // tutto dai permessi (pagina Permessi, per ruolo o per operatore): "Allert" = questa pagina,
+    // Accesso Admin = vede tutti gli allert; chi ha gli Allert ma non il Registro contatti la usa al posto del Registro
+    const permessiPronti = () => !!io()
+        && ((typeof myEffectivePermissions !== 'undefined' && myEffectivePermissions && Object.keys(myEffectivePermissions).length > 0)
+            || (typeof permissionMatrix !== 'undefined' && permissionMatrix && Object.keys(permissionMatrix).length > 0));
+    const liv = sez => permessiPronti() && typeof getAccess === 'function' ? getAccess(sez) : 'NONE';
+    const puo = () => liv('ALLERT') !== 'NONE';
+    const senzaRegistro = () => puo() && liv('CONTACTS') === 'NONE';
     const stretto = () => window.matchMedia('(max-width: 900px)').matches;
     const ISTANZE = [];
 
@@ -65,9 +70,9 @@
                 if (!r.ok) { info = { errore: d.error || 'Errore ' + r.status }; dati = []; disegna(); return; }
                 info = d;
                 let L = Array.isArray(d.allert) ? d.allert : [];
-                // un allert mandato a persone precise lo vedono solo loro (dal Moderatore in su si vede tutto);
+                // un allert mandato a persone precise lo vedono solo loro (con Accesso Admin si vede tutto);
                 // lo filtra gia' il server, qui e' solo una sicurezza in piu'
-                if (cfg.fo ? ruolo() === 'FRONT_OFFICE' : !VEDONO_TUTTO.includes(ruolo())) L = L.filter(l => (!cfg.fo && l.alertNotifyAll !== false) || perMe(l));
+                if (!d.vedeTutti) L = L.filter(l => (!cfg.fo && l.alertNotifyAll !== false) || perMe(l));
                 avvisaNuovi(L);
                 dati = L;
                 sincronizzaContatti(L);
@@ -122,7 +127,7 @@
     const sel = () => dati.find(l => l.id === selId) || null;
 
     /* ---------- disegno ---------- */
-    function sottotitolo() { return cfg.sottotitolo(); }
+    function sottotitolo() { return cfg.sottotitolo(info); }
     function kpi() {
         const da = dati.filter(l => stato(l) === 'DA_GESTIRE'), inG = dati.filter(l => stato(l) === 'IN_GESTIONE');
         const vecchio = da.reduce((m, l) => Math.max(m, giorniDa(quandoSegnalato(l))), 0);
@@ -432,9 +437,9 @@
         root: () => document.getElementById('allertRoot'),
         visibile: () => { const p = document.getElementById('allertPage'); return !!p && p.style.display !== 'none'; },
         titolo: 'GESTIONE ALLERT',
-        sottotitolo: () => VEDONO_TUTTO.includes(ruolo()) ? 'Tutti gli allert' : 'Gli allert segnalati a tutti e quelli mandati a te',
-        torna: () => ruolo() !== 'BACK_OFFICE',
-        sfondo: () => ruolo() === 'BACK_OFFICE'
+        sottotitolo: i => i.vedeTutti ? 'Tutti gli allert' : 'Gli allert segnalati a tutti e quelli mandati a te',
+        torna: () => liv('CONTACTS') !== 'NONE',
+        sfondo: senzaRegistro
     });
     const visibile = BO.visibile, seleziona = BO.seleziona;
     window.apriAllertDaChat = function (id) {
@@ -463,7 +468,7 @@
         await BO.apri();
     }
     // il Back Office riceve gli avvisi dei nuovi allert anche se e' su un'altra pagina
-    const attesa = setInterval(() => { if (!io()) return; clearInterval(attesa); if (ruolo() === 'BACK_OFFICE') { BO.collega(); BO.carica(); BO.avviaGiro(); } }, 1500);
+    const attesa = setInterval(() => { if (!permessiPronti()) return; clearInterval(attesa); if (senzaRegistro()) { BO.collega(); BO.carica(); BO.avviaGiro(); } }, 1500);
     // fuori dalla pagina: via le classi
     setInterval(() => {
         document.body.classList.toggle('ap-on', visibile());
@@ -493,5 +498,5 @@
         window.openAllAlertsModal = async function () { const r = await orig.apply(this, arguments); pulsanteRegistro(puo()); return r; };
     }
 
-    window.AllertPage = { puo, apri, carica: BO.carica, seleziona, crea };
+    window.AllertPage = { puo, apri, carica: BO.carica, seleziona, crea, liv, permessiPronti };
 })();

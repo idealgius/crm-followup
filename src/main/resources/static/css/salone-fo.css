@@ -25,6 +25,7 @@
 .fo-cerca input { flex:1; min-width:0; height:40px; border:0; outline:0; background:transparent; color:var(--sa-ink); font:inherit; font-size:14px; }
 
 .fo-main { display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; }
+.fo-main.fo-sola .fo-form-box { display:none; }     /* Doppie chiavi = Solo lettura: niente modulo */
 .fo-list-box { flex:999 1 600px; min-width:0; }
 .fo-form-box { flex:1 1 340px; max-width:420px; min-width:0; position:sticky; top:84px; }
 .fo-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap:14px; }

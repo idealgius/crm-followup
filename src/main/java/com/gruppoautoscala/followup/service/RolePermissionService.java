@@ -88,7 +88,18 @@ public class RolePermissionService {
         "SALONE",
         // NUOVO: Quotazioni Rent (import dei preventivi dei portali di noleggio, classifiche
         // e ricerca). Solo lettura = consulta · Completo = importa, corregge ed elimina
-        "QUOTAZIONI_RENT"
+        "QUOTAZIONI_RENT",
+        // NUOVO: Chat (BDC, Back Office...) in basso a sinistra nel Registro contatti e nella pagina Allert.
+        // Solo lettura = legge · Completo = scrive · Accesso Admin = crea e gestisce i gruppi
+        "CHAT",
+        // NUOVO: scheda "Allert" del Front Office in Appuntamenti e ingressi.
+        // Solo lettura = vede i suoi · Completo = li gestisce (e riceve quelli "Al Front Office")
+        // · Accesso Admin = vede e gestisce tutti quelli mandati al Front Office, riapre i gestiti
+        "ALLERT_FO",
+        // NUOVO: Registro doppie chiavi (scheda "Doppie chiavi" in Appuntamenti e ingressi).
+        // Solo lettura = vede · Completo = registra, segna chiamate/messaggi, consegna
+        // · Accesso Admin = in piu' elimina, rimette in sede, toglie i tentativi di chiunque
+        "DOPPIE_CHIAVI"
     );
     // ===== NUOVO: PERMESSI DEI GRAFICI =====
     // Un grafico e' una "sezione" come le altre, salvata nella stessa tabella
@@ -147,8 +158,10 @@ public class RolePermissionService {
     // mano dalla pagina Permessi.
     private static final Map<String, Map<String, String>> DEFAULTS = new HashMap<>();
     static {
-        DEFAULTS.put("UTENTE", Map.of("CONTACTS", "FULL"));
-        DEFAULTS.put("BACK_OFFICE", Map.of("CONTACTS", "FULL", "ALLERT", "FULL"));
+        DEFAULTS.put("UTENTE", Map.of("CONTACTS", "FULL", "CHAT", "FULL"));
+        // NUOVO: il Back Office lavora nella pagina Allert (al posto del Registro contatti, che di
+        // partenza non vede piu'): chi ha "Allert" ma non "Registro Contatti" trova la voce ALLERT nel menu
+        DEFAULTS.put("BACK_OFFICE", Map.of("ALLERT", "FULL", "CHAT", "FULL"));
         // NUOVO: CONSEGNE di default solo a Moderatore, Gestore e Admin (modificabile
         // dalla pagina Permessi). HashMap invece di Map.of perche' Map.of accetta
         // al massimo 10 coppie e GESTORE ne ha 11.
@@ -161,6 +174,8 @@ public class RolePermissionService {
         moderatoreDefaults.put("STOCK", "FULL");
         moderatoreDefaults.put("ALLERT", "ADMIN_FULL");
         moderatoreDefaults.put("QUOTAZIONI_RENT", "FULL");
+        moderatoreDefaults.put("ALLERT_FO", "ADMIN_FULL");
+        moderatoreDefaults.put("DOPPIE_CHIAVI", "ADMIN_FULL");
         DEFAULTS.put("MODERATORE", moderatoreDefaults);
         Map<String, String> gestoreDefaults = new HashMap<>(Map.of(
             "DASHBOARD", "ADMIN_FULL", "FOLLOWUPS", "ADMIN_FULL", "WAITING", "ADMIN_FULL",
@@ -171,6 +186,8 @@ public class RolePermissionService {
         gestoreDefaults.put("STOCK", "ADMIN_FULL");
         gestoreDefaults.put("ALLERT", "ADMIN_FULL");
         gestoreDefaults.put("QUOTAZIONI_RENT", "ADMIN_FULL");
+        gestoreDefaults.put("ALLERT_FO", "ADMIN_FULL");
+        gestoreDefaults.put("DOPPIE_CHIAVI", "ADMIN_FULL");
         DEFAULTS.put("GESTORE", gestoreDefaults);
         Map<String, String> adminDefaults = new HashMap<>();
         adminDefaults.put("DASHBOARD", "ADMIN_FULL");
@@ -189,9 +206,12 @@ public class RolePermissionService {
         adminDefaults.put("ALLERT", "ADMIN_FULL");
         adminDefaults.put("SALONE", "S_ALL");          // Appuntamenti e ingressi: Completo (tutto + chat)
         adminDefaults.put("QUOTAZIONI_RENT", "ADMIN_FULL");
+        adminDefaults.put("CHAT", "FULL");                 // nessuno crea gruppi (Accesso Admin = crea i gruppi: da dare a mano)
+        adminDefaults.put("ALLERT_FO", "ADMIN_FULL");
+        adminDefaults.put("DOPPIE_CHIAVI", "ADMIN_FULL");
         DEFAULTS.put("ADMIN", adminDefaults);
         // NUOVO: Front Office registra e assegna i clienti; Consulenza riceve le notifiche e usa la chat
-        DEFAULTS.put("FRONT_OFFICE", Map.of("SALONE", "S_FO"));
+        DEFAULTS.put("FRONT_OFFICE", Map.of("SALONE", "S_FO", "ALLERT_FO", "FULL", "DOPPIE_CHIAVI", "FULL"));
         DEFAULTS.put("CONSULENZA", Map.of("SALONE", "S_CONS"));
         DEFAULTS.put("NOLEGGIO", Map.of("RENT", "FULL", "SALONE", "S_CONS", "QUOTAZIONI_RENT", "FULL"));   // consulenti del noleggio: come Consulenza, scheda accanto a RENT
         DEFAULTS.put("SERVICE", Map.of("SERVICE", "FULL"));
