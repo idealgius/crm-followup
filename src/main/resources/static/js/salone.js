@@ -771,8 +771,9 @@
           <button type="button" class="sa-x" title="Togli questa vettura">✕</button>`;
         const inp = r.querySelector('.sa-marca'), dd = r.querySelector('.sa-dd'), list = r.querySelector('.sa-dd-l');
         const draw = () => {
-            const q = inp.value.trim().toLowerCase();
-            const L = marche().filter(m => !q || m.toLowerCase().includes(q));
+            // senza accenti e maiuscole ("citroen" o "cit" -> CITROËN); prima i marchi che iniziano cosi'
+            const q = senzaAccenti(inp.value.trim());
+            const L = !q ? marche() : [...marche().filter(m => senzaAccenti(m).startsWith(q)), ...marche().filter(m => !senzaAccenti(m).startsWith(q) && senzaAccenti(m).includes(q))];
             list.innerHTML = L.map(m => `<button type="button" data-m="${esc(m)}">${esc(m)}</button>`).join('') || '<div class="sa-hint" style="padding:8px 10px">Nessun marchio</div>';
         };
         inp.addEventListener('focus', () => { dd.classList.add('open'); draw(); });

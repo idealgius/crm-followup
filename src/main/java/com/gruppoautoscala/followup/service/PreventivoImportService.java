@@ -46,7 +46,7 @@ public class PreventivoImportService {
     // mano. Usata SOLO per normalizzare la scrittura (es. "hyundai" ->
     // "HYUNDAI"), mai per scartare una riga.
     private static final List<String> MARCHE_LIST = List.of(
-        "ALFA ROMEO", "AUDI", "BMW", "BYD", "CITROEN", "CUPRA", "DACIA", "DR", "DS", "EVO",
+        "ALFA ROMEO", "AUDI", "BMW", "BYD", "CITRO\u00cbN", "CUPRA", "DACIA", "DR", "DS", "EVO",
         "FIAT", "FORD", "FERRARI", "HYUNDAI", "ICH-X", "INFINITI", "IVECO", "JAECOO", "JEEP",
         "KIA", "LAMBORGHINI", "LANCIA", "LAND ROVER", "LEAPMOTOR", "MAXUS", "MAZDA",
         "MARCA GENERICA", "MASERATI", "MERCEDES-BENZ", "MG", "MINI", "MITSUBISHI", "NISSAN", "OMODA", "OPEL",
@@ -813,10 +813,16 @@ public class PreventivoImportService {
         return null;
     }
 
+    private static String senzaAccenti(String s) {
+        return java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD).replaceAll("\\p{M}", "").toUpperCase(Locale.ROOT);
+    }
+
     private String normalizeMarca(String raw) {
         if (raw == null) return null;
         String trimmed = raw.trim();
-        for (String m : MARCHE_LIST) if (m.equalsIgnoreCase(trimmed)) return m;
+        // senza badare ad accenti e maiuscole: "Citroen" -> "CITROËN"
+        String k = senzaAccenti(trimmed);
+        for (String m : MARCHE_LIST) if (senzaAccenti(m).equals(k)) return m;
         return trimmed.isEmpty() ? null : trimmed.toUpperCase();
     }
 

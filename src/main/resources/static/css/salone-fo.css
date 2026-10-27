@@ -65,8 +65,8 @@
 .fo-btn { height:40px; padding:0 14px; border-radius:10px; border:1px solid var(--sa-line); background:var(--sa-card); color:var(--sa-ink); font:inherit; font-size:13px; font-weight:700; cursor:pointer; }
 .fo-btn:hover { border-color:var(--sa-acc); }
 
-.fo-form { border-radius:18px; background:var(--sa-card); border:1px solid var(--sa-line); overflow:hidden; }
-.fo-form-h { padding:16px 20px; background:linear-gradient(135deg, #0f3d3a, #12304a); color:#fff; }
+.fo-form { border-radius:18px; background:var(--sa-card); border:1px solid var(--sa-line); }   /* niente overflow:hidden: la tendina del marchio deve uscire */
+.fo-form-h { border-radius:17px 17px 0 0; padding:16px 20px; background:linear-gradient(135deg, #0f3d3a, #12304a); color:#fff; }
 .fo-form-h h3 { margin:0; font-size:16px; font-weight:800; }
 .fo-form-h p { margin:4px 0 0; font-size:12.5px; color:rgba(255,255,255,.78); }
 .fo-form form { padding:16px 20px 20px; display:flex; flex-direction:column; gap:12px; }
@@ -74,6 +74,20 @@
 .fo-form input, .fo-form select, .fo-form textarea { width:100%; height:40px; padding:0 12px; border-radius:10px; border:1.5px solid var(--sa-line); background:var(--sa-bg); color:var(--sa-ink); font:inherit; font-size:14px; font-weight:500; letter-spacing:0; text-transform:none; }
 .fo-form textarea { height:auto; padding:10px 12px; resize:vertical; }
 .fo-form input:focus, .fo-form select:focus, .fo-form textarea:focus { outline:none; border-color:var(--sa-acc); }
+/* marchio: tendina che si apre sempre sotto il campo e filtra mentre si scrive */
+.fo-form .fo-lab { display:flex; flex-direction:column; gap:5px; min-width:0; }
+.fo-dd { position:relative; }
+.fo-form .fo-dd input { padding-right:34px; font-weight:600; text-transform:uppercase; }
+.fo-form .fo-dd input::placeholder { text-transform:none; font-weight:500; }
+.fo-dd-f { position:absolute; right:12px; top:13px; color:var(--sa-ink2); cursor:pointer; transition:transform .15s; }
+.fo-dd.open .fo-dd-f { transform:rotate(180deg); color:var(--sa-acc); }
+.fo-dd-l { display:none; position:absolute; left:0; right:0; top:calc(100% + 4px); z-index:30; max-height:264px; overflow:auto; padding:4px;
+  background:var(--sa-card); border:1.5px solid var(--sa-acc); border-radius:12px; box-shadow:0 18px 34px -12px rgba(0,0,0,.65); }
+.fo-dd.open .fo-dd-l { display:block; }
+.fo-dd-l button { display:block; width:100%; text-align:left; border:0; border-radius:8px; background:transparent; color:var(--sa-ink); font:inherit; font-size:13.5px; font-weight:600; padding:8px 10px; cursor:pointer; }
+.fo-dd-l button:hover { background:rgba(34,195,166,.12); }
+.fo-dd-l button.on { background:var(--sa-acc); color:#04201c; }
+.fo-dd-v { padding:10px; font-size:13px; color:var(--sa-ink2); }
 .fo-form .fo-targa { font-weight:700; letter-spacing:1px; text-transform:uppercase; }
 .fo-2 { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; }
 .fo-form-a { display:flex; gap:8px; justify-content:flex-end; }
@@ -86,6 +100,6 @@
 [data-theme="light"] .fo-err { color:#b42318; }
 
 @media (max-width: 900px) {
-  .fo-form-box { position:static; max-width:none; flex-basis:100%; }
+  .fo-form-box { position:static; max-width:none; flex-basis:100%; order:-1; }   /* su telefono il modulo compare subito sotto il tasto, sopra l'elenco */
   .fo-t { flex:1 1 auto; padding:0 12px; font-size:13px; }
 }

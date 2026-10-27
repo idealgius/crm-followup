@@ -23,6 +23,8 @@ async function loadPreventivi() {
         const res = await fetch(url);
         if (!res.ok) throw new Error('Errore nel caricamento dei preventivi telefonici');
         preventiviData = await res.json();
+        // marchio scritto come nell'elenco ("CITROEN" dei vecchi preventivi -> "CITROËN")
+        if (Array.isArray(preventiviData)) preventiviData.forEach(p => { if (p && p.marca) p.marca = nomeMarca(p.marca); });
     } catch (err) {
         console.error('Errore caricamento preventivi telefonici:', err);
         preventiviData = [];
@@ -55,8 +57,8 @@ function applyPreventiviFilters() {
 
     preventiviFiltered = preventiviData.filter(p => {
         if (searchText) {
-            const haystack = `${p.clienteNome || ''} ${p.clienteCognome || ''} ${p.sourceLeadId || ''} ${p.marca || ''} ${p.modello || ''} ${p.consultantName || ''}`.toLowerCase();
-            if (!haystack.includes(searchText)) return false;
+            const haystack = normalizeText(`${p.clienteNome || ''} ${p.clienteCognome || ''} ${p.sourceLeadId || ''} ${p.marca || ''} ${p.modello || ''} ${p.consultantName || ''}`);
+            if (!haystack.includes(normalizeText(searchText))) return false;
         }
         return (!operatore || p.user?.fullName === operatore) &&
             (!consulente || p.consultantName === consulente) &&
@@ -116,7 +118,7 @@ function showPreventivoMarcheDropdown() { filterPreventivoMarche('', true); }
 function filterPreventivoMarche(query, showAll) {
     const dropdown = document.getElementById('pvMarcaDropdown');
     if (!dropdown) return;
-    const q = (query || '').toLowerCase().trim();
+    const q = normalizeText((query || '').trim());
     let matches = MARCHE_NORMALIZED;
     if (q && !showAll) matches = MARCHE_NORMALIZED.filter(m => m.normalized.includes(q));
     if (matches.length === 0) {
@@ -1420,7 +1422,7 @@ function showEditPreventivoMarcheDropdown() { filterEditPreventivoMarche('', tru
 function filterEditPreventivoMarche(query, showAll) {
     const dropdown = document.getElementById('editPvMarcaDropdown');
     if (!dropdown) return;
-    const q = (query || '').toLowerCase().trim();
+    const q = normalizeText((query || '').trim());
     let matches = MARCHE_NORMALIZED;
     if (q && !showAll) matches = MARCHE_NORMALIZED.filter(m => m.normalized.includes(q));
     if (matches.length === 0) {

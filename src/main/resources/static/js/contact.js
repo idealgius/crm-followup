@@ -133,7 +133,7 @@ const NOLEGGIO_RICHIESTA_LABELS = { 'SOLO_INFO': 'Solo Info', 'RICHIESTA_CLIENTE
 const ACQUISTO_ALERT_LABELS = { 'SI': '🔔 Con Allert', 'NO': 'Senza Allert' };
 const ACQUISTO_ALERT_STATUS_LABELS = { 'DA_GESTIRE': '⚪ Da gestire', 'IN_GESTIONE': '🟡 In gestione', 'GESTITA': '🟢 Gestita' };
 const MARCHE_LIST = [
-    'ALFA ROMEO', 'AUDI', 'BMW', 'BYD', 'CITROEN', 'CUPRA', 'DACIA', 'DR', 'DS', 'EVO',
+    'ALFA ROMEO', 'AUDI', 'BMW', 'BYD', 'CITROËN', 'CUPRA', 'DACIA', 'DR', 'DS', 'EVO',
     'FIAT', 'FORD', 'FERRARI', 'HYUNDAI', 'ICH-X', 'INFINITI', 'IVECO', 'JAECOO', 'JEEP',
     'KIA', 'LAMBORGHINI', 'LANCIA', 'LAND ROVER', 'LEAPMOTOR', 'MAXUS', 'MAZDA',
     'MARCA GENERICA', 'MASERATI', 'MERCEDES-BENZ', 'MG', 'MINI', 'MITSUBISHI', 'NISSAN', 'OMODA', 'OPEL',
@@ -167,6 +167,14 @@ function normalizeText(str) {
         .replace(/ë/g,'e').replace(/é/g,'e').replace(/è/g,'e')
         .replace(/ä/g,'a').replace(/ü/g,'u').replace(/ö/g,'o')
         .replace(/š/g,'s').replace(/č/g,'c').replace(/ž/g,'z');
+}
+// Nome del marchio come nell'elenco (senza badare ad accenti e maiuscole):
+// "citroen", "CITROEN" o "Citroën" diventano tutti "CITROËN". Se non è nell'elenco resta com'è.
+function nomeMarca(m) {
+    if (!m) return m;
+    const k = normalizeText(String(m).trim());
+    const f = MARCHE_NORMALIZED.find(x => x.normalized === k);
+    return f ? f.original : m;
 }
 function clienteNomeCompleto(log) {
     if (log.clienteNome || log.clienteCognome) {
@@ -1311,7 +1319,7 @@ function renderGenericContactDetail(opts) {
                         <div style="font-size:12px;color:var(--text-secondary);margin-top:4px">📅 ${formatDateIT(date)} · 🕐 ${time}</div>
                         <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📞 ${clienteNumeroDisplay(log)}</div>
                         <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">👤 ${log.user.fullName}</div>
-                        ${log.marca ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">🚗 ${log.marca}${log.modello?' · '+log.modello:''}</div>` : ''}
+                        ${log.marca ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">🚗 ${nomeMarca(log.marca)}${log.modello?' · '+log.modello:''}</div>` : ''}
                         ${log.serviceSede ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">📍 Service ${log.serviceSede}</div>` : ''}
                         ${log.serviceTarga ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">🔖 ${log.serviceTarga}</div>` : ''}
                         ${log.consultantName ? `<div style="font-size:12px;color:var(--text-secondary);margin-top:2px">🧑‍💼 ${log.consultantName}</div>` : ''}
@@ -1735,7 +1743,7 @@ function renderChartMarcheCustom(logs) {
     logs.filter(log => log.category === 'Info Vendita' || log.category === 'Info + Appuntamento')
         .forEach(log => {
             if (log.marca) {
-                const mUpper = log.marca.trim().toUpperCase();
+                const mUpper = nomeMarca(log.marca.trim()).toUpperCase();
                 counts[mUpper] = (counts[mUpper]||0) + 1;
             }
         });
@@ -1762,7 +1770,7 @@ function renderChartMarcheCustom(logs) {
 function showMarcaContactDetail(marcaUpper) {
     const items = contactLogsFiltered.filter(l => {
         if (l.category !== 'Info Vendita' && l.category !== 'Info + Appuntamento') return false;
-        return l.marca && l.marca.trim().toUpperCase() === marcaUpper;
+        return l.marca && nomeMarca(l.marca.trim()).toUpperCase() === marcaUpper;
     });
     showGenericContactDetail(`Marca — ${marcaUpper}`, items);
 }
@@ -2287,7 +2295,7 @@ function openAlertAnagraficaModal(id) {
     document.getElementById('alertAnagraficaNumero').value = log.clienteNumero || '';
     document.getElementById('alertAnagraficaNumero2').value = log.clienteNumero2 || '';
     document.getElementById('alertAnagraficaEmail').value = log.clienteEmail || '';
-    document.getElementById('alertAnagraficaMarca').value = log.marca || '';
+    document.getElementById('alertAnagraficaMarca').value = nomeMarca(log.marca) || '';
     document.getElementById('alertAnagraficaModello').value = log.modello || '';
     document.getElementById('alertAnagraficaModal').style.display = 'flex';
     bringModalToFront('alertAnagraficaModal');
@@ -2431,7 +2439,7 @@ function refreshAcquistoAlertModalDisplay(log) {
                 📋 Tipologia: ${log.otherNote || '—'}
                 ${log.acquistoNote ? `<br>📝 Nota: ${log.acquistoNote}` : ''}
                 ${log.notaAggiuntiva ? `<br>📝 Nota aggiuntiva: ${log.notaAggiuntiva}` : ''}
-                ${log.marca ? `<br>🚗 Veicolo: ${log.marca}${log.modello ? ' ' + log.modello : ''}` : ''}
+                ${log.marca ? `<br>🚗 Veicolo: ${nomeMarca(log.marca)}${log.modello ? ' ' + log.modello : ''}` : ''}
                 ${log.serviceTarga ? `<br>🔖 Targa: ${log.serviceTarga}` : ''}
                 ${log.consultantName ? `<br>🧑‍💼 Consulente: ${log.consultantName}` : ''}
                 ${linkParts.length ? `<br>${linkParts.join(' · ')}` : ''}
@@ -3410,7 +3418,7 @@ function renderContactRow(log) {
     const targetIsAdmin = log.user.role === 'ADMIN';
     const canEdit = targetIsAdmin ? canWriteAdminOwned('CONTACTS') : canWrite('CONTACTS');
     const catClass = log.category.replace(/[\s+]/g, '_');
-    const marca = log.marca || log.noleggioMarca;
+    const marca = nomeMarca(log.marca || log.noleggioMarca);
     const modello = log.modello || log.noleggioModello;
     const alert = hasAcquistoAlert(log);
     const alertVisual = alert ? acquistoAlertVisual(log) : null;
@@ -3493,7 +3501,7 @@ function printDay(date) {
     win.document.write(`<html><head><title>Registro ${date}</title><style>body{font-family:Arial,sans-serif;font-size:12px;padding:20px}h2{font-size:16px;margin-bottom:10px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ccc;padding:6px 10px;text-align:left}th{background:#f0f0f0;font-weight:700;font-size:10px;text-transform:uppercase}@page{margin:15mm}</style></head><body>
         <h2>Registro Contatti — ${formatDateIT(date)}</h2>
         <table><thead><tr><th>Orario</th><th>Cliente</th><th>Categoria</th><th>Dettaglio</th><th>Marca/Modello</th><th>Operatore</th></tr></thead><tbody>
-        ${dayLogs.map(log => `<tr><td>${log.contactDate.split('T')[1].substring(0,5)}</td><td>${clienteNomeCompleto(log)}<br>${clienteNumeroDisplay(log)}</td><td>${log.category}</td><td>${log.noleggioTipo||log.serviceTipo||log.otherNote||'—'}</td><td>${(log.marca||log.noleggioMarca)?(log.marca||log.noleggioMarca)+((log.modello||log.noleggioModello)?' '+(log.modello||log.noleggioModello):''):'—'}</td><td>${log.user.fullName}</td></tr>`).join('')}
+        ${dayLogs.map(log => `<tr><td>${log.contactDate.split('T')[1].substring(0,5)}</td><td>${clienteNomeCompleto(log)}<br>${clienteNumeroDisplay(log)}</td><td>${log.category}</td><td>${log.noleggioTipo||log.serviceTipo||log.otherNote||'—'}</td><td>${(log.marca||log.noleggioMarca)?nomeMarca(log.marca||log.noleggioMarca)+((log.modello||log.noleggioModello)?' '+(log.modello||log.noleggioModello):''):'—'}</td><td>${log.user.fullName}</td></tr>`).join('')}
         </tbody></table></body></html>`);
     win.document.close();
     win.print();
@@ -3948,30 +3956,30 @@ function openEditContactModal(id, logData) {
     setVal('editContactCognome', log.clienteCognome);
     setVal('editContactNumero', log.clienteNumero || (clienteNumeroDisplay(log) !== '—' ? clienteNumeroDisplay(log) : ''));
     setVal('editContactTarga', log.category === 'Service' ? log.serviceTarga : '');
-    setVal('editContactServiceMarcaInput', log.marca);
-    setVal('editContactServiceMarca', log.marca);
+    setVal('editContactServiceMarcaInput', nomeMarca(log.marca));
+    setVal('editContactServiceMarca', nomeMarca(log.marca));
     setVal('editContactServiceModello', log.modello);
     setVal('editContactServiceNote', log.serviceNote);
     // NUOVO: campi dedicati "Info Acquisto effettuato" — prima non
     // esistevano nel modal, quindi non venivano mai popolati né salvati.
     setVal('editContactAcquistoTipo', log.otherNote);
     setVal('editContactAcquistoNote', log.acquistoNote);
-    setVal('editContactAcquistoMarca', log.category === 'Info Acquisto effettuato' ? log.marca : '');
+    setVal('editContactAcquistoMarca', log.category === 'Info Acquisto effettuato' ? nomeMarca(log.marca) : '');
     setVal('editContactAcquistoModello', log.category === 'Info Acquisto effettuato' ? log.modello : '');
     setVal('editContactAcquistoTarga', log.category === 'Info Acquisto effettuato' ? log.serviceTarga : '');
     setVal('editContactAcquistoConsulente', log.category === 'Info Acquisto effettuato' ? log.consultantName : '');
     // NUOVO: Pratica Leasing/Finanziamento/Amministrazione.
     const isLeasingFinCat = log.category === 'Pratica Leasing' || log.category === 'Pratica Finanziamento' || log.category === 'Amministrazione';
-    setVal('editContactLeasingMarcaInput', isLeasingFinCat ? log.marca : '');
-    setVal('editContactLeasingMarca', isLeasingFinCat ? log.marca : '');
+    setVal('editContactLeasingMarcaInput', isLeasingFinCat ? nomeMarca(log.marca) : '');
+    setVal('editContactLeasingMarca', isLeasingFinCat ? nomeMarca(log.marca) : '');
     setVal('editContactLeasingModello', isLeasingFinCat ? log.modello : '');
     setVal('editContactLeasingTarga', isLeasingFinCat ? log.serviceTarga : '');
     // NUOVO: nota universale — prima non era MAI editabile dopo la
     // creazione, per nessuna categoria.
     setVal('editContactNotaAggiuntiva', log.notaAggiuntiva);
     // Campi generici marca/modello (Info Vendita e simili)
-    setVal('editContactMarcaInput', isVenditaLikeCategory(log.category) ? log.marca : '');
-    setVal('editContactMarca', isVenditaLikeCategory(log.category) ? log.marca : '');
+    setVal('editContactMarcaInput', isVenditaLikeCategory(log.category) ? nomeMarca(log.marca) : '');
+    setVal('editContactMarca', isVenditaLikeCategory(log.category) ? nomeMarca(log.marca) : '');
     setVal('editContactModello', isVenditaLikeCategory(log.category) ? log.modello : '');
     setVal('editContactLinkAuto', log.linkAuto);
     setVal('editContactFonte', log.fonte);
