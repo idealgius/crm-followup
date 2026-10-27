@@ -1956,8 +1956,10 @@
         if (t3 === 'bar') nuovo('saChStati', { type: 'bar', data: { labels: cons, datasets: Object.keys(STATI).map(k => ({
                 label: STATI[k].t, data: cons.map(c => { const t = C.T[c], g = t.giorni.size; return g ? Math.round(t[k] / g) : 0; }),
                 backgroundColor: COL[k], borderColor: card, borderWidth: { right: 2 }, borderSkipped: false, maxBarThickness: 22 })) },
-            options: { responsive: true, maintainAspectRatio: false, animation: false, indexAxis: 'y',
-                plugins: { legend: { display: false }, tooltip: Object.assign({ mode: 'index', intersect: false, callbacks: { label: x => ` ${x.dataset.label}: ${durata(x.raw)} al giorno` } }, tip) },
+            // barre orizzontali: il consulente sotto il mouse si cerca lungo l'asse verticale (axis 'y'),
+            // altrimenti Chart.js prende la barra piu' vicina in orizzontale e mostra il consulente sbagliato
+            options: { responsive: true, maintainAspectRatio: false, animation: false, indexAxis: 'y', interaction: { mode: 'index', axis: 'y', intersect: false },
+                plugins: { legend: { display: false }, tooltip: Object.assign({ mode: 'index', axis: 'y', intersect: false, callbacks: { label: x => ` ${x.dataset.label}: ${durata(x.raw)} al giorno` } }, tip) },
                 scales: { x: { stacked: true, beginAtZero: true, title: { display: true, text: 'minuti medi al giorno', color: ink2 }, ticks: { color: ink2 }, grid: { color: line }, border: { display: false } },
                           y: { stacked: true, grid: { display: false }, ticks: { color: ink, autoSkip: false, font: { size: 12.5 } }, border: { display: false } } } } });
         else if (t3 === 'doughnut') {
