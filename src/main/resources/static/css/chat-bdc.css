@@ -150,6 +150,8 @@
 
 /* altri pulsanti in basso a sinistra: salgono sopra la Chat */
 body.cb-on #inbAvvisi { bottom:80px !important; }
+/* nella home di scelta area la chat non c'e' mai, neanche per un istante */
+body.mh-home-on .cb { display:none !important; }
 
 /* tema chiaro */
 [data-theme="light"] .cb-side { background:rgba(0,0,0,.025); }

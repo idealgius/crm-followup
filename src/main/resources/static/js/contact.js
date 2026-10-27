@@ -729,7 +729,7 @@ function checkAcquistoAlertDaGestire() {
         const date = alertDate.split('T')[0];
         const time = alertDate.split('T')[1]?.substring(0,5) || '';
         const visual = acquistoAlertVisual(log);
-        return `<div class="followup-card" style="margin-bottom:10px;cursor:pointer;border-left:4px solid ${visual.color}" onclick="closeAcquistoAlertDaGestireModal();openAcquistoAlertModal(${log.id})">
+        return `<div class="followup-card" style="margin-bottom:10px;cursor:pointer;border-left:4px solid ${visual.color}" onclick="openAcquistoAlertModal(${log.id})">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
                 <div>
                     <div style="font-weight:800;color:${visual.color};font-size:14px">${visual.icon} ${clienteNomeCompleto(log)}</div>
@@ -1172,7 +1172,10 @@ async function openAllAlertsModal() {
 // 2) Sotto-filtro a pillole Da gestire / In gestione / Gestita — visibile
 //    solo quando il filtro allert è attivo.
 // ============================================================
-function renderGenericContactDetail() {
+function renderGenericContactDetail(opts) {
+    // NUOVO: opts.dietro = aggiornamento dal vivo (es. cambio stato di un allert aperto sopra):
+    // l'elenco si ridisegna ma RESTA DIETRO e non perde il punto in cui si era
+    const dietro = !!(opts && opts.dietro);
     const modal = document.getElementById('sedeDetailModal');
     const titleEl = document.getElementById('sedeDetailTitle');
     const list = document.getElementById('sedeDetailList');
@@ -1325,9 +1328,11 @@ function renderGenericContactDetail() {
             </div>`;
         }).join('');
     }
+    const scorri = dietro ? [list.scrollTop, (list.closest('.modal-body') || {}).scrollTop] : null;
     list.innerHTML = html;
     modal.style.display = 'flex';
-    bringModalToFront('sedeDetailModal');
+    if (dietro) { list.scrollTop = scorri[0]; const mb = list.closest('.modal-body'); if (mb && scorri[1] != null) mb.scrollTop = scorri[1]; }
+    else bringModalToFront('sedeDetailModal');
 }
 
 function toggleDetailNominativoFilter() {
@@ -2083,8 +2088,19 @@ function renderAlertDestinatariList(users) {
     `).join('');
 }
 
+// NUOVO: "Al Front Office" — esclude "Invia a tutti"; si possono aggiungere anche persone precise.
+// Il server aggiunge da solo tutti i Front Office ai destinatari (alertFrontOffice: true).
+function toggleAlertFrontOffice(prefisso) {
+    const fo = document.getElementById(prefisso + 'AlertFrontOffice');
+    const tutti = document.getElementById(prefisso + 'AlertInviaATutti');
+    if (fo && fo.checked && tutti && tutti.checked) {
+        tutti.checked = false;
+        if (prefisso === 'contact') toggleAlertInviaATutti(); else toggleEditAlertInviaATutti();
+    }
+}
 function toggleAlertInviaATutti() {
     const checked = document.getElementById('contactAlertInviaATutti')?.checked;
+    if (checked) { const fo = document.getElementById('contactAlertFrontOffice'); if (fo) fo.checked = false; }
     const wrapper = document.getElementById('contactAlertDestinatariListWrapper');
     if (wrapper) wrapper.style.display = checked ? 'none' : 'block';
     if (!checked) loadUsersForAlertDestinatari();
@@ -2096,7 +2112,8 @@ function getAlertDestinatariPayload() {
     const inviaATutti = document.getElementById('contactAlertInviaATutti')?.checked !== false;
     if (inviaATutti) return { alertNotifyAll: true, alertRecipientIds: null };
     const checked = Array.from(document.querySelectorAll('.contact-alert-destinatario-checkbox:checked')).map(cb => Number(cb.value));
-    return { alertNotifyAll: false, alertRecipientIds: checked };
+    const frontOffice = !!document.getElementById('contactAlertFrontOffice')?.checked;
+    return { alertNotifyAll: false, alertRecipientIds: checked, alertFrontOffice: frontOffice };
 }
 
 // Un allert è visibile (popup automatico / lista Da Gestire) per l'utente
@@ -2803,7 +2820,7 @@ function applyUpdatedLogEverywhere(updatedLog) {
         lastDetailItems[detailIdx] = updatedLog;
         const detailModal = document.getElementById('sedeDetailModal');
         if (detailModal && detailModal.style.display === 'flex') {
-            renderGenericContactDetail();
+            renderGenericContactDetail({ dietro: true });
         }
     }
 
@@ -2834,7 +2851,7 @@ function refreshAcquistoAlertDaGestireModalLive() {
         const date = log.contactDate.split('T')[0];
         const time = log.contactDate.split('T')[1]?.substring(0,5) || '';
         const visual = acquistoAlertVisual(log);
-        return `<div class="followup-card" style="margin-bottom:10px;cursor:pointer;border-left:4px solid ${visual.color}" onclick="closeAcquistoAlertDaGestireModal();openAcquistoAlertModal(${log.id})">
+        return `<div class="followup-card" style="margin-bottom:10px;cursor:pointer;border-left:4px solid ${visual.color}" onclick="openAcquistoAlertModal(${log.id})">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
                 <div>
                     <div style="font-weight:800;color:${visual.color};font-size:14px">${visual.icon} ${clienteNomeCompleto(log)}</div>
@@ -3842,6 +3859,7 @@ async function createContactLog() {
         acquistoAlert: isAcquisto ? acquistoAlert : (isLeasingFin ? leasingAlert : false),
         alertNotifyAll: destinatariPayload.alertNotifyAll,
         alertRecipientIds: destinatariPayload.alertRecipientIds,
+        alertFrontOffice: !!destinatariPayload.alertFrontOffice,
         // NUOVO: se non attivo (checkbox spuntato di default), la mail
         // dell'allert non parte in automatico — resta da inviare a mano.
         inviaEmailAllert: document.getElementById('contactAlertInviaEmail')?.checked !== false,
@@ -3917,6 +3935,8 @@ function openEditContactModal(id, logData) {
     if (editAlertDestRow) editAlertDestRow.style.display = 'none';
     const editAlertInviaATutti = document.getElementById('editContactAlertInviaATutti');
     if (editAlertInviaATutti) editAlertInviaATutti.checked = true;
+    const editFrontOffice = document.getElementById('editContactAlertFrontOffice');
+    if (editFrontOffice) editFrontOffice.checked = false;
     const editAlertInviaEmail = document.getElementById('editContactAlertInviaEmail');
     if (editAlertInviaEmail) editAlertInviaEmail.checked = true;
     const categorySelect = document.getElementById('editContactCategory');
@@ -4050,6 +4070,7 @@ function renderEditAlertDestinatariList(users) {
 
 function toggleEditAlertInviaATutti() {
     const checked = document.getElementById('editContactAlertInviaATutti')?.checked;
+    if (checked) { const fo = document.getElementById('editContactAlertFrontOffice'); if (fo) fo.checked = false; }
     const wrapper = document.getElementById('editContactAlertDestinatariListWrapper');
     if (wrapper) wrapper.style.display = checked ? 'none' : 'block';
     if (!checked) loadUsersForEditAlertDestinatari();
@@ -4059,7 +4080,7 @@ function getEditAlertDestinatariPayload() {
     const inviaATutti = document.getElementById('editContactAlertInviaATutti')?.checked !== false;
     if (inviaATutti) return { alertNotifyAll: true, alertRecipientIds: null };
     const ids = Array.from(document.querySelectorAll('.edit-contact-alert-destinatario-checkbox:checked')).map(cb => Number(cb.value));
-    return { alertNotifyAll: false, alertRecipientIds: ids };
+    return { alertNotifyAll: false, alertRecipientIds: ids, alertFrontOffice: !!document.getElementById('editContactAlertFrontOffice')?.checked };
 }
 async function saveEditContactLog() {
     if (!editingContactId) return;
@@ -4201,6 +4222,8 @@ function hideNewContactForm() {
     if (leasingAlertHiddenReset) leasingAlertHiddenReset.value = 'false';
     const inviaATuttiEl = document.getElementById('contactAlertInviaATutti');
     if (inviaATuttiEl) inviaATuttiEl.checked = true;
+    const frontOfficeEl = document.getElementById('contactAlertFrontOffice');
+    if (frontOfficeEl) frontOfficeEl.checked = false;
     const inviaEmailEl = document.getElementById('contactAlertInviaEmail');
     if (inviaEmailEl) inviaEmailEl.checked = true;
     const nonComEl = document.getElementById('nonComunicaNominativo');
@@ -4542,7 +4565,7 @@ async function aggiornaAvvisoAllert() {
             .sort((a, b) => allertQuando(a).localeCompare(allertQuando(b)));
         disegnaAvvisoAllert();
         const m = document.getElementById('allertSospesiModal');
-        if (m && m.style.display === 'flex') apriElencoAllertSospesi();
+        if (m && m.style.display === 'flex') apriElencoAllertSospesi(true);   // aggiornamento: resta dov'e' (anche dietro)
     } catch (err) { /* riprova al prossimo giro */ }
 }
 function disegnaAvvisoAllert() {
@@ -4566,7 +4589,7 @@ function disegnaAvvisoAllert() {
             <button type="button" data-x title="Nascondi">✕</button>`;
     } else if (chip) chip.remove();
 }
-function apriElencoAllertSospesi() {
+function apriElencoAllertSospesi(aggiorna) {
     let ov = document.getElementById('allertSospesiModal');
     if (!ov) {
         ov = document.createElement('div'); ov.id = 'allertSospesiModal';
@@ -4576,10 +4599,10 @@ function apriElencoAllertSospesi() {
             const a = e.target.closest('[data-apri]'); if (!a) return;
             const log = allertSospesi.find(l => String(l.id) === a.dataset.apri); if (!log) return;
             if (!contactLogs.some(l => l.id === log.id)) contactLogs.push(log);
-            ov.style.display = 'none';
-            openAcquistoAlertModal(log.id);
+            openAcquistoAlertModal(log.id);   // NUOVO: l'elenco resta aperto dietro (la scheda dell'allert va sopra)
         });
-        document.addEventListener('keydown', e => { if (e.key === 'Escape') ov.style.display = 'none'; });
+        // Esc chiude l'elenco solo se sopra non c'e' aperta la scheda di un allert
+        document.addEventListener('keydown', e => { if (e.key === 'Escape' && (document.getElementById('acquistoAlertModal') || {}).style?.display !== 'flex') ov.style.display = 'none'; });
     }
     const esc = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const dataIt = iso => iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)} ${iso.slice(11, 16)}` : '';
@@ -4601,7 +4624,10 @@ function apriElencoAllertSospesi() {
           <button type="button" data-chiudi aria-label="Chiudi">✕</button></header>
         <div class="as-list">${allertSospesi.length ? `<table><thead><tr><th>Da</th><th>Cliente</th><th>Categoria</th><th>Segnalato da</th><th>Quando</th><th></th></tr></thead><tbody>
           ${righe('⚪ Da gestire', da)}${righe('🟡 In gestione', inG)}</tbody></table>` : '<p class="as-vuoto">Nessun allert in sospeso 👍</p>'}</div></div>`;
+    const lst = ov.querySelector('.as-list'); if (aggiorna && lst && apriElencoAllertSospesi._s) lst.scrollTop = apriElencoAllertSospesi._s;
+    if (lst) lst.addEventListener('scroll', () => { apriElencoAllertSospesi._s = lst.scrollTop; });
     ov.style.display = 'flex';
+    if (!aggiorna && typeof bringModalToFront === 'function') bringModalToFront('allertSospesiModal');   // aperto a mano: davanti
 }
 function stiliAvvisoAllert() {
     if (document.getElementById('allertSospesiStyle')) return;

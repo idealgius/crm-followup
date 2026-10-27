@@ -339,7 +339,19 @@
         clearInterval(timer);
         timer = setInterval(() => { if (!document.hidden || Date.now() % 15000 < 4000) aggiorna(); }, 4000);
     }
-    setInterval(aggiornaVisibile, 800);
+    // la chat si accende/spegne nell'istante in cui cambia la pagina (non solo al giro di controllo)
+    let osservati = false;
+    function osserva() {
+        if (osservati) return;
+        const els = ['mainApp', 'contactsPage', 'allertPage'].map(id => document.getElementById(id)).filter(Boolean);
+        if (!els.length) return;
+        osservati = true;
+        const mo = new MutationObserver(aggiornaVisibile);
+        mo.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+        els.forEach(e => mo.observe(e, { attributes: true, attributeFilter: ['style', 'class'] }));
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', osserva); else osserva();
+    setInterval(() => { osserva(); aggiornaVisibile(); }, 800);
     const attesa = setInterval(() => { if (typeof currentUser !== 'undefined' && currentUser) { clearInterval(attesa); avvia(); } }, 1200);
 
     // per le altre pagine (es. Allert del Back Office): manda un allert in una chat

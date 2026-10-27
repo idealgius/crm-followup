@@ -1,8 +1,8 @@
 /* PAGINA ALLERT (Back Office) — js/allert-bo.js */
-#allertPage { --ap-card:var(--bg-card, #10141f); --ap-bd:#2a3350; --ap-tx:var(--text-primary, #fff); --ap-tx2:var(--text-secondary, #8a8faa); --ap-in:var(--input-bg, #0b0f19);
+#allertPage, .ap-scope { --ap-card:var(--bg-card, #10141f); --ap-bd:#2a3350; --ap-tx:var(--text-primary, #fff); --ap-tx2:var(--text-secondary, #8a8faa); --ap-in:var(--input-bg, #0b0f19);
   --ap-row:#222a42; --ap-gold:#f0c040; color:var(--ap-tx); }
-[data-theme="light"] #allertPage { --ap-bd:#d6deea; --ap-row:#e6ebf3; }
-#allertPage * { box-sizing:border-box; }
+[data-theme="light"] #allertPage, [data-theme="light"] .ap-scope { --ap-bd:#d6deea; --ap-row:#e6ebf3; }
+#allertPage *, .ap-scope * { box-sizing:border-box; }
 .ap-wrap { display:flex; flex-direction:column; gap:18px; }
 .ap-top { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; flex-wrap:wrap; }
 .ap-top h1 { margin:0; font-size:22px; font-weight:800; letter-spacing:3px; color:var(--heading-accent, var(--ap-tx)); }
@@ -160,6 +160,23 @@ body.ap-on #allertSospesiChip { display:none !important; }
   .ap-d-az .ap-btn { flex:1 1 auto; }
   .ap-dl { grid-template-columns:minmax(0, 1fr) minmax(0, 1fr); }
   .ap-d-vuoto { display:none; }
-  body.ap-dett-on .cb, body.ap-dett-on #inbAvvisi { display:none !important; }
+  body.ap-dett-on .cb, body.ap-dett-on #inbAvvisi, body.ap-dett-on .sa-chat { display:none !important; }
 }
 @media (prefers-reduced-motion: reduce) { #apToast { transition:none; } }
+
+/* ===== Allert del Front Office (scheda "Allert" di Appuntamenti e ingressi): colori del salone ===== */
+.ap-scope.ap-fo { --ap-gold:#22c3a6; --ap-card:var(--sa-card, var(--bg-card, #171a23)); --ap-bd:var(--border, #2a2e3b); --ap-in:var(--sa-bg, var(--bg-primary, #0f1117)); }
+.ap-fo .ap-top h1 { color:var(--ap-tx); font-size:20px; letter-spacing:2px; }
+.ap-fo .ap-tabs button.on, .ap-fo .ap-big.gi { color:#062a24; }
+.ap-fo .ap-big.gi:hover { background:#3fd6b9; }
+.ap-fo .ap-btn:hover { border-color:#22c3a6; }
+.ap-fo .ap-r:hover { background:rgba(34,195,166,.05); }
+.ap-fo .ap-r.on { background:rgba(34,195,166,.09); }
+.ap-fo .ap-chips button.on { background:rgba(34,195,166,.12); color:#5fe0c8; }
+.ap-fo .ap-pill.IN_GESTIONE { background:rgba(34,195,166,.16); color:#5fe0c8; }
+.ap-fo .ap-k.in { border-top-color:#22c3a6; }
+.ap-fo .ap-d-top { background:linear-gradient(135deg, rgba(15,61,58,.55), rgba(18,48,74,.35)); }
+.ap-fo .ap-link, .ap-fo .ap-bz, .ap-fo .ap-bozza, .ap-fo .ap-d-back { color:#22c3a6; }
+.ap-fo .ap-btn-chiave { border-color:#22c3a6; color:#5fe0c8; }
+[data-theme="light"] .ap-fo .ap-chips button.on, [data-theme="light"] .ap-fo .ap-pill.IN_GESTIONE, [data-theme="light"] .ap-fo .ap-btn-chiave { color:#0f7f6b; }
+[data-theme="light"] .ap-fo .ap-d-top { background:rgba(34,195,166,.08); }

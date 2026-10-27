@@ -1,0 +1,90 @@
+/* FRONT OFFICE in Appuntamenti e ingressi — js/salone-fo.js (prefisso fo-). Colori del salone (--sa-*). */
+.sa-tab .fo-n { display:inline-flex; align-items:center; justify-content:center; min-width:20px; height:20px; margin-left:8px; padding:0 6px; border-radius:999px; background:#e91e63; color:#fff; font-style:normal; font-size:11px; font-weight:900; vertical-align:1px; }
+#foAllertRoot .ap-wrap { padding-top:4px; }
+
+.fo-wrap { display:flex; flex-direction:column; gap:16px; color:var(--sa-ink); }
+.fo-wrap * { box-sizing:border-box; }
+.fo-head { display:flex; flex-direction:column; gap:14px; }
+.fo-top { display:flex; align-items:flex-end; justify-content:space-between; gap:14px; flex-wrap:wrap; }
+.fo-nuova { display:inline-flex; align-items:center; gap:8px; }
+.fo-top h2 { margin:0; font-size:20px; font-weight:800; letter-spacing:2px; }
+.fo-top p { margin:6px 0 0; font-size:13px; color:var(--sa-ink2); }
+.fo-err { margin:0; padding:10px 14px; border-radius:12px; background:rgba(239,68,68,.12); border:1px solid rgba(239,68,68,.4); color:#ffb4b4; font-size:13px; }
+.fo-mut { margin:0; font-size:12.5px; color:var(--sa-ink2); }
+
+.fo-f { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.fo-t { display:inline-flex; align-items:center; gap:8px; height:44px; padding:0 16px; border-radius:12px; border:1px solid var(--sa-line); background:var(--sa-card); color:var(--sa-ink); font:inherit; font-size:13.5px; font-weight:800; cursor:pointer; }
+.fo-t i { width:9px; height:9px; border-radius:50%; background:#f4a83a; }
+.fo-t.SEDE i { background:#22c3a6; } .fo-t.CONSEGNATA i { background:#4fb3ff; }
+.fo-t b { font-size:12px; opacity:.8; }
+.fo-t.on.MANCA { border-color:#f4a83a; background:rgba(244,168,58,.14); color:#f4c07a; }
+.fo-t.on.SEDE { border-color:#22c3a6; background:rgba(34,195,166,.14); color:#5fe0c8; }
+.fo-t.on.CONSEGNATA { border-color:#4fb3ff; background:rgba(79,179,255,.12); color:#8ccbff; }
+.fo-cerca { flex:1 1 240px; display:flex; align-items:center; gap:8px; height:44px; padding:0 14px; border-radius:12px; background:var(--sa-card); border:1px solid var(--sa-line); color:var(--sa-ink2); }
+.fo-cerca:focus-within { border-color:var(--sa-acc); }
+.fo-cerca input { flex:1; min-width:0; height:40px; border:0; outline:0; background:transparent; color:var(--sa-ink); font:inherit; font-size:14px; }
+
+.fo-main { display:flex; gap:18px; align-items:flex-start; flex-wrap:wrap; }
+.fo-list-box { flex:999 1 600px; min-width:0; }
+.fo-form-box { flex:1 1 340px; max-width:420px; min-width:0; position:sticky; top:84px; }
+.fo-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap:14px; }
+.fo-vuoto { grid-column:1 / -1; margin:0; padding:40px 20px; text-align:center; color:var(--sa-ink2); border:1px dashed var(--sa-line); border-radius:18px; }
+.fo-altre { grid-column:1 / -1; justify-self:center; }
+
+.fo-k { display:flex; flex-direction:column; gap:12px; padding:16px 18px; border-radius:18px; background:var(--sa-card); border:1px solid var(--sa-line); border-top:3px solid #f4a83a; min-width:0; }
+.fo-k.SEDE { border-top-color:#22c3a6; } .fo-k.CONSEGNATA { border-top-color:#4fb3ff; }
+.fo-k-h { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
+.fo-k-h > div { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.fo-k-h b { font-size:16px; font-weight:800; overflow-wrap:anywhere; }
+.fo-k-h span { font-size:13px; color:var(--sa-ink2); }
+.fo-k-h strong { color:var(--sa-ink); letter-spacing:1px; white-space:nowrap; }
+.fo-pill { flex:none; padding:4px 10px; border-radius:999px; font-size:11.5px; font-weight:800; white-space:nowrap; background:rgba(244,168,58,.16); color:#f4c07a; }
+.fo-pill.SEDE { background:rgba(34,195,166,.16); color:#5fe0c8; } .fo-pill.CONSEGNATA { background:rgba(79,179,255,.14); color:#8ccbff; }
+.fo-k-r { font-style:normal; font-size:12px; color:var(--sa-ink2); }
+.fo-k-n { margin:0; padding:10px 12px; border-radius:10px; background:var(--sa-bg); font-size:13px; line-height:1.45; overflow-wrap:anywhere; }
+.fo-big { height:44px; padding:0 16px; border-radius:12px; border:0; background:var(--sa-acc); color:#062a24; font:inherit; font-size:14px; font-weight:800; cursor:pointer; }
+.fo-big:hover { background:#3fd6b9; }
+.fo-big.ok { background:transparent; border:1px solid var(--sa-acc); color:#5fe0c8; }
+.fo-big.ok:hover { background:rgba(34,195,166,.12); }
+.fo-big:disabled, .fo-tent button:disabled { opacity:.55; cursor:default; }
+.fo-tent { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; }
+.fo-tent button { display:flex; align-items:center; justify-content:center; gap:8px; height:46px; border-radius:12px; border:1px solid var(--sa-line); background:var(--sa-bg); color:var(--sa-ink); font:inherit; font-size:13.5px; font-weight:700; cursor:pointer; }
+.fo-tent button:hover { border-color:var(--sa-acc); }
+.fo-tent i { font-style:normal; min-width:22px; height:22px; padding:0 6px; border-radius:999px; display:inline-flex; align-items:center; justify-content:center; font-size:12px; font-weight:800; }
+.fo-tent i.c { background:rgba(34,195,166,.18); color:#5fe0c8; } .fo-tent i.m { background:rgba(79,179,255,.18); color:#8ccbff; }
+.fo-log { margin:0; padding:10px 0 0; list-style:none; display:flex; flex-direction:column; gap:6px; border-top:1px solid var(--sa-line); max-height:170px; overflow:auto; }
+.fo-log li { display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--sa-ink2); }
+.fo-log li b { color:var(--sa-ink); }
+.fo-log li i { flex:none; width:8px; height:8px; border-radius:50%; background:#22c3a6; }
+.fo-log li i.m { background:#4fb3ff; }
+.fo-k-a { display:flex; gap:14px; flex-wrap:wrap; }
+.fo-k-a:empty { display:none; }
+.fo-link { align-self:flex-start; border:0; background:none; padding:0; color:var(--sa-acc); font:inherit; font-size:12.5px; font-weight:700; cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
+.fo-link.rosso { color:#ff8f9c; }
+.fo-btn { height:40px; padding:0 14px; border-radius:10px; border:1px solid var(--sa-line); background:var(--sa-card); color:var(--sa-ink); font:inherit; font-size:13px; font-weight:700; cursor:pointer; }
+.fo-btn:hover { border-color:var(--sa-acc); }
+
+.fo-form { border-radius:18px; background:var(--sa-card); border:1px solid var(--sa-line); overflow:hidden; }
+.fo-form-h { padding:16px 20px; background:linear-gradient(135deg, #0f3d3a, #12304a); color:#fff; }
+.fo-form-h h3 { margin:0; font-size:16px; font-weight:800; }
+.fo-form-h p { margin:4px 0 0; font-size:12.5px; color:rgba(255,255,255,.78); }
+.fo-form form { padding:16px 20px 20px; display:flex; flex-direction:column; gap:12px; }
+.fo-form label { display:flex; flex-direction:column; gap:5px; font-size:11px; font-weight:800; letter-spacing:.8px; text-transform:uppercase; color:var(--sa-ink2); min-width:0; }
+.fo-form input, .fo-form select, .fo-form textarea { width:100%; height:40px; padding:0 12px; border-radius:10px; border:1.5px solid var(--sa-line); background:var(--sa-bg); color:var(--sa-ink); font:inherit; font-size:14px; font-weight:500; letter-spacing:0; text-transform:none; }
+.fo-form textarea { height:auto; padding:10px 12px; resize:vertical; }
+.fo-form input:focus, .fo-form select:focus, .fo-form textarea:focus { outline:none; border-color:var(--sa-acc); }
+.fo-form .fo-targa { font-weight:700; letter-spacing:1px; text-transform:uppercase; }
+.fo-2 { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:10px; }
+.fo-form-a { display:flex; gap:8px; justify-content:flex-end; }
+.fo-form-a .fo-big { flex:1; }
+
+[data-theme="light"] .fo-t.on.MANCA, [data-theme="light"] .fo-pill { color:#a35a00; }
+[data-theme="light"] .fo-t.on.SEDE, [data-theme="light"] .fo-pill.SEDE, [data-theme="light"] .fo-tent i.c, [data-theme="light"] .fo-big.ok { color:#0f7f6b; }
+[data-theme="light"] .fo-t.on.CONSEGNATA, [data-theme="light"] .fo-pill.CONSEGNATA, [data-theme="light"] .fo-tent i.m { color:#1b6fb3; }
+[data-theme="light"] .fo-link { color:#0f7f6b; }
+[data-theme="light"] .fo-err { color:#b42318; }
+
+@media (max-width: 900px) {
+  .fo-form-box { position:static; max-width:none; flex-basis:100%; }
+  .fo-t { flex:1 1 auto; padding:0 12px; font-size:13px; }
+}

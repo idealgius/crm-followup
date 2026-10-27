@@ -12,22 +12,27 @@
    "Scheda completa" apre la finestra allert di sempre (contact.js: anagrafica, destinatari, mail).
    ===================================================================== */
 (function () {
-    const ROOT = 'allertRoot';
     const RUOLI_PAGINA = ['BACK_OFFICE', 'MODERATORE', 'GESTORE', 'ADMIN'];
     const VEDONO_TUTTO = ['MODERATORE', 'GESTORE', 'ADMIN'];
     const STATI = { DA_GESTIRE: 'Da gestire', IN_GESTIONE: 'In gestione', GESTITA: 'Gestita' };
-    let dati = [], info = {}, tab = 'DA_GESTIRE', cerca = '', tipoF = '', ordine = 'vecchi', selId = null;
-    let gestiteGiorni = 30, primo = true, visti = new Set(), stomp = null, timer = null, inCarica = null, rinvio = 0, dettaglioInSospeso = false;
-    const bozze = {};          // id -> { g: nota gestione, c: nota chiusura } scritte e non ancora salvate
-
     const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const io = () => (typeof currentUser !== 'undefined' && currentUser) || null;
     const ruolo = () => (io() || {}).role || '';
     const puo = () => RUOLI_PAGINA.includes(ruolo());
-    const root = () => document.getElementById(ROOT);
-    const pagina = () => document.getElementById('allertPage');
-    const visibile = () => { const p = pagina(); return !!p && p.style.display !== 'none'; };
     const stretto = () => window.matchMedia('(max-width: 900px)').matches;
+    const ISTANZE = [];
+
+    /* Una pagina di allert. La stessa serve:
+       - al Back Office (pagina #allert, questa sotto: BO)
+       - al Front Office (scheda "Allert" di Appuntamenti e ingressi, salone-fo.js: AllertPage.crea({...}))
+       cfg: root() elemento, visibile(), fo (true = allert del Front Office, colori del salone), titolo,
+            sottotitolo(), torna (pulsante "Torna al Registro"), sfondo() (si aggiorna anche se non e' aperta),
+            azioniExtra(l) html, clicExtra(e, l) -> true se gestito, onDati(dati) */
+    function crea(cfg) {
+    const root = cfg.root, visibile = cfg.visibile;
+    let dati = [], info = {}, tab = 'DA_GESTIRE', cerca = '', tipoF = '', ordine = 'vecchi', selId = null;
+    let gestiteGiorni = 30, primo = true, visti = new Set(), stomp = null, timer = null, inCarica = null, rinvio = 0, dettaglioInSospeso = false;
+    const bozze = {};          // id -> { g: nota gestione, c: nota chiusura } scritte e non ancora salvate
 
     /* ---------- date: quelle scritte dal server sono in UTC (vedi formatDateTimeIT in contact.js) ---------- */
     const dUtc = iso => { if (!iso) return null; const d = new Date(/Z$|[+-]\d\d:\d\d$/.test(iso) ? iso : iso + 'Z'); return isNaN(d) ? null : d; };
@@ -55,17 +60,18 @@
         if (inCarica) return inCarica;
         inCarica = (async () => {
             try {
-                const r = await fetch('/api/contacts/allert-pagina?gestiteGiorni=' + gestiteGiorni, { cache: 'no-store' });
+                const r = await fetch('/api/contacts/allert-pagina?gestiteGiorni=' + gestiteGiorni + (cfg.fo ? '&fo=1' : ''), { cache: 'no-store' });
                 const d = await r.json().catch(() => ({}));
                 if (!r.ok) { info = { errore: d.error || 'Errore ' + r.status }; dati = []; disegna(); return; }
                 info = d;
                 let L = Array.isArray(d.allert) ? d.allert : [];
                 // un allert mandato a persone precise lo vedono solo loro (dal Moderatore in su si vede tutto);
                 // lo filtra gia' il server, qui e' solo una sicurezza in piu'
-                if (!VEDONO_TUTTO.includes(ruolo())) L = L.filter(l => l.alertNotifyAll !== false || perMe(l));
+                if (cfg.fo ? ruolo() === 'FRONT_OFFICE' : !VEDONO_TUTTO.includes(ruolo())) L = L.filter(l => (!cfg.fo && l.alertNotifyAll !== false) || perMe(l));
                 avvisaNuovi(L);
                 dati = L;
                 sincronizzaContatti(L);
+                if (cfg.onDati) cfg.onDati(dati);
                 disegna();
             } catch (e) { /* rete: si riprova al prossimo giro */ }
             finally { inCarica = null; }
@@ -93,7 +99,7 @@
         if (stomp || !window.StompJs || !window.SockJS) return;
         try {
             stomp = new StompJs.Client({ webSocketFactory: () => new SockJS('/ws'), reconnectDelay: 5000,
-                onConnect: () => { stomp.subscribe('/topic/contacts', () => { if (visibile() || ruolo() === 'BACK_OFFICE') caricaPresto(); }); vivo(true); },
+                onConnect: () => { stomp.subscribe('/topic/contacts', () => { if (visibile() || (cfg.sfondo && cfg.sfondo())) caricaPresto(); }); vivo(true); },
                 onWebSocketClose: () => vivo(false), onDisconnect: () => vivo(false) });
             stomp.activate();
         } catch (e) { stomp = null; }
@@ -116,9 +122,7 @@
     const sel = () => dati.find(l => l.id === selId) || null;
 
     /* ---------- disegno ---------- */
-    function sottotitolo() {
-        return VEDONO_TUTTO.includes(ruolo()) ? 'Tutti gli allert' : 'Gli allert segnalati a tutti e quelli mandati a te';
-    }
+    function sottotitolo() { return cfg.sottotitolo(); }
     function kpi() {
         const da = dati.filter(l => stato(l) === 'DA_GESTIRE'), inG = dati.filter(l => stato(l) === 'IN_GESTIONE');
         const vecchio = da.reduce((m, l) => Math.max(m, giorniDa(quandoSegnalato(l))), 0);
@@ -198,9 +202,10 @@
             <div class="ap-d-sub">${esc(l.category)}${l.category === 'Info Acquisto effettuato' ? ' · <b>' + esc(tipo(l)) + '</b>' : ''}</div>
             <div class="ap-d-az">
               ${tel ? `<a class="ap-btn ap-btn-v" href="tel:${esc(tel)}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>Chiama ${esc(l.clienteNumero)}</a>` : ''}
+              ${cfg.azioniExtra ? cfg.azioniExtra(l) : ''}
               <button type="button" class="ap-btn" data-storico>Storico cliente</button>
-              <button type="button" class="ap-btn" data-scheda title="Anagrafica, destinatari, mail: la finestra allert di sempre">Scheda completa</button>
-              ${window.ChatBdc ? '<button type="button" class="ap-btn" data-chat title="Manda questo allert in una chat">Invia in chat</button>' : ''}
+              ${cfg.fo ? '' : '<button type="button" class="ap-btn" data-scheda title="Anagrafica, destinatari, mail: la finestra allert di sempre">Scheda completa</button>'}
+              ${window.ChatBdc && !cfg.fo ? '<button type="button" class="ap-btn" data-chat title="Manda questo allert in una chat">Invia in chat</button>' : ''}
             </div>
           </div>
           <dl class="ap-dl">
@@ -215,7 +220,7 @@
           </dl>
           <div class="ap-sez"><div class="ap-tit">Cronologia</div>${cronologia(l)}</div>
           <div class="ap-sez ap-g">
-            ${!gest ? '<p class="ap-mut">Puoi vedere gli allert ma non gestirli (permesso Allert nella pagina Permessi).</p>' : ''}
+            ${!gest ? `<p class="ap-mut">Puoi vedere gli allert ma non gestirli${cfg.fo ? '' : ' (permesso Allert nella pagina Permessi)'}.</p>` : ''}
             ${chiusa ? `${notaG ? `<div class="ap-tit">Nota di gestione</div><p class="ap-nota">${esc(notaG).replace(/\n/g, '<br>')}</p>` : ''}${notaC ? `<div class="ap-tit">Nota di chiusura</div><p class="ap-nota">${esc(notaC).replace(/\n/g, '<br>')}</p>` : ''}<p class="ap-mut">Allert gestito: può riaprirlo solo un Moderatore o un Admin.</p>` : `
               <label class="ap-tit" for="apNotaG">Nota di gestione</label>
               <textarea id="apNotaG" rows="3" data-nota="g" placeholder="Cosa hai fatto, cosa hai detto al cliente…" ${gest ? '' : 'disabled'}>${esc(notaG)}</textarea>
@@ -246,7 +251,7 @@
         if (lb.querySelector('.ap-list')) lb.querySelector('.ap-list').scrollTop = sc;
         if (scrivendo) dettaglioInSospeso = true; else disegnaDettaglio();
         r.querySelector('.ap-main').classList.toggle('ap-aperto', stretto() && !!sel());
-        document.body.classList.toggle('ap-dett-on', visibile() && stretto() && !!sel());
+        if (visibile()) document.body.classList.toggle('ap-dett-on', stretto() && !!sel());
     }
     function disegnaDettaglio() {
         const r = root(); if (!r) return;
@@ -255,8 +260,8 @@
     }
     function costruisci() {
         const r = root();
-        r.innerHTML = `<div class="ap-wrap">
-          <div class="ap-top"><div>${ruolo() !== 'BACK_OFFICE' ? '<button type="button" class="ap-torna" data-torna>← Torna al Registro contatti</button>' : ''}<h1>GESTIONE ALLERT</h1><p class="ap-sub"></p></div>
+        r.innerHTML = `<div class="ap-wrap ap-scope${cfg.fo ? ' ap-fo' : ''}">
+          <div class="ap-top"><div>${cfg.torna && cfg.torna() ? '<button type="button" class="ap-torna" data-torna>← Torna al Registro contatti</button>' : ''}<h1>${esc(cfg.titolo)}</h1><p class="ap-sub"></p></div>
             <div class="ap-top-a"><span class="ap-live ${connesso ? '' : 'off'}" title="Si aggiorna da solo quando arriva o cambia un allert"><i></i>In tempo reale</span>
               <button type="button" class="ap-btn" data-excel><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>Excel</button></div></div>
           <div class="ap-kpi-box"></div>
@@ -292,6 +297,7 @@
         const r = t.closest('.ap-r[data-id]'); if (r) { scegli(+r.dataset.id); return; }
         if (t.closest('[data-indietro]')) { selId = null; disegna(); return; }
         const l = sel(); if (!l) return;
+        if (cfg.clicExtra && cfg.clicExtra(e, l)) return;
         if (t.closest('[data-storico]')) { storico(l); return; }
         if (t.closest('[data-scheda]')) { schedaCompleta(l); return; }
         if (t.closest('[data-chat]')) { window.ChatBdc && ChatBdc.condividiAllert({ id: l.id, cliente: cliente(l), tipo: tipo(l), stato: STATI[stato(l)] }); return; }
@@ -388,7 +394,7 @@
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'Allert');
         const nome = { DA_GESTIRE: 'da-gestire', IN_GESTIONE: 'in-gestione', GESTITA: 'gestite', TUTTI: 'tutti' }[tab];
-        XLSX.writeFile(wb, 'allert-' + nome + '-' + new Date().toISOString().slice(0, 10) + '.xlsx');
+        XLSX.writeFile(wb, 'allert-' + (cfg.fo ? 'front-office-' : '') + nome + '-' + new Date().toISOString().slice(0, 10) + '.xlsx');
     }
 
     /* ---------- apertura dalla chat / dal link nella mail ---------- */
@@ -404,6 +410,33 @@
         selId = id; disegna();
         const r = root().querySelector(`.ap-r[data-id="${id}"]`); if (r) r.scrollIntoView({ block: 'center' });
     }
+    async function apri() {
+        collega();
+        if (!root().querySelector('.ap-wrap')) costruisci();
+        await carica();
+        avviaGiro();
+    }
+    function avviaGiro() {
+        if (timer) return;
+        timer = setInterval(() => { if (visibile() || (cfg.sfondo && cfg.sfondo())) carica(); }, 60 * 1000);
+    }
+    function aggiornaUno(log) { const i = dati.findIndex(x => x.id === log.id); if (i < 0) return; dati[i] = log; if (cfg.onDati) cfg.onDati(dati); if (visibile()) disegna(); }
+    function chiudiDettaglio() { if (stretto() && selId) { selId = null; disegna(); return true; } return false; }
+    const ist = { apri, carica, seleziona, collega, avviaGiro, aggiornaUno, chiudiDettaglio, disegna, visibile, dati: () => dati, messaggio };
+    ISTANZE.push(ist);
+    return ist;
+    }   // fine crea()
+
+    /* ================= la pagina del Back Office (#allert) ================= */
+    const BO = crea({
+        root: () => document.getElementById('allertRoot'),
+        visibile: () => { const p = document.getElementById('allertPage'); return !!p && p.style.display !== 'none'; },
+        titolo: 'GESTIONE ALLERT',
+        sottotitolo: () => VEDONO_TUTTO.includes(ruolo()) ? 'Tutti gli allert' : 'Gli allert segnalati a tutti e quelli mandati a te',
+        torna: () => ruolo() !== 'BACK_OFFICE',
+        sfondo: () => ruolo() === 'BACK_OFFICE'
+    });
+    const visibile = BO.visibile, seleziona = BO.seleziona;
     window.apriAllertDaChat = function (id) {
         if (visibile()) { seleziona(id); return; }
         if (puo() && typeof showPage === 'function') { showPage('allert').then(() => seleziona(id)); return; }
@@ -419,7 +452,7 @@
         const orig = window.applyUpdatedLogEverywhere;
         window.applyUpdatedLogEverywhere = function (log) {
             try { return orig.apply(this, arguments); }
-            finally { if (log && log.id && dati.some(x => x.id === log.id)) { const i = dati.findIndex(x => x.id === log.id); dati[i] = log; if (visibile()) disegna(); } }
+            finally { if (log && log.id) ISTANZE.forEach(x => x.aggiornaUno(log)); }
         };
     }
 
@@ -427,21 +460,17 @@
     async function apri() {
         if (!puo()) return;
         document.body.classList.add('ap-on');
-        collega();
-        if (!root().querySelector('.ap-wrap')) costruisci();
-        await carica();
-        avviaGiro();
-    }
-    function avviaGiro() {
-        if (timer) return;
-        timer = setInterval(() => { if (visibile() || ruolo() === 'BACK_OFFICE') carica(); }, 60 * 1000);
+        await BO.apri();
     }
     // il Back Office riceve gli avvisi dei nuovi allert anche se e' su un'altra pagina
-    const attesa = setInterval(() => { if (!io()) return; clearInterval(attesa); if (ruolo() === 'BACK_OFFICE') { collega(); carica(); avviaGiro(); } }, 1500);
+    const attesa = setInterval(() => { if (!io()) return; clearInterval(attesa); if (ruolo() === 'BACK_OFFICE') { BO.collega(); BO.carica(); BO.avviaGiro(); } }, 1500);
     // fuori dalla pagina: via le classi
-    setInterval(() => { if (!visibile()) document.body.classList.remove('ap-on', 'ap-dett-on'); else document.body.classList.add('ap-on'); }, 700);
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && visibile() && stretto() && selId && !document.querySelector('.modal-overlay[style*="flex"]')) { selId = null; disegna(); } });
-    window.addEventListener('resize', () => { if (visibile()) disegna(); });
+    setInterval(() => {
+        document.body.classList.toggle('ap-on', visibile());
+        if (!ISTANZE.some(x => x.visibile())) document.body.classList.remove('ap-dett-on');
+    }, 700);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !document.querySelector('.modal-overlay[style*="flex"]')) ISTANZE.some(x => x.visibile() && x.chiudiDettaglio()); });
+    window.addEventListener('resize', () => ISTANZE.forEach(x => { if (x.visibile()) x.disegna(); }));
 
     /* ---------- dal Registro: pulsante "Vedi finestra allert" nella finestra 🔔 ALLERT ---------- */
     function pulsanteRegistro(mostra) {
@@ -464,5 +493,5 @@
         window.openAllAlertsModal = async function () { const r = await orig.apply(this, arguments); pulsanteRegistro(puo()); return r; };
     }
 
-    window.AllertPage = { puo, apri, carica, seleziona };
+    window.AllertPage = { puo, apri, carica: BO.carica, seleziona, crea };
 })();

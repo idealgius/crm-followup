@@ -361,6 +361,7 @@
             st.tab = b.dataset.tab;
             disegnaSchede();
             if (st.tab === 'app') { if (!st.app.caricato) caricaApp(st.app.giorno); else { render(); caricaApp(st.app.giorno); } }
+            else if (window.SaloneFO && SaloneFO.mia(st.tab)) render();          // NUOVO: Allert e Doppie chiavi del Front Office (salone-fo.js)
             else if (st.tab === 'report' && !st.rep.dati) caricaReport();
             else { render(); if (st.tab === 'walkin') caricaGiorno(st.giorno, true); }   // dati sempre freschi cambiando scheda
         });
@@ -377,7 +378,7 @@
     }
     function disegnaSchede() {
         const t = root.querySelector('.sa-tabs');
-        const L = [['walkin', '🚶 Walk-in'], ['app', '📅 Appuntamenti']].concat(st.vedeReport ? [['report', '📊 Report']] : []);
+        const L = [['walkin', '🚶 Walk-in'], ['app', '📅 Appuntamenti']].concat(window.SaloneFO ? SaloneFO.voci() : [], st.vedeReport ? [['report', '📊 Report']] : []);
         if (!L.some(x => x[0] === st.tab)) st.tab = 'walkin';
         t.innerHTML = L.map(([k, n]) => `<button type="button" class="sa-tab ${st.tab === k ? 'on' : ''}" data-tab="${k}" role="tab" aria-selected="${st.tab === k}">${n}</button>`).join('');
     }
@@ -482,6 +483,7 @@
         const body = root && root.querySelector('#saBody'); if (!body) return;
         if (st.tab === 'app') { renderApp(body); return; }
         if (st.tab === 'report') { renderReport(body); return; }
+        if (window.SaloneFO && SaloneFO.mia(st.tab)) { SaloneFO.render(st.tab, body); return; }
         const L = st.ingressi.slice().sort((a, b) => (a.ora < b.ora ? -1 : a.ora > b.ora ? 1 : 0) * (st.verso === 'desc' ? -1 : 1));
         const isOggi = st.giorno === oggi();
         const assegnati = st.ingressi.filter(r => r.consulente).length, presi = st.ingressi.filter(r => r.presoAt).length;
@@ -563,6 +565,7 @@
     }
 
     async function onClick(e) {
+        if (window.SaloneFO && SaloneFO.mia(st.tab)) return;          // le schede del Front Office gestiscono i loro clic
         const mn = e.target.closest('[data-menu]'); if (mn) { menuStato(mn, mn.dataset.menu); return; }
         const so = e.target.closest('[data-stato]'); if (so) { cambiaStato(so.dataset.stato); return; }
         if (st.tab === 'app' && await onClickApp(e)) return;
@@ -590,6 +593,7 @@
     }
     const spostaMese = (mese, d) => { const [y, mm] = mese.split('-').map(Number); const n = new Date(Date.UTC(y, mm - 1 + d, 1)); return n.getUTCFullYear() + '-' + pad(n.getUTCMonth() + 1); };
     async function onChange(e) {
+        if (window.SaloneFO && SaloneFO.mia(st.tab)) return;
         if (st.tab === 'app') { onChangeApp(e); return; }
         if (st.tab === 'report') { onChangeReport(e); return; }
         const s = e.target.closest('[data-assegna]'); if (!s) return;
@@ -2388,5 +2392,7 @@
         return { mostra, ascolta, perMe };
     })();
 
-    window.Salone = { can, canFull, entraDiretto, refreshNav, open, hide };
+    // NUOVO: per salone-fo.js — schede ridisegnate (numeri), passaggio a una scheda, elenco marchi
+    function vai(tab) { if (!root) return; st.tab = tab; disegnaSchede(); render(); }
+    window.Salone = { can, canFull, entraDiretto, refreshNav, open, hide, marche, vai, schede: () => { if (root) disegnaSchede(); } };
 })();

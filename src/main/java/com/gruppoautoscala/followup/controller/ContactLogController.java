@@ -44,6 +44,34 @@ public class ContactLogController {
         return rolePermissionService.getEffectiveAccess(userId, role, "ALLERT");
     }
 
+    // ===== NUOVO: allert al FRONT OFFICE =====
+    // "Al Front Office" (Registro contatti) = allert mandato a persone precise: tutti i Front Office
+    // attivi in quel momento (piu' le eventuali persone spuntate). Nessuna colonna nuova: lo
+    // vedono nella scheda "Allert" di Appuntamenti e ingressi (salone-fo.js) e lo gestiscono loro.
+    private static final String FRONT_OFFICE = "FRONT_OFFICE";
+
+    private List<User> utentiFrontOffice() {
+        return userRepository.findAll().stream().filter(u -> FRONT_OFFICE.equals(u.getRole())).collect(Collectors.toList());
+    }
+
+    private static boolean destinatario(ContactLog l, Long userId) {
+        return Boolean.FALSE.equals(l.getAlertNotifyAll()) && l.getAlertRecipients() != null
+                && l.getAlertRecipients().stream().anyMatch(u -> u != null && userId.equals(u.getId()));
+    }
+
+    private static boolean perFrontOffice(ContactLog l) {
+        return Boolean.FALSE.equals(l.getAlertNotifyAll()) && l.getAlertRecipients() != null
+                && l.getAlertRecipients().stream().anyMatch(u -> u != null && FRONT_OFFICE.equals(u.getRole()));
+    }
+
+    /** aggiunge tutti i Front Office ai destinatari (senza doppioni) */
+    private void aggiungiFrontOffice(ContactLog log) {
+        List<User> dest = new java.util.ArrayList<>(log.getAlertRecipients() == null ? List.of() : log.getAlertRecipients());
+        for (User u : utentiFrontOffice()) if (dest.stream().noneMatch(x -> x.getId().equals(u.getId()))) dest.add(u);
+        log.setAlertNotifyAll(false);
+        log.setAlertRecipients(dest);
+    }
+
     // campi che riguardano solo la gestione dell'allert (stato, note, destinatari)
     private static final java.util.Set<String> ALERT_MGMT_KEYS = java.util.Set.of(
             "acquistoAlertStatus", "acquistoAlertNoteGestione", "acquistoAlertNoteGestita", "alertNotifyAll", "alertRecipientIds");
@@ -340,6 +368,8 @@ public class ContactLogController {
                         .collect(Collectors.toList());
                 log.setAlertRecipients(explicitRecipients);
             }
+            // NUOVO: "Al Front Office"
+            if (Boolean.TRUE.equals(body.get("alertFrontOffice"))) aggiungiFrontOffice(log);
             log = contactLogService.update(log);
         }
 
@@ -435,7 +465,9 @@ public class ContactLogController {
                 || (!body.isEmpty() && ALERT_MGMT_KEYS.containsAll(body.keySet()));
         if (isTouchingAlertManagement) {
             String acc = alertAccess(userId, role);
-            if (!rolePermissionService.hasAtLeast(acc, "FULL")) {
+            // NUOVO: il Front Office gestisce gli allert mandati a lui (scheda Allert del salone)
+            boolean frontOfficeSuo = FRONT_OFFICE.equals(role) && destinatario(log, userId);
+            if (!rolePermissionService.hasAtLeast(acc, "FULL") && !frontOfficeSuo) {
                 return ResponseEntity.status(403).body(Map.of("error", "Non hai il permesso per gestire gli Allert"));
             }
             // Un allert GESTITO si puo' riaprire (rimetterlo in gestione o togliere
@@ -493,6 +525,8 @@ public class ContactLogController {
                     .collect(Collectors.toList());
             log.setAlertRecipients(recipients);
         }
+        // NUOVO: "Al Front Office" anche modificando il contatto
+        if (Boolean.TRUE.equals(body.get("alertFrontOffice"))) aggiungiFrontOffice(log);
 
         // ===== ALLERT — cambio stato: valorizza automaticamente "chi" e "quando" =====
         // Quando lo stato passa a IN_GESTIONE o GESTITA, registriamo l'utente corrente
@@ -744,21 +778,25 @@ public class ContactLogController {
     @GetMapping("/allert-pagina")
     public ResponseEntity<?> getAllertPagina(
             @RequestParam(required = false, defaultValue = "30") int gestiteGiorni,
+            @RequestParam(required = false, defaultValue = "false") boolean fo,
             HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");
         if (userId == null) return ResponseEntity.status(401).body(Map.of("error", "Non autenticato"));
         String role = (String) session.getAttribute("userRole");
         String acc = alertAccess(userId, role);
-        if (!rolePermissionService.hasAtLeast(acc, "READ_ONLY")) {
+        boolean vedeTutti = "MODERATORE".equals(role) || "GESTORE".equals(role) || "ADMIN".equals(role);
+        boolean frontOffice = FRONT_OFFICE.equals(role);
+        // fo=1: scheda Allert del Front Office (il Front Office vede i suoi, dal Moderatore in su
+        // quelli mandati al Front Office); senza: pagina Allert del Back Office
+        if (fo ? !(frontOffice || vedeTutti) : !rolePermissionService.hasAtLeast(acc, "READ_ONLY")) {
             return ResponseEntity.status(403).body(Map.of("error", "Non hai il permesso per vedere gli Allert"));
         }
-        boolean vedeTutti = "MODERATORE".equals(role) || "GESTORE".equals(role) || "ADMIN".equals(role);
         LocalDateTime limite = gestiteGiorni > 0 ? LocalDateTime.now().minusDays(gestiteGiorni) : null;
         long[] gestiteNascoste = {0};
         List<Map<String, Object>> allert = contactLogService.getAll().stream()
             .filter(l -> Boolean.TRUE.equals(l.getAcquistoAlert()) && ALERT_CATEGORIES.contains(l.getCategory()))
-            .filter(l -> vedeTutti || !Boolean.FALSE.equals(l.getAlertNotifyAll())
-                    || (l.getAlertRecipients() != null && l.getAlertRecipients().stream().anyMatch(u -> u != null && userId.equals(u.getId()))))
+            .filter(l -> fo ? (vedeTutti ? perFrontOffice(l) : destinatario(l, userId))
+                    : (vedeTutti || !Boolean.FALSE.equals(l.getAlertNotifyAll()) || destinatario(l, userId)))
             .filter(l -> {
                 if (limite == null || !"GESTITA".equals(l.getAcquistoAlertStatus())) return true;
                 LocalDateTime q = l.getAcquistoAlertGestitaAt() != null ? l.getAcquistoAlertGestitaAt()
@@ -774,7 +812,7 @@ public class ContactLogController {
         out.put("gestiteGiorni", gestiteGiorni);
         out.put("gestiteNascoste", gestiteNascoste[0]);
         out.put("vedeTutti", vedeTutti);
-        out.put("puoGestire", rolePermissionService.hasAtLeast(acc, "FULL"));
+        out.put("puoGestire", rolePermissionService.hasAtLeast(acc, "FULL") || (fo && frontOffice));
         out.put("puoRiaprire", rolePermissionService.hasAtLeast(acc, "ADMIN_FULL"));
         return ResponseEntity.ok(out);
     }
