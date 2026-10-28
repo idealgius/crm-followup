@@ -46,12 +46,12 @@ public class PreventivoImportService {
     // mano. Usata SOLO per normalizzare la scrittura (es. "hyundai" ->
     // "HYUNDAI"), mai per scartare una riga.
     private static final List<String> MARCHE_LIST = List.of(
-        "ALFA ROMEO", "AUDI", "BMW", "BYD", "CITRO\u00cbN", "CUPRA", "DACIA", "DR", "DS", "EVO",
-        "FIAT", "FORD", "FERRARI", "HYUNDAI", "ICH-X", "INFINITI", "IVECO", "JAECOO", "JEEP",
-        "KIA", "LAMBORGHINI", "LANCIA", "LAND ROVER", "LEAPMOTOR", "MAXUS", "MAZDA",
-        "MARCA GENERICA", "MASERATI", "MERCEDES-BENZ", "MG", "MINI", "MITSUBISHI", "NISSAN", "OMODA", "OPEL",
-        "PEUGEOT", "PORSCHE", "RENAULT", "SAAB", "SEAT", "SKODA", "SMART", "SPORTEQUIPE",
-        "SUZUKI", "SWM", "TIGER", "TOYOTA", "TESLA", "VOLKSWAGEN"
+        "ALFA ROMEO", "AUDI", "BMW", "BYD", "CITRO\u00cbN", "CUPRA", "DACIA", "DR", "DS",
+        "EVO", "FERRARI", "FIAT", "FORD", "HYUNDAI", "ICH-X", "INFINITI", "IVECO", "JAECOO",
+        "JEEP", "KIA", "LAMBORGHINI", "LANCIA", "LAND ROVER", "LEAPMOTOR", "MAHINDRA", "MARCA GENERICA", "MASERATI",
+        "MAXUS", "MAZDA", "MERCEDES-BENZ", "MG", "MINI", "MITSUBISHI", "NISSAN", "OMODA", "OPEL",
+        "PEUGEOT", "PORSCHE", "RENAULT", "SAAB", "SEAT", "SKODA", "SMART", "SPORTEQUIPE", "SUZUKI",
+        "SWM", "TESLA", "TIGER", "TOYOTA", "VOLKSWAGEN"
     );
 
     // Stessa lista consulenti della tendina in index.html — idem, solo

@@ -28,8 +28,8 @@
         'adminPage', 'rentPage', 'servicePage', 'veicoliPage', 'preventiviPage', 'allChartsPage', 'consegnePage', 'stockPage', 'commercialePage'];
     const MESI = ['gennaio', 'febbraio', 'marzo', 'aprile', 'maggio', 'giugno', 'luglio', 'agosto', 'settembre', 'ottobre', 'novembre', 'dicembre'];
     const GG = ['lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom'];
-    const MARCHE_RISERVA = ['Alfa Romeo', 'Audi', 'BMW', 'BYD', 'Citroën', 'Cupra', 'Dacia', 'DR', 'DS', 'Fiat', 'Ford', 'Hyundai', 'ICH-X', 'Jeep', 'Kia', 'Lancia', 'Mazda',
-        'Mercedes-Benz', 'MG', 'Mini', 'Nissan', 'Opel', 'Peugeot', 'Renault', 'Seat', 'Skoda', 'Sportequipe', 'Suzuki', 'Tesla', 'Toyota', 'Volkswagen', 'Volvo'];
+    const MARCHE_RISERVA = ['Alfa Romeo', 'Audi', 'BMW', 'BYD', 'Citroën', 'Cupra', 'Dacia', 'DR', 'DS', 'Fiat', 'Ford', 'Hyundai', 'ICH-X', 'Jeep', 'Kia', 'Lancia', 'Mahindra',
+        'Mazda', 'Mercedes-Benz', 'MG', 'Mini', 'Nissan', 'Opel', 'Peugeot', 'Renault', 'Seat', 'Skoda', 'Sportequipe', 'Suzuki', 'Tesla', 'Toyota', 'Volkswagen', 'Volvo'];
     const marche = () => (typeof MARCHE_LIST !== 'undefined' && Array.isArray(MARCHE_LIST) && MARCHE_LIST.length ? MARCHE_LIST : MARCHE_RISERVA);
     /* bollini */
     const STATI = {

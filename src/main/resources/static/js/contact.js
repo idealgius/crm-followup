@@ -132,14 +132,16 @@ const NOLEGGIO_TIPO_LIST = ['Privato', 'Partita IVA', 'Noleggio per aziende'];
 const NOLEGGIO_RICHIESTA_LABELS = { 'SOLO_INFO': 'Solo Info', 'RICHIESTA_CLIENTE': 'Richiesta Cliente' };
 const ACQUISTO_ALERT_LABELS = { 'SI': '🔔 Con Allert', 'NO': 'Senza Allert' };
 const ACQUISTO_ALERT_STATUS_LABELS = { 'DA_GESTIRE': '⚪ Da gestire', 'IN_GESTIONE': '🟡 In gestione', 'GESTITA': '🟢 Gestita' };
+// Tutti i marchi dei menu a tendina del CRM. Si possono aggiungere in qualunque punto:
+// l'elenco viene comunque messo in ordine alfabetico qui sotto (senza badare agli accenti).
 const MARCHE_LIST = [
-    'ALFA ROMEO', 'AUDI', 'BMW', 'BYD', 'CITROËN', 'CUPRA', 'DACIA', 'DR', 'DS', 'EVO',
-    'FIAT', 'FORD', 'FERRARI', 'HYUNDAI', 'ICH-X', 'INFINITI', 'IVECO', 'JAECOO', 'JEEP',
-    'KIA', 'LAMBORGHINI', 'LANCIA', 'LAND ROVER', 'LEAPMOTOR', 'MAXUS', 'MAZDA',
-    'MARCA GENERICA', 'MASERATI', 'MERCEDES-BENZ', 'MG', 'MINI', 'MITSUBISHI', 'NISSAN', 'OMODA', 'OPEL',
-    'PEUGEOT', 'PORSCHE', 'RENAULT', 'SAAB', 'SEAT', 'SKODA', 'SMART', 'SPORTEQUIPE',
-    'SUZUKI', 'SWM', 'TIGER', 'TOYOTA', 'TESLA', 'VOLKSWAGEN'
-];
+    'ALFA ROMEO', 'AUDI', 'BMW', 'BYD', 'CITROËN', 'CUPRA', 'DACIA', 'DR', 'DS',
+    'EVO', 'FERRARI', 'FIAT', 'FORD', 'HYUNDAI', 'ICH-X', 'INFINITI', 'IVECO', 'JAECOO',
+    'JEEP', 'KIA', 'LAMBORGHINI', 'LANCIA', 'LAND ROVER', 'LEAPMOTOR', 'MAHINDRA', 'MARCA GENERICA', 'MASERATI',
+    'MAXUS', 'MAZDA', 'MERCEDES-BENZ', 'MG', 'MINI', 'MITSUBISHI', 'NISSAN', 'OMODA', 'OPEL',
+    'PEUGEOT', 'PORSCHE', 'RENAULT', 'SAAB', 'SEAT', 'SKODA', 'SMART', 'SPORTEQUIPE', 'SUZUKI',
+    'SWM', 'TESLA', 'TIGER', 'TOYOTA', 'VOLKSWAGEN'
+].sort((a, b) => a.localeCompare(b, 'it', { sensitivity: 'base' }));
 const MARCHE_NORMALIZED = MARCHE_LIST.map(m => ({
     original: m,
     normalized: m.toLowerCase()
