@@ -276,28 +276,15 @@
         page.style.height = Math.max(420, window.innerHeight - top) + 'px';
     }
     window.addEventListener('resize', () => { if (inAvz) altezzaAvz(); });
+    // AGGIORNATO: si apre come PAGINA INTERA (non piu' nel riquadro): il server del CRM vieta di mostrare
+    // le sue pagine dentro un riquadro (intestazione di sicurezza), quindi il riquadro restava bianco.
+    // Stessa sessione; il tasto "← BI" dell'Avanzamento riporta a /#bi. Anche "indietro" del browser
+    // torna alla pagina BI (prima di uscire l'indirizzo del CRM diventa #bi).
     function openAvanzamento(foglio) {
         if (!canAvanzamento()) return;
-        hide();
-        hideBI();
-        stopInboundLiveUpdates();
-        hideAllPages();
-        inConsegne = false; inStock = false; inComm = false; inAvz = true;
-        setNavLinksVisible(false);
-        document.body.removeAttribute('data-role-theme');
-        setBadge('AVANZAMENTO');
-        const page = document.getElementById('avanzamentoPage');
-        if (page) page.style.display = 'block';
-        const fr = document.getElementById('avanzamentoFrame');
-        if (fr) {
-            const f = /^(m([1-9]|1[0-2])|FOR|FV|CRU|WIP|DB|PLA|REG)$/.test(foglio || '') ? foglio : '';
-            if (!fr.getAttribute('src')) fr.setAttribute('src', '/avanzamento.html?v=' + AVZ_V + (f ? '#' + f : ''));
-            else if (f) { try { fr.contentWindow.location.hash = f; } catch (e) { /* */ } }
-        }
-        altezzaAvz();
-        history.replaceState(null, '', window.location.pathname + '#avanzamento');
-        sessionStorage.setItem('currentPage', 'avanzamento');
-        window.scrollTo(0, 0);
+        const f = /^(m([1-9]|1[0-2])|FOR|FV|CRU|WIP|DB|PLA|REG)$/.test(foglio || '') ? foglio : '';
+        try { history.replaceState(null, '', window.location.pathname + '#bi'); sessionStorage.setItem('currentPage', 'bi'); } catch (e) { /* */ }
+        window.location.href = '/avanzamento.html?v=' + AVZ_V + (f ? '#' + f : '');
     }
 
     function template() {
