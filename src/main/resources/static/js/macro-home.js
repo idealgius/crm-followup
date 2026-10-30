@@ -267,7 +267,7 @@
     // mensili, Dashboard, Cruscotto, Forecast, Database, Plafond, Registro) e si apre in un riquadro
     // a tutta altezza sotto la barra del CRM: stessa sessione, salva sul server (/api/avanzamento).
     // foglio (facoltativo): m1..m12, WIP, CRU, FOR, FV, DB, PLA, REG
-    const AVZ_V = '20261030a';
+    const AVZ_V = '20261030b';
     function canAvanzamento() { return canAvzRaw(); }
     function altezzaAvz() {
         const page = document.getElementById('avanzamentoPage'), nav = document.querySelector('#mainApp .navbar');
