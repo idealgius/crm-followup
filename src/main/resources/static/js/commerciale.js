@@ -31,6 +31,11 @@
       come annullata ("Solo nel foglio").
       Abbinamento trattativa <-> riga del foglio: regole delle Consegne (vedi REGOLE_ABB
       qui sotto e consegne.js); la regola usata si vede nel bollino di ogni riga.
+   1c) NUOVO: "Importa trattative" (import-fonti.js) chiede la fonte: Leadspark (CSV) o RadaR
+      (Excel contratti), e permette di caricarle tutte e due e confrontarle (tenere i contratti
+      con doppio confronto, solo Leadspark o solo RadaR). Ogni trattativa ha "fonte" (L/R/LR).
+   1d) NUOVO: "Giacenza alla vendita" (commerciale-giacenza.js, vista {k:'giac'}): giorni in stock
+      delle vetture vendute (ingresso stock da RadaR, data contratto dal foglio AVANZAMENTO).
    3) Preventivi telefonici della sezione In bound: abbinati al contratto
       (stesso cliente o targa/telaio) -> bollino "Da preventivo telefonico",
       l'origine resta quella del CSV.
@@ -413,7 +418,7 @@
               <label for="cmA">A</label><select id="cmA"></select>
               <button type="button" data-act="reload">Aggiorna</button>
               <button type="button" data-act="export" class="cm-btn-gold">Esporta</button>
-              <label class="cm-btn-imp" id="cmImpLbl" style="display:none">Importa trattative (CSV)<input type="file" accept=".csv,text/csv" id="cmFile" hidden></label>
+              <button type="button" class="cm-btn-imp" id="cmImpLbl" data-act="importa" style="display:none" title="Da Leadspark (CSV) o da RadaR (Excel), anche tutti e due con il confronto">Importa trattative</button>
               <label class="cm-btn-imp" id="cmLeadLbl" style="display:none" title="File dei lead del gestionale: serve solo per i tempi da lead a trattativa e a contratto">Importa lead (CSV)<input type="file" accept=".csv,text/csv" id="cmLeadFile" hidden></label>
             </div>
           </div>
@@ -421,7 +426,6 @@
         </div>
         <div class="cm-wrap"><div class="cm-layout"><aside class="cm-side" id="cmSide"></aside><main id="cmMain"><div class="cm-card cm-empty">Caricamento dati…</div></main></div></div>`;
         rootEl.addEventListener('click', onClick);
-        rootEl.querySelector('#cmFile').addEventListener('change', e => importa(e.target));
         rootEl.querySelector('#cmLeadFile').addEventListener('change', e => importaLead(e.target));
         rootEl.querySelector('#cmB2b').addEventListener('change', e => { b2bOn = e.target.checked; try { localStorage.setItem(LS_B2B, b2bOn ? '1' : '0'); } catch (x) { /* */ } render(); });
         rootEl.querySelector('#cmRec').addEventListener('change', e => { recOn = e.target.checked; try { localStorage.setItem(LS_REC, recOn ? '1' : '0'); } catch (x) { /* */ } shellSrc(); render(); });
@@ -469,6 +473,7 @@
             if (act.dataset.act === 'reload') load(true);
             if (act.dataset.act === 'storico') openStorico();
             if (act.dataset.act === 'export') openExport();
+            if (act.dataset.act === 'importa') apriImport();
             if (act.dataset.act === 'fissa-reset') salvaFissa(null);
             if (act.dataset.act === 'fissa') { try { salvaFissa(JSON.parse(act.dataset.v)); } catch (x) { /* */ } }
             return;
@@ -537,6 +542,7 @@
             '<div class="cm-nav-t">Sedi</div>' + ['Agnano', 'Casamarciano', 'Salerno'].map(s => grp(s, { k: 'sede', s }, '🏢', SEDI[s], consOf(s))).join('') +
             '<div class="cm-nav-t">Categorie</div>' + grp('B2B', { k: 'b2b' }, '💼', 'B2B', b2bSubs) + grp('Noleggio', { k: 'sede', s: 'Noleggio' }, '🔑', 'Noleggio', consOf('Noleggio')) +
             '<div class="cm-nav-t">Report</div>' + item({ k: 'marche' }, '🏷️', 'Performance marchi', new Set(contr().filter(inPer).map(c => c.marca)).size) +
+            item({ k: 'giac' }, '⏳', 'Giacenza alla vendita', cIn({ k: 'all' }).length) +
             item({ k: 'pt' }, '📞', 'Preventivi telefonici', PT.filter(inPer).length) + item({ k: 'ann' }, '↩️', 'Contratti annullati', TR.filter(c => c.ann && annBase(c)).length + AF.filter(annBase).length) +
             item({ k: 'list' }, '📋', 'Tutte le trattative', trIn({ k: 'any' }).length);
         // NUOVO (telefono): il menu e' chiuso, si vede solo la vista attuale con "Cambia ▾"
@@ -801,7 +807,8 @@
         selects(); side();
         const main = rootEl.querySelector('#cmMain');
         if (!loaded) { if (msgErr) main.innerHTML = `<div class="cm-card cm-empty">${esc(msgErr)}</div>`; return; }
-        if (!TR.length) { main.innerHTML = '<div class="cm-card cm-empty"><h2>Importa il CSV con tutte le trattative</h2><p>Usa il pulsante "Importa trattative (CSV)" in alto. I dati del Commerciale sono separati da quelli delle Consegne: questo import non cambia i numeri delle Consegne e viceversa.</p></div>'; return; }
+        if (view.k === 'giac') { renderGiac(main); return; }
+        if (!TR.length) { main.innerHTML = '<div class="cm-card cm-empty"><h2>Importa il CSV con tutte le trattative</h2><p>Usa il pulsante "Importa trattative" in alto (da Leadspark, da RadaR o da tutti e due). I dati del Commerciale sono separati da quelli delle Consegne: questo import non cambia i numeri delle Consegne e viceversa.</p></div>'; return; }
         if (view.k === 'pt') renderPT();
         else if (view.k === 'ann') renderAnn();
         else if (view.k === 'marche') renderMarche();
@@ -1206,8 +1213,8 @@
     function openStorico() {
         const st = (info && info.storico) || [];
         const when = iso => iso ? new Date(iso).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-        modal('Storico import trattative', st.length ? `<div class="cm-scroll"><table class="cm-t"><tr><th>Quando</th><th class="l">Chi</th><th class="l">Da</th><th class="l">File</th><th>Righe</th><th>Chiuse</th><th>Vendita</th><th>Noleggio</th><th class="l">Periodo nel file</th><th>Nuove</th><th>Tolte</th></tr>
-          ${st.map((r, i) => `<tr><td style="text-align:left">${when(r.quando)}${i === 0 ? ' <span class="cm-b2b">ultimo</span>' : ''}</td><td class="l">${esc(r.chi || '')}</td><td class="l">${esc(r.da || '')}</td><td class="l">${esc(r.file || '')}</td><td>${nf(r.righe)}</td><td>${r.chiuse != null ? nf(r.chiuse) : '–'}</td><td>${r.vendita != null ? nf(r.vendita) : '–'}</td><td>${r.noleggio != null ? nf(r.noleggio) : '–'}</td><td class="l">${r.dal ? esc(r.dal) + ' – ' + esc(r.al) : ''}</td><td>${r.nuove != null ? nf(r.nuove) : '–'}</td><td>${r.tolte != null ? nf(r.tolte) : '–'}</td></tr>`).join('')}</table></div>
+        modal('Storico import trattative', st.length ? `<div class="cm-scroll"><table class="cm-t"><tr><th>Quando</th><th class="l">Chi</th><th class="l">Da</th><th class="l">Fonte</th><th class="l">File</th><th>Righe</th><th>Chiuse</th><th>Vendita</th><th>Noleggio</th><th class="l">Periodo nel file</th><th>Nuove</th><th>Tolte</th></tr>
+          ${st.map((r, i) => `<tr><td style="text-align:left">${when(r.quando)}${i === 0 ? ' <span class="cm-b2b">ultimo</span>' : ''}</td><td class="l">${esc(r.chi || '')}</td><td class="l">${esc(r.da || '')}</td><td class="l">${esc(r.fonte || 'Leadspark')}</td><td class="l">${esc(r.file || '')}</td><td>${nf(r.righe)}</td><td>${r.chiuse != null ? nf(r.chiuse) : '–'}</td><td>${r.vendita != null ? nf(r.vendita) : '–'}</td><td>${r.noleggio != null ? nf(r.noleggio) : '–'}</td><td class="l">${r.dal ? esc(r.dal) + ' – ' + esc(r.al) : ''}</td><td>${r.nuove != null ? nf(r.nuove) : '–'}</td><td>${r.tolte != null ? nf(r.tolte) : '–'}</td></tr>`).join('')}</table></div>
           <p class="cm-hint" style="margin-top:10px">Ogni import sostituisce il precedente per tutti, solo nel Commerciale (le Consegne hanno il loro import). Nuove/Tolte = trattative presenti solo nel nuovo file / solo nel file precedente.</p>`
             : '<p class="cm-empty">Nessun import registrato finora: lo storico parte dal prossimo import.</p>', true, st.length ? { titolo: 'Commerciale · Storico import trattative' } : null);
     }
@@ -1332,33 +1339,48 @@
         })()}`;
     }
 
-    function importa(input) {
-        const file = input.files && input.files[0]; if (!file) return;
+    // NUOVO: "Importa trattative" -> finestra con la scelta della fonte (import-fonti.js)
+    function apriImport() {
+        if (!window.ImportFonti) { msgErr = 'Manca il file import-fonti.js: aggiorna la pagina (Ctrl+F5)'; shellSrc(); return; }
+        msgErr = ''; msgOk = '';
+        ImportFonti.apri({ ambito: 'Commerciale', salva: salvaRighe, fatto: m => { msgOk = m; shellSrc(); } });
+    }
+    // salva le trattative scelte (Leadspark, RadaR o tutte e due) come import del Commerciale
+    async function salvaRighe(rows, fx) {
         const lbl = rootEl.querySelector('#cmImpLbl');
-        const r = new FileReader();
-        r.onload = async () => {
-            lbl.classList.add('cm-busy'); msgErr = ''; msgOk = '';
-            try {
-                const rows = A().preparaCsv(String(r.result));
-                const chiusa = x => x.stato ? /chius/i.test(x.stato) : !!String(x.chiusura || '').trim();
-                const isNol = x => /noleggio/i.test(x.sede || '');
-                if (!rows.length) throw new Error('Il file non contiene trattative');
-                if (!rows.some(x => x.stato)) throw new Error('Nel file manca la colonna "Stato trattativa": serve il CSV con tutte le trattative');
-                // confronto con l'import precedente (stesso cliente, data e consulente)
-                const chiave = x => [`${x.nome || ''} ${x.cognome || ''} ${x.rag || ''}`.toUpperCase().replace(/\s+/g, ' ').trim(), String(x.dataTratt || x.chiusura || '').trim(), String(x.vend || '').toUpperCase().trim()].join('|');
-                const prima = new Set(((info && info.trattAll) || []).filter(x => !x.rec).map(chiave)), dopo = new Set(rows.map(chiave));
-                const pd = A().pd, date = rows.map(x => pd(x.dataTratt) || pd(x.chiusura)).filter(Boolean).sort((x, y) => x - y);
-                const body = { rows, file: file.name, chiuse: rows.filter(chiusa).length, vendita: rows.filter(x => !isNol(x)).length, noleggio: rows.filter(isNol).length,
-                    dal: date.length ? dd(date[0]) : '', al: date.length ? dd(date[date.length - 1]) : '',
-                    nuove: [...dopo].filter(k => !prima.has(k)).length, tolte: prima.size ? [...prima].filter(k => !dopo.has(k)).length : 0 };
-                const res = await fetch('/api/commerciale/trattative', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-                if (!res.ok) { let m = 'Errore ' + res.status; try { m = (await res.json()).error || m; } catch (x) { /* */ } throw new Error(m); }
-                loaded = false; await load(true);
-                msgOk = `Import completato: ${nf(rows.length)} trattative (${nf(body.chiuse)} chiuse). Vale solo per il Commerciale: le Consegne hanno il loro import.`; shellSrc();
-            } catch (e) { msgErr = e.message; shellSrc(); }
-            finally { lbl.classList.remove('cm-busy'); input.value = ''; }
-        };
-        r.readAsText(file, 'utf-8');
+        if (lbl) lbl.classList.add('cm-busy');
+        try {
+            const chiusa = x => x.stato ? /chius/i.test(x.stato) : !!String(x.chiusura || '').trim();
+            const isNol = x => /noleggio/i.test(x.sede || '');
+            if (!rows.length) throw new Error('Il file non contiene trattative');
+            if (!rows.some(x => x.stato)) throw new Error('Nel file manca la colonna "Stato trattativa": serve il CSV con tutte le trattative');
+            // confronto con l'import precedente (stesso cliente, data e consulente)
+            const chiave = x => [`${x.nome || ''} ${x.cognome || ''} ${x.rag || ''}`.toUpperCase().replace(/\s+/g, ' ').trim(), String(x.dataTratt || x.chiusura || '').trim(), String(x.vend || '').toUpperCase().trim()].join('|');
+            const prima = new Set(((info && info.trattAll) || []).filter(x => !x.rec).map(chiave)), dopo = new Set(rows.map(chiave));
+            const pd = A().pd, date = rows.map(x => pd(x.dataTratt) || pd(x.chiusura)).filter(Boolean).sort((x, y) => x - y);
+            const body = { rows, file: fx.file || '', fonte: fx.fonte || 'Leadspark', confronto: fx.confronto || null,
+                chiuse: rows.filter(chiusa).length, vendita: rows.filter(x => !isNol(x)).length, noleggio: rows.filter(isNol).length,
+                dal: date.length ? dd(date[0]) : '', al: date.length ? dd(date[date.length - 1]) : '',
+                nuove: [...dopo].filter(k => !prima.has(k)).length, tolte: prima.size ? [...prima].filter(k => !dopo.has(k)).length : 0 };
+            const res = await fetch('/api/commerciale/trattative', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            if (!res.ok) { let m = 'Errore ' + res.status; try { m = (await res.json()).error || m; } catch (x) { /* */ } throw new Error(m); }
+            loaded = false; await load(true);
+            if (window.CommercialeGiacenza) CommercialeGiacenza.ricarica();
+            return `Import completato da ${body.fonte}: ${nf(rows.length)} trattative (${nf(body.chiuse)} chiuse). Vale solo per il Commerciale: le Consegne hanno il loro import.`;
+        } finally { if (lbl) lbl.classList.remove('cm-busy'); }
+    }
+    // NUOVO: Giacenza alla vendita (commerciale-giacenza.js)
+    function renderGiac(main) {
+        if (!window.CommercialeGiacenza) { main.innerHTML = '<div class="cm-card cm-empty">Manca il file commerciale-giacenza.js: aggiorna la pagina (Ctrl+F5).</div>'; return; }
+        const d = info && info.meta && info.meta.database;
+        CommercialeGiacenza.render({
+            root: rootEl, main, anno, da, a, per: per(), SEDI, esc, nf, pct, nice, pd: A().pd, modal, escluso,
+            righe: (info && info.righe) || [], foglioInfo: d ? { righe: d.righe, aggiornatoAt: d.aggiornatoAt } : null,
+            puoImportare: !!(info && info.puoImportare),
+            rerender: () => { if (view.k === 'giac') render(); },
+            // "Aggiorna dal foglio": rilegge il foglio Google (come nelle Consegne) e ricarica il Commerciale
+            aggiornaFoglio: async () => { await A().post('/database/aggiorna', {}); loaded = false; await load(true); }
+        });
     }
 
 

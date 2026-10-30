@@ -3,6 +3,9 @@
    ---------------------------------------------------------------------
    Due fonti, entrambe salvate SUL SERVER (visibili a tutti, sempre
    l'ultimo aggiornamento):
+   NUOVO: "Importa trattative" apre la finestra di import-fonti.js: Leadspark (CSV), RadaR
+      (Excel contratti) o tutti e due con il confronto (doppio confronto / solo Leadspark /
+      solo RadaR). RadaR non ha le date di consegna: per le Tempistiche serve Leadspark.
    1) CSV trattative di Leadspark ("Importa trattative", solo Admin /
       Gestore / Moderatore). Il file viene letto e ridotto qui nel browser
       alle sole colonne necessarie (niente telefoni, email, CF), poi
@@ -633,7 +636,7 @@
               <p>Consegne, tempistiche e analisi dell'avanzamento</p>
             </div>
             <div class="cg-actions">
-              <label class="cg-btn" id="cgImportLbl" style="display:none">Importa trattative (CSV)<input type="file" accept=".csv,text/csv" id="cgFileTratt" hidden></label>
+              <button type="button" class="cg-btn" id="cgImportLbl" style="display:none" title="Da Leadspark (CSV) o da RadaR (Excel), anche tutti e due con il confronto">Importa trattative</button>
               <button type="button" class="cg-btn cg-btn-light" id="cgSheetBtn">Aggiorna dal foglio Google</button>
             </div>
           </div>
@@ -651,7 +654,7 @@
         </div>
         <div class="cg-wrap" id="cgBody"></div>
         <div class="cg-wrap" id="cgAnalisi" style="display:none"></div>`;
-        rootEl.querySelector('#cgFileTratt').addEventListener('change', e => importTrattative(e.target));
+        rootEl.querySelector('#cgImportLbl').addEventListener('click', apriImport);
         rootEl.querySelectorAll('.cg-tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
         rootEl.querySelector('#cgSheetBtn').addEventListener('click', refreshSheet);
         Cerca.collega(rootEl.querySelector('#cgSearch'));
@@ -769,6 +772,20 @@
             (msg ? `<div class="cg-msg ${isErr ? 'err' : ''}">${esc(msg)}</div>` : '');
     }
 
+    // NUOVO: finestra con la scelta della fonte (import-fonti.js)
+    function apriImport() {
+        if (!window.ImportFonti) { setSrc('Manca il file import-fonti.js: aggiorna la pagina (Ctrl+F5)', true); return; }
+        ImportFonti.apri({ ambito: 'Consegne', salva: importaRighe, fatto: m => refresh(m) });
+    }
+    async function importaRighe(rows, fx) {
+        const lbl = rootEl.querySelector('#cgImportLbl');
+        if (lbl) lbl.classList.add('cg-busy');
+        try {
+            if (!rows.filter(x => !/noleggio/i.test(x.sede || '') && isChiusa(x)).length) throw new Error('Non ci sono trattative chiuse (dopo aver escluso il Noleggio).');
+            applyServerData(await api('/trattative', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rows }) }));
+            return `Import completato da ${fx.fonte}: ${fmt(rows.length)} trattative. Ora le vedono tutti.`;
+        } finally { if (lbl) lbl.classList.remove('cg-busy'); }
+    }
     function importTrattative(input) {
         const file = input.files && input.files[0]; if (!file) return;
         const lbl = rootEl.querySelector('#cgImportLbl');

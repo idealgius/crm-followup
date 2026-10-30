@@ -456,3 +456,33 @@
 [data-theme="light"] #biPage .bh-xo-c button{border-color:rgba(20,30,50,.16);background:#fff;color:#18202b}
 [data-theme="light"] #biPage .bh-xo-c button:hover{background:rgba(20,30,50,.05)}
 @media (max-width:760px){[data-theme="light"] #biPage .bh-ch{background:rgba(20,30,50,.03)}[data-theme="light"] #biPage .bh-ch.bh-on{background:rgba(20,30,50,.07)}}
+
+/* AVANZAMENTO (prova) */
+.bh-rail{top:108px}.bh-ch{padding:5px 16px 10px 18px}.bh-ch .bh-t{font-size:17.5px}.bh-sub{margin-top:6px}.bh-sub li{padding:3px 12px;font-size:13px}
+.bh-avz{position:absolute;inset:0}.bh-avz-svg{width:100%;height:100%;display:block}
+.bh-avz-grid line{stroke:rgba(180,140,255,.07)}
+.bh-avz-ticks line{stroke:rgba(200,180,255,.28);stroke-width:1.4}
+.bh-avz-trk{fill:none;stroke:rgba(255,255,255,.07);stroke-width:18}
+.bh-avz-arc{fill:none;stroke:url(#bh-avarc);stroke-width:18;stroke-linecap:round;filter:drop-shadow(0 0 10px rgba(160,120,255,.6))}
+.bh-scene.bh-on .bh-avz-arc{animation:bh-avz-arc 2.2s cubic-bezier(.3,.8,.3,1) both}
+@keyframes bh-avz-arc{from{stroke-dasharray:0 var(--c)}}
+.bh-avz-in{fill:rgba(14,12,24,.75);stroke:rgba(180,140,255,.18)}
+.bh-avz-k1{fill:#a99bd1;font-size:11px;font-weight:800;letter-spacing:1.4px}
+.bh-avz-k2{fill:#a7b0c0;font-size:13px}.bh-avz-k3{fill:#c9b0ff;font-size:11px;font-weight:800;letter-spacing:1.1px}
+.bh-avz-big{fill:#fff;font-size:34px;font-weight:800;letter-spacing:-.5px}
+.bh-avz-cb{fill:#181a22;stroke:rgba(180,140,255,.28)}
+.bh-avz-cm{fill:#8f99ab;font-size:10px;font-weight:800;letter-spacing:1px}.bh-avz-ci{fill:#fff;font-size:20px;font-weight:800}
+.bh-avz-cl{fill:#7fe0b6;font-size:9.5px;font-weight:800;letter-spacing:1px;opacity:0}
+.bh-avz-tick rect{fill:rgba(255,255,255,.05);stroke:rgba(255,255,255,.18)}.bh-avz-tick path{fill:none;stroke:#7fe0b6;stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:30;stroke-dashoffset:30}
+.bh-scene.bh-on .bh-avz-card{animation:bh-avz-in .6s calc(var(--k)*1.6s + .3s) cubic-bezier(.2,.8,.3,1) both}
+.bh-scene.bh-on .bh-avz-card .bh-avz-tick path{animation:bh-avz-ck .45s calc(var(--k)*1.6s + 1s) ease-out forwards}
+.bh-scene.bh-on .bh-avz-card .bh-avz-tick rect{animation:bh-avz-ckb .45s calc(var(--k)*1.6s + 1s) ease-out forwards}
+.bh-scene.bh-on .bh-avz-card .bh-avz-cl{animation:bh-avz-lb .4s calc(var(--k)*1.6s + 1.2s) ease-out forwards}
+@keyframes bh-avz-in{from{opacity:0;transform:translateX(-40px)}}
+@keyframes bh-avz-ck{to{stroke-dashoffset:0}}@keyframes bh-avz-ckb{to{fill:rgba(127,224,182,.14);stroke:#7fe0b6}}@keyframes bh-avz-lb{to{opacity:1}}
+.bh-avz-flow{fill:none;stroke:rgba(180,140,255,.55);stroke-width:2;stroke-dasharray:4 7;animation:bh-avz-fl 1.2s linear infinite}
+@keyframes bh-avz-fl{to{stroke-dashoffset:-22}}
+.bh-avz-bar rect{fill:url(#bh-avbar);opacity:.85}.bh-avz-bar rect.bh-avz-now{fill:#d7c4ff;opacity:1;filter:drop-shadow(0 0 8px rgba(190,150,255,.7))}
+.bh-scene.bh-on .bh-avz-bar{animation:bh-avz-up .8s var(--d) cubic-bezier(.2,.8,.3,1) both;transform-box:fill-box;transform-origin:50% 100%}
+@keyframes bh-avz-up{from{transform:scaleY(0);opacity:0}}
+.bh-avz-bv{fill:#cfc4ec;font-size:10.5px;font-weight:700;text-anchor:middle}.bh-avz-bm{fill:#7d8697;font-size:10.5px;font-weight:800;letter-spacing:1px;text-anchor:middle}

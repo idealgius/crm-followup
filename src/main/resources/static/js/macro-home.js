@@ -29,12 +29,14 @@
     let inConsegne = false;
     let inStock = false;
     let inComm = false;   // area Commerciale (capitolo 03 della BI)
+    let inAvz = false;    // NUOVO: Avanzamento (capitolo 04 della BI)
 
     // PERMESSI DELLA BI (pagina Permessi, gruppo BI):
     //  - CONSEGNE    -> capitolo 01 Consegne
     //  - STOCK       -> capitolo 02 Stock
     //  - COMMERCIALE -> capitolo 03 Commerciale (se il server non lo conosce ancora,
     //                   segue CONSEGNE come prima)
+    //  - AVANZAMENTO -> capitolo 04 Avanzamento (pagina /avanzamento.html in un riquadro)
     // La selezione area e la pagina BI le vede chi ha ALMENO UNO dei tre; tutti gli
     // altri entrano direttamente in In bound. Il parametro role resta per
     // compatibilita' con le chiamate esistenti: vale il permesso effettivo dell'utente.
@@ -48,7 +50,8 @@
     function canConsegne() { return loggato() && hasAccess('CONSEGNE'); }
     function canStockRaw() { return loggato() && hasAccess('STOCK'); }
     function canCommRaw() { return loggato() && (conosciuto('COMMERCIALE') ? hasAccess('COMMERCIALE') : hasAccess('CONSEGNE')); }
-    function canShow() { return canConsegne() || canStockRaw() || canCommRaw(); }
+    function canAvzRaw() { return loggato() && conosciuto('AVANZAMENTO') && hasAccess('AVANZAMENTO'); }
+    function canShow() { return canConsegne() || canStockRaw() || canCommRaw() || canAvzRaw(); }
 
     // Voce "Seleziona Area" nel menu del nome e clic sul logo: solo per chi puo'
     function refreshNav() {
@@ -70,6 +73,8 @@
         if (stockP) stockP.style.display = 'none';
         const commP = document.getElementById('commercialePage');
         if (commP) commP.style.display = 'none';
+        const avzP = document.getElementById('avanzamentoPage');
+        if (avzP) avzP.style.display = 'none';
         if (window.Salone) Salone.hide();   // Appuntamenti e ingressi
         document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
     }
@@ -120,7 +125,7 @@
         hideAllPages();
         hideBI();
         const cgp = document.getElementById('consegnePage'); if (cgp) cgp.style.display = 'none';
-        inConsegne = false; inStock = false; inComm = false;
+        inConsegne = false; inStock = false; inComm = false; inAvz = false;
         setNavLinksVisible(false);
         document.body.removeAttribute('data-role-theme');
         setBadge('HOME');
@@ -149,7 +154,9 @@
         if (stockP) stockP.style.display = 'none';
         const commP = document.getElementById('commercialePage');
         if (commP) commP.style.display = 'none';
-        inConsegne = false; inStock = false; inComm = false;
+        const avzP = document.getElementById('avanzamentoPage');
+        if (avzP) avzP.style.display = 'none';
+        inConsegne = false; inStock = false; inComm = false; inAvz = false;
         setNavLinksVisible(true);
     }
 
@@ -166,7 +173,7 @@
         hideAllPages();
         const consegne = document.getElementById('consegnePage');
         if (consegne) consegne.style.display = 'none';
-        inConsegne = false; inStock = false; inComm = false;
+        inConsegne = false; inStock = false; inComm = false; inAvz = false;
         setNavLinksVisible(false);
         document.body.removeAttribute('data-role-theme');
         setBadge('BI');
@@ -183,7 +190,7 @@
         hideBI();
         stopInboundLiveUpdates();
         hideAllPages();
-        inConsegne = true; inStock = false; inComm = false;
+        inConsegne = true; inStock = false; inComm = false; inAvz = false;
         setNavLinksVisible(false);
         document.body.removeAttribute('data-role-theme');
         setBadge('CONSEGNE');
@@ -204,7 +211,7 @@
         hideBI();
         stopInboundLiveUpdates();
         hideAllPages();
-        inConsegne = false; inStock = true; inComm = false;
+        inConsegne = false; inStock = true; inComm = false; inAvz = false;
         setNavLinksVisible(false);
         document.body.removeAttribute('data-role-theme');
         setBadge('STOCK');
@@ -225,7 +232,7 @@
         hideBI();
         stopInboundLiveUpdates();
         hideAllPages();
-        inConsegne = false; inStock = false; inComm = true;
+        inConsegne = false; inStock = false; inComm = true; inAvz = false;
         setNavLinksVisible(false);
         document.body.removeAttribute('data-role-theme');
         setBadge('COMMERCIALE');
@@ -247,8 +254,50 @@
         if (stockP) stockP.style.display = 'none';
         const commP = document.getElementById('commercialePage');
         if (commP) commP.style.display = 'none';
-        inConsegne = false; inStock = false; inComm = false;
+        const avzP = document.getElementById('avanzamentoPage');
+        if (avzP) avzP.style.display = 'none';
+        // al logout la pagina dell'Avanzamento si scarica (il prossimo utente la riapre da zero)
+        const fr = document.getElementById('avanzamentoFrame');
+        if (fr) fr.removeAttribute('src');
+        inConsegne = false; inStock = false; inComm = false; inAvz = false;
         setNavLinksVisible(true);
+    }
+
+    // NUOVO: Avanzamento (capitolo 04 della BI). La pagina e' /avanzamento.html (lavorazioni
+    // mensili, Dashboard, Cruscotto, Forecast, Database, Plafond, Registro) e si apre in un riquadro
+    // a tutta altezza sotto la barra del CRM: stessa sessione, salva sul server (/api/avanzamento).
+    // foglio (facoltativo): m1..m12, WIP, CRU, FOR, FV, DB, PLA, REG
+    const AVZ_V = '20261030a';
+    function canAvanzamento() { return canAvzRaw(); }
+    function altezzaAvz() {
+        const page = document.getElementById('avanzamentoPage'), nav = document.querySelector('#mainApp .navbar');
+        if (!page) return;
+        const top = nav ? Math.max(0, nav.getBoundingClientRect().bottom) : 0;
+        page.style.height = Math.max(420, window.innerHeight - top) + 'px';
+    }
+    window.addEventListener('resize', () => { if (inAvz) altezzaAvz(); });
+    function openAvanzamento(foglio) {
+        if (!canAvanzamento()) return;
+        hide();
+        hideBI();
+        stopInboundLiveUpdates();
+        hideAllPages();
+        inConsegne = false; inStock = false; inComm = false; inAvz = true;
+        setNavLinksVisible(false);
+        document.body.removeAttribute('data-role-theme');
+        setBadge('AVANZAMENTO');
+        const page = document.getElementById('avanzamentoPage');
+        if (page) page.style.display = 'block';
+        const fr = document.getElementById('avanzamentoFrame');
+        if (fr) {
+            const f = /^(m([1-9]|1[0-2])|FOR|FV|CRU|WIP|DB|PLA|REG)$/.test(foglio || '') ? foglio : '';
+            if (!fr.getAttribute('src')) fr.setAttribute('src', '/avanzamento.html?v=' + AVZ_V + (f ? '#' + f : ''));
+            else if (f) { try { fr.contentWindow.location.hash = f; } catch (e) { /* */ } }
+        }
+        altezzaAvz();
+        history.replaceState(null, '', window.location.pathname + '#avanzamento');
+        sessionStorage.setItem('currentPage', 'avanzamento');
+        window.scrollTo(0, 0);
     }
 
     function template() {
@@ -450,8 +499,10 @@
         canStock: canStock,
         openCommerciale: openCommerciale,
         canCommerciale: canCommerciale,
+        openAvanzamento: openAvanzamento,
+        canAvanzamento: canAvanzamento,
         reset: reset,
-        isInConsegne: function () { return inConsegne || inStock || inComm; },
+        isInConsegne: function () { return inConsegne || inStock || inComm || inAvz; },
         isInStock: function () { return inStock; }
     };
 })();

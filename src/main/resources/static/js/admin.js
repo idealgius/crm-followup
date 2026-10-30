@@ -367,6 +367,8 @@ const PERMISSION_SECTIONS = [
     { key: 'CONSEGNE', icon: '🔑', label: 'Consegne', group: 'BI' },
     { key: 'STOCK', icon: '🚘', label: 'Stock', group: 'BI' },
     { key: 'COMMERCIALE', icon: '💼', label: 'Commerciale', group: 'BI' },
+    // NUOVO: capitolo 04 della BI (lavorazioni mensili, Dashboard, Cruscotto, Plafond, Registro)
+    { key: 'AVANZAMENTO', icon: '🗓️', label: 'Avanzamento', group: 'BI' },
     // Salone: Appuntamenti e ingressi (Front Office e Consulenza entrano direttamente qui)
     // Profili con un nome (Consulenza, Solo visione, Front office, Visione + report, Completo)
     { key: 'SALONE', icon: '🚶', label: 'Appuntamenti e ingressi', group: 'Salone' },
@@ -427,7 +429,11 @@ const SECTION_INFO = {
     GRAFICI: { intro: 'Il menu ☰ "Mostra Grafici" in alto a sinistra.', READ_ONLY: 'Vede il menu ☰ e può aprire i grafici che i permessi dei grafici gli lasciano vedere.', FULL: 'Come Solo lettura (per il menu non c\'è differenza).', ADMIN_FULL: 'Come Solo lettura (per il menu non c\'è differenza).' },
     CONSEGNE: { intro: 'BI · Consegne: Tempistiche, Analisi avanzamento, lavorazione officina, ricerca clienti.', READ_ONLY: 'Vede Tempistiche e Analisi, cerca i clienti, apre gli elenchi, scarica gli Excel e può premere "Aggiorna dal foglio Google". Non importa le trattative e non segna verifiche.', FULL: 'Come Solo lettura, in più importa il CSV delle trattative, segna e toglie le verifiche, abbina, conta o elimina le pratiche dubbie.', ADMIN_FULL: 'Come Completo.' },
     STOCK: { intro: 'BI · Stock: giacenza, marchi, motorizzazioni, vetture in stock.', READ_ONLY: 'Vede tutti i grafici e gli elenchi dello stock e scarica gli Excel. Non importa il file.', FULL: 'Come Solo lettura, in più importa il file dello stock.', ADMIN_FULL: 'Come Completo.' },
-    COMMERCIALE: { intro: 'BI · Commerciale: contratti, origini, preventivi, consulenti.', READ_ONLY: 'Vede tutte le viste e i grafici del Commerciale e scarica gli Excel. Non importa le trattative.', FULL: 'Come Solo lettura, in più importa il CSV delle trattative del Commerciale.', ADMIN_FULL: 'Come Completo.' },
+    AVANZAMENTO: { intro: 'BI · Avanzamento: lavorazioni mensili, Dashboard, Cruscotto, Forecast, Database, Plafond Compass e Registro attività. Ogni azione è registrata con giorno, ora italiana e persona.',
+        READ_ONLY: 'Vede tutti i fogli e scarica Excel e PDF. Non modifica niente.',
+        FULL: 'Come Solo lettura, in più inserisce e modifica i contratti, cambia gli stati e spunta LIQUIDATA (la spunta tolta resta solo all\'Accesso Admin).',
+        ADMIN_FULL: 'Come Completo, in più toglie la spunta LIQUIDATA (con conferma), svuota il Plafond Compass e annulla l\'ultimo svuotamento, ripristina i contratti eliminati e vede il Registro attività.' },
+    COMMERCIALE: { intro: 'BI · Commerciale: contratti, origini, preventivi, consulenti.', READ_ONLY: 'Vede tutte le viste e i grafici del Commerciale e scarica gli Excel. Non importa le trattative.', FULL: 'Come Solo lettura, in più importa le trattative del Commerciale (Leadspark e/o RadaR) e carica il file RadaR della Giacenza alla vendita.', ADMIN_FULL: 'Come Completo.' },
     ADMIN: { intro: 'Gestione utenti e permessi (questa pagina).', READ_ONLY: 'Vede gli utenti e i permessi, senza cambiare niente.', FULL: 'Crea utenti, cambia ruoli e permessi (non degli utenti Admin).', ADMIN_FULL: 'Come Completo, anche sugli utenti Admin.' },
     ALLERT: { intro: 'Gli allert (avvisi da gestire), nella pagina Allert e nel Registro contatti. Chi ha gli Allert ma non il Registro contatti trova la voce ALLERT nel menu al posto del Registro.', READ_ONLY: 'Vede gli allert segnalati a tutti e quelli mandati a lui, senza gestirli.', FULL: 'Gestisce gli allert segnalati a tutti e quelli mandati a lui (li prende e li chiude).', ADMIN_FULL: 'Vede e gestisce tutti gli allert, anche quelli mandati ad altri, e riapre quelli già gestiti.' },
     CHAT: { intro: 'La chat rossa in basso a sinistra (Registro contatti e pagina Allert): gruppo con tutti, gruppi e chat singole. Nell\'elenco compare chi ha la chat.', READ_ONLY: 'Legge i messaggi, senza scrivere.', FULL: 'Legge e scrive, risponde, mette le reazioni, manda gli allert in chat.', ADMIN_FULL: 'Come Completo, in più crea, modifica ed elimina i gruppi e li vede tutti.' },
@@ -753,7 +759,7 @@ function renderPermissionMatrix() {
     PERMISSION_SECTIONS.forEach(section => {
         if (section.group !== gruppo) {
             gruppo = section.group;
-            html += `<tr><td colspan="${permissionRolesCache.length + 1}" style="text-align:left;font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--text-secondary);padding-top:14px">${gruppo}${gruppo === 'BI' ? ' · la pagina BI la vede chi ha almeno una delle tre' : ''}${gruppo === 'Salone' ? ' · profili con un nome: clicca la sezione per il confronto' : ''}</td></tr>`;
+            html += `<tr><td colspan="${permissionRolesCache.length + 1}" style="text-align:left;font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--text-secondary);padding-top:14px">${gruppo}${gruppo === 'BI' ? ' · la pagina BI la vede chi ha almeno una di queste sezioni' : ''}${gruppo === 'Salone' ? ' · profili con un nome: clicca la sezione per il confronto' : ''}</td></tr>`;
         }
         html += `<tr>
             <td style="text-align:left;font-weight:700;white-space:nowrap"><button type="button" class="perm-sec" onclick="apriInfoSezione('${section.key}')" title="Clicca per vedere cosa si può fare con ogni livello">${section.icon} ${section.label.split(' · ')[0]} <span class="perm-i">ⓘ</span></button></td>

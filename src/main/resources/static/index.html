@@ -14,7 +14,7 @@
     <meta name="apple-mobile-web-app-title" content="CRM Autoscala">
     <link rel="stylesheet" href="/css/style.css?v=20261023a">
     <link rel="stylesheet" href="/css/macro-home.css">
-    <link rel="stylesheet" href="/css/bi-home.css?v=20261023f">
+    <link rel="stylesheet" href="/css/bi-home.css?v=20261030a">
     <link rel="stylesheet" href="/css/dashboard-fu.css">
     <link rel="stylesheet" href="/css/consegne.css?v=20261014b">
     <link rel="stylesheet" href="/css/stock-home.css?v=20261017a">
@@ -208,6 +208,13 @@
     <div id="allertPage" class="page page-wide" style="display:none"><div id="allertRoot"></div></div>
     <div id="commercialePage" class="page" style="display:none">
         <div id="commercialeRoot"></div>
+    </div>
+
+    <!-- NUOVO: AVANZAMENTO — capitolo 04 della BI. Si apre da MacroHome.openAvanzamento()
+         (vedi /js/macro-home.js): la pagina /avanzamento.html in un riquadro a tutta altezza,
+         dati e registro sul server (/api/avanzamento, AvanzamentoController.java). -->
+    <div id="avanzamentoPage" class="page" style="display:none;max-width:none;padding:0;margin:0;overflow:hidden">
+        <iframe id="avanzamentoFrame" title="Avanzamento" style="display:block;width:100%;height:100%;border:0;background:#0e1416"></iframe>
     </div>
 
     <!-- DASHBOARD -->
@@ -2688,7 +2695,7 @@
 <script src="/js/contact.js?v=20261028a"></script>
 <script src="/js/allert-bo.js?v=20261027a"></script>
 <script src="/js/promo.js"></script>
-<script src="/js/admin.js?v=20261027a"></script>
+<script src="/js/admin.js?v=20261030a"></script>
 <script src="/js/rent.js?v=20261014a"></script>
 <script src="/js/rent-import.js?v=20261022b"></script>
 <script src="/js/service.js"></script>
@@ -2696,14 +2703,17 @@
 <script src="/js/preventivi.js?v=20261027e"></script>
 <script src="/js/preventivi-sospesi.js?v=20261026a"></script>
 <script src="/js/quotazioni-rent.js?v=20261020h"></script>
-<script src="/js/app.js?v=20261027b"></script>
-<script src="/js/macro-home.js?v=20261014b"></script>
-<script src="/js/bi-home.js?v=20261023g"></script>
+<script src="/js/app.js?v=20261030a"></script>
+<script src="/js/macro-home.js?v=20261030a"></script>
+<script src="/js/bi-home.js?v=20261030a"></script>
 <script src="/js/bi-tools.js?v=20261022a"></script>
-<script src="/js/consegne.js?v=20261014d"></script>
+<script src="/js/consegne.js?v=20261030a"></script>
 <script src="/js/consegne-analisi.js?v=20261021a"></script>
 <script src="/js/stock-home.js?v=20261021a"></script>
-<script src="/js/commerciale.js?v=20261023c"></script>
+<!-- NUOVO: import trattative da Leadspark / RadaR (Commerciale e Consegne) e Giacenza alla vendita -->
+<script src="/js/import-fonti.js?v=20261030a"></script>
+<script src="/js/commerciale.js?v=20261030a"></script>
+<script src="/js/commerciale-giacenza.js?v=20261030a"></script>
 <script src="/js/salone.js?v=20261028a"></script>
 <script src="/js/salone-fo.js?v=20261027f"></script>
 <script src="/js/chat-bdc.js?v=20261027b"></script>

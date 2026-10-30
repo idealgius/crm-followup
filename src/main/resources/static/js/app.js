@@ -622,11 +622,15 @@ window.onload = function() {
             } else if (macroHomeOk && urlHash === 'commerciale' && MacroHome.openCommerciale && puo('canCommerciale')) {
                 MacroHome.openCommerciale();
                 hideLoadingOverlay();
+            } else if (macroHomeOk && urlHash === 'avanzamento' && MacroHome.openAvanzamento && puo('canAvanzamento')) {
+                // NUOVO: F5 dentro l'Avanzamento (capitolo 04 della BI) lo riapre
+                MacroHome.openAvanzamento();
+                hideLoadingOverlay();
             } else if (macroHomeOk && (urlHash === 'stock' || urlHash.startsWith('stock/')) && MacroHome.openStock && puo('canStock')) {
                 window.__stockLinkView = decodeURIComponent(urlHash.split('/')[1] || '');
                 MacroHome.openStock();
                 hideLoadingOverlay();
-            } else if (macroHomeOk && (['consegne', 'commerciale', 'stock'].includes(urlHash) || urlHash.startsWith('stock/'))) {
+            } else if (macroHomeOk && (['consegne', 'commerciale', 'stock', 'avanzamento'].includes(urlHash) || urlHash.startsWith('stock/'))) {
                 MacroHome.openBI();
                 hideLoadingOverlay();
             } else if (macroHomeOk && urlHash === 'bi') {

@@ -5,7 +5,11 @@
      01 Consegne    -> "Entra" apre l'area Consegne (Tempistiche / Analisi)
      02 Stock       -> "Entra" apre l'area Stock (pedana con i loghi dei marchi)
      03 Commerciale -> "Entra" apre l'area Commerciale (abitacolo digitale: lead, vendite, noleggio)
-     04 Service     -> in arrivo (officina connessa: la Sportequipe sul ponte
+     04 Avanzamento -> "Entra" apre l'Avanzamento (lavorazioni mensili, Dashboard, Cruscotto, Forecast,
+                       Database, Plafond Compass, Registro): pagina /avanzamento.html nel CRM.
+                       Plancia: plafond Compass e liquidato mese per mese, numeri veri da
+                       /api/avanzamento/riepilogo (indice interno 4, mostrato come 04 prima di Service)
+     05 Service     -> in arrivo (officina connessa: la Sportequipe sul ponte
                        sollevatore, scansione di diagnosi con i punti controllati,
                        ordine di lavoro che si completa da solo).
                        Foto: /img/macro/sportequipe-service.png
@@ -64,6 +68,13 @@
         MacroHome.openStock();
         if (titolo) await soloRiquadro('stockRoot', titolo);
     }
+    // AVANZAMENTO: apre la pagina sul foglio scelto (m1..m12 = mesi, WIP Dashboard, CRU, FOR, FV, DB, PLA, REG)
+    function avanzamento(foglio) {
+        if (!window.MacroHome || !MacroHome.openAvanzamento) return;
+        if (window.BiTools && BiTools.esciFocus) BiTools.esciFocus();
+        MacroHome.openAvanzamento(foglio);
+    }
+    const meseOra = () => 'm' + (new Date().getMonth() + 1);
     async function commerciale(vw, titolo) {
         if (!window.MacroHome) return;
         if (window.BiTools && BiTools.esciFocus) BiTools.esciFocus();
@@ -105,15 +116,26 @@
             { i: '📈', t: 'Andamento mensile', d: 'Preventivi, contratti, annullati e fallite mese per mese', go: () => commerciale({ k: 'all' }, 'Andamento mensile') },
             { i: '🧭', t: 'Origini', d: 'Da dove arrivano preventivi e contratti (sito, Autoscout, ingresso…)', go: () => commerciale({ k: 'all' }, 'Preventivi e contratti per origine') },
             { i: '🏷️', t: 'Performance marchi', d: 'Preventivi, contratti e conversione per marca', go: () => commerciale({ k: 'marche' }) },
+            { i: '⏳', t: 'Giacenza alla vendita', d: 'Da quanti giorni erano in stock le vetture vendute, per sede e consulente', go: () => commerciale({ k: 'giac' }) },
             { i: '📞', t: 'Preventivi telefonici', d: 'I preventivi fatti al telefono e quanti diventano contratti', go: () => commerciale({ k: 'pt' }) },
             { i: '↩️', t: 'Contratti annullati', d: 'Annullati per sede, con il motivo e la fonte', go: () => commerciale({ k: 'ann' }) },
             { i: '📋', t: 'Tutte le trattative', d: "L'elenco completo con ricerca e filtri", go: () => commerciale({ k: 'list' }) }
         ],
-        [   // 04 SERVICE (in arrivo)
+        [   // 05 SERVICE (in arrivo)
             { i: '📦', t: 'Magazzino ricambi', d: 'In arrivo' }, { i: '🧾', t: 'Ordini di lavoro', d: 'In arrivo' }, { i: '🛎️', t: 'Accettazione', d: 'In arrivo' }
+        ],
+        [   // 04 AVANZAMENTO (indice 4, mostrato come 04 prima di Service)
+            { i: '🗓️', t: 'Lavorazioni mensili', d: 'Il mese in corso: i contratti da compilare, con menù a tendina e spunte', go: () => avanzamento(meseOra()) },
+            { i: '🧩', t: 'Dashboard', d: 'Canali, sedi, obiettivi, totale venduto e performance finance', go: () => avanzamento('WIP') },
+            { i: '🎛️', t: 'Cruscotto', d: 'Vendite, finance, B2C e B2B, accessori e servizi', go: () => avanzamento('CRU') },
+            { i: '🎯', t: 'Forecast', d: '2026 contro 2025 e obiettivi per sede', go: () => avanzamento('FOR') },
+            { i: '👤', t: 'Forecast venditori', d: 'Peso sulle vendite, conversione e finance per consulente', go: () => avanzamento('FV') },
+            { i: '🏦', t: 'Plafond Compass', d: 'Liquidato, svuotamenti e storico dei plafond', go: () => avanzamento('PLA') },
+            { i: '🗂️', t: 'Database', d: 'Tutti i contratti dell’anno, presi dai mesi', go: () => avanzamento('DB') },
+            { i: '🕘', t: 'Registro attività', d: 'Chi ha fatto cosa, giorno e ora · con Accesso Admin', go: () => avanzamento('REG') }
         ]
     ];
-    const SUB = [[0, 5, 2], [0, 1, 2], [0, 2, 7], [0, 1, 2]];
+    const SUB = [[0, 5, 2], [0, 1, 2], [0, 2, 7], [0, 1, 2], [0, 1, 5]];
 
     // SERVICE: officina "connessa" — la Sportequipe sale sul ponte, una scansione
     // la attraversa e compaiono i punti di diagnosi; l'ordine di lavoro si spunta da solo.
@@ -370,6 +392,51 @@
         </div>`;
     }
 
+    // R = /api/avanzamento/riepilogo: { plafond, soglia, anno, liqAnno, liqMesi: [12 numeri], ultime: [{ mese, importo }] }
+    // senza dati (pagina mai aperta o permesso mancante) la plancia resta neutra, senza numeri inventati
+    function avanzamentoScene(R) {
+        const MN = ['GEN','FEB','MAR','APR','MAG','GIU','LUG','AGO','SET','OTT','NOV','DIC'], NM = ['GENNAIO','FEBBRAIO','MARZO','APRILE','MAGGIO','GIUGNO','LUGLIO','AGOSTO','SETTEMBRE','OTTOBRE','NOVEMBRE','DICEMBRE'];
+        const eur = v => '€ ' + Math.round(v || 0).toLocaleString('it-IT');
+        const nM = R && Array.isArray(R.liqMesi) ? Math.max(1, Math.min(12, R.meseFine || new Date().getMonth() + 1)) : 10;
+        const MES = MN.slice(Math.max(0, nM - 10), nM);
+        const LIQ = R && Array.isArray(R.liqMesi) ? R.liqMesi.slice(Math.max(0, nM - 10), nM).map(v => +v || 0) : MES.map(() => 1);
+        const mx = Math.max(1, ...LIQ), bx = 70, bw = 46, gap = 16, base = 540, hmax = 120;
+        let bars = '';
+        LIQ.forEach((v, i) => { const h = Math.round(v / mx * hmax), x = bx + i * (bw + gap);
+            bars += `<g class="bh-avz-bar" style="--d:${(0.15 + i * 0.09).toFixed(2)}s"><rect x="${x}" y="${base - h}" width="${bw}" height="${h}" rx="7" class="${i === LIQ.length - 1 ? 'bh-avz-now' : ''}"/>
+              <text x="${x + bw / 2}" y="${base - h - 8}" class="bh-avz-bv">${R ? (v / 1e6).toFixed(2).replace('.', ',') : ''}</text><text x="${x + bw / 2}" y="${base + 18}" class="bh-avz-bm">${MES[i]}</text></g>`; });
+        const soglia = (R && R.soglia) || 600000, pv = R ? +R.plafond || 0 : 0;
+        const cx = 500, cy = 228, r = 132, C = 2 * Math.PI * r, used = Math.min(1, pv / soglia);
+        let ticks = ''; for (let k = 0; k < 60; k++) { const a = -Math.PI / 2 + k / 60 * 2 * Math.PI, r1 = r + 16, r2 = r + (k % 5 ? 22 : 28);
+            ticks += `<line x1="${(cx + r1 * Math.cos(a)).toFixed(1)}" y1="${(cy + r1 * Math.sin(a)).toFixed(1)}" x2="${(cx + r2 * Math.cos(a)).toFixed(1)}" y2="${(cy + r2 * Math.sin(a)).toFixed(1)}"/>`; }
+        const card = (k, mese, imp) => `<g class="bh-avz-card" style="--k:${k}">
+            <rect x="0" y="0" width="210" height="82" rx="14" class="bh-avz-cb"/>
+            <text x="16" y="24" class="bh-avz-cm">PRATICA COMPASS · ${mese}</text>
+            <text x="16" y="50" class="bh-avz-ci">${imp}</text>
+            <g class="bh-avz-tick"><rect x="156" y="24" width="38" height="34" rx="9"/><path d="M165,41 l6,6 l12,-13"/></g>
+            <text x="16" y="70" class="bh-avz-cl">✓ LIQUIDATA → PLAFOND</text></g>`;
+        return `<div class="bh-avz" aria-hidden="true">
+          <svg viewBox="0 0 750 580" class="bh-avz-svg">
+            <defs><radialGradient id="bh-avsp" cx="50%" cy="40%" r="60%"><stop offset="0" stop-color="rgba(180,140,255,.22)"/><stop offset="1" stop-color="rgba(180,140,255,0)"/></radialGradient>
+              <linearGradient id="bh-avbar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c9b0ff"/><stop offset="1" stop-color="#5b3fb3"/></linearGradient>
+              <linearGradient id="bh-avarc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e0d0ff"/><stop offset="1" stop-color="#8d63ff"/></linearGradient></defs>
+            <rect width="750" height="580" fill="url(#bh-avsp)"/>
+            <g class="bh-avz-grid">${Array.from({ length: 9 }, (_, i) => `<line x1="40" y1="${300 + i * 30}" x2="710" y2="${300 + i * 30}"/>`).join('')}</g>
+            <g class="bh-avz-ticks">${ticks}</g>
+            <circle cx="${cx}" cy="${cy}" r="${r}" class="bh-avz-trk"/>
+            <circle cx="${cx}" cy="${cy}" r="${r}" class="bh-avz-arc" stroke-dasharray="${(C * used).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 ${cx} ${cy})" style="--c:${C.toFixed(1)}"/>
+            <circle cx="${cx}" cy="${cy}" r="${r - 26}" class="bh-avz-in"/>
+            <text x="${cx}" y="${cy - 44}" class="bh-avz-k1" text-anchor="middle">PLAFOND COMPASS</text>
+            <text x="${cx}" y="${cy + 4}" class="bh-avz-big" text-anchor="middle">${R ? eur(pv) : '—'}</text>
+            <text x="${cx}" y="${cy + 30}" class="bh-avz-k2" text-anchor="middle">${R ? (pv >= soglia ? 'oltre ' : 'avviso a ') + eur(soglia) + ' · ' + Math.round(pv / soglia * 100) + '%' : 'si aggiorna aprendo l’Avanzamento'}</text>
+            <text x="${cx}" y="${cy + 62}" class="bh-avz-k3" text-anchor="middle">${R ? 'LIQUIDATO ' + (R.anno || '') + ' · ' + eur(R.liqAnno) : 'LIQUIDATO · PLAFOND · LAVORAZIONI'}</text>
+            ${((R && R.ultime) || [{}, {}, {}]).slice(0, 3).map((u, k) => `<g transform="translate(40,${92 + k * 92})">${card(k, u.mese ? NM[u.mese - 1] : 'COMPASS', u.importo != null ? eur(u.importo) : '€ ···')}</g>`).join('')}
+            <path d="M256,133 C320,140 330,210 362,224" class="bh-avz-flow"/><path d="M256,225 C300,225 330,226 362,228" class="bh-avz-flow"/><path d="M256,317 C320,310 330,240 362,232" class="bh-avz-flow"/>
+            <text x="40" y="402" class="bh-avz-k1">LIQUIDATO · MESE PER MESE (MLN €)</text>
+            <g class="bh-avz-bars">${bars}</g>
+          </svg></div>`;
+    }
+
     function template() {
         return `
 <div class="bh-page">
@@ -383,7 +450,8 @@
       <button class="bh-ch" data-c="0" type="button" style="--c:#f4a83a"><span class="bh-n">01</span><span class="bh-t">Consegne</span><span class="bh-d">Tempistiche, analisi e verifiche</span><span class="bh-bar"><i></i></span></button>
       <button class="bh-ch" data-c="1" type="button" style="--c:#3fcfae"><span class="bh-n">02</span><span class="bh-t">Stock</span><span class="bh-d">Giacenza, marchi e motorizzazioni</span><span class="bh-bar"><i></i></span></button>
       <button class="bh-ch" data-c="2" type="button" style="--c:#ff7a1a"><span class="bh-n">03</span><span class="bh-t">Commerciale</span><span class="bh-d">Contratti, origini e preventivi</span><span class="bh-bar"><i></i></span></button>
-      <button class="bh-ch" data-c="3" type="button" style="--c:#4aa8ff"><span class="bh-n">04</span><span class="bh-t">Service</span><span class="bh-d">Prossimamente</span><span class="bh-bar"><i></i></span></button>
+      <button class="bh-ch" data-c="4" type="button" style="--c:#b48cff"><span class="bh-n">04</span><span class="bh-t">Avanzamento</span><span class="bh-d">Finance, plafond e lavorazioni</span><span class="bh-bar"><i></i></span></button>
+      <button class="bh-ch" data-c="3" type="button" style="--c:#4aa8ff"><span class="bh-n">05</span><span class="bh-t">Service</span><span class="bh-d">Prossimamente</span><span class="bh-bar"><i></i></span></button>
       <ul class="bh-sub" id="bh-sub"></ul>
     </nav>
     <button class="bh-enter" type="button" id="bh-enter">Entra <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="#111" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
@@ -464,6 +532,11 @@
         <div class="bh-cap"><i></i>Officina · ricambi · ordini di lavoro · prossimamente</div>
         ${serviceScene()}
       </div>
+      <!-- AVANZAMENTO: le pratiche spuntate LIQUIDATA entrano nel plafond Compass -->
+      <div class="bh-scene" data-s="4">
+        <div class="bh-cap"><i></i>Finance · plafond · lavorazioni mensili</div>
+        ${avanzamentoScene(null)}
+      </div>
       <div class="bh-beam" id="bh-beam"></div>
     </div>
   </div>
@@ -497,14 +570,17 @@
     { acc: '#f4a83a', tint: 'rgba(244,168,58,.28)', sub: SUB[0].map(k => [OPZ[0][k].t]) },
     { acc: '#3fcfae', tint: 'rgba(63,207,174,.26)', sub: SUB[1].map(k => [OPZ[1][k].t]) },
     { acc: '#ff7a1a', tint: 'rgba(255,106,26,.18)', sub: SUB[2].map(k => [OPZ[2][k].t]) },
-    { acc: '#4aa8ff', tint: 'rgba(74,168,255,.22)', sub: [['Magazzino ricambi', 'In arrivo'], ['Ordini di lavoro', 'In arrivo'], ['Accettazione', 'In arrivo']], off: true }
+    { acc: '#4aa8ff', tint: 'rgba(74,168,255,.22)', sub: [['Magazzino ricambi', 'In arrivo'], ['Ordini di lavoro', 'In arrivo'], ['Accettazione', 'In arrivo']], off: true },
+    { acc: '#b48cff', tint: 'rgba(180,140,255,.24)', sub: SUB[4].map(k => [OPZ[4][k].t]) }
   ];
+  const ORDINE = [0, 1, 2, 4, 3];
   // permessi: si rileggono ogni volta che la pagina si apre
   function permessi() {
     const M = window.MacroHome || {};
     CH[0].off = !(M.canConsegne ? M.canConsegne() : true);
     CH[1].off = !(M.canStock && M.canStock());
     CH[2].off = !(M.canCommerciale && M.canCommerciale());
+    CH[4].off = !(M.canAvanzamento && M.canAvanzamento());
   }
   permessi();
   const DUR = 9000;
@@ -539,7 +615,7 @@
     }
     cur = i;
   };
-  function restart() { clearInterval(timer); if (active && !paused && !reduce && xp < 0) timer = setInterval(() => go((cur + 1) % CH.length), DUR); }
+  function restart() { clearInterval(timer); if (active && !paused && !reduce && xp < 0) timer = setInterval(() => go(ORDINE[(ORDINE.indexOf(cur) + 1) % ORDINE.length]), DUR); }
 
   /* ---------- NUOVO: SEZIONE APERTA = pannello delle opzioni a SINISTRA del riquadro ----------
      Cliccando un capitolo (Consegne, Stock, Commerciale, Service) a sinistra compare un pannello con
@@ -549,13 +625,13 @@
   let xp = -1;
   const rail = document.querySelector('#biPage .bh-rail'), side = $('bh-side');
   const posTog = () => {};
-  const NOMI = ['Consegne', 'Stock', 'Commerciale', 'Service'], DESC = ['Tempistiche, analisi e verifiche', 'Giacenza, marchi e motorizzazioni', 'Contratti, origini e preventivi', 'Prossimamente'];
+  const NOMI = ['Consegne', 'Stock', 'Commerciale', 'Service', 'Avanzamento'], DESC = ['Tempistiche, analisi e verifiche', 'Giacenza, marchi e motorizzazioni', 'Contratti, origini e preventivi', 'Prossimamente', 'Finance, plafond e lavorazioni mensili'];
   function espandi(i) {
     xp = i; clearInterval(timer);
     rail.classList.add('bh-x-on');
     const c = CH[i], vietato = c.off && i !== 3;
     side.style.setProperty('--acc', c.acc);
-    side.innerHTML = `<div class="bh-side-h"><div><small>${String(i + 1).padStart(2, '0')} · OPZIONI</small><b>${NOMI[i]}</b><em>${DESC[i]}</em></div>
+    side.innerHTML = `<div class="bh-side-h"><div><small>${['01','02','03','05','04'][i]} · OPZIONI</small><b>${NOMI[i]}</b><em>${DESC[i]}</em></div>
         <button type="button" class="bh-side-x" aria-label="Chiudi le opzioni" title="Chiudi (Esc)">✕</button></div>
       <div class="bh-x-list">${(vietato ? '<p class="bh-x-msg">Non hai il permesso per questa sezione: chiedilo a un amministratore (pagina Permessi).</p>' : i === 3 ? '<p class="bh-x-msg">In arrivo: saranno disponibili presto.</p>' : '') +
       OPZ[i].map((o, k) => { const ok = !vietato && (o.go || o.chips); return `<div class="bh-xo ${ok ? '' : 'off'}" ${ok && o.go ? `data-xo="${i}|${k}" role="button" tabindex="0"` : ''}>
@@ -815,6 +891,7 @@
                     const act = root.querySelector('.bh-ch.bh-on');
                     if (act && act.dataset.c === '1') MacroHome.openStock();
                     else if (act && act.dataset.c === '2') MacroHome.openCommerciale();
+                    else if (act && act.dataset.c === '4' && MacroHome.openAvanzamento) MacroHome.openAvanzamento();
                     else if (act && act.dataset.c === '0') openTab('tempi');
                 }
                 return;
@@ -829,7 +906,7 @@
             const li = e.target.closest('[data-sub]');
             if (li && window.MacroHome) {
                 const [c, k] = li.dataset.sub.split('|').map(Number);
-                const permesso = c === 0 ? (!MacroHome.canConsegne || MacroHome.canConsegne()) : c === 1 ? MacroHome.canStock && MacroHome.canStock() : c === 2 ? MacroHome.canCommerciale && MacroHome.canCommerciale() : false;
+                const permesso = c === 0 ? (!MacroHome.canConsegne || MacroHome.canConsegne()) : c === 1 ? MacroHome.canStock && MacroHome.canStock() : c === 2 ? MacroHome.canCommerciale && MacroHome.canCommerciale() : c === 4 ? MacroHome.canAvanzamento && MacroHome.canAvanzamento() : false;
                 const o = SUB[c] && OPZ[c][SUB[c][k]];
                 if (permesso && o && o.go) o.go();
             }
@@ -846,9 +923,24 @@
         const n = (typeof currentUser !== 'undefined' && currentUser && currentUser.fullName) || '';
         return n.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') || 'BI';
     }
+    // AVANZAMENTO: numeri veri della plancia (plafond, liquidato) dall'ultimo salvataggio della pagina
+    let avzT = 0;
+    async function avanzamentoDati() {
+        if (!(window.MacroHome && MacroHome.canAvanzamento && MacroHome.canAvanzamento()) || Date.now() - avzT < 60000) return;
+        avzT = Date.now();
+        try {
+            const r = await fetch('/api/avanzamento/riepilogo', { credentials: 'same-origin' });
+            if (!r.ok) return;
+            const R = await r.json();
+            if (!R || R.plafond == null) return;
+            const box = root && root.querySelector('.bh-scene[data-s="4"] .bh-avz');
+            if (box) box.outerHTML = avanzamentoScene(R);
+        } catch (e) { /* resta la plancia neutra */ }
+    }
     function show() {
         build();
         root.style.display = 'block';
+        avanzamentoDati();
         const av = document.getElementById('bh-av'); if (av) av.textContent = initials();
         if (scene) scene.start();
     }
