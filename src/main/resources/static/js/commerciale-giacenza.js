@@ -20,7 +20,8 @@
    - Data di firma RadaR e data del foglio distanti piu' di 7 giorni: elenco "Date da verificare".
 
    FILTRI: periodo del Commerciale (anno, da, a) oppure ultimi N giorni; tipo, sede, consulente.
-   EXPORT: Excel (server, come il resto del Commerciale) e PDF (stampa).
+   EXPORT: finestra con la scelta delle voci (azienda, sedi, consulenti) e del contenuto, poi
+   Excel (server, come il resto del Commerciale) o PDF (un report per voce).
    Si apre dal menu del Commerciale: Report > Giacenza alla vendita (vista {k:'giac'}).
    ===================================================================== */
 (function () {
@@ -152,6 +153,18 @@
         }
         const { V, soloR, nonR, daVer, consList } = filtrati(ctx);
         const az = riga('Azienda', V);
+        // NUOVO: filtro del solo grafico "Vetture vendute per giorni di giacenza" (sede o consulente),
+        // sopra ai filtri della pagina. S.gv = '' | 's:Agnano' | 'c:Marco Castaldo'
+        const gSedi = SEDI.filter(x => V.some(r => r.sede === x)), gCons = [...new Set(V.map(r => r.cons))].sort((x, y) => x.localeCompare(y, 'it'));
+        if (S.gv && !(S.gv.startsWith('s:') ? gSedi.includes(S.gv.slice(2)) : gCons.includes(S.gv.slice(2)))) S.gv = '';
+        const gF = S.gv ? (S.gv.startsWith('s:') ? { sede: S.gv.slice(2) } : { cons: S.gv.slice(2) }) : {};
+        const gLab = gF.sede ? ctx.SEDI[gF.sede] : gF.cons || (S.cons ? S.cons : S.sede ? ctx.SEDI[S.sede] : 'Azienda');
+        const gR = riga(gLab, V.filter(r => (!gF.sede || r.sede === gF.sede) && (!gF.cons || r.cons === gF.cons)));
+        const gIn = gR.n - gR.ns;
+        const gSel = `<label class="gz-gv">Mostra <select data-gzs="gv"><option value="">${esc(S.cons || (S.sede ? ctx.SEDI[S.sede] : 'Tutta l\'azienda'))}</option>
+            ${gSedi.length > 1 ? `<optgroup label="Sede">${gSedi.map(x => `<option value="s:${esc(x)}" ${S.gv === 's:' + x ? 'selected' : ''}>${esc(ctx.SEDI[x])}</option>`).join('')}</optgroup>` : ''}
+            ${gCons.length > 1 ? `<optgroup label="Consulente">${gCons.map(x => `<option value="c:${esc(x)}" ${S.gv === 'c:' + x ? 'selected' : ''}>${esc(x)}</option>`).join('')}</optgroup>` : ''}</select></label>`;
+        const gKpi = `<div class="gz-gk"><span><b>${nf(gR.n)}</b> vendute</span><span>media <b>${gR.m == null ? '–' : f1(gR.m) + ' gg'}</b></span><span>mediana <b>${gR.med == null ? '–' : f1(gR.med) + ' gg'}</b></span><span>oltre 90 gg <b>${nf(gR.o90)}</b>${gIn ? ' (' + ctx.pct(gR.o90, gIn) + ')' : ''}</span><span>non in stock <b>${nf(gR.ns)}</b></span></div>`;
         const sedi = gruppi(V, r => r.sede).sort((x, y) => SEDI.indexOf(x.k) - SEDI.indexOf(y.k));
         const cons = gruppi(V, r => r.cons).sort((x, y) => y.n - x.n);
         const opt = (list, val, all) => `<option value="">${all}</option>` + list.map(([v, l]) => `<option value="${esc(v)}" ${v === val ? 'selected' : ''}>${esc(l)}</option>`).join('');
@@ -185,7 +198,7 @@
           ${avvisi ? `<div class="gz-msg gz-av">⚠ ${avvisi}</div>` : ''}
           <div class="cm-sec">Azienda</div>
           <div class="gz-g2">
-            <div class="cm-card"><h2>Vetture vendute per giorni di giacenza</h2><p class="cm-hint">Giorni tra l'ingresso in stock (RadaR) e la data del contratto (foglio) · clicca una colonna per l'elenco</p><div class="gz-ch"><canvas id="gzAz"></canvas></div></div>
+            <div class="cm-card"><div class="gz-gh"><div><h2>Vetture vendute per giorni di giacenza · ${esc(gLab)}</h2><p class="cm-hint">Giorni tra l'ingresso in stock (RadaR) e la data del contratto (foglio) · scegli una sede o un consulente · clicca una colonna per l'elenco</p></div>${gSel}</div>${gKpi}<div class="gz-ch"><canvas id="gzAz"></canvas></div></div>
             <div class="cm-card"><h2>Per sede</h2><p class="cm-hint">Clicca un numero per le vetture · clicca la sede per filtrare</p>${tab('Sede', sedi, k => ({ sede: k }), false, az)}</div>
           </div>
           <div class="cm-sec">Per consulente</div>
@@ -194,9 +207,9 @@
           <p class="cm-hint" style="margin-top:12px">${costruisci(ctx).da ? 'I contratti RadaR partono dal ' + dd(costruisci(ctx).da) + ': prima di quella data non ci sono vetture da contare. ' : ''}Data di ingresso = "Data Ingresso Stock" di RadaR (se una vettura viene spostata tra sedi e RadaR aggiorna la data, i giorni partono da lì). Data del contratto = colonna DATA del foglio AVANZAMENTO. Abbinamento RadaR ↔ foglio: stessa targa/telaio, altrimenti stesso cliente entro 45 giorni.</p>
         </div>`;
         collega(main, ctx);
-        grafici(ctx, az, cons);
+        grafici(ctx, gR, cons, gF);
     }
-    function grafici(ctx, az, cons) {
+    function grafici(ctx, az, cons, gF) {
         if (!window.Chart) return;
         const css = n => getComputedStyle(ctx.root).getPropertyValue(n).trim();
         const ink = css('--cm-ink-2') || '#5f7479', line = css('--cm-line') || '#dbe6e8';
@@ -206,7 +219,7 @@
             data: { labels: TUTTE.map(f => f.l), datasets: [{ data: TUTTE.map(f => az[f.k]), backgroundColor: TUTTE.map(f => f.c), borderRadius: 6 }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.raw} vetture · ${ctx.pct(c.raw, az.n)}` } } },
                 scales: { x: { ticks: { color: ink }, grid: { display: false } }, y: { beginAtZero: true, ticks: { color: ink, precision: 0 }, grid: { color: line } } },
-                onClick: (e, el) => { if (el.length) { const f = TUTTE[el[0].index]; lista(ctx, { t: 'Azienda · ' + f.l + (f.k === 'ns' ? '' : ' giorni'), w: 'f', f: f.k }); } },
+                onClick: (e, el) => { if (el.length) { const f = TUTTE[el[0].index]; lista(ctx, Object.assign({ t: az.k + ' · ' + f.l + (f.k === 'ns' ? '' : ' giorni'), w: 'f', f: f.k }, gF || {})); } },
                 onHover: (e, el) => { e.native.target.style.cursor = el.length ? 'pointer' : 'default'; } }
         }));
         const c2 = ctx.main.querySelector('#gzCons');
@@ -228,8 +241,8 @@
             if (r && !e.target.closest('th')) { e.stopPropagation(); Object.assign(S, JSON.parse(r.dataset.gzr)); salvaS(); ctx.rerender(); return; }
             const b = e.target.closest('[data-gz]'); if (!b) return;
             if (b.dataset.gz === 'foglio') aggiorna(ctx, b);
-            if (b.dataset.gz === 'xls') excel(ctx, b);
-            if (b.dataset.gz === 'pdf') pdf(ctx);
+            if (b.dataset.gz === 'xls') apriExport(ctx, 'xlsx');
+            if (b.dataset.gz === 'pdf') apriExport(ctx, 'pdf');
         });
         box.addEventListener('change', e => {
             const f = e.target.closest('[data-gzf]'); if (f) { caricaFile(ctx, f); return; }
@@ -293,90 +306,158 @@
           ${L.some(r => !r.nelFoglio) ? '<p class="cm-hint">* contratto non trovato nel foglio: vale la data di firma di RadaR.</p>' : ''}`, true, {});
     }
 
-    /* ---------- export ---------- */
-    function datiExport(ctx) {
-        const F = filtrati(ctx), V = F.V;
-        return { F, V, az: riga('Azienda', V), sedi: gruppi(V, r => r.sede).sort((x, y) => SEDI.indexOf(x.k) - SEDI.indexOf(y.k)), cons: gruppi(V, r => r.cons).sort((x, y) => y.n - x.n) };
+    /* ---------- export: finestra con la scelta di cosa estrarre (come il resto del Commerciale) ----------
+       Voci: Azienda, le sedi, i consulenti (uno o piu'). Contenuto: riepilogo, fasce, per sede, per consulente,
+       vetture oltre 90 giorni, elenco completo; in piu' (solo Excel) date da verificare, contratti non nel foglio,
+       righe del foglio non in RadaR. Periodo, tipo e "contratti non nel foglio" sono quelli scelti nella pagina.
+       Excel: un foglio Riepilogo con una riga per voce + i fogli scelti. PDF: un report per ogni voce. */
+    const CONT_X = [['riep', 'Riepilogo e indicatori'], ['fasce', 'Fasce di giacenza (grafico)'], ['sede', 'Per sede'], ['cons', 'Per consulente'],
+        ['o90', 'Vetture vendute dopo più di 90 giorni'], ['lista', 'Elenco di tutte le vetture']];
+    const EXTRA_X = [['daVer', 'Date da verificare'], ['soloR', 'Contratti RadaR non trovati nel foglio'], ['nonR', 'Righe del foglio senza contratto RadaR']];
+    let expS = null;
+    const voceDi = key => { const [k, x] = key.split('|'); return k === 'sede' ? { k, x, lab: null } : k === 'cons' ? { k, x } : { k: 'all' }; };
+    function voceDati(ctx, F, key) {
+        const v = voceDi(key);
+        const V = F.V.filter(r => v.k === 'all' || (v.k === 'sede' ? r.sede === v.x : r.cons === v.x));
+        const lab = v.k === 'all' ? (S.cons || (S.sede ? ctx.SEDI[S.sede] : 'Azienda')) : v.k === 'sede' ? ctx.SEDI[v.x] : v.x;
+        return { key, v, lab, V, az: riga(lab, V), sedi: gruppi(V, r => r.sede).sort((x, y) => SEDI.indexOf(x.k) - SEDI.indexOf(y.k)), cons: gruppi(V, r => r.cons).sort((x, y) => y.n - x.n) };
     }
     const sotto = ctx => ['Periodo ' + perTesto(ctx), S.tipo, S.sede ? ctx.SEDI[S.sede] : '', S.cons, S.incl ? 'compresi i contratti non nel foglio' : 'solo contratti presenti nel foglio', 'Gruppo Autoscala'].filter(Boolean).join(' · ');
-    async function excel(ctx, b) {
+    function apriExport(ctx, fmt) {
+        const { esc, nf } = ctx;
+        const F = filtrati(ctx);
+        const sedi = SEDI.filter(x => F.V.some(r => r.sede === x));
+        const consDi = s => [...new Set(F.V.filter(r => r.sede === s).map(r => r.cons))].sort((x, y) => x.localeCompare(y, 'it'));
+        const nDi = key => { const v = voceDi(key); return F.V.filter(r => v.k === 'all' || (v.k === 'sede' ? r.sede === v.x : r.cons === v.x)).length; };
+        const s0 = Object.assign({ fmt: fmt || 'xlsx', amb: ['all|'].concat(sedi.length > 1 ? sedi.map(x => 'sede|' + x) : []), cont: CONT_X.map(c => c[0]), extra: ['daVer'] }, expS || {}, fmt ? { fmt } : {});
+        const ck = (arr, k) => arr.includes(k) ? 'checked' : '';
+        const lbl = (key, t) => `<label><input type="checkbox" data-amb="${esc(key)}" ${ck(s0.amb, key)}> ${esc(t)} <small class="cm-hint">${nf(nDi(key))}</small></label>`;
+        const ov = ctx.modal('Esporta la giacenza alla vendita', `
+          <div class="cm-exp">
+            <div class="cm-exp-s"><h4>Formato</h4><div class="cm-exp-fmt">
+              <label><input type="radio" name="gzFmt" value="xlsx" ${s0.fmt === 'xlsx' ? 'checked' : ''}><span><b>📊 Excel</b><small>Riepilogo con una riga per ogni voce scelta, fasce per sede e per consulente, elenchi delle vetture con cliente, targa, telaio e giorni</small></span></label>
+              <label><input type="radio" name="gzFmt" value="pdf" ${s0.fmt === 'pdf' ? 'checked' : ''}><span><b>📄 PDF</b><small>Un report impaginato per ogni voce scelta (azienda, sede o consulente), pronto da stampare o salvare</small></span></label>
+            </div></div>
+            <div class="cm-exp-s"><h4>Periodo e filtri</h4><p class="cm-hint" style="margin:0">${esc(sotto(ctx))}. Per cambiarli usa i filtri della pagina.</p></div>
+            <div class="cm-exp-s"><h4>Cosa esportare <button type="button" class="cm-link" data-xall>Seleziona tutto</button> <button type="button" class="cm-link" data-xnone>Nessuno</button></h4>
+              <div class="cm-exp-grid">
+                <div><h5>Azienda e sedi</h5>${lbl('all|', S.cons || (S.sede ? ctx.SEDI[S.sede] : 'Tutta l\'azienda'))}${sedi.length > 1 ? sedi.map(x => lbl('sede|' + x, ctx.SEDI[x])).join('') : ''}</div>
+                ${sedi.map(s => `<div><h5>Consulenti ${esc(s)} <button type="button" class="cm-link" data-xg>tutti</button></h5>${consDi(s).map(c => lbl('cons|' + c, c)).join('') || '<small class="cm-hint">Nessuno</small>'}</div>`).join('')}
+              </div></div>
+            <div class="cm-exp-s"><h4>Contenuto <button type="button" class="cm-link" data-call>Tutto</button> <button type="button" class="cm-link" data-cnone>Nessuno</button></h4><div class="cm-exp-row">
+              ${CONT_X.map(([k, t]) => `<label class="cm-exp-chk"><input type="checkbox" data-cont="${k}" ${ck(s0.cont, k)}> ${t}</label>`).join('')}
+            </div><p class="cm-hint" style="margin:8px 0 0">Solo quello che spunti finisce nel file o nella stampa. "Per sede" e "Per consulente" si saltano dove non servono (es. nel report di un solo consulente).</p></div>
+            <div class="cm-exp-s gz-x-xls"><h4>Fogli in più (solo Excel)</h4><div class="cm-exp-row">
+              ${EXTRA_X.map(([k, t]) => `<label class="cm-exp-chk"><input type="checkbox" data-extra="${k}" ${ck(s0.extra, k)}> ${t} (${nf((F[k] || []).length)})</label>`).join('')}
+            </div></div>
+            <div class="cm-exp-foot"><span class="cm-hint" id="gzXInfo"></span><button type="button" class="cm-chip" data-x>Annulla</button><button type="button" class="cm-btn-go" id="gzXGo">Esporta</button></div>
+          </div>`, true);
+        const $ = q => ov.querySelector(q);
+        const read = () => ({ fmt: ov.querySelector('[name="gzFmt"]:checked').value, amb: [...ov.querySelectorAll('[data-amb]:checked')].map(i => i.dataset.amb),
+            cont: [...ov.querySelectorAll('[data-cont]:checked')].map(i => i.dataset.cont), extra: [...ov.querySelectorAll('[data-extra]:checked')].map(i => i.dataset.extra) });
+        const upd = () => { const s = read(); $('.gz-x-xls').style.display = s.fmt === 'xlsx' ? '' : 'none';
+            $('#gzXInfo').textContent = s.amb.length + (s.amb.length === 1 ? ' voce scelta' : ' voci scelte') + ' · ' + (s.cont.length === CONT_X.length ? 'tutto il contenuto' : s.cont.length + ' argomenti su ' + CONT_X.length); };
+        ov.addEventListener('change', upd); upd();
+        ov.addEventListener('click', e => {
+            if (e.target.closest('#gzXGo')) return;
+            if (e.target.closest('[data-xall]')) ov.querySelectorAll('[data-amb]').forEach(i => { i.checked = true; });
+            if (e.target.closest('[data-xnone]')) ov.querySelectorAll('[data-amb]').forEach(i => { i.checked = false; });
+            if (e.target.closest('[data-call]')) ov.querySelectorAll('[data-cont]').forEach(i => { i.checked = true; });
+            if (e.target.closest('[data-cnone]')) ov.querySelectorAll('[data-cont]').forEach(i => { i.checked = false; });
+            const g = e.target.closest('[data-xg]');
+            if (g) { const all = [...g.closest('div').querySelectorAll('[data-amb]')]; const on = all.some(i => !i.checked); all.forEach(i => { i.checked = on; }); }
+            upd();
+        });
+        $('#gzXGo').addEventListener('click', async () => {
+            const s = read();
+            if (!s.amb.length) { $('#gzXInfo').textContent = 'Scegli almeno una voce'; return; }
+            if (!s.cont.length && !(s.fmt === 'xlsx' && s.extra.length)) { $('#gzXInfo').textContent = 'Scegli almeno un argomento in "Contenuto"'; return; }
+            expS = s;
+            const btn = $('#gzXGo'); btn.disabled = true; btn.textContent = 'Preparo…';
+            try { const D = s.amb.map(k => voceDati(ctx, F, k)); if (s.fmt === 'xlsx') await excel(ctx, D, F, s); else pdf(ctx, D, s); ov.close(); }
+            catch (e) { $('#gzXInfo').textContent = 'Errore: ' + e.message; }
+            finally { btn.disabled = false; btn.textContent = 'Esporta'; }
+        });
+    }
+    async function excel(ctx, D, F, s) {
         const T = (t, w) => ({ t, tipo: 'text', w: w || 22 }), I = (t, w) => ({ t, tipo: 'int', w: w || 10 }), Q = (t, w) => ({ t, tipo: 'pct', w: w || 10 }), Dt = (t, w) => ({ t, tipo: 'data', w: w || 12 });
-        const D = datiExport(ctx);
+        const has = k => s.cont.includes(k);
         const fasceC = TUTTE.map(f => I(f.l + (f.k === 'ns' ? '' : ' gg'), 10));
-        const rg = r => [r.n].concat(TUTTE.map(f => r[f.k]), [r.m == null ? '' : Math.round(r.m), r.med == null ? '' : Math.round(r.med), r.n ? r.o90 / Math.max(1, r.n - r.ns) : 0]);
+        const rg = r => [r.n].concat(TUTTE.map(f => r[f.k]), [r.m == null ? '' : Math.round(r.m), r.med == null ? '' : Math.round(r.med), r.n - r.ns ? r.o90 / (r.n - r.ns) : 0]);
         const cols = [I('Vendute')].concat(fasceC, [I('Media gg'), I('Mediana gg'), Q('% oltre 90 gg', 12)]);
         const dett = r => [r.cliente, r.targa, r.vin, r.veicolo, r.tipo, r.cons, r.sede, r.ingr ? dd(r.ingr) : '', dd(r.dataC), r.gg == null ? '' : r.gg, TUTTE.find(f => f.k === r.fascia).l, dd(r.firma), r.ggR == null ? '' : r.ggR, r.n, r.nelFoglio ? 'Sì' : 'No'];
         const dCols = [T('Cliente', 28), T('Targa', 11), T('Telaio', 20), T('Vettura', 34), T('Tipo', 8), T('Consulente', 22), T('Sede', 14), Dt('Ingresso stock'), Dt('Contratto (foglio)', 14), I('Giorni', 8), T('Fascia', 12), Dt('Firma RadaR'), I('GG RadaR', 9), T('N. contratto', 12), T('Nel foglio', 9)];
         const nota = 'Giorni = data del contratto (foglio AVANZAMENTO) − data di ingresso in stock (RadaR). Non in stock = senza data di ingresso o vettura arrivata dopo il contratto. % oltre 90 gg sulle vetture in stock.';
-        const body = {
-            titolo: 'Giacenza alla vendita', sottotitolo: sotto(ctx),
-            file: 'giacenza_vendita_' + (S.per === 'gg' ? 'ultimi_' + (+S.gg || 90) + '_giorni' : ctx.anno + '_' + String(ctx.da).padStart(2, '0') + '-' + String(ctx.a).padStart(2, '0')) + '.xlsx',
-            fogli: [
-                { nome: 'Riepilogo', tabelle: [
-                    { titolo: 'Azienda', nota, colonne: [T('Voce', 24)].concat(cols), righe: [['Azienda'].concat(rg(D.az))] },
-                    { titolo: 'Per sede', colonne: [T('Sede', 24)].concat(cols), righe: D.sedi.map(r => [ctx.SEDI[r.k] || r.k].concat(rg(r))), totale: ['Totale'].concat(rg(D.az)) }] },
-                { nome: 'Per consulente', tabelle: [{ titolo: 'Fasce di giacenza per consulente', nota, colonne: [T('Consulente', 24), T('Sede', 22)].concat(cols), righe: D.cons.map(r => [r.k, sedeCons(D.V, r.k)].concat(rg(r))), totale: ['Totale', ''].concat(rg(D.az)) }] },
-                { nome: 'Vetture', tabelle: [{ titolo: 'Dettaglio delle vetture vendute', colonne: dCols, righe: D.V.slice().sort((x, y) => x.cons.localeCompare(y.cons, 'it') || (y.gg ?? -1) - (x.gg ?? -1)).map(dett) }] }
-            ]
-        };
-        if (D.F.daVer.length) body.fogli.push({ nome: 'Date da verificare', tabelle: [{ titolo: 'Firma RadaR e data del foglio distanti più di 7 giorni', colonne: dCols, righe: D.F.daVer.map(dett) }] });
-        if (D.F.soloR.length && !S.incl) body.fogli.push({ nome: 'Non nel foglio', tabelle: [{ titolo: 'Contratti RadaR non trovati nel foglio (esclusi dal conteggio)', colonne: dCols, righe: D.F.soloR.map(dett) }] });
-        if (D.F.nonR.length) body.fogli.push({ nome: 'Non in RadaR', tabelle: [{ titolo: 'Righe del foglio senza contratto RadaR', colonne: [Dt('Data (foglio)'), T('Cliente', 28), T('Venditore', 18), T('Targa / telaio', 20), T('Modello', 34), T('Stato', 18)],
-            righe: D.F.nonR.map(f => [dd(f.d), ctx.nice(f.cli), f.vend, f.raw['TARGA/TELAIO'] || '', f.raw['MODELLO'] || '', f.stato]) }] });
-        b.disabled = true;
-        try {
-            const res = await fetch('/api/commerciale/export/excel', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-            if (!res.ok) { let m = 'Errore ' + res.status; try { m = (await res.json()).error || m; } catch (e) { /* */ } throw new Error(m); }
-            const blob = await res.blob(), url = URL.createObjectURL(blob), a = document.createElement('a');
-            a.href = url; a.download = body.file; document.body.appendChild(a); a.click(); a.remove();
-            setTimeout(() => URL.revokeObjectURL(url), 4000);
-        } catch (e) { msg = 'Excel non creato: ' + e.message; msgErr = true; ctx.rerender(); }
-        finally { b.disabled = false; }
+        // vetture di tutte le voci scelte, senza doppioni
+        const U = new Set(); D.forEach(d => d.V.forEach(r => U.add(r))); const UV = [...U];
+        const ord = l => l.slice().sort((x, y) => x.cons.localeCompare(y.cons, 'it') || (y.gg ?? -1) - (x.gg ?? -1));
+        const fogli = [];
+        if (has('riep') || has('fasce')) fogli.push({ nome: 'Riepilogo', tabelle: [{ titolo: 'Voci scelte', nota, colonne: [T('Voce', 28)].concat(cols), righe: D.map(d => [d.lab].concat(rg(d.az))) }] });
+        if (has('sede')) { const gs = gruppi(UV, r => r.sede).sort((x, y) => SEDI.indexOf(x.k) - SEDI.indexOf(y.k)); if (gs.length) fogli.push({ nome: 'Per sede', tabelle: [{ titolo: 'Fasce di giacenza per sede', nota, colonne: [T('Sede', 24)].concat(cols), righe: gs.map(r => [ctx.SEDI[r.k] || r.k].concat(rg(r))), totale: ['Totale'].concat(rg(riga('Totale', UV))) }] }); }
+        if (has('cons')) { const gc = gruppi(UV, r => r.cons).sort((x, y) => y.n - x.n); if (gc.length) fogli.push({ nome: 'Per consulente', tabelle: [{ titolo: 'Fasce di giacenza per consulente', nota, colonne: [T('Consulente', 24), T('Sede', 22)].concat(cols), righe: gc.map(r => [r.k, sedeCons(UV, r.k)].concat(rg(r))), totale: ['Totale', ''].concat(rg(riga('Totale', UV))) }] }); }
+        if (has('o90')) fogli.push({ nome: 'Oltre 90 giorni', tabelle: [{ titolo: 'Vetture vendute dopo più di 90 giorni in stock', colonne: dCols, righe: UV.filter(r => r.gg != null && r.gg > 90).sort((x, y) => y.gg - x.gg).map(dett) }] });
+        if (has('lista')) fogli.push({ nome: 'Vetture', tabelle: [{ titolo: 'Dettaglio delle vetture vendute', colonne: dCols, righe: ord(UV).map(dett) }] });
+        const inVoci = r => D.some(d => d.v.k === 'all' || (d.v.k === 'sede' ? r.sede === d.v.x : r.cons === d.v.x));
+        if (s.extra.includes('daVer') && F.daVer.length) fogli.push({ nome: 'Date da verificare', tabelle: [{ titolo: 'Firma RadaR e data del foglio distanti più di 7 giorni', colonne: dCols, righe: F.daVer.filter(inVoci).map(dett) }] });
+        if (s.extra.includes('soloR') && F.soloR.length) fogli.push({ nome: 'Non nel foglio', tabelle: [{ titolo: 'Contratti RadaR non trovati nel foglio', colonne: dCols, righe: F.soloR.filter(inVoci).map(dett) }] });
+        if (s.extra.includes('nonR') && F.nonR.length) fogli.push({ nome: 'Non in RadaR', tabelle: [{ titolo: 'Righe del foglio senza contratto RadaR (tutta l\'azienda)', colonne: [Dt('Data (foglio)'), T('Cliente', 28), T('Venditore', 18), T('Targa / telaio', 20), T('Modello', 34), T('Stato', 18)],
+            righe: F.nonR.map(f => [dd(f.d), ctx.nice(f.cli), f.vend, f.raw['TARGA/TELAIO'] || '', f.raw['MODELLO'] || '', f.stato]) }] });
+        if (!fogli.length) throw new Error('Con le scelte fatte non c\'è nulla da esportare');
+        const nomeV = D.length === 1 ? '_' + D[0].lab.replace(/[^A-Za-z0-9]+/g, '_') : '';
+        const body = { titolo: 'Giacenza alla vendita' + (D.length === 1 ? ' · ' + D[0].lab : ''), sottotitolo: sotto(ctx) + (D.length > 1 ? ' · ' + D.length + ' voci' : ''),
+            file: 'giacenza_vendita_' + (S.per === 'gg' ? 'ultimi_' + (+S.gg || 90) + '_giorni' : ctx.anno + '_' + String(ctx.da).padStart(2, '0') + '-' + String(ctx.a).padStart(2, '0')) + nomeV + '.xlsx', fogli };
+        const res = await fetch('/api/commerciale/export/excel', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!res.ok) { let m = 'Errore ' + res.status; try { m = (await res.json()).error || m; } catch (e) { /* */ } throw new Error(m); }
+        const blob = await res.blob(), url = URL.createObjectURL(blob), a = document.createElement('a');
+        a.href = url; a.download = body.file; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
     }
-    function pdf(ctx) {
-        const { esc } = ctx;
-        const D = datiExport(ctx), PAL = { c1: '#0f5662', ink: '#16262a', ink2: '#5f7479', line: '#dbe6e8', soft: '#dfeef0' };
+    function pdf(ctx, D, s) {
+        const { esc } = ctx, has = k => s.cont.includes(k);
+        const PAL = { c1: '#0f5662', ink: '#16262a', ink2: '#5f7479', line: '#dbe6e8', soft: '#dfeef0' };
         const f1 = x => x == null ? '–' : Math.round(x).toLocaleString('it-IT');
         const bars = r => {
             const W = 520, H = 200, pad = { l: 30, r: 8, t: 18, b: 24 }, mx = Math.max(1, ...TUTTE.map(f => r[f.k])), iw = W - pad.l - pad.r, ih = H - pad.t - pad.b, gw = iw / TUTTE.length;
-            let s = '';
-            [0, 0.5, 1].forEach(p => { const y = pad.t + ih - p * ih; s += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y}" y2="${y}" stroke="${PAL.line}"/><text x="${pad.l - 5}" y="${y + 3}" font-size="8" text-anchor="end" fill="${PAL.ink2}">${Math.round(mx * p)}</text>`; });
+            let g = '';
+            [0, 0.5, 1].forEach(p => { const y = pad.t + ih - p * ih; g += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${y}" y2="${y}" stroke="${PAL.line}"/><text x="${pad.l - 5}" y="${y + 3}" font-size="8" text-anchor="end" fill="${PAL.ink2}">${Math.round(mx * p)}</text>`; });
             TUTTE.forEach((f, i) => { const v = r[f.k], h = v / mx * ih, x = pad.l + i * gw + 6, y = pad.t + ih - h;
-                s += `<rect x="${x}" y="${y}" width="${gw - 12}" height="${h}" rx="3" fill="${f.c}"/>${v ? `<text x="${x + (gw - 12) / 2}" y="${y - 3}" font-size="9" font-weight="700" text-anchor="middle" fill="${PAL.ink}">${v}</text>` : ''}<text x="${pad.l + i * gw + gw / 2}" y="${H - 8}" font-size="8.5" text-anchor="middle" fill="${PAL.ink2}">${f.l}</text>`; });
-            return `<svg viewBox="0 0 ${W} ${H}" width="100%">${s}</svg>`;
+                g += `<rect x="${x}" y="${y}" width="${gw - 12}" height="${h}" rx="3" fill="${f.c}"/>${v ? `<text x="${x + (gw - 12) / 2}" y="${y - 3}" font-size="9" font-weight="700" text-anchor="middle" fill="${PAL.ink}">${v}</text>` : ''}<text x="${pad.l + i * gw + gw / 2}" y="${H - 8}" font-size="8.5" text-anchor="middle" fill="${PAL.ink2}">${f.l}</text>`; });
+            return `<svg viewBox="0 0 ${W} ${H}" width="100%">${g}</svg>`;
         };
-        const stack = r => `<div class="stk">${TUTTE.map(f => r[f.k] ? `<i style="width:${r[f.k] / r.n * 100}%;background:${f.c}" title="${f.l}"></i>` : '').join('')}</div>`;
+        const stack = r => `<div class="stk">${TUTTE.map(f => r[f.k] ? `<i style="width:${r[f.k] / r.n * 100}%;background:${f.c}"></i>` : '').join('')}</div>`;
         const head = ['', 'Vendute'].concat(TUTTE.map(f => f.l), ['Media', 'Mediana']);
-        const tr = (k, r, extra) => `<tr><td class="l">${esc(k)}${extra ? '<br><small>' + esc(extra) + '</small>' : ''}</td><td><b>${r.n}</b></td>${TUTTE.map(f => `<td>${r[f.k] || '–'}</td>`).join('')}<td><b>${f1(r.m)}</b></td><td>${f1(r.med)}</td></tr>`;
-        const tabella = (h0, rows, tot) => `<table><tr>${head.map((h, i) => `<th${i ? '' : ' class="l"'}>${i ? h : h0}</th>`).join('')}</tr>${rows.join('')}${tot ? `<tr class="tot">${tr('Totale', tot).slice(4, -5)}</tr>` : ''}</table>`;
+        const celle = r => `<td><b>${r.n}</b></td>${TUTTE.map(f => `<td>${r[f.k] || '–'}</td>`).join('')}<td><b>${f1(r.m)}</b></td><td>${f1(r.med)}</td>`;
+        const tabella = (h0, rows, tot) => `<table><tr>${head.map((h, i) => `<th${i ? '' : ' class="l"'}>${i ? h : h0}</th>`).join('')}</tr>${rows.map(([k, r, x]) => `<tr><td class="l">${esc(k)}${x ? '<br><small>' + esc(x) + '</small>' : ''}</td>${celle(r)}</tr>`).join('')}${tot ? `<tr class="tot"><td class="l">Totale</td>${celle(tot)}</tr>` : ''}</table>`;
         const leg = `<div class="leg">${TUTTE.map(f => `<span><i style="background:${f.c}"></i>${f.l}</span>`).join('')}</div>`;
-        const kp = (l, v, s) => `<div class="kpi"><small>${l}</small><b>${v}</b><span>${s}</span></div>`;
-        const inS = D.az.n - D.az.ns;
-        const dett = D.V.filter(r => r.gg != null && r.gg > 90).sort((x, y) => y.gg - x.gg);
-        const html = `<!doctype html><html lang="it"><head><meta charset="utf-8"><title>Giacenza alla vendita</title><style>
+        const kp = (l, v, t) => `<div class="kpi"><small>${l}</small><b>${v}</b><span>${t}</span></div>`;
+        const elenco = (tit, L) => L.length ? `<h2>${tit} (${L.length})</h2><table><tr><th class="l">Cliente</th><th class="l">Targa / telaio</th><th class="l">Vettura</th><th class="l">Consulente</th><th>Ingresso</th><th>Contratto</th><th>Giorni</th></tr>
+            ${L.map(r => `<tr><td class="l">${esc(r.cliente)}</td><td class="l n">${esc([r.targa, r.vin].filter(Boolean).join(' · '))}</td><td class="l n">${esc(r.veicolo)}</td><td class="l n">${esc(r.cons)}</td><td>${r.ingr ? dd(r.ingr) : '–'}</td><td>${dd(r.dataC)}</td><td><b>${r.gg == null ? '–' : r.gg}</b></td></tr>`).join('')}</table>` : '';
+        const sezioni = D.map(d => {
+            const az = d.az, inS = az.n - az.ns, unCons = d.v.k === 'cons';
+            let h = `<section><header><h1>Giacenza alla vendita · ${esc(d.lab)}</h1><p>${esc(sotto(ctx))}</p></header>`;
+            if (has('riep')) h += `<div class="kpis">${kp('Vetture vendute', az.n, inS + ' in stock alla firma · ' + az.ns + ' non in stock')}${kp('Giacenza media', f1(az.m) + ' gg', 'mediana ' + f1(az.med) + ' giorni')}${kp('Oltre 90 giorni', az.o90, inS ? ctx.pct(az.o90, inS) + ' delle vetture in stock' : '–')}${kp('Oltre 180 giorni', az.f7 + az.f8, inS ? ctx.pct(az.f7 + az.f8, inS) + ' delle vetture in stock' : '–')}</div>`;
+            if (has('fasce')) h += `<h2>Vetture per giorni di giacenza</h2><div class="card">${bars(az)}</div>`;
+            if (has('sede') && d.v.k === 'all' && d.sedi.length > 1) h += `<h2>Per sede</h2><div class="card">${tabella('Sede', d.sedi.map(r => [ctx.SEDI[r.k] || r.k, r]), az)}</div>`;
+            if (has('cons') && !unCons && d.cons.length) h += `<h2>Per consulente</h2><div class="card">${leg}${d.cons.map(r => `<div class="cr"><span>${esc(r.k)}</span>${stack(r)}<em>${r.n}</em></div>`).join('')}</div><div class="card">${tabella('Consulente', d.cons.map(r => [r.k, r, sedeCons(d.V, r.k)]), az)}</div>`;
+            if (has('o90')) h += elenco('Vendute dopo più di 90 giorni', d.V.filter(r => r.gg != null && r.gg > 90).sort((x, y) => y.gg - x.gg));
+            if (has('lista')) h += elenco('Tutte le vetture vendute', d.V.slice().sort((x, y) => (y.gg ?? -1) - (x.gg ?? -1)));
+            return h + `<footer>Gruppo Autoscala · BI Commerciale · Giorni = data del contratto (foglio AVANZAMENTO) − ingresso in stock (RadaR) · generato il ${new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</footer></section>`;
+        }).join('');
+        const html = `<!doctype html><html lang="it"><head><meta charset="utf-8"><title>Giacenza alla vendita${D.length === 1 ? ' – ' + esc(D[0].lab) : ''}</title><style>
           @page{size:A4;margin:11mm}*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
           body{margin:0;font-family:Inter,'Segoe UI',Arial,sans-serif;color:${PAL.ink};font-size:10.5px}
-          header{border-left:5px solid ${PAL.c1};padding:2px 0 2px 12px;margin-bottom:12px}header h1{margin:0;font-size:21px}header p{margin:3px 0 0;color:${PAL.ink2}}
-          h2{font-size:13px;margin:16px 0 7px}.h{margin:2px 0 8px;color:${PAL.ink2};font-size:9.5px}
+          section{page-break-after:always}section:last-child{page-break-after:auto}
+          header{border-left:5px solid ${PAL.c1};padding:2px 0 2px 12px;margin-bottom:12px}header h1{margin:0;font-size:20px}header p{margin:3px 0 0;color:${PAL.ink2}}
+          h2{font-size:13px;margin:14px 0 7px}
           .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.kpi{border:1px solid ${PAL.line};border-top:3px solid ${PAL.c1};border-radius:8px;padding:8px 9px}.kpi small{display:block;color:${PAL.ink2};font-size:9px}.kpi b{display:block;font-size:20px;margin:3px 0}.kpi span{color:${PAL.ink2};font-size:8.5px}
           .card{border:1px solid ${PAL.line};border-radius:9px;padding:10px;break-inside:avoid;margin-bottom:9px}
-          table{width:100%;border-collapse:collapse;font-size:9px}th{background:${PAL.c1};color:#fff;text-align:right;padding:5px 5px;font-size:8px;text-transform:uppercase}th.l,td.l{text-align:left}
-          td{padding:4px 5px;text-align:right;border-bottom:1px solid ${PAL.line}}td.l{font-weight:700}td small{font-weight:400;color:${PAL.ink2}}tr.tot td{background:${PAL.soft};font-weight:800}
+          table{width:100%;border-collapse:collapse;font-size:9px}th{background:${PAL.c1};color:#fff;text-align:right;padding:5px;font-size:8px;text-transform:uppercase}th.l,td.l{text-align:left}
+          td{padding:4px 5px;text-align:right;border-bottom:1px solid ${PAL.line}}td.l{font-weight:700}td.n{font-weight:400}td small{font-weight:400;color:${PAL.ink2}}tr.tot td{background:${PAL.soft};font-weight:800}
           .leg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:9px;color:${PAL.ink2};margin:4px 0 6px}.leg i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:-1px}
           .cr{display:grid;grid-template-columns:150px 1fr 34px;gap:8px;align-items:center;margin:3px 0;font-size:9.5px}.cr span{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.cr em{font-style:normal;font-weight:800;text-align:right}
           .stk{display:flex;height:11px;border-radius:3px;overflow:hidden;background:#ecf2f3}.stk i{display:block;height:100%}
-          .pb{page-break-before:always}footer{margin-top:8px;color:${PAL.ink2};font-size:8px;border-top:1px solid ${PAL.line};padding-top:5px}
-        </style></head><body>
-          <header><h1>Giacenza alla vendita</h1><p>${esc(sotto(ctx))}</p></header>
-          <div class="kpis">${kp('Vetture vendute', D.az.n, inS + ' in stock alla firma · ' + D.az.ns + ' non in stock')}${kp('Giacenza media', f1(D.az.m) + ' gg', 'mediana ' + f1(D.az.med) + ' giorni')}${kp('Oltre 90 giorni', D.az.o90, inS ? ctx.pct(D.az.o90, inS) + ' delle vetture in stock' : '–')}${kp('Oltre 180 giorni', D.az.f7 + D.az.f8, inS ? ctx.pct(D.az.f7 + D.az.f8, inS) + ' delle vetture in stock' : '–')}</div>
-          <h2>Azienda · vetture per giorni di giacenza</h2><div class="card">${bars(D.az)}</div>
-          <h2>Per sede</h2><div class="card">${tabella('Sede', D.sedi.map(r => tr(ctx.SEDI[r.k] || r.k, r)), D.az)}</div>
-          <h2 class="pb">Per consulente</h2><div class="card">${leg}${D.cons.map(r => `<div class="cr"><span>${esc(r.k)}</span>${stack(r)}<em>${r.n}</em></div>`).join('')}</div>
-          <div class="card">${tabella('Consulente', D.cons.map(r => tr(r.k, r, sedeCons(D.V, r.k))), D.az)}</div>
-          ${dett.length ? `<h2 class="pb">Vetture vendute dopo più di 90 giorni (${dett.length})</h2><table><tr><th class="l">Cliente</th><th class="l">Targa / telaio</th><th class="l">Vettura</th><th class="l">Consulente</th><th>Ingresso</th><th>Contratto</th><th>Giorni</th></tr>
-            ${dett.map(r => `<tr><td class="l">${esc(r.cliente)}</td><td class="l" style="font-weight:400">${esc([r.targa, r.vin].filter(Boolean).join(' · '))}</td><td class="l" style="font-weight:400">${esc(r.veicolo)}</td><td class="l" style="font-weight:400">${esc(r.cons)}</td><td>${dd(r.ingr)}</td><td>${dd(r.dataC)}</td><td><b>${r.gg}</b></td></tr>`).join('')}</table>` : ''}
-          <footer>Gruppo Autoscala · BI Commerciale · Giorni = data del contratto (foglio AVANZAMENTO) − ingresso in stock (RadaR) · generato il ${new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</footer>
-        </body></html>`;
+          footer{margin-top:8px;color:${PAL.ink2};font-size:8px;border-top:1px solid ${PAL.line};padding-top:5px}
+        </style></head><body>${sezioni}</body></html>`;
         const fr = document.createElement('iframe');
         fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
         document.body.appendChild(fr);
@@ -397,6 +478,10 @@
 #commercialeRoot .gz-f label{display:flex;gap:6px;align-items:center;font-size:12.5px;font-weight:700;color:var(--cm-ink-2)}
 #commercialeRoot .gz-f select,#commercialeRoot .gz-f input[type=number]{border:1px solid var(--cm-line);border-radius:8px;padding:6px 8px;background:var(--cm-card);color:var(--cm-ink);font-size:13px}
 #commercialeRoot .gz-f label.gz-tg{color:var(--cm-ink);cursor:pointer}#commercialeRoot .gz-tg input{width:16px;height:16px;accent-color:var(--cm-acc)}
+#commercialeRoot .gz-gh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+#commercialeRoot .gz-gv{display:flex;gap:6px;align-items:center;font-size:12.5px;font-weight:700;color:var(--cm-ink-2)}
+#commercialeRoot .gz-gv select{border:1px solid var(--cm-line);border-radius:8px;padding:6px 8px;background:var(--cm-card);color:var(--cm-ink);font-size:13px;max-width:240px}
+#commercialeRoot .gz-gk{display:flex;gap:8px 18px;flex-wrap:wrap;font-size:12.5px;color:var(--cm-ink-2);margin:2px 0 10px}#commercialeRoot .gz-gk b{color:var(--cm-ink)}
 #commercialeRoot .gz-g2{display:grid;grid-template-columns:1fr;gap:16px}
 #commercialeRoot .gz-msg{background:var(--cm-acc-soft);color:var(--cm-ink);border-radius:12px;padding:9px 14px;margin:0 0 14px;font-size:13px}
 #commercialeRoot .gz-msg.err{background:#fbe9e7;color:#8c2a1e}[data-theme="dark"] #commercialeRoot .gz-msg.err{background:#3a1f1b;color:#f3b4aa}
